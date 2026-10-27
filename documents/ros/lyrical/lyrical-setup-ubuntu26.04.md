@@ -56,6 +56,8 @@ sudo apt install -y ros-lyrical-ros-base ros-dev-tools python3-colcon-common-ext
 
 ```bash
 sudo apt install -y \
+  ros-lyrical-laser-filters \
+  ros-lyrical-xacro \
   ros-lyrical-slam-toolbox \
   ros-lyrical-nav2-bringup \
   ros-lyrical-nav2-amcl \
@@ -80,7 +82,9 @@ sudo apt install -y \
 
 **apt에 없는 것**
 
-- 라이다 드라이버: `hls-lfcd-lds-driver`(LDS-01) · `ld08-driver`(LDS-02) 모두 Lyrical arm64 apt에 없음 → 라이다 정해지면 `ros2_ws/src`에 소스로 넣어 빌드.
+- 라이다 드라이버: 이 로봇은 **LDS-03** → `coin_d4_driver` (ROBOTIS, apt 없음). `ros2_ws/deps.repos`로 받아 빌드 (4장).
+  포트 `/dev/tb3_lidar`는 udev 규칙으로 만든다: `cd ~/ros2/firmware/opencr && ./install-udev.sh` ([OpenCR 문서 3장](../../opencr/opencr-setup-ubuntu26.04.md)).
+  (`hls-lfcd-lds-driver`(LDS-01) · `ld08-driver`(LDS-02)도 Lyrical arm64 apt에 없음)
 - `cartographer_ros`: 없음 → SLAM은 slam_toolbox 사용.
 - (선택) RL 모델 추론: `pip install --break-system-packages onnxruntime` — torch는 Pi에 깔지 않음.
 
@@ -106,6 +110,7 @@ source ~/.bashrc
 git clone https://github.com/visualkhh/ros2.git ~/ros2   # 이미 있으면 cd ~/ros2 && git pull
 cd ~/ros2/ros2_ws
 source /opt/ros/lyrical/setup.bash
+vcs import src < deps.repos                               # apt에 없는 소스 (LDS-03 coin_d4_driver)
 colcon build --symlink-install --parallel-workers 2       # Pi 4: 2개로 제한 (메모리)
 source install/setup.bash
 ```
