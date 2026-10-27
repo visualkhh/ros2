@@ -1,5 +1,5 @@
 # LDS-03 (coin_d4_driver) + 자기 몸 지우기 필터. tb-only.launch.py가 읽음.
-# 라이다는 scan_raw로 내고, 필터가 로봇 몸통(base_link 기준 상자) 안의 점을 지워 /scan으로 낸다.
+# 라이다 scan_raw → 필터(로봇 몸통 base_link 기준 상자 안 점 제거) scan_filtered → scan_resample(고정 칸) → /scan.
 # 라이다가 1층 앞에 있어 뒤쪽 반은 모터·지지대·바퀴가 찍힘 → 이걸 안 지우면 SLAM이 몸통을 벽으로 그림.
 coin_d4_driver:
   ros__parameters:
@@ -26,3 +26,9 @@ scan_filter:
         min_z: -0.05
         max_z: 0.20
         invert: false
+
+scan_resample:
+  ros__parameters:
+    # LDS-03는 한 바퀴 점 개수가 395~404로 매번 다름 → slam_toolbox가 첫 개수와 다른 스캔을 버림
+    # ("LaserRangeScan contains 403 range readings, expected 404") → 고정 칸으로 다시 나눔
+    beams: 400                  # 360° / 400 = 0.9° (LDS-03 분해능)

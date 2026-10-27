@@ -4,7 +4,8 @@
   ros2 launch tb3_bringup tb-only.launch.py port:=/dev/ttyACM0
   ros2 launch tb3_bringup tb-only.launch.py lidar:=false      # 라이다 없이 (coin_d4_driver 미설치여도 됨)
 
-라이다: coin_d4_driver(ros2_ws/deps.repos) → /scan_raw → laser_filters 몸통 상자 제거 → /scan
+라이다: coin_d4_driver(ros2_ws/deps.repos) → /scan_raw → laser_filters 몸통 상자 제거 → /scan_filtered
+       → scan_resample(고정 400칸: LDS-03 점 개수가 매번 달라 slam_toolbox가 버림) → /scan
 
 RL 보정과 같이 쓰려면 tb-for-rl.launch.py (Pi) + rl-only.launch.py (PC).
 rl:=true는 tb-for-rl이 쓰는 내부 인자 — 드라이버가 cmd_vel 대신 cmd_vel_rl을 받는다.
@@ -61,6 +62,9 @@ def lidar_nodes(share, condition):
              parameters=[lidar_params], output='screen', condition=condition,
              sigterm_timeout='15', sigkill_timeout='15'),
         Node(package='laser_filters', executable='scan_to_scan_filter_chain', name='scan_filter',
-             parameters=[lidar_params], remappings=[('scan', 'scan_raw'), ('scan_filtered', 'scan')],
+             parameters=[lidar_params], remappings=[('scan', 'scan_raw')],
+             condition=condition),
+        Node(package='tb3_bringup', executable='scan_resample', name='scan_resample',
+             parameters=[lidar_params], remappings=[('scan_in', 'scan_filtered'), ('scan_out', 'scan')],
              condition=condition),
     ]

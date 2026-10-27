@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'mock_base = tb3_bringup.mock_base_node:main',
             'opencr_driver = tb3_bringup.opencr_driver_node:main',
+            'scan_resample = tb3_bringup.scan_resample_node:main',
         ],
     },
 )
