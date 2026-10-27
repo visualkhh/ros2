@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+/.idea/
+**/ros2_ws/install/
+**/ros2_ws/log/
+**/ros2_ws/build/
+**/cmake-build-debug/

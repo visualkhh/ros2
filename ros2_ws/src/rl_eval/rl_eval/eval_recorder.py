@@ -1,0 +1,69 @@
+"""Before/After metrics recorder.
+
+Subscribes raw vs corrected cmd_vel and odom, appends one CSV row per raw msg:
+  t, lin_raw, ang_raw, lin_out, ang_out, odom_x, odom_y, odom_yaw, label
+
+Run twice (enable=false / enable=true) with different --ros-args -p output:=
+and diff the CSVs: tracking error, correction magnitude, travel time.
+"""
+import csv
+import math
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
+
+
+class EvalRecorder(Node):
+    def __init__(self):
+        super().__init__('eval_recorder')
+        self.declare_parameter('output', '/tmp/rl_eval.csv')
+        self.declare_parameter('label', 'before')
+        self.raw = None
+        self.out = None
+        self.odom = None
+        self.f = open(self.get_parameter('output').value, 'w', newline='')
+        self.w = csv.writer(self.f)
+        self.w.writerow(['t', 'lin_raw', 'ang_raw', 'lin_out', 'ang_out',
+                        'odom_x', 'odom_y', 'odom_yaw', 'label'])
+        self.create_subscription(Twist, 'cmd_vel_raw', self.cb_raw, 10)
+        self.create_subscription(Twist, 'cmd_vel', self.cb_out, 10)
+        self.create_subscription(Odometry, 'odom', self.cb_odom, 10)
+
+    def _flush(self):
+        if self.raw is None:
+            return
+        ox, oy, yaw = 0.0, 0.0, 0.0
+        if self.odom is not None:
+            p = self.odom.pose.pose
+            ox, oy = p.position.x, p.position.y
+            q = p.orientation
+            yaw = math.atan2(2 * (q.w * q.z + q.x * q.y),
+                             1 - 2 * (q.y * q.y + q.z * q.z))
+        lo = self.out.linear.x if self.out else 0.0
+        ao = self.out.angular.z if self.out else 0.0
+        self.w.writerow([self.get_clock().now().nanoseconds / 1e9,
+                        self.raw.linear.x, self.raw.angular.z,
+                        lo, ao, ox, oy, yaw,
+                        self.get_parameter('label').value])
+
+    def cb_raw(self, msg):
+        self.raw = msg
+        self._flush()
+
+    def cb_out(self, msg):
+        self.out = msg
+
+    def cb_odom(self, msg):
+        self.odom = msg
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = EvalRecorder()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.f.close()
+        node.destroy_node()
+        rclpy.shutdown()

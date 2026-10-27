@@ -1,0 +1,143 @@
+# tool
+
+로봇 운영 도구. **지도 만들기(SLAM, slam_toolbox)** 와 **지도 주행(Nav2)** 을 켜고 끄고,
+텔레오퍼로 몰고, 지도를 저장합니다. 상주 노드(state_manager 등) 없이 tool이 `ros2 launch`를 직접 띄웁니다.
+
+```text
+tool/
+├── README.md
+├── run-cli          # 로봇(Pi)에서: 메뉴 / 한 번 명령
+├── run-rviz         # PC에서: 맵핑·주행 보기
+├── config/
+│   ├── slam_toolbox.yaml   # slam_toolbox online_async 기본값 + base_frame=base_link · 지도 갱신 2초
+│   └── nav2_params.yaml    # nav2_bringup 기본값 + base_link · Twist cmd_vel
+├── rviz/
+│   ├── start.sh · stop.sh · restart.sh
+│   ├── slam.rviz           # 지도(/map)·스캔·odom·TF·포즈 그래프 — 위에서 내려다봄
+│   └── nav.rviz            # nav2 기본 화면 (코스트맵·경로 · 2D Pose Estimate · Goal)
+├── cli/
+│   ├── start.sh · stop.sh · restart.sh
+│   ├── robot_tool.py       # 배선 + argparse + main
+│   └── op/                 # terminal · dialogs · ui · state · procs · bus · pages/
+└── .run/                   # (git 무시) 띄운 launch의 pid · 로그
+```
+
+## 어디서 무엇을
+
+| 어디 | 무엇 | 왜 |
+|---|---|---|
+| 로봇 Pi (`ssh pak`) | `./run-cli` — 베이스·SLAM·Nav 켜기/끄기, 텔레오퍼, 지도 저장 | SLAM·Nav는 라이다·odom 옆에서 돌아야 함 |
+| PC | `./run-rviz slam` / `./run-rviz nav` | 지도가 커지는 모습·주행 경로를 화면으로 봄 |
+
+"맵핑 모드로 전송" 같은 명령은 따로 없습니다. **Pi에서 SLAM을 켜면 그게 맵핑 중**이고,
+PC RViz는 같은 `ROS_DOMAIN_ID`(=25)로 `/map`·`/scan`·TF를 받아 그릴 뿐입니다.
+
+`ROS_DOMAIN_ID`는 **25로 통일**합니다. `cli/start.sh`·`rviz/start.sh`가 `~/.bashrc` 값과 무관하게 25로 맞춥니다.
+시험할 때만 `ROBOT_DOMAIN_ID=77 ./run-cli ...`처럼 바꿉니다.
+
+## 지도 만들기 (SLAM)
+
+```bash
+# Pi
+ssh pak
+cd ~/ros2/tool                  # (저장소 위치)
+./run-cli base start            # 바퀴·odom·라이다 (TOOL_BASE_CMD)
+./run-cli slam start            # 맵핑 시작
+
+# PC — 지도 커지는 거 보기
+./run-rviz slam
+
+# Pi — 천천히 돌기 (0.10 m/s · 0.5 rad/s 정도, 벽을 따라 한 바퀴 → 가운데)
+./run-cli teleop
+./run-cli map save office       # → ros2_ws/map/office/map.yaml + map.pgm
+./run-cli slam stop
+```
+
+메뉴로 하면: `./run-cli` → `2) 베이스` → `3) SLAM 맵핑` → `5) 수동 주행` → `3) SLAM → 3) 지도 저장`.
+
+## 지도로 주행 (Nav)
+
+```bash
+./run-cli nav start office      # 이름 없으면 가장 최근 지도
+./run-cli initpose 0 0 0        # 지도 위 로봇 위치 (x y yaw°) — 또는 RViz 2D Pose Estimate
+./run-cli goal 1.0 0.5 90       # 도착까지 기다림 · --no-wait · goal --cancel
+# PC: ./run-rviz nav            # 2D Goal Pose로 찍어도 됨
+```
+
+`SLAM 중 Nav`(`./run-cli explore start`)는 SLAM을 켠 채 Nav2 주행만 띄웁니다. 맵핑 중에 목표를 찍어
+움직이며 지도를 넓힐 때 씁니다 (초기 위치 불필요).
+
+동시에 못 켜는 조합: `slam` ↔ `nav`, `nav` ↔ `explore` (지도·위치를 내는 쪽이 둘이 됨). 켜려 하면 거부합니다.
+
+## 명령
+
+```bash
+./run-cli                       # 대화형 메뉴 (TTY 아니면 status)
+./run-cli status                # 프로세스 + odom·scan·map·amcl 수신 상태
+./run-cli {base|slam|nav|explore} {start|stop|restart|status|log}
+./run-cli nav start [지도이름|폴더|yaml]
+./run-cli map list
+./run-cli map save [이름]       # 기본 이름: 날짜_시각
+./run-cli teleop [--linear 0.1 --angular 0.5]
+./run-cli drive forward|back|left|right|stop [--speed --angular --duration]
+./run-cli initpose x y [yaw°]
+./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
+./run-cli nodes
+./run-cli stop-all              # 바퀴 정지 → 띄운 것 전부 종료
+./run-cli stop                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
+```
+
+CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
+로그: `./run-cli slam log` 또는 `.run/slam.log`.
+
+메뉴 키 규약 (참고: `cli/op/dialogs.py` 맨 위):
+
+| 화면 | 키 |
+|---|---|
+| 메뉴 | `↑↓` 이동 · `Enter` 실행 · 번호로 포커스 · `Esc`/`◀`/`b` 뒤로 · `m` 메인 · `r` 새로고침 · `q` 종료 |
+| 확인창 | `y` 예 · `n`/`Esc` 아니오 · `Enter` 기본값 |
+| 입력창 | `Enter` 확인 · `Esc` 취소 |
+| 텔레오퍼 | `w`/`x`/`a`/`d`·방향키 · `s`/`space` 정지 · `e`/`c` 속도 · `q` 종료 (종료 시 0 속도) |
+
+## 설정 (환경변수)
+
+| 변수 | 기본 | 뜻 |
+|---|---|---|
+| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup basic_bringup.launch.py` | 베이스 bringup. 실기 드라이버·라이다가 생기면 이걸로 교체 |
+| `TOOL_CMD_VEL` | `/cmd_vel` | 텔레오퍼·drive가 내는 토픽 |
+| `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
+| `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) |
+| `TOOL_SLAM_PARAMS` / `TOOL_NAV_PARAMS` | `config/*.yaml` | 파라미터 파일 |
+| `TOOL_USE_SIM_TIME` | `false` | Gazebo면 `true` |
+| `ROBOT_DOMAIN_ID` | `25` | 시험용 도메인 분리 |
+
+프레임 규약: `map → odom → base_link`, 스캔은 `/scan`. 라이다 프레임(`base_scan` 등)은 베이스 bringup이
+`base_link → <라이다>` static TF를 내야 합니다. `base_footprint`를 쓰는 드라이버면 `config/*.yaml`의 `base_link`를 바꿉니다.
+
+`config/nav2_params.yaml`은 `enable_stamped_cmd_vel: false`입니다. Lyrical Nav2 기본은 `TwistStamped`인데
+`mock_base`·자체 드라이버는 `Twist`를 받기 때문입니다 (안 맞으면 Nav가 경로는 내도 바퀴가 안 움직임).
+
+## 문제 확인
+
+```bash
+./run-cli status                # odom/scan/map 중 뭐가 안 오는지
+./run-cli slam log              # slam_toolbox 에러
+ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
+```
+
+- PC RViz에 아무것도 안 보임 → PC와 Pi가 같은 WiFi · 둘 다 `ROS_DOMAIN_ID=25` · `ROS_LOCALHOST_ONLY`/`ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST` 아님
+- 지도가 안 커짐 → `scan` 수신 확인, 라이다 TF 확인, 너무 빨리 돌면 스캔 매칭 실패 (천천히)
+- Nav 목표 거부 → `initpose` 먼저, `./run-cli nav log`
+
+## 시험 (실기 없이 PC에서)
+
+mock_base(odom)에 가짜 라이다를 붙여 전체 흐름(SLAM → 저장 → Nav 목표 → SLAM 중 Nav)을 확인했습니다 (2026-10-27).
+
+```bash
+export ROBOT_DOMAIN_ID=77 TOOL_MAP_DIR=/tmp/maps
+./run-cli base start            # mock_base
+# + /scan을 내는 무언가 (Gazebo turtlebot3 또는 가짜 스캔 노드)
+./run-cli slam start && ./run-cli drive left --duration 4 && ./run-cli map save test
+./run-cli slam stop && ./run-cli nav start test && ./run-cli initpose 0 0 0 && ./run-cli goal 1 0.5
+./run-cli stop-all
+```

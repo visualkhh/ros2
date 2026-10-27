@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# run-rviz — rviz/{start,stop,restart}.sh 실행기. 기본은 start slam.
+#   ./run-rviz [slam|nav]          # RViz 시작 (기본 slam = 맵핑 보기)
+#   ./run-rviz stop                # 켜져 있는 RViz 종료
+#   ./run-rviz restart [slam|nav]  # RViz 재시작
+set -eo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cmd="${1:-start}"
+case "$cmd" in
+  start|stop|restart)
+    [ $# -gt 0 ] && shift
+    exec "$HERE/rviz/$cmd.sh" "$@"
+    ;;
+  *)
+    exec "$HERE/rviz/start.sh" "$@"
+    ;;
+esac

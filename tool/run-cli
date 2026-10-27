@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# run-cli — cli/{start,stop,restart}.sh 실행기. 기본은 start.
+#   ./run-cli [start] [...]      # CLI 시작 (기본) — 인자는 robot_tool.py로 그대로
+#   ./run-cli stop               # 실행 중인 CLI 종료 (띄운 SLAM·Nav는 안 끔 → stop-all)
+#   ./run-cli restart            # CLI 프로세스 재시작
+# 그 밖의 인자(slam start, map save ...)는 robot_tool.py로 그대로 넘긴다.
+set -eo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cmd="${1:-start}"
+case "$cmd" in
+  start)
+    [ $# -gt 0 ] && shift
+    exec "$HERE/cli/start.sh" "$@"
+    ;;
+  stop)
+    exec "$HERE/cli/stop.sh"
+    ;;
+  restart)
+    exec "$HERE/cli/restart.sh"
+    ;;
+  *)
+    exec "$HERE/cli/start.sh" "$@"
+    ;;
+esac

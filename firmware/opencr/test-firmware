@@ -1,0 +1,195 @@
+#!/bin/bash
+if [ -z "${BASH_VERSION:-}" ]; then
+  exec bash "$0" "$@"
+fi
+
+# OpenCR tb3_wheels 시리얼 테스트 (ROS 없이, 프로토콜은 README.md)
+#
+#   ./test-firmware                          # 상태(S)·에러(E) 읽기만 — 로봇 안 움직임
+#   ./test-firmware --raw                    # 받은 줄 원문 출력
+#   ./test-firmware --port /dev/ttyACM0      # 포트 지정 (기본: /dev/opencr → /dev/ttyACM0)
+#   ./test-firmware --lines 10               # 읽을 S 줄 수
+#
+#   ./test-firmware --wheel 0.5 --yes        # 양쪽 0.5 rad/s, 2초 (--secs로 변경)
+#   ./test-firmware --wheel 0.5 -0.5 --yes   # 좌 0.5 · 우 -0.5 rad/s (제자리 회전)
+#   ./test-firmware --wheel 0.5 --secs 5 --yes
+#   ./test-firmware --send 'C,0.5,' --yes    # 원문 한 줄 (빈칸 = 그 바퀴 유지)
+#   ./test-firmware --torque off --yes       # 양쪽 토크 해제 (손으로 굴리기)
+#   ./test-firmware --torque on --yes
+#   ./test-firmware --reboot --yes           # 양쪽 재부팅 (Hardware Error 해제) = R
+#   ./test-firmware --reboot left --yes      # 좌만 = R,1,0 · right = R,0,1
+#
+# 주의:
+#   - --wheel/--send/--torque on은 바퀴를 실제로 돌립니다. 바퀴를 띄우고 작은 값부터.
+#   - 펌웨어는 500ms 동안 C가 없으면 정지하므로 --wheel은 0.1초마다 C를 다시 보냅니다.
+#   - 끝나면(Ctrl+C 포함) C,0,0을 보내 정지합니다.
+#   - ROS 드라이버·시리얼 모니터가 포트를 잡고 있으면 먼저 종료하세요.
+set -euo pipefail
+
+PORT="${PORT:-}"
+LINES=5
+RAW=0
+SEND=""
+WHEEL_L=""
+WHEEL_R=""
+SECS=2
+TORQUE=""
+REBOOT=""
+YES=0
+TIMEOUT=3
+
+usage() {
+  sed -n '6,26p' "$0"
+}
+
+while (($#)); do
+  case "$1" in
+    --port) PORT="$2"; shift 2 ;;
+    --lines) LINES="$2"; shift 2 ;;
+    --raw) RAW=1; shift ;;
+    --send) SEND="$2"; shift 2 ;;
+    --wheel)
+      WHEEL_L="$2"; WHEEL_R="$2"; shift 2
+      if (($#)) && [[ "$1" =~ ^-?[0-9.]+$ ]]; then WHEEL_R="$1"; shift; fi ;;
+    --secs) SECS="$2"; shift 2 ;;
+    --torque) TORQUE="$2"; shift 2 ;;
+    --reboot)
+      REBOOT=all; shift
+      if (($#)) && [[ "$1" =~ ^(all|left|right)$ ]]; then REBOOT="$1"; shift; fi ;;
+    --yes) YES=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "모르는 인자: $1"; usage; exit 2 ;;
+  esac
+done
+
+if [ -z "$PORT" ]; then
+  if [ -e /dev/opencr ]; then PORT=/dev/opencr; else PORT=/dev/ttyACM0; fi
+fi
+[ -e "$PORT" ] || { echo "FAIL: 포트 없음: $PORT (ls -l /dev/opencr /dev/ttyACM* · ./install-udev.sh)"; exit 1; }
+[ -r "$PORT" ] && [ -w "$PORT" ] || { echo "FAIL: $PORT 권한 없음 → ./install-udev.sh 또는 sudo usermod -aG dialout \$USER"; exit 1; }
+# 다른 프로그램이 잡고 있으면 줄이 섞인다. socat(가상 시리얼 쌍)은 원래 잡고 있으므로 제외.
+holders=""
+for pid in $(fuser "$PORT" 2>/dev/null || true); do
+  [ "$(cat /proc/"$pid"/comm 2>/dev/null)" = socat ] || holders+=" $pid"
+done
+[ -z "$holders" ] || { echo "FAIL: $PORT 사용 중 (pid:$holders) — 먼저 종료"; exit 1; }
+
+moving=0
+[ -n "$SEND$WHEEL_L$REBOOT" ] && moving=1
+[ "$TORQUE" = on ] && moving=1
+if [ "$moving" = 1 ] || [ -n "$TORQUE" ]; then
+  [ "$YES" = 1 ] || { echo "거부: 모터에 명령을 보냅니다 — 확인했으면 --yes"; exit 2; }
+fi
+
+stty -F "$PORT" 115200 raw -echo -hupcl
+exec 3<>"$PORT"
+
+send() {
+  printf '%s\n' "$1" >&3
+  [ "$RAW" = 1 ] && echo ">> $1"
+  return 0
+}
+
+stop_wheels() { send 'C,0,0' 2>/dev/null || true; }
+# 읽기만 할 때는 아무것도 보내지 않는다 (명령을 보낸 경우에만 끝에서 정지)
+[ "$moving" = 1 ] && trap 'stop_wheels' EXIT
+trap 'exit 130' INT
+
+# S,<l_pos>,<l_vel>,<r_pos>,<r_vel>,<uptime>,<l_cur>,<r_cur>,<l_temp>,<r_temp>
+show_line() {
+  local line="$1"
+  if [ "$RAW" = 1 ]; then echo "<< $line"; return; fi
+  IFS=',' read -r -a f <<<"$line"
+  case "${f[0]}" in
+    S)
+      if [ "${#f[@]}" -ge 10 ]; then
+        printf 'S  좌 pos %9s vel %8s cur %6sA %3s℃ | 우 pos %9s vel %8s cur %6sA %3s℃ | %sms\n' \
+          "${f[1]}" "${f[2]}" "${f[6]}" "${f[8]}" "${f[3]}" "${f[4]}" "${f[7]}" "${f[9]}" "${f[5]}"
+      else
+        echo "S (필드 ${#f[@]}개 — 옛 펌웨어?) $line"
+      fi ;;
+    E)
+      echo "E  좌 $(err_txt "${f[1]:-}") | 우 $(err_txt "${f[2]:-}")" ;;
+    *)
+      echo "?  $line" ;;
+  esac
+}
+
+err_txt() {
+  local v="$1" out=""
+  [ -z "$v" ] && { echo '?'; return; }
+  [ "$v" = 0 ] && { echo '정상'; return; }
+  [ "$v" = -1 ] && { echo '무응답(-1)'; return; }
+  ((v & 1)) && out+="입력전압 "
+  ((v & 4)) && out+="과열 "
+  ((v & 8)) && out+="엔코더 "
+  ((v & 16)) && out+="전기충격 "
+  ((v & 32)) && out+="과부하 "
+  echo "${out}(${v})"
+}
+
+# n개의 S 줄을 읽는다 (E 줄은 보이는 대로 같이 출력)
+read_status() {
+  local want="$1" got=0 line
+  while ((got < want)); do
+    if ! IFS= read -r -t "$TIMEOUT" line <&3; then
+      echo "FAIL: ${TIMEOUT}초 동안 응답 없음 — 펌웨어 업로드·보드 전원·포트 확인"
+      exit 1
+    fi
+    line="${line%$'\r'}"
+    [ -z "$line" ] && continue
+    show_line "$line"
+    [[ "$line" == S,* ]] && got=$((got + 1))
+  done
+}
+
+echo "=== $PORT"
+read_status 1
+
+if [ -n "$TORQUE" ]; then
+  case "$TORQUE" in
+    on|1) send 'T,1' ;;
+    off|0) send 'T,0' ;;
+    *) echo "--torque on|off"; exit 2 ;;
+  esac
+  read_status 2
+fi
+
+if [ -n "$REBOOT" ]; then
+  case "$REBOOT" in
+    all) send 'R' ;;
+    left) send 'R,1,0' ;;
+    right) send 'R,0,1' ;;
+  esac
+  echo "(재부팅 중 최대 ~2초 S가 멈춥니다)"
+  read_status 3
+fi
+
+if [ -n "$SEND" ]; then
+  send "$SEND"
+  read_status "$LINES"
+fi
+
+if [ -n "$WHEEL_L" ]; then
+  echo "=== 바퀴 좌 $WHEEL_L · 우 $WHEEL_R rad/s, ${SECS}초"
+  end=$(( $(date +%s%N) + ${SECS%.*} * 1000000000 ))
+  next=0
+  while (( $(date +%s%N) < end )); do
+    now=$(date +%s%N)
+    if (( now >= next )); then
+      send "C,$WHEEL_L,$WHEEL_R"
+      next=$(( now + 100000000 ))
+    fi
+    if IFS= read -r -t 0.1 line <&3; then
+      line="${line%$'\r'}"
+      [ -n "$line" ] && show_line "$line"
+    fi
+  done
+  stop_wheels
+  echo "=== 정지 (C,0,0)"
+  read_status 2
+  exit 0
+fi
+
+[ -z "$SEND$TORQUE$REBOOT" ] && read_status $((LINES - 1))
+echo "OK"
