@@ -5,9 +5,10 @@ opencr_driver:
     baud: 115200
     wheel_radius: 0.033        # [m]
     wheel_separation: 0.287    # [m] 좌우 바퀴 중심 사이 (Waffle Pi. Burger는 0.160)
-    # 장착 방향. TB3는 모터를 거울 대칭으로 달아 오른쪽이 -1.
-    # 확인: ./run-cli drive forward → 두 바퀴가 같이 앞으로. 한쪽이 거꾸로면 그쪽 부호를 바꾼다.
-    left_dir: 1.0
+    # 장착 방향 (펌웨어 +rad/s가 바퀴를 어느 쪽으로 굴리나). 이 로봇은 둘 다 -1 (2026-10-27 실기:
+    # left_dir=+1일 때 w → 제자리 회전, d → 후진 = 왼쪽만 거꾸로 → 왼쪽 부호 반전).
+    # 확인: teleop w → 직진 · a → 제자리 좌회전(위에서 볼 때 반시계). 한쪽이 거꾸로면 그쪽 부호를 바꾼다.
+    left_dir: -1.0
     right_dir: -1.0
     cmd_rate: 20.0             # C 재전송 [Hz] (펌웨어 watchdog 500 ms)
     cmd_timeout: 0.5           # cmd_vel이 이만큼 끊기면 0 [s]
