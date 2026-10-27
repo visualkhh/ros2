@@ -22,8 +22,7 @@ else
 fi
 
 # 이 프로젝트는 ROS_DOMAIN_ID=25로 통일 (로봇 Pi · PC · docker). ~/.bashrc 값과 무관하게 25.
-# 시험용으로 다른 값이 필요하면 ROBOT_DOMAIN_ID=77 ./run-cli ...
-export ROS_DOMAIN_ID="${ROBOT_DOMAIN_ID:-25}"
+export ROS_DOMAIN_ID=25
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 
 exec python3 -u "$HERE/robot_tool.py" "$@"

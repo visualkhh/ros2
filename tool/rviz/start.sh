@@ -2,7 +2,6 @@
 # tool/rviz 시작 — PC에서 로봇(Pi)의 /map·/scan·TF를 본다.
 #   ./start.sh            # slam.rviz (맵핑 보기: 지도·스캔·odom·포즈 그래프)
 #   ./start.sh nav        # nav.rviz  (주행 보기: 지도·코스트맵·경로 · 2D Pose Estimate / Goal)
-#   ROBOT_DOMAIN_ID=77 ./start.sh   # 시험용 (기본 25)
 set -eo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -34,8 +33,7 @@ if ! command -v rviz2 >/dev/null; then
 fi
 
 # 이 프로젝트는 ROS_DOMAIN_ID=25로 통일 (로봇 Pi · PC · docker). ~/.bashrc 값과 무관하게 25.
-# 시험용으로 다른 값이 필요하면 ROBOT_DOMAIN_ID=77 ./run-cli ...
-export ROS_DOMAIN_ID="${ROBOT_DOMAIN_ID:-25}"
+export ROS_DOMAIN_ID=25
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 
 if [ "${ROS_LOCALHOST_ONLY:-0}" = "1" ] || [ "${ROS_AUTOMATIC_DISCOVERY_RANGE:-}" = "LOCALHOST" ]; then

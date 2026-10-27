@@ -32,8 +32,7 @@ tool/
 "맵핑 모드로 전송" 같은 명령은 따로 없습니다. **Pi에서 SLAM을 켜면 그게 맵핑 중**이고,
 PC RViz는 같은 `ROS_DOMAIN_ID`(=25)로 `/map`·`/scan`·TF를 받아 그릴 뿐입니다.
 
-`ROS_DOMAIN_ID`는 **25로 통일**합니다. `cli/start.sh`·`rviz/start.sh`가 `~/.bashrc` 값과 무관하게 25로 맞춥니다.
-시험할 때만 `ROBOT_DOMAIN_ID=77 ./run-cli ...`처럼 바꿉니다.
+`ROS_DOMAIN_ID`는 **25로 통일**합니다. `cli/start.sh`·`rviz/start.sh`가 `export ROS_DOMAIN_ID=25`를 하므로 `~/.bashrc` 값과 무관합니다.
 
 ## 지도 만들기 (SLAM)
 
@@ -109,7 +108,6 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). �
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) |
 | `TOOL_SLAM_PARAMS` / `TOOL_NAV_PARAMS` | `config/*.yaml` | 파라미터 파일 |
 | `TOOL_USE_SIM_TIME` | `false` | Gazebo면 `true` |
-| `ROBOT_DOMAIN_ID` | `25` | 시험용 도메인 분리 |
 
 프레임 규약: `map → odom → base_link`, 스캔은 `/scan`. 라이다 프레임(`base_scan` 등)은 베이스 bringup이
 `base_link → <라이다>` static TF를 내야 합니다. `base_footprint`를 쓰는 드라이버면 `config/*.yaml`의 `base_link`를 바꿉니다.
@@ -134,7 +132,7 @@ ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
 mock_base(odom)에 가짜 라이다를 붙여 전체 흐름(SLAM → 저장 → Nav 목표 → SLAM 중 Nav)을 확인했습니다 (2026-10-27).
 
 ```bash
-export ROBOT_DOMAIN_ID=77 TOOL_MAP_DIR=/tmp/maps
+export TOOL_MAP_DIR=/tmp/maps   # 시험 지도는 따로
 ./run-cli base start            # mock_base
 # + /scan을 내는 무언가 (Gazebo turtlebot3 또는 가짜 스캔 노드)
 ./run-cli slam start && ./run-cli drive left --duration 4 && ./run-cli map save test
