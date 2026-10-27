@@ -6,6 +6,7 @@
 
 - 대상: Raspberry Pi 4 Model B · 4GB RAM · 4코어 · arm64 · Ubuntu 26.04 LTS Server (resolute) · Python 3.14
 - ROS: Lyrical Luth (LTS) — 26.04 Tier 1, 공식 apt에 arm64 deb 있음 (Jetson용 Isaac 저장소 같은 우회 불필요)
+- 전체 세팅 순서(목차): [Pi 세팅 순서](../../raspberry/lyrical-setup.md)
 - OS 설치·WiFi·SSH: [SD카드 OS 설치](../../raspberry/raspberry-pi-ubuntu-sdcard-os-install.md) · [SSH 접속](../../raspberry/ssh-pak-local-troubleshooting.md)
 - OpenCR 펌웨어 툴: [OpenCR 세팅](../../opencr/opencr-setup-ubuntu26.04.md)
 - PC(개발·RViz)도 같은 방법으로 깔고, 4장의 PC 추가분만 더 깝니다.
