@@ -142,7 +142,11 @@ ros2 run demo_nodes_cpp talker     # demo_nodes_cpp 없으면: ros2 topic pub /c
 ros2 topic echo /chatter
 ```
 
-안 보이면: 같은 WiFi인지 · 양쪽 `ROS_DOMAIN_ID=25` · `ROS_AUTOMATIC_DISCOVERY_RANGE`가 `LOCALHOST`가 아닌지 ·
+**사내 WiFi는 멀티캐스트를 버려서 자동 탐색이 불안정** (ping은 되는데 노드가 안 보이거나 보였다 사라짐 — 2026-10-27 실측).
+PC 쪽에서 Pi를 직접 지정하면 해결 (한쪽만 지정해도 양방향): `export ROS_STATIC_PEERS=pak.local`.
+`tool/run-cli`·`run-rviz`는 PC에서 이걸 자동으로 넣습니다.
+
+그래도 안 보이면: 같은 WiFi인지 · 양쪽 `ROS_DOMAIN_ID=25` · `ROS_AUTOMATIC_DISCOVERY_RANGE`가 `LOCALHOST`가 아닌지 ·
 사내/게스트 WiFi의 기기 간 차단(AP isolation) — 이 경우 폰 핫스팟 등으로 시험.
 
 ## 6. Docker (PC 시험대 전용)

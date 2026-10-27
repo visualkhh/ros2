@@ -24,5 +24,12 @@ fi
 # 이 프로젝트는 ROS_DOMAIN_ID=25로 통일 (로봇 Pi · PC · docker). ~/.bashrc 값과 무관하게 25.
 export ROS_DOMAIN_ID=25
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+# PC에서 실행할 때: 로봇 Pi를 유니캐스트로 직접 찾는다. 사내 WiFi는 멀티캐스트(DDS 자동 탐색)를 자주 버려서
+# 노드가 보였다 안 보였다 함 (2026-10-27 실측: ping은 되는데 ros2 node list가 빔). 한쪽만 지정해도 양방향 연결됨.
+# Pi 자신에서 실행할 때는 필요 없음. 로봇 이름이 다르면 ROBOT_HOST=다른이름.local
+if [ "$(hostname)" != "${ROBOT_HOST:-pak.local}" ] && [ "$(hostname).local" != "${ROBOT_HOST:-pak.local}" ]; then
+  export ROS_STATIC_PEERS="${ROS_STATIC_PEERS:-${ROBOT_HOST:-pak.local}}"
+  echo "ROS_STATIC_PEERS=$ROS_STATIC_PEERS"
+fi
 
 exec python3 -u "$HERE/robot_tool.py" "$@"
