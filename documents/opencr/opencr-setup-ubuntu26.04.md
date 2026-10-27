@@ -1,73 +1,58 @@
-# OpenCR 세팅 - Ubuntu 26.04 기준 (Arduino CLI)
+# OpenCR 세팅 — Raspberry Pi 4 (Ubuntu 26.04, arm64) 기준
 
-> 원본: `/home/pank/workspaces/pa/source/Lv2_bee_Assignment/docker/Dockerfile` 127-169행
-> 24.04 Jetson Orin Nano 기준 내용 중 26.04에서도 그대로 되는 부분만 정리.
-> ROS Lyrical 문서: [../ros/lyrical/lyrical-setup-ubuntu26.04.md](../ros/lyrical/lyrical-setup-ubuntu26.04.md)
+OpenCR은 로봇 Pi(`pak`)의 USB에 꽂혀 있고, 펌웨어 빌드·업로드도 **Pi에서** 합니다.
+설치·빌드·업로드는 저장소의 스크립트가 다 하므로 이 문서는 순서와 주의점만 적습니다.
 
-- 보드: OpenCR 1.0 (TurtleBot3 Burger / Waffle)
-- 코어 버전: 1.5.3 (고정, 재현성)
-- 툴체인: Ubuntu 시스템 `gcc-arm-none-eabi` 사용 (인덱스 내장 `opencr_gcc` 대체)
-- 26.04 amd64/arm64 공통 적용
+- 보드: OpenCR 1.0 · 바퀴 DYNAMIXEL XM430-W350 ×2 (ID 1·2, 1 Mbps, Protocol 2.0)
+- 펌웨어: [`firmware/opencr/tb3_wheels`](../../firmware/opencr/README.md) (프로토콜 `C`/`T`/`R` → `S`/`E`)
+- 보드 코어 1.5.3 고정 (sha256 확인) · 툴체인은 Ubuntu `gcc-arm-none-eabi` · 라이브러리는 코어에 든 DynamixelSDK
+- ROS 설치: [Lyrical (Pi 기준)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) — 펌웨어 작업만이면 ROS 없어도 됨
 
-## 1. 설치
-
-```bash
-# Arduino CLI
-curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
-  | BINDIR=/usr/local/bin sh
-
-# OpenCR 보드 인덱스
-arduino-cli config init --overwrite
-arduino-cli config add board_manager.additional_urls \
-  https://raw.githubusercontent.com/ROBOTIS-GIT/OpenCR/master/arduino/opencr_release/package_opencr_index.json
-arduino-cli core update-index
-
-# 시스템 ARM 툴체인 (26.04 동일 패키지명)
-sudo apt update && sudo apt install -y \
-  gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
-
-# 보드 코어 설치 (아키텍처별 분기 - 원본 Dockerfile 로직)
-# x86_64:
-arduino-cli core install OpenCR:OpenCR
-# 인덱스의 opencr_gcc는 32비트(i386)라 64비트 이미지에서 실행 불가 → 시스템 gcc로 대체
-rm -rf /root/.arduino15/packages/OpenCR/tools/opencr_gcc/5.4.0-2016q2/bin
-mkdir -p /root/.arduino15/packages/OpenCR/tools/opencr_gcc/5.4.0-2016q2/bin
-for f in /usr/bin/arm-none-eabi-*; do ln -s "$f" /root/.arduino15/packages/OpenCR/tools/opencr_gcc/5.4.0-2016q2/bin/; done
-
-# arm64 (라즈베리파이 등):
-# curl -fsSL "https://github.com/ROBOTIS-GIT/OpenCR/releases/download/1.5.3/opencr.tar.bz2" -o /tmp/opencr.tar.bz2
-# echo "418656e5e6d99d45d187ffdb28dece0f450c6707da3f6db56769f3ecafdc413c  /tmp/opencr.tar.bz2" | sha256sum -c -
-# mkdir -p /root/.arduino15/packages/OpenCR/hardware/OpenCR/1.5.3 \
-#   /root/.arduino15/packages/OpenCR/tools/opencr_gcc/5.4.0-2016q2/bin
-# tar xzf /tmp/opencr.tar.bz2 -C /tmp
-# cp -a /tmp/opencr/. /root/.arduino15/packages/OpenCR/hardware/OpenCR/1.5.3/
-# for f in /usr/bin/arm-none-eabi-*; do ln -s "$f" /root/.arduino15/packages/OpenCR/tools/opencr_gcc/5.4.0-2016q2/bin/; done
-
-# 라이브러리
-arduino-cli lib install Dynamixel2Arduino
-```
-
-환경변수 (알림 끄기):
+## 1. 순서 (Pi에서)
 
 ```bash
-export ARDUINO_UPDATER_ENABLE_NOTIFICATION=false
+ssh pak
+cd ~/ros2/firmware/opencr
+./setup.sh            # 최초 1회: apt(gcc-arm-none-eabi 등) · arduino-cli · OpenCR 코어 · opencr_ld_shell_arm
+./install-udev.sh     # 최초 1회: /dev/opencr 고정 이름 + 권한 0666
+./compile.sh          # → build/tb3_wheels/tb3_wheels.ino.bin
+./upload.sh           # /dev/opencr (없으면 /dev/ttyACM0)
+./test-firmware       # S 줄 5개 읽기 (아무것도 안 보냄)
 ```
 
-## 2. 26.04 주의사항 (24.04 대비)
+`./setup_compile_upload.sh` = setup + compile + upload 한 번에.
 
-- `OPENCR_VERSION=1.5.3`, `OPENCR_SHA256=418656e5e...` 고정값 그대로 사용.
-- 릴리스 파일명이 `.tar.bz2`지만 내용은 gzip → `tar xzf` 사용 (원본 주석 실측).
-- `opencr_tools` 업로더는 x86_64만 제공 → arm64에서는 컴파일만 되고 업로드는 x86_64 실기 PC에서.
-- FQBN: `OpenCR:OpenCR:OpenCR`
+## 2. arm64(Pi)에서 달라지는 점 — `setup.sh`가 처리
 
-## 3. 검증
+| 항목 | x86_64 PC | arm64 Pi |
+|---|---|---|
+| 보드 코어 | `arduino-cli core install OpenCR:OpenCR` | 인덱스에 arm64 툴이 없어 릴리스 `opencr.tar.bz2`(1.5.3)를 받아 수동 설치. 이름은 `.tar.bz2`지만 내용은 gzip → `tar xzf` |
+| 컴파일러 | 인덱스 `opencr_gcc`(32비트)를 시스템 `arm-none-eabi-*` 링크로 교체 | 같은 자리에 시스템 `arm-none-eabi-*` 링크 |
+| 업로더 | `opencr_ld_shell_x86` | `opencr_ld_shell_arm` (32비트 ARM 바이너리) → `dpkg --add-architecture armhf` + `libc6:armhf` 필요 |
+| 업로더 위치 | `~/.local/share/opencr_update/` | 같음 |
+
+이전 판의 "arm64에서는 업로드 불가, x86 PC에서" 는 틀렸습니다 — ROBOTIS가 `opencr_ld_shell_arm`을 제공하고
+`setup.sh`가 받습니다. `Dynamixel2Arduino` 설치도 필요 없습니다 (tb3_wheels는 코어 내장 DynamixelSDK 사용).
+
+## 3. 포트·권한
 
 ```bash
-arduino-cli core list
-arduino-cli lib list | grep -i dynamixel
-ls -l /dev/opencr  # 실기 연결 시 (udev 고정 이름)
+lsusb | grep 0483:5740          # STMicroelectronics Virtual COM Port = OpenCR
+ls -l /dev/opencr /dev/ttyACM*  # udev 설치 후 /dev/opencr → ttyACM0
 ```
 
-관련:
-- Lyrical 본체: [ROS 2 Lyrical Ubuntu 26.04 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md)
-- 허브: [Ubuntu 26.04 정리](../ubuntu26_04/lyrical-setup-ubuntu26.04.md)
+- udev 규칙: `firmware/opencr/99-opencr.rules` (`MODE=0666` · ModemManager 무시). 규칙 없이 쓰려면 `sudo usermod -aG dialout $USER` 후 재로그인.
+- 포트를 다른 프로그램(베이스 드라이버·시리얼 모니터)이 잡고 있으면 `upload.sh`·`test-firmware`가 거부 → `tool/run-cli stop-all`.
+
+## 4. 문제 확인
+
+- 업로드 응답 없음 → OpenCR **SW2를 누른 채 RESET** (부트로더 모드, LED 깜빡임) → `./upload.sh` 다시.
+- `test-firmware`가 `응답 없음` → 펌웨어 미업로드 · 바퀴 전원(12V) · 모터 ID/보드레이트 확인. 모터가 없어도 `S`는 나옴 (값 0).
+- `E,..` 줄 → 비트 해석·`R` 재부팅은 [firmware README](../../firmware/opencr/README.md).
+
+```bash
+arduino-cli core list            # OpenCR:OpenCR 1.5.3
+ls ~/.local/share/opencr_update/ # opencr_ld_shell_arm · _x86
+```
+
+관련: [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [허브](../ubuntu26_04/lyrical-setup-ubuntu26.04.md)
