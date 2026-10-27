@@ -1,5 +1,7 @@
 # ros2_ws — Lyrical RL 실험 워크스페이스
 
+시스템 노드 계통도 · TF · 토픽 · 장치: **[ARCH.md](ARCH.md)**
+
 ## 패키지
 
 - `rl_correction/` — 이동 보정 RL 노드 (`corrector`: `cmd_vel_in` → `cmd_vel_out`)
