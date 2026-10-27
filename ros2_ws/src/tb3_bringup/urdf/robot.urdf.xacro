@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <!--
-  TurtleBot3 Waffle Pi 개조형: 맨 위 판(원래 라이다 자리) 걷어냄 · LDS-03 라이다를 1층 앞쪽에 앞으로 조금 튀어나오게.
+  TurtleBot3 Waffle Pi 개조형: 맨 위 판(원래 라이다 자리) 걷어냄 · LDS-03 라이다를 1층 맨 앞, 두 바퀴 사이 가운데에.
+  2층(지금 맨 위): 앞쪽 OpenCR · 뒤쪽 Raspberry Pi 4 (2026-10-27 사진 기준).
 
   치수 출처: turtlebot3_description/urdf/turtlebot3_waffle_pi.urdf (ROBOTIS, Apache 2.0) —
   바퀴·캐스터·몸통 외곽은 원본 그대로. 라이다 크기는 LDS-03 e-Manual (54.7 W × 39.7 D × 34 H mm).
@@ -20,7 +21,7 @@
   <xacro:property name="plate_z2" value="0.047"/>          <!-- 측정: 2층 판 (지금 맨 위) -->
 
   <!-- LDS-03 라이다. base_scan = 스캔 평면 중심 = coin_d4_driver frame_id -->
-  <xacro:property name="lidar_x" value="0.075"/>           <!-- 측정: 앞끝(0.069)보다 조금 앞 (라이다 중심) -->
+  <xacro:property name="lidar_x" value="0.060"/>           <!-- 측정: 라이다 중심 — 바퀴축(0)보다 앞, 판 앞끝(0.069) 근처 -->
   <xacro:property name="lidar_y" value="0.0"/>
   <xacro:property name="lidar_z" value="0.022"/>           <!-- 측정: 스캔 평면 높이 (1층 판 위, 2층 판 0.047 아래) -->
   <xacro:property name="lidar_yaw" value="0.0"/>           <!-- 측정: 라이다 0°가 로봇 앞과 다르면 (rad) -->
@@ -55,10 +56,15 @@
       <geometry><box size="0.090 0.070 0.030"/></geometry>
       <material name="dark"/>
     </visual>
-    <!-- 2층: OpenCR + RPi (대략) -->
+    <!-- 2층: 앞쪽 OpenCR (105×75mm) · 뒤쪽 Raspberry Pi 4 (85×56mm) — 사진 기준 대략 위치 -->
     <visual>
-      <origin xyz="${body_x} 0 ${plate_z2 + 0.012}"/>
-      <geometry><box size="0.105 0.110 0.024"/></geometry>
+      <origin xyz="-0.025 0 ${plate_z2 + 0.010}"/>
+      <geometry><box size="0.075 0.105 0.020"/></geometry>
+      <material name="board"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.140 -0.010 ${plate_z2 + 0.010}"/>
+      <geometry><box size="0.056 0.085 0.020"/></geometry>
       <material name="board"/>
     </visual>
     <collision>

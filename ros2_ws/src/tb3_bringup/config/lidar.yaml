@@ -18,9 +18,9 @@ scan_filter:
       type: laser_filters/LaserScanBoxFilter
       params:
         box_frame: base_link
-        # 몸통 + 바퀴 + 여유 1cm (urdf: x -0.197~0.069, 바퀴 y ±0.153). 라이다 자체(앞 0.095)는 포함 안 함
+        # 몸통 + 바퀴 + 여유 1cm (urdf: x -0.197~0.069, 바퀴 y ±0.153). 라이다(중심 x 0.060) 뒤쪽까지만
         min_x: -0.207
-        max_x: 0.060
+        max_x: 0.035
         min_y: -0.165
         max_y: 0.165
         min_z: -0.05
