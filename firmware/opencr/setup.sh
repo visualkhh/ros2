@@ -79,12 +79,12 @@ echo "=== OpenCR 코어 패치: min/max 매크로 (gcc 14 newlib C++ 헤더와 �
 # DynamixelSDK 컴파일이 실패한다 (Ubuntu 26.04 gcc-arm-none-eabi 14). C++에서는 템플릿 함수로 바꾼다
 # (ArduinoCore-API와 같은 방식). C 파일은 기존 매크로 그대로.
 wc_h="$data/packages/OpenCR/hardware/OpenCR/$OPENCR_VERSION/cores/arduino/wiring_constants.h"
-if [ -f "$wc_h" ] && ! grep -q 'tool-patch: minmax' "$wc_h"; then
+if [ -f "$wc_h" ] && ! grep -q 'tool-patch: minmax2' "$wc_h"; then
   python3 - "$wc_h" <<'PY'
-import sys
+import re, sys
 p = sys.argv[1]
 s = open(p).read()
-old = """#ifndef min
+orig = """#ifndef min
 #define min(a,b) ((a)<(b)?(a):(b))
 #endif // min
 
@@ -92,14 +92,15 @@ old = """#ifndef min
 #define max(a,b) ((a)>(b)?(a):(b))
 #endif // max
 """
-new = """// tool-patch: minmax — C++에서는 매크로 대신 템플릿 (std 헤더 <map> 등과 충돌 방지)
+new = """// tool-patch: minmax2 — C++에서는 매크로 대신 템플릿 (std 헤더 <map> 등과 충돌 방지).
+// 이 헤더는 바깥 extern "C" 블록 안에서 포함되기도 하므로 extern "C++"로 감싼다.
 #ifdef __cplusplus
-} // extern "C"
+extern "C++" {
 template<class T, class L>
 auto min(const T& a, const L& b) -> decltype((b < a) ? b : a) { return (b < a) ? b : a; }
 template<class T, class L>
 auto max(const T& a, const L& b) -> decltype((b < a) ? b : a) { return (a < b) ? b : a; }
-extern "C" {
+}
 #else
 #ifndef min
 #define min(a,b) ((a)<(b)?(a):(b))
@@ -109,8 +110,12 @@ extern "C" {
 #endif // max
 #endif
 """
-assert old in s, "wiring_constants.h 형식이 예상과 다름"
-open(p, "w").write(s.replace(old, new))
+if orig in s:
+    s = s.replace(orig, new)
+else:  # 이전 판 패치(minmax)를 덮어씀
+    s, n = re.subn(r"// tool-patch: minmax .*?#endif // max\n#endif\n", lambda m: new, s, flags=re.S)
+    assert n == 1, "wiring_constants.h 형식이 예상과 다름"
+open(p, "w").write(s)
 PY
   echo "패치 적용: $wc_h"
 fi
