@@ -130,7 +130,8 @@ ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
 
 - PC RViz에 아무것도 안 보임 → PC와 Pi가 같은 WiFi · 둘 다 `ROS_DOMAIN_ID=25` · `ROS_LOCALHOST_ONLY`/`ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST` 아님
 - PC에서 Pi 노드가 보였다 안 보였다 함 (`odom ✗`, `ros2 node list` 빔, ping은 됨) → WiFi가 멀티캐스트를 버림.
-  `run-cli`·`run-rviz`는 PC에서 자동으로 `ROS_STATIC_PEERS=pak.local`(유니캐스트)을 씁니다. 직접 `ros2` 명령을 칠 때는
+  `run-cli`·`run-rviz`는 PC에서 자동으로 `ROS_STATIC_PEERS=<pak.local의 IP>`(유니캐스트)를 씁니다 (`tool/peers.sh`).
+  이름 조회가 순간 실패해도 재시도 → 마지막으로 찾은 IP(`.run/robot_ip.pak.local`) → 그래도 없으면 경고 후 멀티캐스트만. 직접 `ros2` 명령을 칠 때는
   `export ROS_DOMAIN_ID=25 ROS_STATIC_PEERS=pak.local` 후 실행.
 - 지도가 안 커짐 → `scan` 수신 확인, 라이다 TF 확인, 너무 빨리 돌면 스캔 매칭 실패 (천천히)
 - Nav 목표 거부 → `initpose` 먼저, `./run-cli nav log`
