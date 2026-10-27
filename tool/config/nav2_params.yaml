@@ -5,7 +5,7 @@ amcl:
     alpha3: 0.2
     alpha4: 0.2
     alpha5: 0.2
-    base_frame_id: "base_link"  # tool: base_footprint 없음
+    base_frame_id: "base_footprint"  # REP-105 (nav2 기본값)
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
@@ -510,7 +510,7 @@ collision_monitor:
   ros__parameters:
     enable_stamped_cmd_vel: false  # tool: mock_base·자체 드라이버는 Twist (Lyrical 기본 true=TwistStamped)
     enabled: true
-    base_frame_id: "base_link"  # tool: base_footprint 없음
+    base_frame_id: "base_footprint"  # REP-105 (nav2 기본값)
     odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_smoothed"
     cmd_vel_out_topic: "cmd_vel"
@@ -596,7 +596,7 @@ docking_server:
 
 loopback_simulator:
   ros__parameters:
-    base_frame_id: "base_link"  # tool: base_footprint 없음
+    base_frame_id: "base_footprint"  # REP-105 (nav2 기본값)
     odom_frame_id: "odom"
     map_frame_id: "map"
     scan_frame_id: "base_scan" # tb4_loopback_simulator.launch.py remaps to 'rplidar_link'

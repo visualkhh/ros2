@@ -109,8 +109,9 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). �
 | `TOOL_SLAM_PARAMS` / `TOOL_NAV_PARAMS` | `config/*.yaml` | 파라미터 파일 |
 | `TOOL_USE_SIM_TIME` | `false` | Gazebo면 `true` |
 
-프레임 규약: `map → odom → base_link`, 스캔은 `/scan`. 라이다 프레임(`base_scan` 등)은 베이스 bringup이
-`base_link → <라이다>` static TF를 내야 합니다. `base_footprint`를 쓰는 드라이버면 `config/*.yaml`의 `base_link`를 바꿉니다.
+프레임 규약 (REP-105, TurtleBot3와 같음): `map → odom → base_footprint(바닥) → base_link(바퀴축 +0.010) → base_scan`.
+`odom → base_footprint`는 드라이버(opencr_driver·mock_base), 나머지는 URDF(robot_state_publisher). 스캔은 `/scan`.
+SLAM·amcl은 `base_footprint`, costmap·footprint 다각형은 `base_link` 기준 (turtlebot3_navigation2와 같음).
 
 `config/nav2_params.yaml`은 `enable_stamped_cmd_vel: false`입니다. Lyrical Nav2 기본은 `TwistStamped`인데
 `mock_base`·자체 드라이버는 `Twist`를 받기 때문입니다 (안 맞으면 Nav가 경로는 내도 바퀴가 안 움직임).

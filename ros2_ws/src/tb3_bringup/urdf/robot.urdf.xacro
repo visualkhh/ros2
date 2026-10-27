@@ -7,8 +7,8 @@
   바퀴·캐스터·몸통 외곽은 원본 그대로. 라이다 크기는 LDS-03 e-Manual (54.7 W × 39.7 D × 34 H mm).
   ★ 실측해서 고칠 값 = 아래 property 중 "측정" 표시. 바꾸면 colcon build 후 view-model로 다시 확인.
 
-  좌표: base_link(바퀴축 높이, 바닥+0.010) — x 앞 · y 왼쪽 · z 위. 루트는 base_link
-  (드라이버가 odom→base_link를 내므로 base_footprint를 위에 두면 부모가 둘이 됨 — tool·Nav2도 base_link 기준).
+  좌표 (REP-105, 원본 TB3와 같음): base_footprint(바닥, 루트) → base_link(바퀴축, +0.010) — x 앞 · y 왼쪽 · z 위.
+  드라이버가 odom→base_footprint를 낸다. 아래 값은 전부 base_link 기준.
   원본 몸통: 중심 x -0.064, 266×266mm → x -0.197 ~ +0.069 (앞끝 0.069), 높이 z 0 ~ 0.094.
 -->
 <robot name="tb3_waffle_pi_lowlidar" xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -42,6 +42,12 @@
     </visual>
   </xacro:macro>
 
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/><child link="base_link"/>
+    <origin xyz="0 0 0.010"/>
+  </joint>
+
   <link name="base_link">
     <xacro:plate_visual z="${plate_z1}"/>
     <xacro:plate_visual z="${plate_z2}"/>
@@ -71,7 +77,6 @@
       <origin xyz="${body_x} 0 ${(plate_z2 + 0.030) / 2}"/>
       <geometry><box size="${plate} ${plate} ${plate_z2 + 0.030}"/></geometry>
     </collision>
-    <!-- inertial 없음: 루트 링크 inertia는 KDL(robot_state_publisher)이 경고만 냄 — 시뮬레이션 안 하므로 생략 -->
   </link>
 
   <xacro:macro name="wheel" params="side y mesh">

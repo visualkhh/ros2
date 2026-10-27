@@ -8,7 +8,7 @@ Protocol (firmware/opencr/README.md):
 Topics:
   sub  <cmd_topic> (Twist, default cmd_vel)   robot.launch.py rl:=true -> cmd_vel_rl
   sub  opencr/reboot (Empty)                   -> R (clears DYNAMIXEL hardware error)
-  pub  odom, TF odom->base_link, joint_states, diagnostics
+  pub  odom, TF odom->base_footprint (REP-105), joint_states, diagnostics
 The firmware stops the wheels by itself if no C arrives for 500 ms, so a dead PC/RL link stops the robot.
 """
 import math
@@ -53,7 +53,7 @@ class OpencrDriver(Node):
         self.cmd_timeout = p('cmd_timeout', 0.5).value     # no cmd_vel for this long -> send 0
         self.publish_tf = p('publish_tf', True).value
         self.odom_frame = p('odom_frame', 'odom').value
-        self.base_frame = p('base_frame', 'base_link').value
+        self.base_frame = p('base_frame', 'base_footprint').value
         cmd_topic = p('cmd_topic', 'cmd_vel').value
 
         self.fd = None

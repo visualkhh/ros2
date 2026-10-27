@@ -12,7 +12,7 @@ slam_toolbox:
     # ROS Parameters
     odom_frame: odom
     map_frame: map
-    base_frame: base_link  # tool: mock_base·자체 드라이버가 odom->base_link를 냄
+    base_frame: base_footprint  # REP-105: odom→base_footprint(바닥)→base_link
     scan_topic: /scan
     use_map_saver: true
     mode: mapping #localization
