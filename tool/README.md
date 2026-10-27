@@ -102,7 +102,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). �
 
 | 변수 | 기본 | 뜻 |
 |---|---|---|
-| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup basic_bringup.launch.py` | 베이스 bringup. 실기 드라이버·라이다가 생기면 이걸로 교체 |
+| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL 연동은 `tb-rl.launch.py`, PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
 | `TOOL_CMD_VEL` | `/cmd_vel` | 텔레오퍼·drive가 내는 토픽 |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) |
@@ -133,7 +133,7 @@ mock_base(odom)에 가짜 라이다를 붙여 전체 흐름(SLAM → 저장 → 
 
 ```bash
 export TOOL_MAP_DIR=/tmp/maps   # 시험 지도는 따로
-./run-cli base start            # mock_base
+TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py' ./run-cli base start   # mock_base
 # + /scan을 내는 무언가 (Gazebo turtlebot3 또는 가짜 스캔 노드)
 ./run-cli slam start && ./run-cli drive left --duration 4 && ./run-cli map save test
 ./run-cli slam stop && ./run-cli nav start test && ./run-cli initpose 0 0 0 && ./run-cli goal 1 0.5

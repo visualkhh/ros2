@@ -36,6 +36,30 @@ source /opt/ros/lyrical/setup.bash
 colcon build --symlink-install
 ```
 
+## bringup (tb3_bringup)
+
+| launch | 어디서 | 내용 |
+|---|---|---|
+| `tb-only.launch.py` | Pi | OpenCR 드라이버 + robot_state_publisher. `cmd_vel` → 바퀴 그대로 (보정 없음, PC 불필요) |
+| `tb-rl.launch.py` | Pi | 같지만 드라이버가 `cmd_vel_rl`을 받음 → PC의 rl-only가 있어야 움직임 (끊기면 정지) |
+| `rl-only.launch.py` | PC | RL 노드만: corrector(`cmd_vel` → `cmd_vel_rl`) + eval_recorder |
+| `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
+| `basic_bringup.launch.py` | PC | OpenCR 없이 시험: corrector + mock_base + eval |
+
+```bash
+# Pi — RL 없이
+ros2 launch tb3_bringup tb-only.launch.py
+# Pi + PC — RL 연동
+ros2 launch tb3_bringup tb-rl.launch.py                       # Pi
+ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx   # PC
+```
+
+`opencr_driver` (`tb3_bringup/opencr_driver_node.py`): `cmd_vel` → `C,l,r` (20Hz 재전송), `S` → `/odom` · TF `odom→base_link` ·
+`/joint_states`(effort=전류 A) · `/diagnostics`(전류·온도·모터 에러). `E` 에러 시 `ros2 topic pub --once /opencr/reboot std_msgs/msg/Empty`.
+파라미터: `config/robot.yaml` (바퀴 반지름·간격·좌우 방향 부호).
+
+로봇 모델: `urdf/robot.urdf.xacro` — TB3 Burger 개조(맨 위 판 제거, 라이다 1층 앞). 실측 값은 파일 위쪽 property에.
+
 ## 기본 주행 (실기 없이 PC에서)
 
 `tb3_bringup` 패키지: corrector(passthrough) + mock base + eval. LiDAR 없이 주행 체인 검증용.

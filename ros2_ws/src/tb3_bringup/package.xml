@@ -3,7 +3,7 @@
 <package format="3">
   <name>tb3_bringup</name>
   <version>0.1.0</version>
-  <description>Basic TurtleBot3 bringup: mock base + corrector chain for PC test without hardware.</description>
+  <description>TurtleBot3-style bringup: OpenCR driver (robot.launch.py), PC RL nodes (rl.launch.py), mock base for PC test.</description>
   <maintainer email="pank@example.com">pank</maintainer>
   <license>Apache-2.0</license>
 
@@ -11,6 +11,11 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
   <exec_depend>rl_correction</exec_depend>
   <exec_depend>rl_eval</exec_depend>
 
