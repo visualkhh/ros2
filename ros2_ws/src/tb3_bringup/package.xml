@@ -16,6 +16,8 @@
   <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>xacro</exec_depend>
+  <exec_depend>laser_filters</exec_depend>
+  <!-- coin_d4_driver (LDS-03): apt에 없음 → ros2_ws/deps.repos. 없으면 launch가 라이다만 건너뜀 -->
   <exec_depend>rl_correction</exec_depend>
   <exec_depend>rl_eval</exec_depend>
 

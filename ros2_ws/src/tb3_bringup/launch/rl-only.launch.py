@@ -5,7 +5,7 @@
   ros2 launch tb3_bringup rl-only.launch.py label:=after output:=/tmp/after.csv
 
 흐름: teleop/Nav2(Pi) -> cmd_vel -> [PC] corrector -> cmd_vel_rl -> (Pi) opencr_driver
-로봇은 tb-rl.launch.py 로 떠 있어야 한다. 같은 ROS_DOMAIN_ID(25)·같은 WiFi.
+로봇은 tb-for-rl.launch.py 로 떠 있어야 한다. 같은 ROS_DOMAIN_ID(25)·같은 WiFi.
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument

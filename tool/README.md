@@ -102,7 +102,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). �
 
 | 변수 | 기본 | 뜻 |
 |---|---|---|
-| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL 연동은 `tb-rl.launch.py`, PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
+| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL 연동은 `tb-for-rl.launch.py`, PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
 | `TOOL_CMD_VEL` | `/cmd_vel` | 텔레오퍼·drive가 내는 토픽 |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) |

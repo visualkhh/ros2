@@ -1,0 +1,28 @@
+# LDS-03 (coin_d4_driver) + 자기 몸 지우기 필터. tb-only.launch.py가 읽음.
+# 라이다는 scan_raw로 내고, 필터가 로봇 몸통(base_link 기준 상자) 안의 점을 지워 /scan으로 낸다.
+# 라이다가 1층 앞에 있어 뒤쪽 반은 모터·지지대·바퀴가 찍힘 → 이걸 안 지우면 SLAM이 몸통을 벽으로 그림.
+coin_d4_driver:
+  ros__parameters:
+    port: /dev/tb3_lidar        # udev: firmware/opencr/99-tb3-lidar.rules (CP2102 USB2LDS)
+    frame_id: base_scan
+    baudrate: 230400
+    version: 4
+    topic_name: scan_raw
+    reverse: false
+    warmup_time: 5
+
+scan_filter:
+  ros__parameters:
+    filter1:
+      name: robot_body
+      type: laser_filters/LaserScanBoxFilter
+      params:
+        box_frame: base_link
+        # 몸통 + 바퀴 + 여유 1cm (urdf: x -0.197~0.069, 바퀴 y ±0.153). 라이다 자체(앞 0.095)는 포함 안 함
+        min_x: -0.207
+        max_x: 0.060
+        min_y: -0.165
+        max_y: 0.165
+        min_z: -0.05
+        max_z: 0.20
+        invert: false

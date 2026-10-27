@@ -1,34 +1,37 @@
 <?xml version="1.0"?>
 <!--
-  TurtleBot3 Burger 개조형: 맨 위 판(라이다 자리) 걷어냄 · 라이다를 1층 앞쪽에 앞으로 조금 튀어나오게.
+  TurtleBot3 Waffle Pi 개조형: 맨 위 판(원래 라이다 자리) 걷어냄 · LDS-03 라이다를 1층 앞쪽에 앞으로 조금 튀어나오게.
 
-  치수 출처: turtlebot3_burger.urdf (ROBOTIS, Apache 2.0) — 바퀴·캐스터·몸통 외곽은 원본 그대로.
+  치수 출처: turtlebot3_description/urdf/turtlebot3_waffle_pi.urdf (ROBOTIS, Apache 2.0) —
+  바퀴·캐스터·몸통 외곽은 원본 그대로. 라이다 크기는 LDS-03 e-Manual (54.7 W × 39.7 D × 34 H mm).
   ★ 실측해서 고칠 값 = 아래 property 중 "측정" 표시. 바꾸면 colcon build 후 view-model로 다시 확인.
 
   좌표: base_link(바퀴축 높이, 바닥+0.010) — x 앞 · y 왼쪽 · z 위. 루트는 base_link
   (드라이버가 odom→base_link를 내므로 base_footprint를 위에 두면 부모가 둘이 됨 — tool·Nav2도 base_link 기준).
-  원본 몸통은 base_link 기준 x -0.102 ~ +0.038 (앞끝 0.038), z 0 ~ 0.143.
+  원본 몸통: 중심 x -0.064, 266×266mm → x -0.197 ~ +0.069 (앞끝 0.069), 높이 z 0 ~ 0.094.
 -->
-<robot name="tb3_burger_lowlidar" xmlns:xacro="http://www.ros.org/wiki/xacro">
+<robot name="tb3_waffle_pi_lowlidar" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- 몸통 판 (Burger 와플판 140×140mm). 원본은 4층(맨 위=라이다판). 맨 위를 뺀 3층만 그림 -->
-  <xacro:property name="body_x" value="-0.032"/>          <!-- 판 중심 x (원본) -->
-  <xacro:property name="plate" value="0.140"/>
+  <!-- 몸통 판 (Waffle 와플판 266×266mm). 원본 3층(맨 위=라이다판) → 맨 위를 뺀 2층만 -->
+  <xacro:property name="body_x" value="-0.064"/>
+  <xacro:property name="plate" value="0.266"/>
   <xacro:property name="plate_t" value="0.003"/>
   <xacro:property name="plate_z1" value="0.000"/>          <!-- 측정: 1층 판 윗면 높이 (base_link 기준) -->
-  <xacro:property name="plate_z2" value="0.047"/>          <!-- 측정: 2층 -->
-  <xacro:property name="plate_z3" value="0.094"/>          <!-- 측정: 3층 (지금 맨 위) -->
+  <xacro:property name="plate_z2" value="0.047"/>          <!-- 측정: 2층 판 (지금 맨 위) -->
 
-  <!-- 라이다 (LDS 모양). base_scan = 스캔 평면 중심 = 드라이버 frame_id -->
-  <xacro:property name="lidar_x" value="0.045"/>           <!-- 측정: 앞끝(0.038)보다 조금 앞 -->
+  <!-- LDS-03 라이다. base_scan = 스캔 평면 중심 = coin_d4_driver frame_id -->
+  <xacro:property name="lidar_x" value="0.075"/>           <!-- 측정: 앞끝(0.069)보다 조금 앞 (라이다 중심) -->
   <xacro:property name="lidar_y" value="0.0"/>
-  <xacro:property name="lidar_z" value="0.030"/>           <!-- 측정: 1층 판 위 스캔 평면 높이 -->
-  <xacro:property name="lidar_yaw" value="0.0"/>           <!-- 측정: 라이다 0° 방향이 로봇 앞과 다르면 (rad) -->
+  <xacro:property name="lidar_z" value="0.022"/>           <!-- 측정: 스캔 평면 높이 (1층 판 위, 2층 판 0.047 아래) -->
+  <xacro:property name="lidar_yaw" value="0.0"/>           <!-- 측정: 라이다 0°가 로봇 앞과 다르면 (rad) -->
+  <xacro:property name="lidar_w" value="0.0547"/>
+  <xacro:property name="lidar_d" value="0.0397"/>
+  <xacro:property name="lidar_h" value="0.034"/>
 
   <material name="plate"><color rgba="0.35 0.35 0.35 1"/></material>
   <material name="dark"><color rgba="0.15 0.15 0.15 1"/></material>
   <material name="board"><color rgba="0.1 0.45 0.2 1"/></material>
-  <material name="lidar"><color rgba="0.8 0.2 0.1 1"/></material>
+  <material name="lidar"><color rgba="0.85 0.25 0.1 1"/></material>
 
   <xacro:macro name="plate_visual" params="z">
     <visual>
@@ -41,33 +44,28 @@
   <link name="base_link">
     <xacro:plate_visual z="${plate_z1}"/>
     <xacro:plate_visual z="${plate_z2}"/>
-    <xacro:plate_visual z="${plate_z3}"/>
-    <!-- 1층: 모터 2개 (바퀴 안쪽) -->
+    <!-- 1층: 모터 2개 (바퀴 안쪽) · 배터리 (뒤쪽) -->
     <visual>
       <origin xyz="0 0 0.023"/>
-      <geometry><box size="0.034 0.120 0.046"/></geometry>
+      <geometry><box size="0.034 0.250 0.046"/></geometry>
       <material name="dark"/>
     </visual>
-    <!-- 2층: 배터리 / 3층: OpenCR + Pi (대략) -->
+    <visual>
+      <origin xyz="-0.110 0 0.018"/>
+      <geometry><box size="0.090 0.070 0.030"/></geometry>
+      <material name="dark"/>
+    </visual>
+    <!-- 2층: OpenCR + RPi (대략) -->
     <visual>
       <origin xyz="${body_x} 0 ${plate_z2 + 0.012}"/>
-      <geometry><box size="0.090 0.070 0.024"/></geometry>
-      <material name="dark"/>
-    </visual>
-    <visual>
-      <origin xyz="${body_x} 0 ${plate_z3 + 0.010}"/>
-      <geometry><box size="0.105 0.075 0.020"/></geometry>
+      <geometry><box size="0.105 0.110 0.024"/></geometry>
       <material name="board"/>
     </visual>
-    <!-- 충돌: 몸통 상자 (맨 위 판 빠진 높이) + 앞으로 나온 라이다는 base_scan에 -->
     <collision>
-      <origin xyz="${body_x} 0 ${(plate_z3 + 0.020) / 2}"/>
-      <geometry><box size="${plate} ${plate} ${plate_z3 + 0.020}"/></geometry>
+      <origin xyz="${body_x} 0 ${(plate_z2 + 0.030) / 2}"/>
+      <geometry><box size="${plate} ${plate} ${plate_z2 + 0.030}"/></geometry>
     </collision>
-    <inertial>
-      <mass value="0.8"/>
-      <inertia ixx="2.2e-03" ixy="0" ixz="0" iyy="2.1e-03" iyz="0" izz="2.0e-03"/>
-    </inertial>
+    <!-- inertial 없음: 루트 링크 inertia는 KDL(robot_state_publisher)이 경고만 냄 — 시뮬레이션 안 하므로 생략 -->
   </link>
 
   <xacro:macro name="wheel" params="side y mesh">
@@ -89,30 +87,33 @@
       </inertial>
     </link>
   </xacro:macro>
-  <xacro:wheel side="left" y="0.080" mesh="left_tire.stl"/>
-  <xacro:wheel side="right" y="-0.080" mesh="right_tire.stl"/>
+  <xacro:wheel side="left" y="0.144" mesh="left_tire.stl"/>
+  <xacro:wheel side="right" y="-0.144" mesh="right_tire.stl"/>
 
-  <joint name="caster_back_joint" type="fixed">
-    <parent link="base_link"/><child link="caster_back_link"/>
-    <origin xyz="-0.081 0 -0.004" rpy="-1.5708 0 0"/>
-  </joint>
-  <link name="caster_back_link">
-    <visual><geometry><box size="0.030 0.009 0.020"/></geometry><material name="dark"/></visual>
-  </link>
+  <xacro:macro name="caster" params="side y">
+    <joint name="caster_back_${side}_joint" type="fixed">
+      <parent link="base_link"/><child link="caster_back_${side}_link"/>
+      <origin xyz="-0.177 ${y} -0.004" rpy="-1.5708 0 0"/>
+    </joint>
+    <link name="caster_back_${side}_link">
+      <visual><geometry><box size="0.030 0.009 0.020"/></geometry><material name="dark"/></visual>
+    </link>
+  </xacro:macro>
+  <xacro:caster side="left" y="0.064"/>
+  <xacro:caster side="right" y="-0.064"/>
 
   <joint name="scan_joint" type="fixed">
     <parent link="base_link"/><child link="base_scan"/>
     <origin xyz="${lidar_x} ${lidar_y} ${lidar_z}" rpy="0 0 ${lidar_yaw}"/>
   </joint>
   <link name="base_scan">
+    <!-- LDS-03 외형 (상자로 근사, 스캔 평면이 높이 중앙이라고 가정) -->
     <visual>
-      <!-- lds.stl 원점 = 스캔 중심 (원본 TB3와 같음) -->
-      <geometry><mesh filename="package://tb3_bringup/meshes/lds.stl" scale="0.001 0.001 0.001"/></geometry>
+      <geometry><box size="${lidar_d} ${lidar_w} ${lidar_h}"/></geometry>
       <material name="lidar"/>
     </visual>
     <collision>
-      <origin xyz="0.015 0 -0.0065"/>
-      <geometry><cylinder length="0.0315" radius="0.055"/></geometry>
+      <geometry><box size="${lidar_d} ${lidar_w} ${lidar_h}"/></geometry>
     </collision>
   </link>
 </robot>

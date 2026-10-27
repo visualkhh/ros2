@@ -1,11 +1,11 @@
-# opencr_driver 파라미터 (robot.launch.py가 읽음). TB3 Burger 기본값.
+# opencr_driver 파라미터 (tb-only.launch.py가 읽음). TurtleBot3 Waffle Pi 값 (turtlebot3_waffle_pi.urdf).
 opencr_driver:
   ros__parameters:
     port: /dev/opencr
     baud: 115200
     wheel_radius: 0.033        # [m]
-    wheel_separation: 0.160    # [m] 좌우 바퀴 중심 사이
-    # 장착 방향. TB3 Burger는 모터를 거울 대칭으로 달아 오른쪽이 -1.
+    wheel_separation: 0.287    # [m] 좌우 바퀴 중심 사이 (Waffle Pi. Burger는 0.160)
+    # 장착 방향. TB3는 모터를 거울 대칭으로 달아 오른쪽이 -1.
     # 확인: ./run-cli drive forward → 두 바퀴가 같이 앞으로. 한쪽이 거꾸로면 그쪽 부호를 바꾼다.
     left_dir: 1.0
     right_dir: -1.0

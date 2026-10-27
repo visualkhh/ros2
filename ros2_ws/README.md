@@ -41,7 +41,7 @@ colcon build --symlink-install
 | launch | 어디서 | 내용 |
 |---|---|---|
 | `tb-only.launch.py` | Pi | OpenCR 드라이버 + robot_state_publisher. `cmd_vel` → 바퀴 그대로 (보정 없음, PC 불필요) |
-| `tb-rl.launch.py` | Pi | 같지만 드라이버가 `cmd_vel_rl`을 받음 → PC의 rl-only가 있어야 움직임 (끊기면 정지) |
+| `tb-for-rl.launch.py` | Pi | 같지만 드라이버가 `cmd_vel_rl`을 받음 → PC의 rl-only가 있어야 움직임 (끊기면 정지) |
 | `rl-only.launch.py` | PC | RL 노드만: corrector(`cmd_vel` → `cmd_vel_rl`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
 | `basic_bringup.launch.py` | PC | OpenCR 없이 시험: corrector + mock_base + eval |
@@ -50,7 +50,7 @@ colcon build --symlink-install
 # Pi — RL 없이
 ros2 launch tb3_bringup tb-only.launch.py
 # Pi + PC — RL 연동
-ros2 launch tb3_bringup tb-rl.launch.py                       # Pi
+ros2 launch tb3_bringup tb-for-rl.launch.py                       # Pi
 ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx   # PC
 ```
 

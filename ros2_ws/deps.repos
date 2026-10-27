@@ -1,0 +1,6 @@
+# 외부 소스 의존성 — apt에 없는 것만. 받기: cd ros2_ws && vcs import src < deps.repos
+repositories:
+  coin_d4_driver:   # LDS-03 라이다 (TurtleBot3 2025~). turtlebot3_bringup LDS_MODEL=LDS-03과 같은 드라이버
+    type: git
+    url: https://github.com/ROBOTIS-GIT/coin_d4_driver.git
+    version: jazzy

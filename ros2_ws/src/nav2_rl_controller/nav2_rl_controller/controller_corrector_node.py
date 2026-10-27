@@ -38,7 +38,7 @@ class Nav2RlCorrector(Node):
             self.in_name = self.session.get_inputs()[0].name
             self.get_logger().info(f'ONNX loaded: {path}')
         except Exception as e:
-            self.get_logger().warn(f'ONNX load failed ({e}): passthrough')
+            self.get_logger().warning(f'ONNX load failed ({e}): passthrough')
 
     def _infer_delta(self, lin, ang):
         x = np.array([[lin, ang]], dtype=np.float32)

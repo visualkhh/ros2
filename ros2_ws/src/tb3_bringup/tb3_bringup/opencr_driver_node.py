@@ -43,9 +43,9 @@ class OpencrDriver(Node):
         p = self.declare_parameter
         self.port = p('port', '/dev/opencr').value
         self.baud = p('baud', 115200).value
-        self.r = p('wheel_radius', 0.033).value            # TB3 Burger
-        self.sep = p('wheel_separation', 0.160).value      # TB3 Burger
-        # Mounting direction per wheel. TB3 Burger mounts the motors mirrored -> right = -1.
+        self.r = p('wheel_radius', 0.033).value            # TB3 Waffle Pi
+        self.sep = p('wheel_separation', 0.287).value      # TB3 Waffle Pi
+        # Mounting direction per wheel. TB3 mounts the motors mirrored -> right = -1.
         # Check: ./run-cli drive forward → both wheels must roll forward.
         self.dir_l = p('left_dir', 1.0).value
         self.dir_r = p('right_dir', -1.0).value
@@ -86,7 +86,7 @@ class OpencrDriver(Node):
         try:
             fd = os.open(self.port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         except OSError as exc:
-            self.get_logger().warn(f'open {self.port}: {exc}', throttle_duration_sec=5.0)
+            self.get_logger().warning(f'open {self.port}: {exc}', throttle_duration_sec=5.0)
             return False
         attrs = termios.tcgetattr(fd)
         attrs[0] = attrs[1] = attrs[3] = 0                       # raw: iflag, oflag, lflag
@@ -179,7 +179,7 @@ class OpencrDriver(Node):
             # Reboot (R) restarts multi-turn position within one turn -> ignore that jump.
             if abs(dl) > 1.0 or abs(dr) > 1.0:
                 self.jumps += 1
-                self.get_logger().warn(f'wheel position jump ({dl:+.2f}, {dr:+.2f}) rad ignored (reboot?)')
+                self.get_logger().warning(f'wheel position jump ({dl:+.2f}, {dr:+.2f}) rad ignored (reboot?)')
             else:
                 ds = self.r * (dl + dr) / 2.0
                 dth = self.r * (dr - dl) / self.sep

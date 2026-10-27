@@ -249,7 +249,7 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.22
+      footprint: "[[0.097, 0.155], [0.097, -0.155], [-0.197, -0.155], [-0.197, 0.155]]"  # tool: Waffle Pi + 앞 라이다 (base_link 기준, 바퀴 포함)
       plugins: ["voxel_layer", "inflation_layer"]
       filters: ["keepout_filter"]
       keepout_filter:
@@ -301,7 +301,7 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      robot_radius: 0.22
+      footprint: "[[0.097, 0.155], [0.097, -0.155], [-0.197, -0.155], [-0.197, 0.155]]"  # tool: Waffle Pi + 앞 라이다 (base_link 기준, 바퀴 포함)
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
