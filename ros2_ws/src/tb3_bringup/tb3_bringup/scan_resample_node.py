@@ -3,7 +3,11 @@
 LDS-03 (coin_d4_driver) emits a slightly different beam count every revolution (395..404).
 slam_toolbox registers the sensor with the first scan's count and drops every later scan whose count
 differs ("LaserRangeScan contains 403 range readings, expected 404") -> no map. This node bins each
-scan into `beams` fixed angles over 360 deg (nearest beam per bin, closest range wins; empty bin = inf).
+scan into `beams` fixed angles over 360 deg (nearest beam per bin, closest range wins).
+
+Empty bin = 0.0 (below range_min = invalid), NOT inf: on this robot the rear ~135 deg is blocked by the
+robot body (lidar on the 1st floor front) and returns nothing. inf would mean "nothing up to max range",
+so SLAM/costmap would ray-trace free space through the robot body behind it.
 
   sub scan_in (LaserScan)  ->  pub scan_out (LaserScan, fixed beams)
 """
@@ -24,12 +28,12 @@ class ScanResample(Node):
         self.create_subscription(LaserScan, 'scan_in', self.cb, qos_profile_sensor_data)
 
     def cb(self, msg: LaserScan) -> None:
-        out = [math.inf] * self.beams
+        out = [0.0] * self.beams   # 0 < range_min -> ignored by slam_toolbox / costmap
         a = msg.angle_min
         for r in msg.ranges:
             if msg.range_min <= r <= msg.range_max:
                 i = int(round((a + math.pi) / self.inc)) % self.beams
-                if r < out[i]:
+                if out[i] == 0.0 or r < out[i]:
                     out[i] = r
             a += msg.angle_increment
         res = LaserScan()
