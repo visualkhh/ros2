@@ -3,7 +3,7 @@
 OpenCR은 로봇 Pi(`pak`)의 USB에 꽂혀 있고, 펌웨어 빌드·업로드도 **Pi에서** 합니다.
 설치·빌드·업로드는 저장소의 스크립트가 다 하므로 이 문서는 순서와 주의점만 적습니다.
 
-- 보드: OpenCR 1.0 · 바퀴 DYNAMIXEL XM430-W350 ×2 (ID 1·2, 1 Mbps, Protocol 2.0)
+- 보드: OpenCR 1.0 · 바퀴 DYNAMIXEL XM430-W350 ×2 (ID 2 왼쪽 · ID 1 오른쪽, 1 Mbps, Protocol 2.0)
 - 펌웨어: [`firmware/opencr/tb3_wheels`](../../firmware/opencr/README.md) (프로토콜 `C`/`T`/`R` → `S`/`E`)
 - 보드 코어 1.5.3 고정 (sha256 확인) · 툴체인은 Ubuntu `gcc-arm-none-eabi` · 라이브러리는 코어에 든 DynamixelSDK
 - ROS 설치: [Lyrical (Pi 기준)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) — 펌웨어 작업만이면 ROS 없어도 됨

@@ -1,6 +1,6 @@
 // tb3_wheels — TurtleBot3 style 2-wheel OpenCR firmware (minimal).
 //
-// Hardware: OpenCR 1.0 + DYNAMIXEL XM430-W350 (wheel ID 1, 2), 1 Mbps, Protocol 2.0.
+// Hardware: OpenCR 1.0 + DYNAMIXEL XM430-W350 (wheel ID 2 = left, ID 1 = right), 1 Mbps, Protocol 2.0.
 // Pair with SBC driver over USB CDC serial (/dev/opencr).
 // Future SBC side: ros2_control hardware plugin replacing mock_base (same topics).
 //
@@ -26,8 +26,9 @@
 #include <DynamixelSDK.h>
 
 // ---------------- config ----------------
-#define WHEEL_LEFT_ID   1
-#define WHEEL_RIGHT_ID  2
+// 이 로봇 배선: 1번 = 오른쪽, 2번 = 왼쪽 (2026-10-27 실기 확인). C·S·R·E의 l/r 순서는 이 매핑을 따른다.
+#define WHEEL_LEFT_ID   2
+#define WHEEL_RIGHT_ID  1
 #define DXL_BUS_NAME    "3"          // OpenCR Serial3 = DYNAMIXEL bus
 #define DXL_BAUD        1000000
 #define DXL_PROTOCOL    2.0f

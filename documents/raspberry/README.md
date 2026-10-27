@@ -11,7 +11,7 @@
 | 로봇 | TurtleBot3 **Waffle Pi** 개조 — 맨 위 판 제거, LDS-03 라이다를 1층 맨 앞(두 바퀴 사이 가운데) |
 | SBC | Raspberry Pi 4 Model B Rev 1.5 · RAM 4GB(3.7Gi) · 4코어 · arm64 |
 | 저장 | SD 32GB (`/` 29G, 여유 12G) · swap 2GB (`/swapfile`) |
-| 바퀴 제어 | OpenCR 1.0 + DYNAMIXEL XM430-W350 ×2 (ID 1 좌 · 2 우, 1 Mbps, Protocol 2.0) |
+| 바퀴 제어 | OpenCR 1.0 + DYNAMIXEL XM430-W350 ×2 (ID 2 왼쪽 · ID 1 오른쪽, 1 Mbps, Protocol 2.0) |
 | 라이다 | LDS-03 (USB2LDS · CP2102) — 360°, 0.05~12 m, ~10 Hz |
 | 바퀴 치수 | 반지름 0.033 m · 간격 0.287 m (Waffle Pi) |
 

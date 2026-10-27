@@ -11,7 +11,7 @@
 flowchart LR
   subgraph HW["하드웨어 (로봇)"]
     OPENCR["OpenCR<br/>tb3_wheels 펌웨어"]
-    DXL["DYNAMIXEL XM430 ×2<br/>(ID 1 좌 · 2 우)"]
+    DXL["DYNAMIXEL XM430 ×2<br/>(ID 2 좌 · 1 우)"]
     LDS["LDS-03 라이다<br/>(USB2LDS · CP2102)"]
     OPENCR <-->|"1 Mbps"| DXL
   end

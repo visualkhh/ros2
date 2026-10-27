@@ -1,6 +1,6 @@
 # OpenCR 2륜 펌웨어 (tb3_wheels)
 
-TurtleBot3 Burger형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(ID 1·2, XM430-W350) 속도제어 + 상태 송신.
+TurtleBot3 Burger형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W350, **ID 2 = 왼쪽 · ID 1 = 오른쪽**) 속도제어 + 상태 송신.
 IMU·팔·그리퍼 없음. Beebot용(`beebot_opencr`)이 아니라 기본 주행용.
 
 - 소스: `tb3_wheels/tb3_wheels.ino` (Arduino 스케치, 폴더명=파일명 유지 필수)
