@@ -76,6 +76,8 @@ Nav2는 로봇이 지도 어디에 있는지 알아야 켜집니다. 초기 위�
   ./run-cli initpose 0 0 0          # 지도 만들기 시작한 자리 = (0, 0, 0°)
   ```
 
+  메뉴: `./run-cli` → `4) Nav` → `3) 초기 위치 (x y yaw°)`. PC·Pi 어디서 해도 됨 (`/initialpose` 토픽 → Pi amcl).
+
   출력이 `→ amcl 반영: x=… y=…` 이면 성공. RViz에서 초록 화살표 구름(파티클)이 로봇 주변에 모이고,
   빨간 스캔 점이 지도 벽과 겹치면 맞은 것. 어긋나면 다시 찍습니다.
 
@@ -133,6 +135,7 @@ ssh -t pak 'cd ~/ros2/tool && ./run-cli stop-all'       # 바퀴 정지 → 베�
 | RViz에 지도가 안 보임 | PC CLI 상단 `map ✗`? → Pi `./run-cli status`에서 SLAM/Nav 켜졌는지 · PC는 `run-rviz`로 켰는지 (DDS 피어 설정이 들어감) |
 | 목표를 찍어도 안 움직임 | 초기 위치를 줬는지 · Nav 준비 완료됐는지 (`nav log`) · 텔레오퍼가 같이 켜져 있으면 끄기 (명령이 섞임) |
 | `실패(ABORTED)` | 목표가 벽 안/지도 밖 · 좁은 통로(로봇 폭 31 cm + 여유) · `nav log` |
+| 베이스를 재시작한 뒤 위치가 튐 | 베이스(드라이버)를 다시 켜면 **odom이 0으로 초기화**됨 → Nav면 2D Pose Estimate로 다시, SLAM이면 저장 후 `slam restart` |
 | 위치가 점점 틀어짐 | RViz 2D Pose Estimate로 다시 · 바퀴 미끄러짐 · 지도가 실제와 다름(다시 만들기) |
 | 지도가 겹침·휨 | 맵핑 때 너무 빠름 → 다시 천천히, 출발점으로 돌아와 루프 닫기 |
 
