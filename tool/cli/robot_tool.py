@@ -39,6 +39,7 @@ from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
+from diagnostic_msgs.msg import DiagnosticArray
 
 from op.bus import Bus
 from op.procs import SERVICES, Procs
@@ -73,6 +74,7 @@ class RobotTool(Node):
         self.create_subscription(LaserScan, '/scan', self.state.on_scan, qos_profile_sensor_data)
         self.create_subscription(OccupancyGrid, '/map', self.state.on_map, LATCHED)
         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.state.on_amcl, LATCHED)
+        self.create_subscription(DiagnosticArray, '/diagnostics', self.state.on_diagnostics, 10)
 
     def screen(self, name: str):
         from op import pages
@@ -161,6 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument('--cancel', action='store_true', help='이 CLI가 보낸 목표 취소')
 
     sub.add_parser('nodes', help='보이는 ROS 노드 목록')
+    sub.add_parser('reboot-motors', help='모터 에러 해제 — 두 바퀴 재부팅 (/opencr/reboot)')
     sub.add_parser('stop-all', help='띄운 것 전부 종료 (바퀴 정지 먼저)')
     return parser
 

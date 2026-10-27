@@ -219,5 +219,11 @@ class Ui:
             map_txt += f' {w * res:.1f}x{h * res:.1f}m'
         lines.append(f'  {dot(st.odom, "odom")} | {dot(st.scan, "scan")} | {map_txt}'
                      + (f' | 목표 {st.goal_status}' if st.goal_status else ''))
+        # 로봇(OpenCR) 상태: opencr_driver의 /diagnostics — 연결·모터 에러·온도·전류
+        level, summary = st.robot_parts()
+        color = {0: GREEN, 1: YELLOW, 2: RED + BOLD}.get(level, YELLOW)
+        mark = {0: '●', 1: '▲', 2: '✗'}.get(level, '?')
+        hint = ' → 상태 메뉴 2) 모터 재부팅' if level == 2 and 'motor error' in st.robot_msg else ''
+        lines.append(f'  {self.term.paint(f"로봇 {mark} {summary}{hint}", color)}')
         lines.append('-' * width)
         return lines

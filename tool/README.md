@@ -82,9 +82,13 @@ cd ~/ros2/tool                  # (저장소 위치)
 ./run-cli initpose x y [yaw°]
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
 ./run-cli nodes
+./run-cli reboot-motors        # 모터 에러(E) 해제 — 두 바퀴 재부팅 (/opencr/reboot)
 ./run-cli stop-all              # 바퀴 정지 → 띄운 것 전부 종료
 ./run-cli stop                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
 ```
+
+상단 상태바 3줄: ① 프로세스(이 컴퓨터 기준) ② `odom`·`scan`·`map` 수신 Hz ③ **로봇** — opencr_driver의 `/diagnostics`
+(● ok / ✗ motor error·no S line / ? 수신 없음 · 바퀴 온도 좌/우 · 전류 좌/우). 모터 에러면 `1) 상태 → 2) 모터 재부팅`.
 
 CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
 로그: `./run-cli slam log` 또는 `.run/slam.log`.

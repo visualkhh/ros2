@@ -31,6 +31,8 @@ class Bus:
         msg_type = TwistStamped if CMD_VEL_STAMPED else Twist
         self._vel_pub = node.create_publisher(msg_type, CMD_VEL, 10)
         self._init_pub = node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
+        from std_msgs.msg import Empty
+        self._reboot_pub = node.create_publisher(Empty, '/opencr/reboot', 10)
         self._nav_client = None
         self._goal_handle = None
 
@@ -58,6 +60,7 @@ class Bus:
         for _, label, on, extra in self.service_rows():
             mark = self.term.paint('●', GREEN) if on else self.term.paint('○', DIM)
             lines.append(f' {mark} {label + ' ' * max(0, 16 - self.term.disp_len(label))} {extra}')
+        lines += ['', '[로봇]', f' {self.state.robot_txt()}']
         lines += ['', '[토픽]',
                   f' odom  {self.state.odom_txt()}',
                   f' scan  {self.state.scan_txt()}',
@@ -343,6 +346,23 @@ class Bus:
             print('goal x y [yaw°] 또는 goal --cancel', file=sys.stderr)
             return 2
         return self.send_goal(args.x, args.y, args.yaw, wait=not args.no_wait)
+
+    # ------------------------------------------------------------- 모터
+    def cmd_reboot_motors(self, args) -> int:
+        """모터 에러(과열·과부하 등) 해제 — /opencr/reboot → opencr_driver가 펌웨어에 R (양쪽 재부팅)."""
+        from std_msgs.msg import Empty
+        end = time.monotonic() + 10.0  # 방금 만든 발행자 — 드라이버와 연결될 때까지
+        while self._reboot_pub.get_subscription_count() == 0 and time.monotonic() < end:
+            self._poll(0.2)
+        if self._reboot_pub.get_subscription_count() == 0:
+            print(self.term.paint('opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
+            return 1
+        self.send_velocity(0.0, 0.0)
+        self._reboot_pub.publish(Empty())
+        print('모터 재부팅 요청 (R) — 바퀴가 잠깐 힘이 빠졌다가 돌아옵니다')
+        self._poll(3.0)  # 재부팅(바퀴당 ~1초) 후 진단 갱신
+        print(f'로봇: {self.state.robot_txt()}')
+        return 0 if self.state.robot_parts()[0] == 0 else 1
 
     # ------------------------------------------------------------- 노드
     def node_names(self) -> list[str]:

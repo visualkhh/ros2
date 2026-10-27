@@ -38,6 +38,10 @@ class StateStore:
         self.map_info: tuple[int, int, float] | None = None       # w, h, res
         self.map_known = 0.0                                       # 알려진 칸 비율
         self.goal_status = ''                                      # 마지막 목표 진행
+        self.robot = Rate(5)                                       # /diagnostics 'opencr' 수신
+        self.robot_level = -1                                      # 0 OK · 1 WARN · 2 ERROR · -1 모름
+        self.robot_msg = ''
+        self.robot_vals: dict[str, str] = {}                       # 전류·온도·uptime·jumps
         self.last_cmd: tuple[float, float] = (0.0, 0.0)
 
     @staticmethod
@@ -93,6 +97,37 @@ class StateStore:
         w, h, res = self.map_info
         return (f'{w}x{h} @{res:.2f}m = {w * res:.1f}x{h * res:.1f}m · '
                 f'탐색 {self.map_known * 100:.0f}% ({self._age_txt(self.map)})')
+
+    def on_diagnostics(self, msg) -> None:
+        for st in msg.status:
+            if st.name != 'opencr':
+                continue
+            self.robot.tick()
+            lv = st.level
+            self.robot_level = lv[0] if isinstance(lv, (bytes, bytearray)) else int(lv)
+            self.robot_msg = st.message
+            self.robot_vals = {kv.key: kv.value for kv in st.values}
+
+    def robot_parts(self) -> tuple[int, str]:
+        """(레벨, 요약) — 레벨 -1 = 수신 없음/끊김. 요약: 메시지 · 온도 · 전류."""
+        age = self.robot.age()
+        if age is None:
+            return -1, '로봇 상태 대기 중 (1초 주기 · 계속 없으면 베이스 꺼짐?)'
+        if age > 3.0:
+            return -1, f'로봇 {age:.0f}초 끊김'
+        v = self.robot_vals
+
+        def f(key, fmt):
+            try:
+                return fmt.format(float(v[key]))
+            except (KeyError, ValueError):
+                return '?'
+        temp = f"{f('left_temp_C', '{:.0f}')}/{f('right_temp_C', '{:.0f}')}℃"
+        cur = f"{f('left_current_A', '{:.2f}')}/{f('right_current_A', '{:.2f}')}A"
+        return self.robot_level, f'{self.robot_msg} · 온도 좌/우 {temp} · 전류 {cur}'
+
+    def robot_txt(self) -> str:
+        return self.robot_parts()[1]
 
     def amcl_txt(self) -> str:
         if self.amcl is None:
