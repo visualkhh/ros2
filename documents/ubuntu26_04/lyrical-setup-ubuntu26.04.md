@@ -4,6 +4,7 @@
 
 - ROS 2 Lyrical: [ros/lyrical/lyrical-setup-ubuntu26.04.md](../ros/lyrical/lyrical-setup-ubuntu26.04.md)
 - OpenCR: [opencr/opencr-setup-ubuntu26.04.md](../opencr/opencr-setup-ubuntu26.04.md)
+- AI가 Pi를 비밀번호 없이 다루기: [ai/ai-passwordless-robot-access.md](../ai/ai-passwordless-robot-access.md)
 - Docker (26.04 Lyrical 설정파일 세트): [docker/README.md](../docker/README.md)
 
 > ROS·OpenCR 문서는 Raspberry Pi 4 기준으로 다시 씀 (2026-10-27). Docker는 PC 시험대 전용.
