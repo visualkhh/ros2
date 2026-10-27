@@ -34,6 +34,8 @@ PC RViz는 같은 `ROS_DOMAIN_ID`(=25)로 `/map`·`/scan`·TF를 받아 그릴 �
 
 `ROS_DOMAIN_ID`는 **25로 통일**합니다. `cli/start.sh`·`rviz/start.sh`가 `export ROS_DOMAIN_ID=25`를 하므로 `~/.bashrc` 값과 무관합니다.
 
+> 지도 만들기 → 저장 → 지도로 주행 → 특정 위치로 보내기 전체 순서: **[MAP_NAV.md](MAP_NAV.md)**
+
 ## 지도 만들기 (SLAM)
 
 ```bash
