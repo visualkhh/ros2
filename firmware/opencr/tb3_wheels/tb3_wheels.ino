@@ -23,10 +23,6 @@
 //                     ERR_REPEAT_MS while any wheel is non-zero. Clear with R.
 //
 // Safety: no C command for CMD_TIMEOUT_MS -> wheels stop (0, 0).
-// Arduino.h의 min/max 매크로가 gcc 14 newlib <map>(DynamixelSDK가 포함)의 std::min/max와 충돌 → 먼저 해제.
-// 이 스케치는 min/max를 쓰지 않는다.
-#undef min
-#undef max
 #include <DynamixelSDK.h>
 
 // ---------------- config ----------------

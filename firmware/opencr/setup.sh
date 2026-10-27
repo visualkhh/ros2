@@ -74,6 +74,47 @@ elif [ ! -d "$data/packages/OpenCR/hardware/OpenCR/$OPENCR_VERSION" ]; then
   rm -rf "$tmp"
 fi
 
+echo "=== OpenCR 코어 패치: min/max 매크로 (gcc 14 newlib C++ 헤더와 충돌)"
+# 코어 wiring_constants.h의 min(a,b)/max(a,b) 매크로가 <map> 등 std::min(a,b,comp)을 깨뜨려
+# DynamixelSDK 컴파일이 실패한다 (Ubuntu 26.04 gcc-arm-none-eabi 14). C++에서는 템플릿 함수로 바꾼다
+# (ArduinoCore-API와 같은 방식). C 파일은 기존 매크로 그대로.
+wc_h="$data/packages/OpenCR/hardware/OpenCR/$OPENCR_VERSION/cores/arduino/wiring_constants.h"
+if [ -f "$wc_h" ] && ! grep -q 'tool-patch: minmax' "$wc_h"; then
+  python3 - "$wc_h" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = """#ifndef min
+#define min(a,b) ((a)<(b)?(a):(b))
+#endif // min
+
+#ifndef max
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif // max
+"""
+new = """// tool-patch: minmax — C++에서는 매크로 대신 템플릿 (std 헤더 <map> 등과 충돌 방지)
+#ifdef __cplusplus
+} // extern "C"
+template<class T, class L>
+auto min(const T& a, const L& b) -> decltype((b < a) ? b : a) { return (b < a) ? b : a; }
+template<class T, class L>
+auto max(const T& a, const L& b) -> decltype((b < a) ? b : a) { return (a < b) ? b : a; }
+extern "C" {
+#else
+#ifndef min
+#define min(a,b) ((a)<(b)?(a):(b))
+#endif // min
+#ifndef max
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif // max
+#endif
+"""
+assert old in s, "wiring_constants.h 형식이 예상과 다름"
+open(p, "w").write(s.replace(old, new))
+PY
+  echo "패치 적용: $wc_h"
+fi
+
 echo "=== opencr_ld_shell ($ARCH)"
 # 이름만 .tar.bz2이고 내용은 gzip → 파일로 받아 tar가 형식을 판별
 mkdir -p "$TOOLS_DIR"
