@@ -66,6 +66,10 @@ cd ~/ros2/tool                  # (저장소 위치)
 `SLAM 중 Nav`(`./run-cli explore start`)는 SLAM을 켠 채 Nav2 주행만 띄웁니다. 맵핑 중에 목표를 찍어
 움직이며 지도를 넓힐 때 씁니다 (초기 위치 불필요).
 
+**베이스·SLAM·Nav 시작/정지는 로봇(Pi)에서만** 됩니다. PC에서 누르면 거부하고 `ssh -t pak '...'` 명령을 알려 줍니다
+(PC에 뜨면 `/dev/opencr`를 못 찾고 지도도 PC에 저장돼 헷갈림). PC 시뮬레이션만 `TOOL_LOCAL=1`.
+지도 저장은 `/map`이 들어올 때만 하고, 없으면 "라이다 /scan이 있어야 지도가 생김"으로 알려 줍니다.
+
 동시에 못 켜는 조합: `slam` ↔ `nav`, `nav` ↔ `explore` (지도·위치를 내는 쪽이 둘이 됨). 켜려 하면 거부합니다.
 
 ## 명령
@@ -141,7 +145,7 @@ ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
 mock_base(odom)에 가짜 라이다를 붙여 전체 흐름(SLAM → 저장 → Nav 목표 → SLAM 중 Nav)을 확인했습니다 (2026-10-27).
 
 ```bash
-export TOOL_MAP_DIR=/tmp/maps   # 시험 지도는 따로
+export TOOL_LOCAL=1 TOOL_MAP_DIR=/tmp/maps   # PC에서 시작 허용 · 시험 지도는 따로
 TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py' ./run-cli base start   # mock_base
 # + /scan을 내는 무언가 (Gazebo turtlebot3 또는 가짜 스캔 노드)
 ./run-cli slam start && ./run-cli drive left --duration 4 && ./run-cli map save test

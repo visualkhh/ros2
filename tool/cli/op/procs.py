@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import socket
 import signal
 import subprocess
 import time
@@ -30,6 +31,10 @@ NAV_PARAMS = Path(os.environ.get('TOOL_NAV_PARAMS', CONFIG_DIR / 'nav2_params.ya
 #   PC 시험(OpenCR 없음): TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py'
 BASE_CMD = os.environ.get('TOOL_BASE_CMD', 'ros2 launch tb3_bringup tb-only.launch.py')
 SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')
+# 베이스·SLAM·Nav는 로봇(Pi)에서 띄운다. PC에서 메뉴로 시작하면 PC에 떠서 /dev/opencr를 못 찾고,
+# 지도도 PC 폴더에 저장돼 헷갈림 (2026-10-27 실제로 겪음) → 로봇이 아니면 거부. PC 시뮬레이션은 TOOL_LOCAL=1.
+ROBOT_HOST = os.environ.get('ROBOT_HOST', 'pak.local')
+IS_ROBOT = socket.gethostname() == ROBOT_HOST.removesuffix('.local') or os.environ.get('TOOL_LOCAL') == '1'
 
 
 @dataclass
@@ -117,6 +122,10 @@ class Procs:
     # ------------------------------------------------------------ start/stop
     def start(self, name: str, map_yaml: str | None = None) -> tuple[bool, str]:
         svc = SERVICES[name]
+        if not IS_ROBOT:
+            return False, (f'{svc.label}: 여기({socket.gethostname()})는 로봇이 아님 — 로봇에서 시작하세요:\n'
+                           f'  ssh -t {ROBOT_HOST.removesuffix(".local")} \'cd ~/ros2/tool && ./run-cli {name} start\'\n'
+                           f'  (PC 시뮬레이션이면 TOOL_LOCAL=1 ./run-cli ...)')
         if self.running(name):
             return False, f'{svc.label}: 이미 실행 중 (pid {self.pid(name)})'
         busy = [SERVICES[c].label for c in svc.conflicts if self.running(c)]

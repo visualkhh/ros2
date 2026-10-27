@@ -133,7 +133,14 @@ class Bus:
                 print(f'{name:<24} {stamp}  {path}')
             return 0
         name = args.name or self.default_map_name()
-        if not self.procs.running('slam'):
+        from .procs import IS_ROBOT
+        if not IS_ROBOT:
+            print(self.term.paint(f'주의: 여기는 로봇이 아님 — 지도는 이 컴퓨터의 {MAP_DIR}에 저장됩니다 '
+                                  '(Nav는 로봇에서 도니 로봇에서 저장하는 게 맞음)', YELLOW))
+        if self.state.map.age() is None:
+            print(self.term.paint('/map 수신 없음 — SLAM이 지도를 내고 있지 않습니다 (라이다 /scan이 있어야 지도가 생김)', RED))
+            return 1
+        if not self.procs.running('slam') and IS_ROBOT:
             print(self.term.paint('주의: SLAM이 꺼져 있음 — /map을 내는 노드(map_server 등)가 있어야 저장됩니다', YELLOW))
         ok, msg = self.procs.save_map(name)
         print(msg)
