@@ -3,7 +3,7 @@
 원본: `/home/pank/workspaces/pa/source/Lv2_bee_Assignment/docker/` 13종 + `fastdds.xml`, `fastdds_local.xml`
 이 폴더는 26.04 Lyrical용으로 검증·정리한 복사본. `Dockerfile`, `docker-compose.yml`은 26.04로 변환, `.sh`는 원본 그대로(26.04 호환 확인됨).
 
-관련: [Lyrical 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [OpenCR 세팅](../opencr/opencr-setup-ubuntu26.04.md) · [Pi 세팅 순서](../raspberry/lyrical-setup.md)
+관련: [Lyrical 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [OpenCR 세팅](../opencr/opencr-setup-ubuntu26.04.md) · [Pi 세팅 순서](../raspberry/README.md)
 
 ## 파일 목록
 

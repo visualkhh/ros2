@@ -51,4 +51,4 @@ arduino-cli core list            # OpenCR:OpenCR 1.5.3
 ls ~/.local/share/opencr_update/ # opencr_ld_shell_arm · _x86
 ```
 
-관련: [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [Pi 세팅 순서](../raspberry/lyrical-setup.md)
+관련: [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [Pi 세팅 순서](../raspberry/README.md)
