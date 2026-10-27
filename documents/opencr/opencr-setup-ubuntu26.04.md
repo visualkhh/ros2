@@ -40,7 +40,31 @@ cd ~/ros2/firmware/opencr
 
 - 포트를 다른 프로그램(베이스 드라이버·시리얼 모니터)이 잡고 있으면 `upload.sh`·`test-firmware`가 거부 → `tool/run-cli stop-all`.
 
-## 4. 문제 확인
+## 4. 바퀴 ID · 방향 점검 (새 로봇 · 모터 교체 · 배선 변경 후 1회)
+
+ROS 없이 펌웨어만으로 **바퀴 하나씩** 돌려서 두 가지를 따로 확인합니다. 로봇을 들어 **바퀴를 띄우고**, 베이스는 끈 상태에서.
+
+```bash
+~/ros2/tool/run-cli base stop            # 포트 비우기 (opencr_driver가 /dev/opencr를 잡고 있음)
+cd ~/ros2/firmware/opencr
+./test-firmware --wheel 0.5 0 --yes      # C의 첫 값 = 왼쪽만 돌아야 함 (2초)
+./test-firmware --wheel 0 0.5 --yes      # 둘째 값 = 오른쪽만
+~/ros2/tool/run-cli base start
+```
+
+| 결과 | 원인 | 고칠 곳 |
+|---|---|---|
+| 엉뚱한 바퀴가 돈다 | **펌웨어 ID 매핑** | `firmware/opencr/tb3_wheels/tb3_wheels.ino` `WHEEL_LEFT_ID`·`WHEEL_RIGHT_ID` → compile·upload |
+| 맞는 바퀴인데 +0.5에 뒤로 구른다 | 모터 장착 방향 | `ros2_ws/src/tb3_bringup/config/robot.yaml` `left_dir`·`right_dir` = -1 (펌웨어 그대로) |
+| 맞는 바퀴가 앞으로 | 정상 | 그 바퀴 dir = +1 |
+
+순서가 중요: **ID를 먼저** 맞추고 방향을 본다. ID가 틀린 채 방향 부호만 바꾸면 직진은 맞아도 회전이 반대가 되고 odom 좌우가 뒤집힌다.
+
+마지막으로 ROS로 확인: `./run-cli teleop` — `w` 직진 · `a` 제자리 좌회전(위에서 반시계) · `d` 우회전(시계).
+
+이 로봇(2026-10-27): **ID 2 = 왼쪽 · ID 1 = 오른쪽**, 두 모터 모두 +속도 = 뒤로 → `left_dir: -1` · `right_dir: -1`.
+
+## 5. 문제 확인
 
 - 업로드 응답 없음 → OpenCR **SW2를 누른 채 RESET** (부트로더 모드, LED 깜빡임) → `./upload.sh` 다시.
 - `test-firmware`가 `응답 없음` → 펌웨어 미업로드 · 바퀴 전원(12V) · 모터 ID/보드레이트 확인. 모터가 없어도 `S`는 나옴 (값 0).
