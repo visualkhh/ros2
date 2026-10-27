@@ -14,7 +14,24 @@ echo "=== apt 패키지 ($ARCH)"
 pkgs=(curl ca-certificates bzip2)
 if [ "$ARCH" = arm ]; then
   pkgs+=(gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib)
-  [ "$(uname -m)" = aarch64 ] && $SUDO dpkg --add-architecture armhf
+  if [ "$(uname -m)" = aarch64 ]; then
+    # opencr_ld_shell_arm은 32비트(armhf) 바이너리 → libc6:armhf 필요.
+    # Ubuntu 26.04: arm64는 archive.ubuntu.com, armhf는 ports.ubuntu.com에만 있음 →
+    # 기존 저장소는 arm64로 묶고 armhf는 ports에서 받는다 (안 하면 apt update가 armhf 404로 실패).
+    $SUDO dpkg --add-architecture armhf
+    for f in /etc/apt/sources.list.d/*.sources; do
+      grep -q '^Architectures:' "$f" || $SUDO sed -i 's/^Types: .*/&\nArchitectures: arm64/' "$f"
+    done
+    armhf_src=/etc/apt/sources.list.d/ubuntu-ports-armhf.sources
+    [ -f "$armhf_src" ] || $SUDO tee "$armhf_src" >/dev/null <<EOF2
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports/
+Suites: $(lsb_release -cs) $(lsb_release -cs)-updates $(lsb_release -cs)-security
+Components: main universe
+Architectures: armhf
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF2
+  fi
   pkgs+=(libc6:armhf)
 fi
 $SUDO apt-get update
