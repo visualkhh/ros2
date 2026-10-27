@@ -29,9 +29,6 @@ firmware/opencr/
 ├── tb3_wheels/              # 스케치 (폴더명=파일명)
 ├── common.sh                # 공통 변수 (source 전용)
 ├── setup.sh                 # arduino-cli + OpenCR 보드 코어(DynamixelSDK 포함) + 업로더 — 최초 1회
-├── install-udev.sh          # udev 규칙 2개 설치 → /dev/opencr · /dev/tb3_lidar — 최초 1회
-├── 99-opencr.rules          # OpenCR (0483:5740) → /dev/opencr
-├── 99-tb3-lidar.rules       # LDS-03 USB2LDS (CP2102 10c4:ea60) → /dev/tb3_lidar
 ├── compile.sh               # → build/tb3_wheels/tb3_wheels.ino.bin
 ├── upload.sh                # .bin → .opencr 변환 후 업로드
 ├── setup_compile_upload.sh  # setup + compile + upload 한 번에
@@ -40,7 +37,7 @@ firmware/opencr/
 
 ```bash
 ./setup.sh                 # sudo 필요 (apt · arduino-cli)
-./install-udev.sh          # sudo 필요. OpenCR → /dev/opencr · 라이다 → /dev/tb3_lidar
+~/ros2/documents/raspberry/udev/install-udev.sh   # 최초 1회: /dev/opencr — documents/raspberry/udev-setup.md
 ./compile.sh
 ./upload.sh                # 기본 포트 /dev/opencr → 없으면 /dev/ttyACM0
 ./test-firmware            # S 5줄 (읽기만 — 아무것도 안 보냄)
@@ -50,7 +47,7 @@ firmware/opencr/
 
 - 업로드가 응답 없으면: OpenCR **SW2를 누른 채 RESET** → 부트로더 모드에서 `./upload.sh` 다시.
 - 포트를 다른 프로그램(ROS 드라이버·tool의 베이스·시리얼 모니터)이 잡고 있으면 `upload.sh`·`test-firmware`가 거부함 → 먼저 종료 (`tool/run-cli stop-all`).
-- `install-udev.sh` 없이 쓰려면 `sudo usermod -aG dialout $USER` 후 재로그인, 포트는 `/dev/ttyACM0`.
+- `/dev/opencr` 고정 이름·권한: [udev 세팅](../../documents/raspberry/udev-setup.md). 없이 쓰려면 `sudo usermod -aG dialout $USER` 후 재로그인, 포트는 `/dev/ttyACM0`.
 
 ## SBC 연결 계획
 

@@ -122,10 +122,10 @@ flowchart TD
 
 | 장치 | USB | udev 이름 | 규칙 |
 |---|---|---|---|
-| OpenCR | `0483:5740` STM Virtual COM | `/dev/opencr` | `firmware/opencr/99-opencr.rules` |
-| LDS-03 (USB2LDS) | `10c4:ea60` CP2102 | `/dev/tb3_lidar` | `firmware/opencr/99-tb3-lidar.rules` |
+| OpenCR | `0483:5740` STM Virtual COM | `/dev/opencr` | `documents/raspberry/udev/99-opencr.rules` |
+| LDS-03 (USB2LDS) | `10c4:ea60` CP2102 | `/dev/tb3_lidar` | `documents/raspberry/udev/99-tb3-lidar.rules` |
 
-설치: `firmware/opencr/install-udev.sh`.
+설치·설명: [documents/raspberry/udev-setup.md](../documents/raspberry/udev-setup.md).
 
 ## 6. 패키지
 

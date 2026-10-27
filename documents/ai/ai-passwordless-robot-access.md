@@ -103,6 +103,6 @@ ssh pak "grep -vF '$key' ~/.ssh/authorized_keys > ~/.ssh/ak.new && mv ~/.ssh/ak.
 ## 7. 이걸로 AI가 하는 일 (이 프로젝트)
 
 - 설치: [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) — apt · swap · `.bashrc` · `colcon build`
-- 펌웨어: [OpenCR](../opencr/opencr-setup-ubuntu26.04.md) — `setup.sh` · `install-udev.sh` · `compile.sh` · `upload.sh` · `test-firmware`
+- 펌웨어: [OpenCR](../opencr/opencr-setup-ubuntu26.04.md) — `setup.sh` · [udev](../raspberry/udev-setup.md) · `compile.sh` · `upload.sh` · `test-firmware`
 - 코드 갱신: PC에서 push → `ssh pak 'cd ~/ros2 && git pull'` (Pi는 GitHub 키 없이 https로 pull만)
 - 운영: `ssh -t pak 'cd ~/ros2/tool && ./run-cli'` · PC에서 `tool/run-rviz slam`

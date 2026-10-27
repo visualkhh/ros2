@@ -14,7 +14,7 @@ OpenCR은 로봇 Pi(`pak`)의 USB에 꽂혀 있고, 펌웨어 빌드·업로드�
 ssh pak
 cd ~/ros2/firmware/opencr
 ./setup.sh            # 최초 1회: apt(gcc-arm-none-eabi 등) · arduino-cli · OpenCR 코어 · opencr_ld_shell_arm
-./install-udev.sh     # 최초 1회: /dev/opencr (OpenCR) · /dev/tb3_lidar (LDS-03) 고정 이름 + 권한 0666
+~/ros2/documents/raspberry/udev/install-udev.sh   # 최초 1회: /dev/opencr · /dev/tb3_lidar → udev 문서
 ./compile.sh          # → build/tb3_wheels/tb3_wheels.ino.bin
 ./upload.sh           # /dev/opencr (없으면 /dev/ttyACM0)
 ./test-firmware       # S 줄 5개 읽기 (아무것도 안 보냄)
@@ -36,18 +36,8 @@ cd ~/ros2/firmware/opencr
 
 ## 3. 포트·권한
 
-```bash
-lsusb | grep -E '0483:5740|10c4:ea60'   # OpenCR (STM Virtual COM) · LDS-03 USB2LDS (CP2102)
-ls -l /dev/opencr /dev/tb3_lidar        # udev 설치 후 → ttyACM0 · ttyUSB0
-```
+`/dev/opencr` 고정 이름과 권한은 udev 규칙으로 만듭니다 → **[udev 세팅](../raspberry/udev-setup.md)** (라이다 `/dev/tb3_lidar`도 같이).
 
-| 장치 | USB ID | udev 이름 | 규칙 파일 | 쓰는 곳 |
-|---|---|---|---|---|
-| OpenCR | `0483:5740` | `/dev/opencr` | `firmware/opencr/99-opencr.rules` | 펌웨어 업로드 · `opencr_driver` |
-| LDS-03 (USB2LDS) | `10c4:ea60` | `/dev/tb3_lidar` | `firmware/opencr/99-tb3-lidar.rules` | `coin_d4_driver` (`ros2_ws/src/tb3_bringup/config/lidar.yaml`) |
-
-- 둘 다 `MODE=0666` · ModemManager 무시. `./install-udev.sh`가 두 규칙을 같이 설치한다. 규칙 없이 쓰려면 `sudo usermod -aG dialout $USER` 후 재로그인.
-- `/dev/tb3_lidar`는 TurtleBot3 공식 udev 규칙과 같은 이름 (coin_d4_driver 기본 포트). CP2102는 흔한 칩이라 같은 칩의 다른 USB-시리얼을 꽂으면 그것도 이 이름을 가져갈 수 있음.
 - 포트를 다른 프로그램(베이스 드라이버·시리얼 모니터)이 잡고 있으면 `upload.sh`·`test-firmware`가 거부 → `tool/run-cli stop-all`.
 
 ## 4. 문제 확인

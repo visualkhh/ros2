@@ -131,5 +131,5 @@ chmod +x "$TOOLS_DIR"/opencr_ld_shell_*
 
 arduino-cli board details --fqbn "$FQBN" >/dev/null
 echo "OK: setup 완료 ($ARCH, $LD_SHELL)"
-echo "다음: ./install-udev.sh  (/dev/opencr 고정 이름 + 권한)"
+echo "다음: ../../documents/raspberry/udev/install-udev.sh  (/dev/opencr 고정 이름 + 권한, 최초 1회)"
 echo "시리얼 권한이 없으면: sudo usermod -aG dialout \$USER  (재로그인 필요)"

@@ -65,8 +65,8 @@ done
 if [ -z "$PORT" ]; then
   if [ -e /dev/opencr ]; then PORT=/dev/opencr; else PORT=/dev/ttyACM0; fi
 fi
-[ -e "$PORT" ] || { echo "FAIL: 포트 없음: $PORT (ls -l /dev/opencr /dev/ttyACM* · ./install-udev.sh)"; exit 1; }
-[ -r "$PORT" ] && [ -w "$PORT" ] || { echo "FAIL: $PORT 권한 없음 → ./install-udev.sh 또는 sudo usermod -aG dialout \$USER"; exit 1; }
+[ -e "$PORT" ] || { echo "FAIL: 포트 없음: $PORT (ls -l /dev/opencr /dev/ttyACM* · udev: documents/raspberry/udev-setup.md)"; exit 1; }
+[ -r "$PORT" ] && [ -w "$PORT" ] || { echo "FAIL: $PORT 권한 없음 → documents/raspberry/udev/install-udev.sh 또는 sudo usermod -aG dialout \$USER"; exit 1; }
 # 다른 프로그램이 잡고 있으면 줄이 섞인다. socat(가상 시리얼 쌍)은 원래 잡고 있으므로 제외.
 holders=""
 for pid in $(fuser "$PORT" 2>/dev/null || true); do

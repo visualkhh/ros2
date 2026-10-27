@@ -3,7 +3,7 @@
 # 라이다가 1층 앞에 있어 뒤쪽 반은 모터·지지대·바퀴가 찍힘 → 이걸 안 지우면 SLAM이 몸통을 벽으로 그림.
 coin_d4_driver:
   ros__parameters:
-    port: /dev/tb3_lidar        # udev: firmware/opencr/99-tb3-lidar.rules (CP2102 USB2LDS)
+    port: /dev/tb3_lidar        # udev: documents/raspberry/udev-setup.md (CP2102 USB2LDS)
     frame_id: base_scan
     baudrate: 230400
     version: 4

@@ -10,7 +10,7 @@
 #   ./setup.sh       # 툴 설치
 #   ./compile.sh     # .bin 생성
 #   ./upload.sh      # .bin/.opencr 업로드
-#   ./install-udev.sh  # /dev/opencr 고정 이름 (최초 1회)
+#   ../../documents/raspberry/udev/install-udev.sh  # /dev/opencr 고정 이름 (최초 1회)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/common.sh"

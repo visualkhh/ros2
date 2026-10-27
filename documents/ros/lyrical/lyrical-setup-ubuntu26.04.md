@@ -83,7 +83,7 @@ sudo apt install -y \
 **apt에 없는 것**
 
 - 라이다 드라이버: 이 로봇은 **LDS-03** → `coin_d4_driver` (ROBOTIS, apt 없음). `ros2_ws/deps.repos`로 받아 빌드 (4장).
-  포트 `/dev/tb3_lidar`는 udev 규칙으로 만든다: `cd ~/ros2/firmware/opencr && ./install-udev.sh` ([OpenCR 문서 3장](../../opencr/opencr-setup-ubuntu26.04.md)).
+  포트 `/dev/tb3_lidar`는 udev 규칙으로 만든다 → [udev 세팅](../../raspberry/udev-setup.md).
   (`hls-lfcd-lds-driver`(LDS-01) · `ld08-driver`(LDS-02)도 Lyrical arm64 apt에 없음)
 - `cartographer_ros`: 없음 → SLAM은 slam_toolbox 사용.
 - (선택) RL 모델 추론: `pip install --break-system-packages onnxruntime` — torch는 Pi에 깔지 않음.

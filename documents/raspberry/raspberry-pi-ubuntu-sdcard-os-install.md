@@ -248,3 +248,7 @@ echo 'export TURTLEBOT3_MODEL=burger' >> ~/.bashrc
 
 ---
 작성일: 2026-10-27 / 호스트 기준: Ubuntu Linux
+
+## 다음: USB 장치 udev
+
+OpenCR·라이다 고정 이름(`/dev/opencr`·`/dev/tb3_lidar`): [udev-setup.md](udev-setup.md)
