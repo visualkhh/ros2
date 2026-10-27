@@ -9,6 +9,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyri
 | [opencr/](opencr/) | OpenCR 펌웨어 툴체인·컴파일·업로드 (arm64 Pi에서) | [opencr-setup-ubuntu26.04.md](opencr/opencr-setup-ubuntu26.04.md) |
 | [ai/](ai/) | AI(Claude Code)가 Pi를 비밀번호 없이 다루게 하기 (SSH 키 · sudo) | [ai-passwordless-robot-access.md](ai/ai-passwordless-robot-access.md) |
 | [docker/](docker/) | PC 시험대 (Lyrical 컨테이너 · 테스트 스크립트) | [docker/README.md](docker/README.md) |
+| [작업이력/](작업이력/) | 날짜별 작업·**시행착오** (증상 → 원인 → 해결 → 교훈) | [작업이력/README.md](작업이력/README.md) |
 | [turtle-bot/](turtle-bot/) | 로봇 실물 사진 (맨 위 판 제거 후) | [images/img.png](turtle-bot/images/img.png) |
 
 저장소의 다른 곳:
