@@ -86,6 +86,7 @@ sudo apt install -y \
 - 라이다 드라이버: 이 로봇은 **LDS-03** → `coin_d4_driver` (ROBOTIS, apt 없음). `ros2_ws/deps.repos`로 받아 빌드 (4장).
   포트 `/dev/tb3_lidar`는 udev 규칙으로 만든다 → [udev 세팅](../../raspberry/udev-setup.md).
   (`hls-lfcd-lds-driver`(LDS-01) · `ld08-driver`(LDS-02)도 Lyrical arm64 apt에 없음)
+- 자동 맵핑 frontier 탐색: `explore_lite` (m-explore-ros2, BSD, apt 없음). `ros2_ws/deps.repos`로 받아 빌드 (4장).
 - `cartographer_ros`: 없음 → SLAM은 slam_toolbox 사용.
 - (선택) RL 모델 추론: `pip install --break-system-packages onnxruntime` — torch는 Pi에 깔지 않음.
 
@@ -119,6 +120,27 @@ source install/setup.bash
 갱신 흐름: PC에서 고치고 push → Pi에서 `cd ~/ros2 && git pull` →
 `ros2_ws`를 바꿨으면 다시 `colcon build`, `tool/`만 바꿨으면 빌드 불필요,
 `firmware/`를 바꿨으면 [OpenCR 문서](../../opencr/opencr-setup-ubuntu26.04.md)의 compile·upload.
+
+### 4-1. 소스로 받거나 직접 빌드하는 것 (전체 목록)
+
+apt로 안 되는 것만 모음. 받는 위치·버전은 저장소 파일에 고정돼 있고, 받은 소스 폴더는 `.gitignore` (저장소엔 목록만).
+
+| 무엇 | 왜 | 어디서 받나 / 버전 | 빌드 | 문서 |
+|---|---|---|---|---|
+| `coin_d4_driver` | LDS-03 라이다 드라이버 (Lyrical apt 없음) | `ros2_ws/deps.repos` — ROBOTIS, 커밋 `79d1833` | `vcs import` → `colcon build` | [ros2_ws README](../../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
+| `explore_lite` · `explore_lite_msgs` | 자동 맵핑 frontier 탐색 (Lyrical apt 없음) | `ros2_ws/deps.repos` — robo-friends/m-explore-ros2, 커밋 `326cf8a` | `vcs import` → `colcon build` (Pi 약 2분, 경고만) | 같음 |
+| 우리 패키지 (`tb3_bringup` · `rl_correction` · `rl_eval` · `nav2_rl_controller`) | 이 프로젝트 코드 | 저장소 `ros2_ws/src/` | `colcon build` | [ros2_ws README](../../../ros2_ws/README.md) |
+| OpenCR 펌웨어 `tb3_wheels` | 바퀴·부저 펌웨어 | 저장소 `firmware/opencr/` | `compile.sh` → `upload.sh` (Pi에서) | [OpenCR 세팅](../../opencr/opencr-setup-ubuntu26.04.md) |
+| arduino-cli + OpenCR 보드 패키지 | 펌웨어 빌드 도구 (arm64는 armhf 툴체인·core min/max 패치 필요) | `firmware/opencr/setup.sh`가 설치·패치 | `setup.sh` 1회 | 같음 |
+
+**빌드 주의**
+
+- 노드·실행 파일을 지웠거나 이름을 바꿨으면 colcon이 옛 것을 install에 남긴다 → 그 패키지만 지우고 다시:
+  `rm -rf build/tb3_bringup install/tb3_bringup && colcon build --packages-select tb3_bringup`
+  (확인: `ros2 pkg executables tb3_bringup`)
+- 외부 소스 버전을 올릴 땐 `deps.repos`의 커밋만 바꾸고 `vcs import src < deps.repos` → 다시 빌드.
+- PC는 `vcs import`를 안 해도 됨 (라이다·자동 맵핑은 Pi에서 돔). PC의 nav2_bringup엔 Python 모듈이 없어
+  `explore-nav.launch.py`는 PC에서 안 뜸 — Pi 전용.
 
 **PC 추가분** (RViz로 보기·시험): `ros-lyrical-desktop` 또는 `ros-lyrical-rviz2` + 위 2장 목록.
 PC 셸도 `ROS_DOMAIN_ID=25`여야 Pi가 보입니다 (`tool/run-rviz`는 자동으로 25).
