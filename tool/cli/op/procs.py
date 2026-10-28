@@ -59,9 +59,9 @@ class Service:
                     f'map:={map_yaml}', f'params_file:={NAV_PARAMS}',
                     f'use_sim_time:={SIM}', 'autostart:=true']
         if self.name == 'explore':
-            # SLAM이 /map·map→odom을 내는 중에 Nav2 주행만 (지도 없이, amcl 없이)
-            return ['ros2', 'launch', 'nav2_bringup', 'navigation_launch.py',
-                    f'params_file:={NAV_PARAMS}', f'use_sim_time:={SIM}', 'autostart:=true']
+            # SLAM이 /map·map→odom을 내는 중에 Nav2 주행만 (지도 없이, amcl 없이) + lifecycle_manager
+            return ['ros2', 'launch', 'tb3_bringup', 'explore-nav.launch.py',
+                    f'params_file:={NAV_PARAMS}', f'use_sim_time:={SIM}']
         raise ValueError(self.name)
 
 

@@ -105,6 +105,7 @@ cmd_manager는 20 Hz로 계속 보내고, 드라이버(0.5초)와 펌웨어(500 
 | launch | 어디서 | 띄우는 것 |
 |---|---|---|
 | `tb-only.launch.py` | Pi | state_manager · cmd_manager · frontier_explorer · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample. RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로) |
+| `explore-nav.launch.py` | Pi | SLAM 중 Nav — Nav2 `navigation_launch.py` + lifecycle_manager (Lyrical은 manager가 `bringup_launch.py`에만 있음). `run-cli explore start`·자동 맵핑이 씀 |
 | `rl-only.launch.py` | PC | rl_corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) · eval_recorder — 로봇 노드는 안 띄움 |
 
 `nav2_rl_controller`(Nav2 내부 `cmd_vel_nav` 단계 보정)는 패키지만 있고 아직 launch에 연결 안 함.

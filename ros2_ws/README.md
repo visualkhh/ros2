@@ -47,6 +47,7 @@ colcon build --symlink-install          # Pi 4는 --parallel-workers 2 (메모�
 | launch | 어디서 | 내용 |
 |---|---|---|
 | `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다(+몸통 필터·고정 칸). RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로, 실행 중엔 `./run-cli rl on`) |
+| `explore-nav.launch.py` | Pi | SLAM 중 Nav — Nav2 `navigation_launch.py` + lifecycle_manager (Lyrical은 manager가 `bringup_launch.py`에만 있음). `run-cli explore start`·자동 맵핑이 씀 |
 | `rl-only.launch.py` | PC | RL 노드만: corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
 
