@@ -131,7 +131,7 @@ class StateStore:
                 return '?'
         temp = f"{f('left_temp_C', '{:.0f}')}/{f('right_temp_C', '{:.0f}')}℃"
         cur = f"{f('left_current_A', '{:.2f}')}/{f('right_current_A', '{:.2f}')}A"
-        bat = f"{f('battery_V', '{:.1f}')}V"
+        bat = f"{f('battery_V', '{:.1f}')}V({f('battery_pct', '{:.0f}')}%)"
         return self.robot_level, f'{self.robot_msg} · 온도 좌/우 {temp} · 전류 {cur} · 배터리 {bat}'
 
     def robot_txt(self) -> str:

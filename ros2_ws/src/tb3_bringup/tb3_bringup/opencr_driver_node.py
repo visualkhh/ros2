@@ -278,6 +278,8 @@ class OpencrDriver(Node):
                 ('left_temp_C', v[7]), ('right_temp_C', v[8]), ('uptime_ms', v[4]))]
             if len(v) >= 10:
                 st.values.append(KeyValue(key='battery_V', value=f'{v[9]:g}'))
+                st.values.append(KeyValue(key='battery_pct',
+                                          value=f'{max(0.0, min(1.0, (v[9] - 9.6) / 3.0)) * 100:g}'))
         st.values.append(KeyValue(key='position_jumps', value=str(self.jumps)))
         arr = DiagnosticArray()
         arr.header.stamp = self.get_clock().now().to_msg()
