@@ -14,3 +14,11 @@ repositories:
     type: git
     url: https://github.com/robo-friends/m-explore-ros2.git
     version: 326cf8a0b487c34246bb8f3326afbcd69576dc60   # 2026-06-02 main (Lyrical 빌드 확인)
+  cartographer:   # Google Cartographer 코어 (SLAM). Lyrical apt(resolute)에 없음 → 소스 빌드. ceres 등은 apt.
+    type: git
+    url: https://github.com/cartographer-project/cartographer.git
+    version: 877157a0d91788a7700221d87232d412cb3c1ef4
+  cartographer_ros:   # Cartographer ROS 2 래퍼. 위 코어와 같은 시기 ros2 브랜치로 고정
+    type: git
+    url: https://github.com/ros2/cartographer_ros.git
+    version: 743345256b43a7fd95765d40c7332b6f31ab66bb

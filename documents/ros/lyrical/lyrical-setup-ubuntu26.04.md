@@ -59,7 +59,6 @@ sudo apt install -y ros-lyrical-ros-base ros-dev-tools python3-colcon-common-ext
 sudo apt install -y \
   ros-lyrical-laser-filters \
   ros-lyrical-xacro \
-  ros-lyrical-slam-toolbox \
   ros-lyrical-nav2-bringup \
   ros-lyrical-nav2-amcl \
   ros-lyrical-nav2-map-server \
@@ -73,7 +72,7 @@ sudo apt install -y \
 
 | 패키지 | 쓰는 곳 |
 |---|---|
-| `slam-toolbox` | `tool/run-cli slam start` (지도 만들기) |
+| `cartographer` (코어+ROS 래퍼, 소스 빌드) | `tool/run-cli slam start` (지도 만들기) — apt 없음, 아래 "apt에 없는 것" 참조 |
 | `nav2-bringup` · `nav2-amcl` · `nav2-map-server` | `tool/run-cli nav start` · `explore start` · `map save` (bringup의 launch 파일을 그대로 씀 → 빼면 안 됨) |
 | `robot-state-publisher` | 로봇 TF (`base_link → 라이다`) |
 | `teleop-twist-keyboard` · `tf2-tools` | 수동 조종 · `view_frames` 디버그 |
@@ -87,7 +86,9 @@ sudo apt install -y \
   포트 `/dev/tb3_lidar`는 udev 규칙으로 만든다 → [udev 세팅](../../raspberry/udev-setup.md).
   (`hls-lfcd-lds-driver`(LDS-01) · `ld08-driver`(LDS-02)도 Lyrical arm64 apt에 없음)
 - 자동 맵핑 frontier 탐색: `explore_lite` (m-explore-ros2, BSD, apt 없음). `ros2_ws/deps.repos`로 받아 빌드 (4장).
-- `cartographer_ros`: 없음 → SLAM은 slam_toolbox 사용.
+- Google Cartographer (코어 + `cartographer_ros`): Lyrical apt에 없음 → `ros2_ws/deps.repos`로 소스 빌드 (아래 4-1절).
+  Pi 빌드 전제: `sudo apt install -y libceres-dev libprotobuf-dev libeigen3-dev liblua5.2-dev libcairo2-dev libgoogle-glog-dev libgflags-dev`
+  (Ceres 2.x 대응 패치 포함: `Manifold` 전환 — `src/cartographer` 직접 수정분, `deps.repos` 커밋에 고정된 버전에 적용됨)
 - (선택) RL 모델 추론: `pip install --break-system-packages onnxruntime` — torch는 Pi에 깔지 않음.
 
 ## 3. 셸 설정 (`~/.bashrc`)
