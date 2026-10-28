@@ -1,10 +1,12 @@
-"""rl-only — PC용: RL 노드(corrector + eval)만 띄운다 (로봇 노드 없음).
+"""rl-only — PC용: RL 노드(corrector + nav_corrector + eval)만 띄운다 (로봇 노드 없음).
 
   ros2 launch tb3_bringup rl-only.launch.py                                   # passthrough (enable:=false)
   ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx
+  ros2 launch tb3_bringup rl-only.launch.py nav_enable:=true nav_model:=/path/nav_policy.onnx
   ros2 launch tb3_bringup rl-only.launch.py label:=after output:=/tmp/after.csv
 
-흐름: (Pi) cmd_manager -> /cmd_vel_rl_in -> [PC] corrector -> /cmd_vel_rl_out -> (Pi) cmd_manager -> 드라이버
+이동 보정 흐름: (Pi) cmd_manager -> /cmd_vel_rl_in -> [PC] corrector -> /cmd_vel_rl_out -> (Pi) cmd_manager -> 드라이버
+Nav 보정 흐름: Nav2 /cmd_vel -> cmd_vel_nav_in -> [PC] nav_corrector -> cmd_vel_nav_out -> cmd_manager (remap으로 연결)
 로봇은 RL 켠 상태여야 한다 (./run-cli rl on 또는 tb-only.launch.py rl:=true). 같은 ROS_DOMAIN_ID(25)·같은 WiFi.
 """
 from launch import LaunchDescription
@@ -20,9 +22,14 @@ def generate_launch_description():
         DeclareLaunchArgument('model', default_value='', description='ONNX 정책 경로'),
         DeclareLaunchArgument('label', default_value='rl'),
         DeclareLaunchArgument('output', default_value='/tmp/rl_eval.csv'),
+        DeclareLaunchArgument('nav_enable', default_value='false', description='Nav Controller 보정 on/off'),
+        DeclareLaunchArgument('nav_model', default_value='', description='Nav ONNX 정책 경로'),
         Node(package='rl_correction', executable='corrector', name='rl_corrector',
              remappings=[('cmd_vel_in', 'cmd_vel_rl_in'), ('cmd_vel_out', 'cmd_vel_rl_out')],
              parameters=[{'enable': arg('enable'), 'model_path': arg('model')}],
+             output='screen'),
+        Node(package='nav2_rl_controller', executable='controller_corrector', name='nav2_rl_corrector',
+             parameters=[{'enable': arg('nav_enable'), 'model_path': arg('nav_model')}],
              output='screen'),
         Node(package='rl_eval', executable='eval_recorder', name='eval_recorder',
              remappings=[('cmd_vel_raw', 'cmd_vel_rl_in'), ('cmd_vel', 'cmd_vel_rl_out')],
