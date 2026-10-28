@@ -50,7 +50,7 @@ _CONS_HZ = {'w': 1350, 'j': 1450, 'm': 1400, 'n': 1500, 'N': 1600, 'l': 1550, 'r
             'S': 2200, 'Z': 2300, 'h': 2400, 'T': 2500, 'D': 2600, 't': 2700,
             'd': 2750, 'k': 2900, 'g': 2950}
 _DIPHTHONGS = ('aI', 'eI', 'oU', 'aU', '@U', 'I@', 'e@', 'U@', 'OI', 'tS', 'dZ')
-_VOWEL_MS, _CONS_MS = 140, 70
+_VOWEL_MS, _CONS_MS, _SAY_GAP_MS = 100, 50, 15
 
 
 @lru_cache(maxsize=1)
@@ -168,10 +168,11 @@ class CmdManager(Node):
         self.pub_beep_tone = self.create_publisher(Int32MultiArray, 'opencr/beep_tone', 10)
         self.create_subscription(Empty, 'cmd_beep', lambda _m: self.pub_beep.publish(Empty()), 10)
         self.create_subscription(Int32MultiArray, 'cmd_beep_tone', self.pub_beep_tone.publish, 10)
-        self._say: deque = deque()   # [(hz, ms)] — tick()이 논블로킹으로 하나씩 재생
+        self._say: deque = deque()   # [(hz, ms)] — tick_say(50 Hz)가 논블로킹으로 하나씩 재생
         self._say_next = 0.0
         self.create_subscription(String, 'cmd_say', self.on_say, 10)
         self.create_timer(1.0 / rate, self.tick)
+        self.create_timer(0.02, self.tick_say)   # 말맛용 빠른 스케줄러 (바퀴 mux는 20 Hz 유지)
 
     def on_say(self, msg: String) -> None:
         tones = text_to_tones(msg.data.strip())
@@ -204,13 +205,15 @@ class CmdManager(Node):
         msg, t = self.last.get(topic, (ZERO, 0.0))
         return msg if time.monotonic() - t <= timeout else ZERO
 
-    def tick(self) -> None:
+    def tick_say(self) -> None:
         now = time.monotonic()
         if self._say and now >= self._say_next:   # 타이핑삑 재생 (바퀴 mux와 무관)
             hz, ms = self._say.popleft()
             if hz:
                 self.pub_beep_tone.publish(Int32MultiArray(data=[hz, ms]))
-            self._say_next = now + (ms + 50) / 1000.0
+            self._say_next = now + (ms + _SAY_GAP_MS) / 1000.0
+
+    def tick(self) -> None:
         if self.estop:
             self.pub_base.publish(ZERO)
             return
