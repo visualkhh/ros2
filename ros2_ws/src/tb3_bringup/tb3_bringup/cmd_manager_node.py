@@ -67,8 +67,8 @@ def _espeak_phonemes(text: str) -> str | None:
     lang = 'ko' if any(0xAC00 <= ord(c) <= 0xD7A3 for c in text) else 'en'
     try:
         r = subprocess.run([_espeak_bin(), '-v', lang, '-x', text],
-                           capture_output=True, text=True, timeout=5,
-                           stderr=subprocess.DEVNULL)
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           text=True, timeout=5)
         pho = r.stdout.strip()
         return pho or None
     except Exception:
