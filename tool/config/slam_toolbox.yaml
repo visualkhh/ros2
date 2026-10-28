@@ -41,11 +41,11 @@ slam_toolbox:
     # General Parameters
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.5
-    minimum_travel_heading: 0.5
+    minimum_travel_distance: 0.15  # tool: 0.5는 성김 — 코너가 둥글어지고 벽이 겹침
+    minimum_travel_heading: 0.15  # tool: 회전 중 스캔을 자주 넣어 번짐 방지
     check_min_dist_and_heading_precisely: false
     scan_buffer_size: 10
-    scan_buffer_maximum_scan_distance: 10.0
+    scan_buffer_maximum_scan_distance: 8.0  # tool: 실내 — 먼光线 노이즈 컷 (기본 10.0)
     link_match_minimum_response_fine: 0.1  
     link_scan_maximum_distance: 1.5
     loop_search_maximum_distance: 3.0
