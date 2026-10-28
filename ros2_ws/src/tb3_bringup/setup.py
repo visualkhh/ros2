@@ -13,7 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
         (os.path.join('share', package_name, 'urdf'), glob('urdf/*')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml') + glob('config/*.lua')),
         (os.path.join('share', package_name, 'meshes'), glob('meshes/*.stl')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
     ],

@@ -50,8 +50,8 @@ class Service:
         if self.name == 'base':
             return shlex.split(BASE_CMD)
         if self.name == 'slam':
-            return ['ros2', 'launch', 'slam_toolbox', 'online_async_launch.py',
-                    f'slam_params_file:={SLAM_PARAMS}', f'use_sim_time:={SIM}']
+            return ['ros2', 'launch', 'tb3_bringup', 'cartographer.launch.py',
+                    f'use_sim_time:={SIM}']
         if self.name == 'nav':
             if not map_yaml:
                 raise ValueError('nav는 지도(map.yaml)가 필요합니다')
@@ -67,7 +67,7 @@ class Service:
 
 SERVICES: dict[str, Service] = {s.name: s for s in (
     Service('base', '베이스', '바퀴·odom·라이다 bringup (TOOL_BASE_CMD)'),
-    Service('slam', 'SLAM 맵핑', 'slam_toolbox online_async — /map 생성', ('nav',)),
+    Service('slam', 'SLAM 맵핑', 'cartographer (tb3_bringup cartographer.launch) — /map 생성', ('nav',)),
     Service('nav', 'Nav (지도 주행)', 'nav2 bringup — map_server + amcl + 주행', ('slam', 'explore')),
     Service('explore', 'SLAM 중 Nav', 'nav2 navigation만 — SLAM 지도 위 목표 주행', ('nav',)),
 )}
@@ -235,7 +235,7 @@ class Procs:
 
 
 # 켜짐 판단에 쓰는 노드 (ROS 그래프 — 연결된 곳 어디서나 보임)
-MARKER_NODES = {'base': ('opencr_driver',), 'slam': ('slam_toolbox',),
+MARKER_NODES = {'base': ('opencr_driver',), 'slam': ('cartographer_node',),
                 'nav': ('amcl',), 'explore': ('bt_navigator',)}
 
 
