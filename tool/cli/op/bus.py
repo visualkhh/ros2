@@ -255,9 +255,11 @@ class Bus:
                 print(msg)
                 if not ok:
                     return 1
-        end = time.monotonic() + 60.0  # Nav2 주행부가 켜질 때까지 (Pi에서 수십 초)
+        start = time.monotonic()
+        end = start + 60.0  # Nav2 주행부가 켜질 때까지 (Pi에서 수십 초)
         client = self._client()
         while not client.server_is_ready() and time.monotonic() < end:
+            self.ui.progress(f'Nav2 주행부 켜지는 중 … {time.monotonic() - start:.0f}/60초 (Pi에서 보통 20~40초)')
             self._poll(0.5)
         if not client.server_is_ready():
             print(self.term.paint('Nav2 주행부가 안 켜짐 — ./run-cli explore log', RED))

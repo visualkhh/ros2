@@ -100,14 +100,18 @@ class Ui:
         self._busy = Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM)])
         self._busy.draw('key')
 
-    def _remote_wait(self, elapsed: float) -> None:
-        """SSH로 로봇에서 실행되는 동안 처리 중 창에 경과 초 (로봇 run-cli는 ~8초 걸림)."""
+    def progress(self, text: str) -> None:
+        """처리 중 창 맨 아래 줄을 갱신 (오래 걸리는 단계가 지금 뭘 기다리는지). 메뉴 밖(명령줄)이면 무시."""
         dlg = self._busy
         if dlg is None:
             return
-        spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[int(elapsed * 4) % 10]
-        dlg.lines = dlg.lines[:3] + [self.term.paint(f'{spin} 로봇({self.procs.host})에서 실행 중 … {elapsed:.0f}초 (보통 8~15초)', DIM)]
+        spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[int(time.monotonic() * 4) % 10]
+        dlg.lines = dlg.lines[:3] + [self.term.paint(f'{spin} {text}', DIM)]
         dlg.draw('key')
+
+    def _remote_wait(self, elapsed: float) -> None:
+        """SSH로 로봇에서 실행되는 동안 (로봇 run-cli는 ~8초 걸림)."""
+        self.progress(f'로봇({self.procs.host})에서 실행 중 … {elapsed:.0f}초 (보통 8~15초)')
 
     def modal_key(self, title: str, body: list[str]) -> str | None:
         """단일 키 확인 — Enter='enter' · Esc/◀=None · 문자 그대로."""
