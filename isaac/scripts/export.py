@@ -55,7 +55,7 @@ def main():
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     runner.load(args.checkpoint)
 
-    out_dir = "/home/pank/workspaces/visualkhh/source/ros2/isaac/export"
+    out_dir = f"/home/pank/workspaces/visualkhh/source/ros2/isaac/export/{args.task}"
     os.makedirs(out_dir, exist_ok=True)
 
     import copy  # noqa: E402

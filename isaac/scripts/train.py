@@ -45,7 +45,10 @@ else:
 
 
 def main():
-    log_dir = f"/home/pank/workspaces/visualkhh/source/ros2/isaac/logs/{exp_name}"
+    from datetime import datetime  # noqa: E402
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_dir = f"/home/pank/workspaces/visualkhh/source/ros2/isaac/logs/{exp_name}/{stamp}"
     os.makedirs(log_dir, exist_ok=True)
     agent_cfg = Tb3PPORunnerCfg()
     agent_cfg.experiment_name = exp_name
