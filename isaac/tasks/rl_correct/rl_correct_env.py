@@ -85,6 +85,8 @@ class RlCorrectEnv(DirectRLEnv):
         w = self.robot.data.root_ang_vel_w.torch[:, 2]
         v = v + torch.randn_like(v) * self.cfg.odom_noise_lin
         w = w + torch.randn_like(w) * self.cfg.odom_noise_ang
+        v = torch.nan_to_num(v, nan=0.0, posinf=5.0, neginf=-5.0)
+        w = torch.nan_to_num(w, nan=0.0, posinf=5.0, neginf=-5.0)
         return v, w
 
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
@@ -125,8 +127,8 @@ class RlCorrectEnv(DirectRLEnv):
         n = len(env_ids)
         root_pos = self.robot.data.default_root_state.torch[env_ids, :3].clone()
         root_pos[:, :2] += self.scene.env_origins[env_ids, :2]
-        root_pos[:, 0] += sample_uniform(-2.0, 2.0, (n,), self.device)
-        root_pos[:, 1] += sample_uniform(-2.0, 2.0, (n,), self.device)
+        root_pos[:, 0] += sample_uniform(-1.0, 1.0, (n,), self.device)
+        root_pos[:, 1] += sample_uniform(-1.0, 1.0, (n,), self.device)
         yaw = sample_uniform(-3.14, 3.14, (n,), self.device)
         root_quat = self.robot.data.default_root_state.torch[env_ids, 3:7].clone()
         root_quat[:, 0] = torch.cos(yaw / 2.0)

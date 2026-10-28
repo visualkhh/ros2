@@ -128,6 +128,8 @@ class Nav2RlEnv(DirectRLEnv):
         w = self.robot.data.root_ang_vel_w.torch[:, 2]
         v = v + torch.randn_like(v) * self.cfg.odom_noise_lin
         w = w + torch.randn_like(w) * self.cfg.odom_noise_ang
+        v = torch.nan_to_num(v, nan=0.0, posinf=5.0, neginf=-5.0)
+        w = torch.nan_to_num(w, nan=0.0, posinf=5.0, neginf=-5.0)
         return v, w
 
     def _base_command(self):
