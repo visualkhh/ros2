@@ -18,14 +18,14 @@ flowchart LR
   end
 
   subgraph PI["Raspberry Pi 4 — pak (tb3_bringup + tool)"]
-    SM["state_manager<br/>/state_mode · rl · estop"]
+    SM["state_manager<br/>/state_control · rl · estop"]
     CM["cmd_manager<br/>(mux)"]
     DRV["opencr_driver"]
     RSP["robot_state_publisher<br/>(URDF)"]
     LIDAR["coin_d4_driver"]
     FILT["scan_filter<br/>(laser_filters 몸통 상자)"]
     SLAM["slam_toolbox<br/>(tool: slam start)"]
-    NAV["Nav2<br/>(tool: nav / explore start)"]
+    NAV_PLAN["Nav2<br/>(tool: nav / explore start)"]
     TELE["teleop<br/>(tool: teleop)"]
   end
 
@@ -36,7 +36,7 @@ flowchart LR
   end
 
   TELE -->|"/cmd_manual_vel"| CM
-  NAV -->|"/cmd_vel"| CM
+  NAV_PLAN -->|"/cmd_vel"| CM
   SM -->|"/state_*"| CM
   CM -->|"/cmd_vel_base"| DRV
   CM <-.->|"rl on: /cmd_vel_rl_in · _out"| RL
@@ -44,56 +44,68 @@ flowchart LR
   LDS -->|"/dev/tb3_lidar 230400"| LIDAR
   LIDAR -->|"/scan_raw"| FILT
   FILT -->|"/scan"| SLAM
-  FILT -->|"/scan"| NAV
-  SLAM -->|"/map · TF map→odom"| NAV
+  FILT -->|"/scan"| NAV_PLAN
+  SLAM -->|"/map · TF map→odom"| NAV_PLAN
   DRV -->|"/odom · TF odom→base_footprint"| SLAM
-  DRV -->|"/odom"| NAV
+  DRV -->|"/odom"| NAV_PLAN
   RSP -->|"TF base_footprint→base_link→base_scan"| SLAM
   SLAM -.->|"/map /scan TF (WiFi)"| RVIZ
-  NAV -.->|"경로 · 코스트맵"| RVIZ
+  NAV_PLAN -.->|"경로 · 코스트맵"| RVIZ
 ```
 
-## 2. 바퀴 명령 경로 — state_manager · cmd_manager(mux)
+## 2. 운행 상태 · 바퀴 명령 경로 — cmd_manager · state_manager
 
-명령은 모두 **cmd_manager**를 거쳐 드라이버로 갑니다. 무엇을 보낼지는 **state_manager**의 상태(`/state_*`)가 정합니다.
-RL은 bringup을 바꾸지 않고 **실행 중에** `/cmd_manual_rl`로 켜고 끕니다.
+- **cmd_manager** = 명령 처리. 외부 요청(`/cmd_manual_*`, RViz `/goal_pose`)을 받아 **운행 상태를 바꾸고**,
+  상태대로 바퀴 명령을 **고르고(선택)** **경로를 정한다**(직결 / PC RL 경유). (ROS의 `twist_mux`는 우선순위로 고르기만 해서
+  제어 상태·RL 경로는 못 함 → 직접 구현)
+- **state_manager** = 현재 상태를 들고 `/state_*`(latched)로 알린다. 바꾸는 판단은 하지 않음 (cmd_manager가 `/state_set_*`로 기록).
 
 ```mermaid
 flowchart LR
-  subgraph IN["명령 입력"]
-    MAN["/cmd_manual_vel<br/>텔레오퍼 · tool drive"]
-    NAV["/cmd_vel<br/>Nav2"]
-    REQ["/cmd_manual_mode · _rl · _estop<br/>tool · 사람"]
+  subgraph IN["외부 요청 · 명령"]
+    REQ["/cmd_manual_control · _rl · _estop<br/>tool · 사람"]
     GOAL["/goal_pose<br/>RViz Nav2 Goal"]
+    MAN["/cmd_manual_vel<br/>텔레오퍼 · tool drive"]
+    NAV_PLAN["/cmd_vel<br/>Nav2"]
   end
-  SM["state_manager<br/>상태의 주인"]
-  CM["cmd_manager (mux)<br/>estop → 0<br/>MANUAL → 수동 · AUTO → Nav2"]
+  FE["frontier_explorer<br/>(SLAM_AUTO_MAPPING일 때만)"]
+  CM["cmd_manager<br/>상태 변경 판단 · 명령 선택 · 경로"]
+  SM["state_manager<br/>현재 상태 알림"]
   RL["[PC] rl_corrector<br/>(rl-only)"]
   DRV["opencr_driver"]
-  REQ --> SM
-  GOAL -->|"→ AUTO"| SM
-  SM -->|"/state_mode · /state_rl · /state_estop (latched)"| CM
+  REQ --> CM
+  GOAL -->|"→ NAV_PLAN"| CM
+  CM -->|"/state_set_*"| SM
+  SM -->|"/state_control · /state_rl · /state_estop (latched)"| CM
+  SM -->|"/state_control"| FE
+  FE -->|"navigate_to_pose"| NAV_PLAN
+  FE -->|"끝나면 MANUAL"| REQ
   MAN --> CM
-  NAV --> CM
-  CM -->|"rl off: /cmd_vel_base"| DRV
-  CM -->|"rl on: /cmd_vel_rl_in"| RL
+  NAV_PLAN --> CM
+  CM -->|"경로 직결: /cmd_vel_base"| DRV
+  CM -->|"경로 RL: /cmd_vel_rl_in"| RL
   RL -->|"/cmd_vel_rl_out"| CM
 ```
 
-| 상태 | 토픽 (latched) | 바꾸는 법 | 효과 |
+| 상태 (`/state_*`) | 값 | 바꾸는 법 | 효과 |
 |---|---|---|---|
-| 모드 | `/state_mode` = `MANUAL` · `AUTO` | `/cmd_manual_mode` · tool 텔레오퍼/drive → MANUAL · tool goal/RViz Goal → AUTO | MANUAL이면 `/cmd_manual_vel`만, AUTO면 Nav2 `/cmd_vel`만 바퀴로 |
-| RL | `/state_rl` = true/false | `/cmd_manual_rl` · `./run-cli rl on/off` · `tb-only.launch.py rl:=true` = true로 시작 | true면 `/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out`을 거침 |
-| 비상정지 | `/state_estop` | `/cmd_manual_estop` · `./run-cli estop on/off` | true면 항상 0 |
+| **제어 상태** — 바퀴를 누가 움직이나 | | | |
+| 제어 상태 `/state_control` | `MANUAL` | `/cmd_manual_control MANUAL` · tool 텔레오퍼/drive (아니면 **물어봄**) | **수동** `/cmd_manual_vel`만 바퀴로 |
+| | `NAV_PLAN` | `/cmd_manual_control NAV_PLAN` · tool goal · RViz Nav2 Goal | Nav2 `/cmd_vel`만 바퀴로 (목표 주행) |
+| | `SLAM_AUTO_MAPPING` | `./run-cli automap start` (SLAM·SLAM 중 Nav 켜고 바꿈) | Nav2 `/cmd_vel`만 · frontier_explorer가 목표를 계속 보냄 · 다 찾으면 MANUAL |
+| 경로 `/state_rl` | false = 직결 · true = RL 경유 | `/cmd_manual_rl` · `./run-cli route direct/rl` · `tb-only.launch.py rl:=true` | RL 경유면 `/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out` |
+| 비상정지 `/state_estop` | | `/cmd_manual_estop` · `./run-cli estop on/off` | true면 항상 0 (요청 즉시 0도 보냄) |
+| **운행 상태** `/state_operation` | `SLAM` · `LOCALIZATION` · `IDLE` | state_manager가 떠 있는 노드로 판단 (slam_toolbox / amcl·map_server / 없음) | 위치를 어떻게 아나 — 맵핑 중인가, 지도로 위치 추정 중인가 |
+| 지도 `/state_map` | `office` · `(SLAM 작성 중)` · `''` | state_manager가 map_server `yaml_filename`에서 | 지금 적용된 지도 |
 
-안전: 고른 입력이 0.5초 넘게 끊기면 0, RL 켰는데 `/cmd_vel_rl_out`이 0.3초 넘게 끊기면(PC 꺼짐·WiFi) 0.
+안전: 고른 입력이 0.5초 넘게 끊기면 0, RL 경유인데 `/cmd_vel_rl_out`이 0.3초 넘게 끊기면(PC 꺼짐·WiFi) 0.
 cmd_manager는 20 Hz로 계속 보내고, 드라이버(0.5초)와 펌웨어(500 ms watchdog)도 각자 멈춥니다.
+모드를 바꾸면 이전 모드에서 온 수동 명령은 버립니다 (새 모드로 새지 않게).
 
 | launch | 어디서 | 띄우는 것 |
 |---|---|---|
-| `tb-only.launch.py` | Pi | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample. RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로) |
+| `tb-only.launch.py` | Pi | state_manager · cmd_manager · frontier_explorer · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample. RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로) |
 | `rl-only.launch.py` | PC | rl_corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) · eval_recorder — 로봇 노드는 안 띄움 |
-| `basic_bringup.launch.py` | PC 시험 | state_manager · cmd_manager · mock_base (OpenCR 없이 같은 명령 경로) |
 
 `nav2_rl_controller`(Nav2 내부 `cmd_vel_nav` 단계 보정)는 패키지만 있고 아직 launch에 연결 안 함.
 
@@ -102,7 +114,7 @@ cmd_manager는 20 Hz로 계속 보내고, 드라이버(0.5초)와 펌웨어(500 
 ```mermaid
 flowchart TD
   MAP["map"] -->|"slam_toolbox 또는 amcl"| ODOM["odom"]
-  ODOM -->|"opencr_driver (mock_base)"| FP["base_footprint (바닥)"]
+  ODOM -->|"opencr_driver"| FP["base_footprint (바닥)"]
   FP -->|"URDF 고정 +0.010"| BL["base_link (바퀴축)"]
   BL -->|"URDF 고정"| SCAN["base_scan (LDS-03)"]
   BL -->|"URDF · /joint_states"| WL["wheel_left_link"]
@@ -113,7 +125,7 @@ flowchart TD
 | 프레임 | 누가 냄 | 기준으로 쓰는 곳 |
 |---|---|---|
 | `map → odom` | slam_toolbox(맵핑) · amcl(지도 주행) | Nav2 global costmap |
-| `odom → base_footprint` | opencr_driver (PC 시험: mock_base) | SLAM `base_frame` · amcl `base_frame_id` |
+| `odom → base_footprint` | opencr_driver | SLAM `base_frame` · amcl `base_frame_id` |
 | `base_footprint → base_link → …` | robot_state_publisher (`urdf/robot.urdf.xacro`) | Nav2 costmap · footprint 다각형 · 몸통 필터 |
 
 ## 4. 토픽
@@ -122,10 +134,12 @@ flowchart TD
 |---|---|---|---|
 | `/cmd_manual_vel` | Twist | tool teleop · drive | cmd_manager (MANUAL) |
 | `/cmd_vel` | Twist | Nav2 (`enable_stamped_cmd_vel: false`) | cmd_manager (AUTO) |
-| `/cmd_vel_base` | Twist | cmd_manager | opencr_driver · mock_base |
+| `/cmd_vel_base` | Twist | cmd_manager | opencr_driver |
 | `/cmd_vel_rl_in` · `/cmd_vel_rl_out` | Twist | cmd_manager · rl_corrector (PC) | rl_corrector · cmd_manager · eval_recorder |
-| `/cmd_manual_mode` · `_rl` · `_estop` | String · Bool · Bool | tool · 사람 | state_manager |
-| `/state_mode` · `/state_rl` · `/state_estop` | String · Bool · Bool (latched) | state_manager | cmd_manager · tool |
+| `/cmd_manual_control` · `_rl` · `_estop` | String · Bool · Bool | tool · 사람 · frontier_explorer(끝나면 MANUAL) | cmd_manager |
+| `/state_set_control` · `_rl` · `_estop` | String · Bool · Bool | cmd_manager | state_manager |
+| `/explore_status` | String | frontier_explorer | tool 상태바 |
+| `/state_control` · `/state_rl` · `/state_estop` · `/state_operation` · `/state_map` | String · Bool · Bool · String · String (latched) | state_manager | cmd_manager · frontier_explorer · tool |
 | `/odom` | Odometry | opencr_driver | slam_toolbox · Nav2 · eval_recorder · tool |
 | `/joint_states` | JointState | opencr_driver (effort = 전류 A) | robot_state_publisher |
 | `/diagnostics` | DiagnosticArray | opencr_driver (전류·온도·모터 에러) | tool · rqt |
@@ -148,7 +162,7 @@ flowchart TD
 
 | 패키지 | 내용 |
 |---|---|
-| `tb3_bringup` | `state_manager` · `cmd_manager` · `opencr_driver` · `scan_resample` · `mock_base` · launch 4개 · `config/robot.yaml` · `config/lidar.yaml` · URDF · 바퀴 메시 |
+| `tb3_bringup` | `state_manager` · `cmd_manager` · `opencr_driver` · `scan_resample` · `frontier_explorer` · launch 3개 · `config/robot.yaml` · `config/lidar.yaml` · URDF · 바퀴 메시 |
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out` |
 | `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력 보정 (미연결) |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom CSV · `benchmark_onnx.py` |

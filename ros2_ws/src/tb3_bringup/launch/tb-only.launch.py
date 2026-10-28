@@ -38,6 +38,8 @@ def generate_launch_description():
         Node(package='tb3_bringup', executable='state_manager', name='state_manager',
              parameters=[{'rl': rl}]),
         Node(package='tb3_bringup', executable='cmd_manager', name='cmd_manager'),
+        # 자동 맵핑: /state_control = SLAM_AUTO_MAPPING일 때만 움직임 (그 밖엔 대기) — SLAM + explore가 떠 있어야
+        Node(package='tb3_bringup', executable='frontier_explorer', name='frontier_explorer'),
         Node(package='tb3_bringup', executable='opencr_driver', name='opencr_driver',
              parameters=[params, {'port': port}], output='screen'),
         LogInfo(msg='RL 켠 상태로 시작: PC에서 ros2 launch tb3_bringup rl-only.launch.py 를 띄워야 바퀴가 움직입니다',

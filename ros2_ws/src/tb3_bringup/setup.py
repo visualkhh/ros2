@@ -25,11 +25,11 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            'mock_base = tb3_bringup.mock_base_node:main',
             'opencr_driver = tb3_bringup.opencr_driver_node:main',
             'scan_resample = tb3_bringup.scan_resample_node:main',
             'state_manager = tb3_bringup.state_manager_node:main',
             'cmd_manager = tb3_bringup.cmd_manager_node:main',
+            'frontier_explorer = tb3_bringup.frontier_explorer_node:main',
         ],
     },
 )

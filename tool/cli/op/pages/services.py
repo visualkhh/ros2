@@ -1,6 +1,7 @@
 """프로세스 메뉴 — 베이스 · SLAM 맵핑 · Nav · SLAM 중 Nav (start/stop/재시작/로그 + 전용 항목)."""
 from __future__ import annotations
 
+import argparse
 import math
 import os
 import re
@@ -202,10 +203,36 @@ class SlamMenu(ServiceMenu):
     name = 'slam'
 
     def extra(self):
-        return [SaveMapItem(self.app), RvizItem(self.app, 'slam')]
+        from .drive import TeleopItem
+
+        class ManualDrive(TeleopItem):
+            key = 't'
+
+            def label(self):
+                return '수동으로 이동하기 (텔레오퍼)'
+        return [SaveMapItem(self.app), RvizItem(self.app, 'slam'), ManualDrive(self.app), AutoMapItem(self.app)]
 
     def hint(self):
-        return [self.term.paint(' 맵핑: 시작 → v) RViz로 보기 → 텔레오퍼(메인 5)로 천천히 돌기 → 지도 저장', DIM)]
+        return [self.term.paint(' 맵핑: 1) 시작 → v) RViz로 보기 → t) 수동으로 돌기 또는 a) 자동 맵핑 → 3) 지도 저장', DIM),
+                f' 탐색: {self.state.explore_status or "-"}' if self.state.st_control == 'SLAM_AUTO_MAPPING' else '']
+
+
+class AutoMapItem(MenuItem):
+    key = 'a'
+
+    def label(self):
+        return '자동 맵핑 중지' if self.state.st_control == 'SLAM_AUTO_MAPPING' else '자동 맵핑 시작 (스스로 탐색)'
+
+    def run(self):
+        if self.state.st_control == 'SLAM_AUTO_MAPPING':
+            self.bus.cmd_automap(argparse.Namespace(value='stop'))
+            return STAY
+        body = ['frontier_explorer가 지도의 모르는 쪽 경계로 Nav2 목표를 계속 보냅니다.',
+                'SLAM · SLAM 중 Nav가 꺼져 있으면 켭니다 (Nav2 준비에 수십 초).',
+                '주변을 비우세요. 끝나면 MANUAL로 돌아오고, 지도는 직접 저장 (3).']
+        if self.ui.confirm('자동 맵핑을 시작할까요?', default=True, body=body):
+            self.bus.cmd_automap(argparse.Namespace(value='start'))
+        return STAY
 
 
 # ---------------------------------------------------------------- Nav

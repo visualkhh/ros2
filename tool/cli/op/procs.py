@@ -28,7 +28,6 @@ SLAM_PARAMS = Path(os.environ.get('TOOL_SLAM_PARAMS', CONFIG_DIR / 'slam_toolbox
 NAV_PARAMS = Path(os.environ.get('TOOL_NAV_PARAMS', CONFIG_DIR / 'nav2_params.yaml'))
 # 베이스(바퀴·odom·라이다) bringup. 기본 = 로봇만(RL 없음).
 #   RL on으로 시작: TOOL_BASE_CMD='ros2 launch tb3_bringup tb-only.launch.py rl:=true' (보통은 ./run-cli rl on)
-#   PC 시험(OpenCR 없음): TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py'
 BASE_CMD = os.environ.get('TOOL_BASE_CMD', 'ros2 launch tb3_bringup tb-only.launch.py')
 SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')
 # 베이스·SLAM·Nav 프로세스와 지도 파일은 로봇(Pi)에 있어야 한다. 로봇이 아닌 곳에서 run-cli를 쓰면
@@ -233,7 +232,7 @@ class Procs:
 
 
 # 켜짐 판단에 쓰는 노드 (ROS 그래프 — 연결된 곳 어디서나 보임)
-MARKER_NODES = {'base': ('opencr_driver', 'mock_base'), 'slam': ('slam_toolbox',),
+MARKER_NODES = {'base': ('opencr_driver',), 'slam': ('slam_toolbox',),
                 'nav': ('amcl',), 'explore': ('bt_navigator',)}
 
 

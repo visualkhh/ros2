@@ -1,7 +1,7 @@
 # tool
 
 로봇 운영 도구. **지도 만들기(SLAM, slam_toolbox)** · **지도 주행(Nav2)** 켜고 끄기, 텔레오퍼, 지도 저장, 목표 보내기,
-모드(MANUAL/AUTO)·RL·비상정지 전환. **ROS 토픽이 보이는 곳 어디서나** 같은 `./run-cli`로 씁니다 (로봇 Pi든 PC든).
+제어 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING 자동 맵핑) · 경로(직결/RL) · 비상정지 전환. **ROS 토픽이 보이는 곳 어디서나** 같은 `./run-cli`로 씁니다 (로봇 Pi든 PC든).
 
 ```text
 tool/
@@ -84,8 +84,9 @@ tool/
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
 ./run-cli nodes
 ./run-cli reboot-motors        # 모터 에러(E) 해제 — 두 바퀴 재부팅 (/opencr/reboot)
-./run-cli mode manual|auto      # 누가 운전: 텔레오퍼 / Nav2 (텔레오퍼·drive는 MANUAL, goal·RViz Goal은 AUTO로 자동 전환)
-./run-cli rl on|off             # 바퀴 명령이 PC RL(rl-only)을 거치게 — on이면 PC rl-only 필요
+./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
+./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
+./run-cli route direct|rl       # 바퀴 명령 경로: 직결 / PC RL 경유 (= rl off|on)
 ./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
 ./run-cli stop-all              # 바퀴 정지 → 띄운 것 전부 종료
 ./run-cli stop                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
@@ -93,7 +94,8 @@ tool/
 
 상단 상태바: ① 프로세스 (로봇: pid · 그 밖: 노드 그래프로 `pak.local (원격)`) ② `odom`·`scan`·`map` 수신 Hz ③ **로봇** — opencr_driver의 `/diagnostics`
 (● ok / ✗ motor error·no S line / ? 수신 없음 · 바퀴 온도 좌/우 · 전류 좌/우). 모터 에러면 `1) 상태 → 2) 모터 재부팅`.
-그 아래 줄 = state_manager의 `/state_*`: `모드 MANUAL · RL off · 비상정지 off` (비상정지면 빨강). 전환은 `1) 상태 → 3·4·5`.
+그 아래 줄 = state_manager의 `/state_*`: `제어 MANUAL · 운행 LOCALIZATION (지도 office) · 경로 직결 · 비상정지 off`
+(제어 = 누가 바퀴를 움직이나 · 운행 = SLAM/LOCALIZATION/IDLE · 비상정지면 빨강). 전환은 `1) 상태 → 3·4·5`.
 
 CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
 로그: `./run-cli slam log` (어디서나 — 원격이면 SSH로 로봇의 `.run/slam.log`).
@@ -111,7 +113,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 
 | 변수 | 기본 | 뜻 |
 |---|---|---|
-| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL on으로 시작은 `… tb-only.launch.py rl:=true` (보통은 실행 중 `./run-cli rl on`), PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
+| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL on으로 시작은 `… tb-only.launch.py rl:=true` (보통은 실행 중 `./run-cli rl on`) |
 | `TOOL_CMD_VEL` | `/cmd_manual_vel` | 텔레오퍼·drive가 내는 토픽 (cmd_manager 수동 입력) |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) — 로봇·`TOOL_LOCAL`에서 |
@@ -123,11 +125,11 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 | `TOOL_LOCAL` | — | `1`이면 로봇이 아니어도 **이 컴퓨터에** 띄움 (PC 시뮬레이션) |
 
 프레임 규약 (REP-105, TurtleBot3와 같음): `map → odom → base_footprint(바닥) → base_link(바퀴축 +0.010) → base_scan`.
-`odom → base_footprint`는 드라이버(opencr_driver·mock_base), 나머지는 URDF(robot_state_publisher). 스캔은 `/scan`.
+`odom → base_footprint`는 opencr_driver, 나머지는 URDF(robot_state_publisher). 스캔은 `/scan`.
 SLAM·amcl은 `base_footprint`, costmap·footprint 다각형은 `base_link` 기준 (turtlebot3_navigation2와 같음).
 
 `config/nav2_params.yaml`은 `enable_stamped_cmd_vel: false`입니다. Lyrical Nav2 기본은 `TwistStamped`인데
-`mock_base`·자체 드라이버는 `Twist`를 받기 때문입니다 (안 맞으면 Nav가 경로는 내도 바퀴가 안 움직임).
+cmd_manager·opencr_driver는 `Twist`를 받기 때문입니다 (안 맞으면 Nav가 경로는 내도 바퀴가 안 움직임).
 
 ## 문제 확인
 
@@ -146,20 +148,4 @@ ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
 - 지도가 안 커짐 → `scan` 수신 확인, 라이다 TF 확인, 너무 빨리 돌면 스캔 매칭 실패 (천천히)
 - Nav 목표 거부 → `initpose` 먼저, `./run-cli nav log`
 - `[pak.local] … SSH 실패` → `ssh pak@pak.local`이 비번 없이 되는지 (켜기/끄기·지도만 SSH, 나머지는 토픽이라 됨)
-- 바퀴가 안 움직임 → 상태바 `모드`: 텔레오퍼는 MANUAL, Nav는 AUTO여야 · `비상정지 off` · RL on이면 PC `rl-only` 떠 있는지
-
-## 시험 (실기 없이 PC에서)
-
-mock_base(odom)에 가짜 라이다를 붙여 전체 흐름(SLAM → 저장 → Nav 목표 → SLAM 중 Nav)을 확인했습니다 (2026-10-27).
-
-주의: 스크립트가 `ROS_DOMAIN_ID=25`로 고정하므로 **실기가 켜져 있으면 같은 도메인에 섞입니다** (시험 명령이 로봇을 움직일 수 있음).
-실기를 끄고 하거나, 시험 동안만 `cli/start.sh`의 `export ROS_DOMAIN_ID=25`를 다른 값으로 바꿨다가 되돌리세요.
-
-```bash
-export TOOL_LOCAL=1 TOOL_MAP_DIR=/tmp/maps ROBOT_HOST=none.local   # 이 PC에 띄움 · Pi 피어 끔
-TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py' ./run-cli base start   # mock_base
-# + /scan을 내는 무언가 (Gazebo turtlebot3 또는 가짜 스캔 노드)
-./run-cli slam start && ./run-cli drive left --duration 4 && ./run-cli map save test
-./run-cli slam stop && ./run-cli nav start test && ./run-cli initpose 0 0 0 && ./run-cli goal 1 0.5
-./run-cli stop-all
-```
+- 바퀴가 안 움직임 → 상태바 `운행`: 텔레오퍼는 MANUAL, Nav·자동 맵핑은 NAV_PLAN·SLAM_AUTO_MAPPING이어야 · `비상정지 off` · RL on이면 PC `rl-only` 떠 있는지

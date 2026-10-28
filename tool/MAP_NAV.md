@@ -17,9 +17,9 @@ SLAM·Nav는 로봇(Pi)에서 돌고, 조작은 **토픽이 보이는 곳 어디
 
 ```text
 ./run-cli                       메인 메뉴
-├─ 1) 상태                      1 상태 출력 · 2 모터 재부팅 · 3 모드 전환 · 4 RL 켜기/끄기 · 5 비상정지
+├─ 1) 상태                      1 상태 출력 · 2 모터 재부팅 · 3 제어 상태 · 4 경로(직결/RL) · 5 비상정지
 ├─ 2) 베이스                    1 시작/정지 · 2 재시작 · l 로그
-├─ 3) SLAM 맵핑                 1 시작/정지 · 2 재시작 · 3 지도 저장 · v RViz로 보기 · l 로그
+├─ 3) SLAM 맵핑                 1 시작/정지 · 2 재시작 · 3 지도 저장 · v RViz로 보기 · t 수동으로 이동 · a 자동 맵핑 · l 로그
 ├─ 4) Nav (지도 주행)           1 시작(지도 선택)/정지 · 2 재시작 · 3 초기 위치 · 4 목표 보내기 · 5 목표 취소 · v RViz · l 로그
 ├─ 5) 수동 주행 / 텔레오퍼      1 텔레오퍼 · 2~5 전진·후진·좌·우 한 번 · 6~8 속도·시간 설정
 ├─ 6) 지도 파일                 s 지금 지도 저장 · 번호 = 지도 내용 보기
@@ -79,7 +79,8 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ./run-cli teleop        # w 전진 · x 후진 · a/d 제자리 회전 · s 정지 · e/c 속도 · q 종료
 ```
 
-메뉴: `./run-cli` → `3) SLAM 맵핑` → `1) 시작` → `v) RViz로 보기` → `m` 메인 → `5) 수동 주행 / 텔레오퍼` → `1) 텔레오퍼` (`q`로 나옴).
+메뉴: `./run-cli` → `3) SLAM 맵핑` → `1) 시작` → `v) RViz로 보기` → `t) 수동으로 이동하기` (`q`로 나옴).
+텔레오퍼는 제어 상태가 MANUAL이 아니면 바꿀지 먼저 묻습니다.
 
 요령:
 
@@ -87,6 +88,23 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 - 벽을 따라 한 바퀴 → **출발점으로 돌아오기**(루프가 닫히며 지도가 바로잡힘) → 방 가운데.
 - 라이다가 1층(바닥에서 ~3 cm)이라 책상 상판 같은 높은 것은 다리만 보입니다.
 - CLI 상단 `map 10.4x9.6m` · 상태 화면의 `탐색 N%`로 진행 확인.
+
+### 1-1. 자동 맵핑 (스스로 탐색)
+
+로봇이 지도의 **모르는 쪽 경계(frontier)** 로 Nav2 목표를 스스로 계속 보내며 지도를 넓힙니다 (`frontier_explorer`, 베이스에 포함).
+
+```bash
+./run-cli automap start       # SLAM·SLAM 중 Nav가 꺼져 있으면 켜고 → 제어 상태 SLAM_AUTO_MAPPING
+./run-rviz slam               # 보기 · 상태바 "탐색" 줄에 진행 (이동 목표 · 남은 frontier 수)
+./run-cli automap stop        # 도중에 멈추기 → MANUAL
+./run-cli map save office     # 다 찾으면 스스로 MANUAL로 — 그다음 저장
+```
+
+메뉴: `./run-cli` → `3) SLAM 맵핑` → `a) 자동 맵핑 시작` (확인창) → `v) RViz로 보기` → 끝나면 `3) 지도 저장`.
+
+- 주변을 비우세요. 라이다 뒤쪽 135°가 몸통에 가려 안 보이므로 **후진은 위험** — Nav2가 주로 앞으로 갑니다.
+- 갈 수 없는 frontier(막힘·60초 초과)는 건너뜁니다. 덜 찍힌 구석은 `t) 수동으로 이동`으로 마저.
+- RViz에서 Nav2 Goal을 찍거나 텔레오퍼로 MANUAL로 바꾸면 자동 맵핑은 그 자리에서 멈춥니다.
 
 ## 2. 지도 저장
 
@@ -136,8 +154,8 @@ Nav2는 로봇이 지도 어디에 있는지 알아야 켜집니다. 초기 위�
 
 ## 4. 특정 위치로 보내기
 
-모드: Nav2 명령은 `/state_mode`가 **AUTO**일 때만 바퀴로 갑니다. RViz Nav2 Goal·`./run-cli goal`은 자동으로 AUTO로 바꾸고,
-텔레오퍼·`drive`는 MANUAL로 바꿉니다 (마지막에 한 조작이 모드를 정함). 상단 상태바 `모드 …`로 확인.
+제어 상태: Nav2 명령은 `/state_control`가 **NAV_PLAN**(또는 SLAM_AUTO_MAPPING)일 때만 바퀴로 갑니다. RViz Nav2 Goal·`./run-cli goal`은 자동으로 NAV로 바꾸고,
+텔레오퍼·`drive`는 MANUAL이 아니면 바꿀지 **물어봅니다** (수동 명령은 MANUAL에서만). 상단 상태바 `모드 …`로 확인.
 
 ### RViz에서 찍기
 

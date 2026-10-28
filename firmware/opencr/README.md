@@ -52,5 +52,5 @@ firmware/opencr/
 ## SBC 연결 계획
 
 - `test-serial` 방식 그대로 사용 가능 (`/dev/opencr` 가상/실물 동일 이름)
-- `mock_base` → ros2_control 하드웨어 플러그인으로 교체 시 `C` 송신 / `S` 파싱 그대로 재사용
+- 지금은 `tb3_bringup/opencr_driver`가 `C` 송신·`S` 파싱. ros2_control 하드웨어 플러그인으로 옮길 때도 프로토콜 그대로
 - LiDAR 장착 후: `hls_lfcd_lds_driver` + `slam_toolbox` 추가

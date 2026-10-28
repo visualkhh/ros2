@@ -2,7 +2,7 @@
 //
 // Hardware: OpenCR 1.0 + DYNAMIXEL XM430-W350 (wheel ID 2 = left, ID 1 = right), 1 Mbps, Protocol 2.0.
 // Pair with SBC driver over USB CDC serial (/dev/opencr).
-// Future SBC side: ros2_control hardware plugin replacing mock_base (same topics).
+// SBC side: ros2_ws/src/tb3_bringup/opencr_driver (C -> wheels, S -> odom/TF/joint_states).
 //
 // Protocol (ASCII lines, '\\n' terminated, SI units):
 //   SBC -> OpenCR : C,<left rad/s>,<right rad/s>   (empty field = keep current)

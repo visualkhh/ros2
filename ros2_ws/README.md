@@ -6,7 +6,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계
 
 | 패키지 | 내용 |
 |---|---|
-| `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `mock_base`(PC 시험) · launch 4개 · URDF |
+| `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `frontier_explorer`(자동 맵핑) · launch 3개 · URDF |
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out`. rl-only가 `/cmd_vel_rl_in` → `/cmd_vel_rl_out`으로 띄움 |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom을 CSV로 · `benchmark_onnx.py` (Pi 추론 속도) |
 | `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력(`cmd_vel_nav`) 단계 보정. **아직 launch에 연결 안 함** |
@@ -41,15 +41,14 @@ colcon build --symlink-install          # Pi 4는 --parallel-workers 2 (메모�
 
 ## bringup (tb3_bringup)
 
-모든 바퀴 명령은 **cmd_manager(mux)** 를 거치고, 무엇을 보낼지(MANUAL/AUTO · RL on/off · 비상정지)는
-**state_manager** 의 `/state_*` 가 정합니다 — [ARCH.md 2장](ARCH.md#2-바퀴-명령-경로--state_manager--cmd_managermux).
+외부 요청은 **cmd_manager**가 받아 운행 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING · 경로 직결/RL · 비상정지)를 바꾸고 바퀴 명령을 고르며,
+**state_manager**는 현재 상태를 `/state_*`로 알립니다 — [ARCH.md 2장](ARCH.md#2-바퀴-명령-경로--state_manager--cmd_managermux).
 
 | launch | 어디서 | 내용 |
 |---|---|---|
 | `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다(+몸통 필터·고정 칸). RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로, 실행 중엔 `./run-cli rl on`) |
 | `rl-only.launch.py` | PC | RL 노드만: corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
-| `basic_bringup.launch.py` | PC | OpenCR 없이 시험: state_manager · cmd_manager · mock_base (실기와 같은 명령 경로) |
 
 보통은 `tool/run-cli base start`가 `tb-only`를 띄웁니다. 직접 띄우려면:
 
@@ -63,12 +62,12 @@ ros2 launch tb3_bringup tb-only.launch.py lidar:=false        # 라이다 없이
 | 토픽 | 타입 | tool | 효과 |
 |---|---|---|---|
 | `/cmd_manual_vel` | Twist | `teleop` · `drive` | MANUAL일 때 바퀴로 |
-| `/cmd_manual_mode` | String `MANUAL`·`AUTO` | `mode manual/auto` | 누가 운전 (RViz Nav2 Goal → 자동 AUTO) |
-| `/cmd_manual_rl` | Bool | `rl on/off` | RL 보정 거치기 (실행 중 전환) |
+| `/cmd_manual_control` | String `MANUAL`·`NAV_PLAN`·`SLAM_AUTO_MAPPING` | `control …` · `automap start/stop` | 제어 상태 (RViz Nav2 Goal → NAV_PLAN, 자동 맵핑 끝 → MANUAL) |
+| `/cmd_manual_rl` | Bool | `route direct/rl` | 경로: 직결 / PC RL 경유 (실행 중 전환) |
 | `/cmd_manual_estop` | Bool | `estop on/off` | 비상정지 |
 | `/opencr/reboot` | Empty | `reboot-motors` | 모터 에러(E) 해제 |
 
-상태는 `/state_mode` · `/state_rl` · `/state_estop` (latched) 로 나옵니다.
+상태는 `/state_control` · `/state_rl` · `/state_estop` (latched) 로 나옵니다.
 
 `opencr_driver`: `/cmd_vel_base` → `C,l,r` (20 Hz 재전송), `S` → `/odom` · TF `odom→base_footprint` · `/joint_states`(effort=전류 A) ·
 `/diagnostics`(전류·온도·모터 에러). 파라미터 `config/robot.yaml` (바퀴 반지름 0.033 · 간격 0.287 · 방향 부호 -1/-1).
@@ -99,17 +98,3 @@ Pi에서 직접 추론할 경우 (탑재 전 체크):
 python3 src/rl_eval/benchmark_onnx.py model.onnx --iters 1000   # 평균 50 ms 이하 권장 (10-20 Hz 루프)
 pip install --break-system-packages onnxruntime                  # Pi에는 torch 설치 금지 (무거움)
 ```
-
-## PC 시험 (실기 없이)
-
-```bash
-source install/setup.bash
-ros2 launch tb3_bringup basic_bringup.launch.py        # state_manager · cmd_manager · mock_base
-ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=cmd_manual_vel   # 다른 터미널
-ros2 topic echo /odom --once
-```
-
-경로: `/cmd_manual_vel` → cmd_manager(MANUAL) → `/cmd_vel_base` → mock_base → `/odom` — 실기와 같고 드라이버만 다름.
-tool로 하려면 `TOOL_LOCAL=1 TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py' ./run-cli base start` ([tool README 시험](../tool/README.md#시험-실기-없이-pc에서)).
-직접 `ros2 launch`는 셸의 `ROS_DOMAIN_ID`를 씁니다 (이 PC `~/.bashrc`는 99 → 실기 25와 안 섞임).
-**tool은 25로 고정**이라 실기가 켜져 있으면 섞이니 실기를 끄거나 시험 동안 도메인을 바꿔서.

@@ -78,7 +78,7 @@ sudo apt install -y \
 | `robot-state-publisher` | 로봇 TF (`base_link → 라이다`) |
 | `teleop-twist-keyboard` · `tf2-tools` | 수동 조종 · `view_frames` 디버그 |
 | `turtlebot3-msgs` · `dynamixel-sdk` | 베이스 드라이버(OpenCR) 작업용 |
-| `python3-numpy` | `ros2_ws` (mock_base·rl 노드) |
+| `python3-numpy` | `ros2_ws` (frontier_explorer · rl 노드) |
 | `socat` | 가상 시리얼 시험 |
 
 **apt에 없는 것**

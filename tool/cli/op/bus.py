@@ -1,6 +1,7 @@
 """Bus — 발행·액션·프로세스 실행. 한 번 실행 명령(cmd_*)과 메뉴가 같이 쓴다."""
 from __future__ import annotations
 
+import argparse
 import math
 import os
 import sys
@@ -12,9 +13,9 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, Twi
 from .procs import SERVICES
 from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 
-# 수동 주행 명령은 cmd_manager(mux)의 수동 입력으로 — /state_mode=MANUAL일 때만 바퀴로 감 (ARCH.md)
+# 수동 주행 명령은 cmd_manager(mux)의 수동 입력으로 — /state_control=MANUAL일 때만 바퀴로 감 (ARCH.md)
 CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
-# Nav2(Lyrical)는 TwistStamped를 낸다. mock_base·자체 드라이버가 Twist면 0.
+# Nav2(Lyrical)는 TwistStamped를 낸다. cmd_manager·드라이버가 Twist라 0.
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
 
 
@@ -35,7 +36,7 @@ class Bus:
         from std_msgs.msg import Empty
         self._reboot_pub = node.create_publisher(Empty, '/opencr/reboot', 10)
         from std_msgs.msg import Bool, String
-        self._req = {'mode': (node.create_publisher(String, '/cmd_manual_mode', 10), String),
+        self._req = {'control': (node.create_publisher(String, '/cmd_manual_control', 10), String),
                      'rl': (node.create_publisher(Bool, '/cmd_manual_rl', 10), Bool),
                      'estop': (node.create_publisher(Bool, '/cmd_manual_estop', 10), Bool)}
         self._nav_client = None
@@ -152,15 +153,15 @@ class Bus:
         print(msg)
         return 0 if ok else 1
 
-    # ------------------------------------------------------------- 상태 요청 (state_manager)
+    # ------------------------------------------------------------- 상태 요청 (cmd_manager가 판단 → state_manager가 알림)
     def request(self, key: str, value) -> bool:
         """/cmd_manual_<key> 발행 → /state_<key>가 그 값이 될 때까지 (최대 3초) 기다림."""
         pub, typ = self._req[key]
-        end = time.monotonic() + 5.0  # 방금 만든 발행자 — state_manager와 연결될 때까지
+        end = time.monotonic() + 5.0  # 방금 만든 발행자 — cmd_manager와 연결될 때까지
         while pub.get_subscription_count() == 0 and time.monotonic() < end:
             self._poll(0.2)
         if pub.get_subscription_count() == 0:
-            print(self.term.paint('state_manager 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
+            print(self.term.paint('cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
             return False
         pub.publish(typ(data=value))
         end = time.monotonic() + 3.0
@@ -168,24 +169,83 @@ class Bus:
             self._poll(0.1)
         return getattr(self.state, f'st_{key}') == value
 
-    def ensure_mode(self, mode: str) -> None:
-        """주행 명령 전에 모드 맞추기 (텔레오퍼·drive = MANUAL, 목표 = AUTO). 이미 그 모드면 아무것도 안 함."""
-        end = time.monotonic() + 2.0  # 새로 켠 CLI는 latched /state_mode를 받기 전 — 잠깐 기다림
-        while self.state.st_mode is None and time.monotonic() < end:
+    def _wait_state(self) -> None:
+        end = time.monotonic() + 2.0  # 새로 켠 CLI는 latched /state_control를 받기 전 — 잠깐 기다림
+        while self.state.st_control is None and time.monotonic() < end:
             self._poll(0.1)
-        if self.state.st_mode != mode and self.request('mode', mode):
-            print(f'모드 → {mode}')
+
+    def ensure_manual(self) -> bool:
+        """수동 주행 전: MANUAL이 아니면 바꿀지 묻는다 (수동 명령은 MANUAL에서만 바퀴로 감). False = 취소."""
+        self._wait_state()
+        if self.state.st_control == 'MANUAL':
+            return True
+        if not sys.stdin.isatty():   # 스크립트에선 묻지 않고 거부 (입력 대기로 멈추지 않게)
+            print(self.term.paint(f'거부: 제어 상태 {self.state.st_control} — 먼저 ./run-cli mode manual', RED))
+            return False
+        body = [f'지금 제어 상태: {self.state.st_control or "?"}',
+                '수동 명령은 MANUAL에서만 바퀴로 갑니다.',
+                'NAV_PLAN·SLAM_AUTO_MAPPING이면 바꾸는 순간 Nav2 주행(목표·자동 맵핑)은 바퀴로 안 갑니다.']
+        if not self.ui.confirm('MANUAL로 바꿀까요?', default=True, body=body):
+            print('취소 — 제어 상태 그대로')
+            return False
+        ok = self.request('control', 'MANUAL')
+        print('제어 상태 → MANUAL' if ok else self.term.paint('MANUAL로 못 바꿈', RED))
+        return ok
+
+    def ensure_nav(self) -> None:
+        """목표 보내기 전: NAV로 (Nav2 /cmd_vel은 NAV_PLAN·SLAM_AUTO_MAPPING에서만 바퀴로)."""
+        self._wait_state()
+        if self.state.st_control != 'NAV_PLAN' and self.request('control', 'NAV_PLAN'):
+            print('제어 상태 → NAV_PLAN')
 
     def cmd_mode(self, args) -> int:
-        ok = self.request('mode', args.value.upper())
-        print(f'모드: {self.state.st_mode}' if ok else self.term.paint('모드 변경 실패', RED))
+        value = args.value.upper().replace('-', '_')
+        value = {'NAV': 'NAV_PLAN', 'AUTO': 'NAV_PLAN', 'AUTO_MAPPING': 'SLAM_AUTO_MAPPING'}.get(value, value)
+        if value == 'SLAM_AUTO_MAPPING':   # SLAM·주행부부터 켜야 함
+            return self.cmd_automap(argparse.Namespace(value='start'))
+        ok = self.request('control', value)
+        print(f'모드: {self.state.st_control}' if ok else self.term.paint('모드 변경 실패', RED))
         return 0 if ok else 1
 
-    def cmd_rl(self, args) -> int:
-        ok = self.request('rl', args.value == 'on')
+    def cmd_route(self, args) -> int:
+        """바퀴 명령 경로: direct = cmd_manager → opencr_driver · rl = PC RL 보정을 거침."""
+        want = args.value in ('rl', 'on')
+        ok = self.request('rl', want)
         if ok and self.state.st_rl:
-            print('RL 켬 — PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 떠 있어야 바퀴가 움직입니다')
-        print(f'RL: {"on" if self.state.st_rl else "off"}' if ok else self.term.paint('RL 변경 실패', RED))
+            print('경로 → RL 경유 — PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 떠 있어야 바퀴가 움직입니다')
+        elif ok:
+            print('경로 → 직결 (cmd_manager → opencr_driver)')
+        else:
+            print(self.term.paint('경로 변경 실패', RED))
+        return 0 if ok else 1
+
+    cmd_rl = cmd_route   # 예전 이름 (rl on|off)
+
+    def cmd_control(self, args) -> int:
+        return self.cmd_mode(args)
+
+    def cmd_automap(self, args) -> int:
+        """자동 맵핑: SLAM + SLAM 중 Nav를 켜고 제어 상태 SLAM_AUTO_MAPPING (frontier_explorer가 돌아다님)."""
+        if args.value == 'stop':
+            ok = self.request('control', 'MANUAL')
+            print('자동 맵핑 중지 → MANUAL (지도 저장: ./run-cli map save 이름)' if ok else self.term.paint('중지 실패', RED))
+            return 0 if ok else 1
+        for name in ('slam', 'explore'):
+            if not self.procs.running(name):
+                ok, msg = self.procs.start(name)
+                print(msg)
+                if not ok:
+                    return 1
+        end = time.monotonic() + 60.0  # Nav2 주행부가 켜질 때까지 (Pi에서 수십 초)
+        client = self._client()
+        while not client.server_is_ready() and time.monotonic() < end:
+            self._poll(0.5)
+        if not client.server_is_ready():
+            print(self.term.paint('Nav2 주행부가 안 켜짐 — ./run-cli explore log', RED))
+            return 1
+        ok = self.request('control', 'SLAM_AUTO_MAPPING')
+        print('자동 맵핑 시작 — 진행은 상태바 "탐색" 줄 · 끝나면 MANUAL로 돌아옴 · 중지: ./run-cli automap stop'
+              if ok else self.term.paint('SLAM_AUTO_MAPPING으로 못 바꿈', RED))
         return 0 if ok else 1
 
     def cmd_estop(self, args) -> int:
@@ -211,7 +271,8 @@ class Bus:
         self.state.last_cmd = (linear, angular)
 
     def cmd_drive(self, args) -> int:
-        self.ensure_mode('MANUAL')
+        if not self.ensure_manual():
+            return 1
         v = {'forward': args.speed, 'back': -args.speed}.get(args.direction, 0.0)
         w = {'left': args.angular, 'right': -args.angular}.get(args.direction, 0.0)
         end = time.monotonic() + (args.duration if args.direction != 'stop' else 0.0)
@@ -230,7 +291,8 @@ class Bus:
         if not sys.stdin.isatty():
             print('거부: teleop은 터미널에서 실행해야 합니다', file=sys.stderr)
             return 2
-        self.ensure_mode('MANUAL')
+        if not self.ensure_manual():
+            return 1
         from .dialogs import KeyReader
         linear = angular = 0.0
         lin_speed, ang_speed = args.linear, args.angular
@@ -341,7 +403,7 @@ class Bus:
         if not client.server_is_ready():
             print(self.term.paint('navigate_to_pose 서버 없음 — Nav 또는 SLAM 중 Nav를 먼저 켜세요', RED))
             return 1
-        self.ensure_mode('AUTO')  # Nav2 /cmd_vel은 AUTO일 때만 바퀴로 감
+        self.ensure_nav()
         goal = NavigateToPose.Goal()
         goal.pose = PoseStamped()
         goal.pose.header.frame_id = 'map'

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 
-from ..defs import STAY
+from ..defs import BACK, STAY
 from .base import Menu, MenuItem
 
 
@@ -44,26 +44,55 @@ class ToggleItem(MenuItem):
 
     def label(self):
         st = self.state
-        return {'mode': f'모드 전환 (지금 {st.st_mode or "?"})',
-                'rl': f'RL 보정 {"끄기" if st.st_rl else "켜기"}',
+        return {'mode': f'제어 상태 바꾸기 (지금 {st.st_control or "?"})',
+                'rl': f'경로 바꾸기 (지금 {"RL 경유" if st.st_rl else "직결"} → {"직결" if st.st_rl else "RL 경유"})',
                 'estop': f'비상정지 {"해제" if st.st_estop else "ON"}'}[self.what]
 
     def run(self):
         st = self.state
         if self.what == 'mode':
-            value = 'AUTO' if st.st_mode == 'MANUAL' else 'MANUAL'
-            self.bus.cmd_mode(argparse.Namespace(value=value))
+            return ModeMenu(self.app).show()
         elif self.what == 'rl':
-            body = ['켜면 바퀴 명령이 PC의 rl-only(rl_corrector)를 거칩니다.',
+            body = ['RL 경유: cmd_manager → PC rl_corrector(rl-only) → cmd_manager → opencr_driver.',
                     'PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 없으면 바퀴가 멈춥니다.']
-            if st.st_rl or self.ui.confirm('RL 보정을 켤까요?', body=body):
-                self.bus.cmd_rl(argparse.Namespace(value='off' if st.st_rl else 'on'))
+            if st.st_rl or self.ui.confirm('경로를 RL 경유로 바꿀까요?', body=body):
+                self.bus.cmd_route(argparse.Namespace(value='direct' if st.st_rl else 'rl'))
         elif st.st_estop:
             if self.ui.confirm('비상정지를 해제할까요?', body=['해제하면 다시 명령대로 움직입니다.']):
                 self.bus.cmd_estop(argparse.Namespace(value='off'))
         else:
             self.bus.cmd_estop(argparse.Namespace(value='on'))  # ON은 확인 없이 바로
         return STAY
+
+
+class ModeItem(MenuItem):
+    def __init__(self, app, key: str, mode: str, desc: str):
+        super().__init__(app)
+        self.key, self.mode, self.desc = key, mode, desc
+
+    def label(self):
+        return f'{self.mode:<13} {self.desc}' + ('  ← 지금' if self.state.st_control == self.mode else '')
+
+    def run(self):
+        if self.mode == 'SLAM_AUTO_MAPPING':
+            self.bus.cmd_automap(argparse.Namespace(value='start'))
+        else:
+            self.bus.cmd_mode(argparse.Namespace(value=self.mode))
+        return BACK
+
+
+class ModeMenu(Menu):
+    title = '제어 상태'
+
+    def items(self):
+        return [ModeItem(self.app, '1', 'MANUAL', '텔레오퍼·drive 명령만 바퀴로'),
+                ModeItem(self.app, '2', 'NAV_PLAN', 'Nav2 목표 주행 (goal · RViz Nav2 Goal)'),
+                ModeItem(self.app, '3', 'SLAM_AUTO_MAPPING', '자동 맵핑 — SLAM·SLAM 중 Nav를 켜고 스스로 탐색')]
+
+    def center(self):
+        return ['[제어 상태] 바꾸는 판단은 cmd_manager, 알리는 건 state_manager (/state_control)', '',
+                ' MANUAL에서만 수동 명령, NAV_PLAN·SLAM_AUTO_MAPPING에서만 Nav2 명령이 바퀴로 갑니다.',
+                ' RViz Nav2 Goal을 찍으면 자동으로 NAV_PLAN, 자동 맵핑이 끝나면 MANUAL로 돌아옵니다.']
 
 
 class StatusMenu(Menu):
