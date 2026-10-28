@@ -59,6 +59,7 @@ flowchart LR
   상태대로 바퀴 명령을 **고르고(선택)** **경로를 정한다**(직결 / PC RL 경유). (ROS의 `twist_mux`는 우선순위로 고르기만 해서
   제어 상태·RL 경로는 못 함 → 직접 구현)
 - **state_manager** = 현재 상태를 들고 `/state_*`(latched)로 알린다. 바꾸는 판단은 하지 않음 (cmd_manager가 `/state_set_*`로 기록).
+- 상태 바꾸기 실전 정리(토픽·명령·메뉴·예시): [STATE_CONTROL.md](STATE_CONTROL.md)
 
 ```mermaid
 flowchart LR
@@ -134,7 +135,7 @@ flowchart TD
 | 토픽 | 타입 | 내는 노드 | 받는 노드 |
 |---|---|---|---|
 | `/cmd_manual_vel` | Twist | tool teleop · drive | cmd_manager (MANUAL) |
-| `/cmd_vel` | Twist | Nav2 (`enable_stamped_cmd_vel: false`) | cmd_manager (AUTO) |
+| `/cmd_vel` | Twist | Nav2 (`enable_stamped_cmd_vel: false`) | cmd_manager (NAV_PLAN · SLAM_AUTO_MAPPING) |
 | `/cmd_vel_base` | Twist | cmd_manager | opencr_driver |
 | `/cmd_vel_rl_in` · `/cmd_vel_rl_out` | Twist | cmd_manager · rl_corrector (PC) | rl_corrector · cmd_manager · eval_recorder |
 | `/cmd_manual_control` · `_rl` · `_estop` | String · Bool · Bool | tool · 사람 · frontier_explorer(끝나면 MANUAL) | cmd_manager |
@@ -145,8 +146,10 @@ flowchart TD
 | `/joint_states` | JointState | opencr_driver (effort = 전류 A) | robot_state_publisher |
 | `/diagnostics` | DiagnosticArray | opencr_driver (전류·온도·모터 에러) | tool · rqt |
 | `/opencr/reboot` | Empty | 사람 · tool | opencr_driver → `R` |
+| `/opencr/beep` | Empty | 사람 · tool (`run-cli beep` · 텔레오퍼 b) | opencr_driver → `B` (부저) |
 | `/scan_raw` | LaserScan | coin_d4_driver | scan_filter |
-| `/scan` | LaserScan | scan_filter | slam_toolbox · amcl · Nav2 costmap |
+| `/scan_filtered` | LaserScan | scan_filter (몸통 가림 제거) | scan_resample |
+| `/scan` | LaserScan | scan_resample (400칸 고정) | slam_toolbox · amcl · Nav2 costmap |
 | `/map` | OccupancyGrid | slam_toolbox · map_server | Nav2 · RViz · tool map save |
 | `/initialpose` · `/goal_pose` | Pose… | RViz · tool | amcl · Nav2 |
 

@@ -42,7 +42,7 @@ colcon build --symlink-install          # Pi 4는 --parallel-workers 2 (메모�
 ## bringup (tb3_bringup)
 
 외부 요청은 **cmd_manager**가 받아 운행 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING · 경로 직결/RL · 비상정지)를 바꾸고 바퀴 명령을 고르며,
-**state_manager**는 현재 상태를 `/state_*`로 알립니다 — [ARCH.md 2장](ARCH.md#2-바퀴-명령-경로--state_manager--cmd_managermux).
+**state_manager**는 현재 상태를 `/state_*`로 알립니다 — [ARCH.md 2장](ARCH.md#2-운행-상태--바퀴-명령-경로--cmd_manager--state_manager). 바꾸는 법(토픽·명령·메뉴): [STATE_CONTROL.md](STATE_CONTROL.md).
 
 | launch | 어디서 | 내용 |
 |---|---|---|
