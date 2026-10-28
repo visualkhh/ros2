@@ -76,7 +76,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ./run-rviz slam
 
 # ③ 터미널 2 — 천천히 돌아다니기
-./run-cli teleop        # w 전진 · x 후진 · a/d 제자리 회전 · s 정지 · e/c 속도 · q 종료
+./run-cli teleop        # w 전진 · x 후진 · a/d 제자리 회전 · q/e 앞 사선 · z/c 뒤 사선 · s 정지 · -/= 속도 · b 삑 · Esc 종료
 ```
 
 메뉴: `./run-cli` → `3) SLAM 맵핑` → `1) 시작` → `v) RViz로 보기` → `t) 수동으로 이동하기` (`q`로 나옴).

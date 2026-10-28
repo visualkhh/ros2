@@ -20,6 +20,9 @@ CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
 # 수동 주행 속도 상한 (텔레오퍼 e · 메뉴 속도 설정) — Waffle Pi 사양 = 펌웨어 바퀴 상한 8 rad/s × 0.033 m
 MAX_LIN, MAX_ANG = 0.26, 1.82
+# 텔레오퍼 키 → (전후, 회전) 방향. 사선 = 전진/후진하며 회전 (teleop_twist_keyboard와 같은 부호: 후진 사선은 회전 부호 반대)
+TELEOP_MOVES = {'w': (1, 0), 'x': (-1, 0), 'a': (0, 1), 'd': (0, -1), 's': (0, 0),
+                'q': (1, 1), 'e': (1, -1), 'z': (-1, -1), 'c': (-1, 1)}
 DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
 
@@ -326,7 +329,7 @@ class Bus:
         if not self.ensure_manual():
             return 1
         from .dialogs import Dialog, KeyReader
-        linear = angular = 0.0
+        move = (0, 0)   # (전후, 회전) 방향 — 속도는 lin_speed·ang_speed를 곱해서 (속도를 바꾸면 달리는 중에도 바로 반영)
         lin_speed, ang_speed = min(args.linear, MAX_LIN), min(args.angular, MAX_ANG)
         last_send = 0.0
         last_key, key_count = '-', 0
@@ -335,6 +338,7 @@ class Bus:
         try:
             with KeyReader(self.term) as keys:
                 while rclpy.ok():
+                    linear, angular = move[0] * lin_speed, move[1] * ang_speed
                     key_txt = f'키 {last_key} ×{key_count}' if key_count else '키 입력 대기 중'
                     box.lines = [box.title,
                                 f'명령 v={linear:+.2f} m/s ω={angular:+.2f} rad/s',
@@ -342,7 +346,8 @@ class Bus:
                                 f'scan {self.state.scan_txt()}',
                                 f'map  {self.state.map_txt()}',
                                 f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
-                                self.term.paint('w/x/a/d·방향키 이동 · s/space 정지 · e/c 속도± · b 삑 · q/Esc 종료', DIM)]
+                                self.term.paint('w/x/a/d·방향키 이동 · q/e/z/c 사선 · s/space 정지', DIM),
+                                self.term.paint('-/= 속도± · b 삑 · Esc 종료', DIM)]
                     box.draw('key')
                     now = time.monotonic()
                     if now - last_send >= 0.1:
@@ -352,30 +357,19 @@ class Bus:
                     self._poll(0.01)
                     if key is None:
                         continue
-                    if key in ('q', 'Q', 'esc', 'eof', '\x03'):
+                    if key in ('esc', 'eof', '\x03'):
                         break
                     key = alias.get(key, key)
                     key_count += 1
                     last_key = 'space' if key == 's' else key
-                    if key == 'w':
-                        linear, angular = lin_speed, 0.0
-                    elif key == 'x':
-                        linear, angular = -lin_speed, 0.0
-                    elif key == 'a':
-                        linear, angular = 0.0, ang_speed
-                    elif key == 'd':
-                        linear, angular = 0.0, -ang_speed
-                    elif key == 's':
-                        linear = angular = 0.0
+                    if key in TELEOP_MOVES:
+                        move = TELEOP_MOVES[key]
                     elif key == 'b':
                         self._beep_pub.publish(Empty())
-                    elif key == 'e':   # Waffle Pi 사양 최대 0.26 m/s · 1.82 rad/s
+                    elif key in ('=', '+'):   # 상한 = Waffle Pi 사양
                         lin_speed, ang_speed = min(lin_speed + 0.05, MAX_LIN), min(ang_speed + 0.3, MAX_ANG)
-                    elif key == 'c':
+                    elif key in ('-', '_'):
                         lin_speed, ang_speed = max(lin_speed - 0.05, 0.05), max(ang_speed - 0.3, 0.2)
-                    if key in ('e', 'c') and (linear or angular):   # 달리는 중이면 바로 새 속도로
-                        linear = math.copysign(lin_speed, linear) if linear else 0.0
-                        angular = math.copysign(ang_speed, angular) if angular else 0.0
         finally:
             for _ in range(3):
                 self.send_velocity(0.0, 0.0)

@@ -149,7 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument('name', nargs='?', help='save 이름 (기본: 날짜_시각)')
 
     t = sub.add_parser('teleop', help='키보드 수동 주행')
-    t.add_argument('--linear', type=_positive, default=0.15, help='선속도 [m/s] (기본 0.15 · e/c로 ±, 최대 0.26)')
+    t.add_argument('--linear', type=_positive, default=0.15, help='선속도 [m/s] (기본 0.15 · -/=로 ±, 최대 0.26)')
     t.add_argument('--angular', type=_positive, default=0.8, help='각속도 [rad/s] (기본 0.8 · 최대 1.82)')
 
     d = sub.add_parser('drive', help='정해진 시간만큼 이동')

@@ -46,7 +46,7 @@ tool/
 ./run-cli base start            # 바퀴·odom·라이다 (로봇에 이미 떠 있으면 생략)
 ./run-cli slam start            # 맵핑 시작 (로봇에서 돔)
 ./run-rviz slam                 # 지도 커지는 거 보기 (다른 터미널)
-./run-cli teleop                # 천천히 돌기 (0.10 m/s · 벽을 따라 한 바퀴 → 출발점 → 가운데)
+./run-cli teleop                # 천천히 돌기 (기본 0.15 m/s · 벽을 따라 한 바퀴 → 출발점 → 가운데)
 ./run-cli map save office       # → 로봇 ~/ros2/ros2_ws/map/office/map.yaml + map.pgm
 ./run-cli slam stop
 ```
@@ -78,7 +78,7 @@ tool/
 ./run-cli nav start [지도이름|폴더|yaml]
 ./run-cli map list
 ./run-cli map save [이름]       # 기본 이름: 날짜_시각
-./run-cli teleop [--linear 0.1 --angular 0.5]
+./run-cli teleop [--linear 0.15 --angular 0.8]   # w/x/a/d · q/e/z/c 사선 · s 정지 · -/= 속도 · b 삑 · Esc 종료
 ./run-cli drive forward|back|left|right|stop [--speed --angular --duration]
 ./run-cli initpose x y [yaw°]
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
