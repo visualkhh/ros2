@@ -31,7 +31,7 @@ def _spawn_box(stage, path: str, cx: float, cy: float, hx: float, hy: float, hz:
     cube = UsdGeom.Cube.Define(stage, Sdf.Path(path + "/geom"))
     cube.GetSizeAttr().Set(1.0)
     cube.AddScaleOp().Set(Gf.Vec3f(hx * 2.0, hy * 2.0, hz))
-    cube.ApplyAPI(UsdPhysics.CollisionAPI)
+    UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
     return prim
 
 
@@ -87,7 +87,9 @@ class Nav2RlEnv(DirectRLEnv):
     def _sector_dists(self) -> torch.Tensor:
         """Analytic min ray distance per sector (front/left/right) vs boxes."""
         p = self.robot.data.root_pos_w.torch[:, :2]  # world; boxes stored in env-local -> shift by origin
-        yaw = yaw_quat(self.robot.data.root_quat_w.torch)
+        q0 = self.robot.data.root_quat_w.torch
+        yaw = torch.atan2(2.0 * (q0[:, 0] * q0[:, 3] + q0[:, 1] * q0[:, 2]),
+                          1.0 - 2.0 * (q0[:, 2] ** 2 + q0[:, 3] ** 2))
         rel = p - self.scene.env_origins[:, :2]
         dirs = torch.stack([
             torch.stack([torch.cos(yaw), torch.sin(yaw)], dim=-1),
@@ -129,7 +131,9 @@ class Nav2RlEnv(DirectRLEnv):
         """Pure-pursuit mimic of Nav2 output toward episode goal."""
         rel = self.goal - (self.robot.data.root_pos_w.torch[:, :2] - self.scene.env_origins[:, :2])
         dist = rel.norm(dim=-1).clamp(min=1e-6)
-        yaw = yaw_quat(self.robot.data.root_quat_w.torch)
+        q0 = self.robot.data.root_quat_w.torch
+        yaw = torch.atan2(2.0 * (q0[:, 0] * q0[:, 3] + q0[:, 1] * q0[:, 2]),
+                          1.0 - 2.0 * (q0[:, 2] ** 2 + q0[:, 3] ** 2))
         ang = torch.atan2(rel[:, 1], rel[:, 0]) - yaw
         ang = torch.atan2(torch.sin(ang), torch.cos(ang))
         self.v_nav = torch.clamp(0.6 * dist, max=self.cfg.max_lin) * (dist > 0.3).float()

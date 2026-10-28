@@ -4,3 +4,4 @@ export/**/*.pt
 logs/
 checkpoints/
 __pycache__/
+/export/

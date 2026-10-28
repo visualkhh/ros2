@@ -48,7 +48,8 @@ def main():
     obs, _ = env.reset()
     while True:
         o = obs["policy"].cpu().numpy().astype(np.float32)
-        act = torch.as_tensor(sess.run(None, {in_name: o})[0], device=env.device)
+        outs = [sess.run(None, {in_name: o[i : i + 1]})[0] for i in range(o.shape[0])]
+        act = torch.as_tensor(np.concatenate(outs, axis=0), device=env.device)
         # clamp to action space (policy is delta twist)
         act[:, 0].clamp_(-0.22, 0.22)
         act[:, 1].clamp_(-2.84, 2.84)
@@ -56,7 +57,7 @@ def main():
         done = term | tout
         if bool(done.any()):
             print(f"[play] mean reward: {float(rew.mean()):.2f}")
-            env.reset_idx(done.nonzero(as_tuple=False).flatten())
+            obs, _ = env.reset()
 
 
 if __name__ == "__main__":
