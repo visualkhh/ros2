@@ -89,7 +89,7 @@ class RobotTool(Node):
         return {
             '1': pages.StatusMenu, '2': pages.BaseMenu, '3': pages.SlamMenu, '4': pages.NavMenu,
             '5': pages.DriveMenu, '6': pages.MapMenu, '7': pages.ExploreMenu, '8': pages.NodesMenu,
-            '9': pages.StopAllPage,
+            '9': pages.StopAllPage, '0': pages.BeepMenu,
         }[name](self)
 
     # ------------------------------------------------------------- CLI 진입

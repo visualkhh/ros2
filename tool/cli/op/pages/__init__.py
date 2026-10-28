@@ -5,7 +5,7 @@ from .mainmenu import MainMenu
 from .mapmenu import MapMenu
 from .nodes import NodesMenu
 from .services import BaseMenu, ExploreMenu, NavMenu, SlamMenu, StopAllPage
-from .status import StatusMenu
+from .status import BeepMenu, StatusMenu
 
-__all__ = ['Menu', 'Page', 'MainMenu', 'StatusMenu', 'BaseMenu', 'SlamMenu', 'NavMenu',
+__all__ = ['Menu', 'Page', 'MainMenu', 'StatusMenu', 'BeepMenu', 'BaseMenu', 'SlamMenu', 'NavMenu',
            'DriveMenu', 'MapMenu', 'ExploreMenu', 'NodesMenu', 'StopAllPage']
