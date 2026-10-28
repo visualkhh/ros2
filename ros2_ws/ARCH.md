@@ -1,7 +1,8 @@
 # 시스템 구성 (노드 계통도)
 
 로봇 = TurtleBot3 Waffle Pi 개조형 (맨 위 판 제거, LDS-03 라이다 1층 앞).
-**Pi(`pak`)는 움직이는 것**, **PC는 RL 계산·화면**. 둘은 같은 WiFi + `ROS_DOMAIN_ID=25`로 토픽을 주고받습니다.
+**Pi(`pak`)는 움직이는 것**(드라이버·라이다·SLAM·Nav), **PC는 RL 계산·화면**. 둘은 같은 WiFi + `ROS_DOMAIN_ID=25`로 토픽을 주고받습니다
+(WiFi가 멀티캐스트를 버려서 PC 쪽은 `tool/peers.sh`가 Pi를 유니캐스트로 찾음). 조작(`tool/run-cli`)은 토픽이 보이는 곳 어디서나.
 
 - 사용법: [README.md](README.md) · 운영 도구: [../tool/README.md](../tool/README.md) · 펌웨어 프로토콜: [../firmware/opencr/README.md](../firmware/opencr/README.md)
 
@@ -152,8 +153,9 @@ flowchart TD
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out` |
 | `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력 보정 (미연결) |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom CSV · `benchmark_onnx.py` |
-| `coin_d4_driver` (외부) | LDS-03 드라이버 — `deps.repos`로 받음 (apt 없음) |
+| `coin_d4_driver` (외부) | LDS-03 드라이버 — `deps.repos`(vcstool 소스 목록)로 받아 같이 빌드 (apt 없음, [README](README.md#depsrepos--apt에-없는-외부-소스)) |
 | apt | slam_toolbox · nav2_bringup · laser_filters · robot_state_publisher · xacro |
 
 SLAM·Nav2는 `ros2_ws` launch가 아니라 `tool/run-cli`가 켜고 끕니다 — 베이스(tb-only)는 켜 둔 채
-맵핑 ↔ 지도 주행을 바꿔 켜기 때문. 설정은 `tool/config/slam_toolbox.yaml` · `nav2_params.yaml`.
+맵핑 ↔ 지도 주행을 바꿔 켜기 때문. 프로세스는 항상 Pi에 뜨고(로봇이 아닌 곳에서 실행하면 tool이 SSH로 Pi에 넘김),
+켜짐 여부는 노드 그래프로 봅니다. 설정은 `tool/config/slam_toolbox.yaml` · `nav2_params.yaml`.

@@ -1,91 +1,116 @@
-# ros2_ws — Lyrical RL 실험 워크스페이스
+# ros2_ws — 로봇 bringup + RL 보정 워크스페이스
 
-시스템 노드 계통도 · TF · 토픽 · 장치: **[ARCH.md](ARCH.md)**
+TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계통도 · 명령 경로 · TF · 토픽 · 장치: **[ARCH.md](ARCH.md)**
 
 ## 패키지
 
-- `rl_correction/` — 이동 보정 RL 노드 (`corrector`: `cmd_vel_in` → `cmd_vel_out`)
-- `nav2_rl_controller/` — Nav2 Controller단 보정 RL 노드 (`controller_corrector`: `cmd_vel_nav_in` → `cmd_vel_nav_out`)
-- `rl_eval/` — Before/After 계측 (`eval_recorder` + `benchmark_onnx.py`)
+| 패키지 | 내용 |
+|---|---|
+| `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `mock_base`(PC 시험) · launch 5개 · URDF |
+| `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out`. rl-only가 `/cmd_vel_rl_in` → `/cmd_vel_rl_out`으로 띄움 |
+| `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom을 CSV로 · `benchmark_onnx.py` (Pi 추론 속도) |
+| `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력(`cmd_vel_nav`) 단계 보정. **아직 launch에 연결 안 함** |
+| `coin_d4_driver` (외부) | LDS-03 라이다 드라이버 (ROBOTIS) — 아래 `deps.repos`로 받음 |
 
-## Before/After 방법 (remap 토글, 코드 수정 없음)
+SLAM(slam_toolbox)·Nav2는 apt 패키지이고, 켜고 끄는 건 [`tool/run-cli`](../tool/README.md)가 합니다 (토픽이 보이는 곳 어디서나).
 
-```bash
-# Before (RL 없음): teleop -> cmd_vel (직결)
-# After (RL 있음):  teleop -> cmd_vel_raw -> corrector -> cmd_vel
-ros2 run rl_correction corrector --ros-args \
-  -r cmd_vel_in:=cmd_vel_raw -r cmd_vel_out:=cmd_vel \
-  -p enable:=true -p model_path:=/path/to/policy.onnx
+## deps.repos — apt에 없는 외부 소스
 
-# 계측 (label만 바꿔 2회 수집)
-ros2 run rl_eval eval_recorder --ros-args -p output:=/tmp/before.csv -p label:=before
-ros2 run rl_eval eval_recorder --ros-args -p output:=/tmp/after.csv -p label:=after
-```
+[`deps.repos`](deps.repos)는 **apt로 설치할 수 없는 ROS 패키지의 소스 목록**입니다 ([vcstool](https://github.com/dirk-thomas/vcstool) 형식).
+`vcs import`가 적힌 git 저장소를 `src/` 아래로 받고, 우리 워크스페이스에서 **Lyrical로 같이 빌드**합니다.
 
-## Pi 탑재 전 체크 (필수)
+| 저장소 | 왜 | 버전 |
+|---|---|---|
+| `coin_d4_driver` (ROBOTIS) | LDS-03 라이다 드라이버. Lyrical apt에 없음 (TurtleBot3 `LDS_MODEL=LDS-03`과 같은 드라이버) | 커밋 `79d1833` 고정 |
 
-```bash
-# Pi 위에서 실행, 평균 50ms 이하 권장 (10-20Hz 루프)
-python3 src/rl_eval/benchmark_onnx.py model.onnx --iters 1000
-pip install onnxruntime numpy  # Pi에는 torch 풀설치 금지 (무거움)
-```
+- `version`은 ROS 배포판이 아니라 **그 저장소의 git 커밋/브랜치**입니다. ROBOTIS는 `humble`·`jazzy`·`main` 브랜치만 있고
+  lyrical 브랜치가 없어서, 코드가 같은 최신(jazzy 끝)을 커밋으로 고정했습니다. 순수 rclcpp 코드라 Lyrical에서 빌드됩니다.
+- 받은 폴더(`src/coin_d4_driver/`)는 `.gitignore` — 우리 저장소엔 `deps.repos` 한 파일만 올라갑니다.
+- 없어도 빌드·실행은 됩니다 (`tb-only`가 라이다만 빼고 뜸, 경고 출력).
 
 ## 빌드
 
 ```bash
-cd /home/pank/workspaces/visualkhh/source/ros2/ros2_ws
+cd ~/ros2/ros2_ws                       # PC: ~/workspaces/visualkhh/source/ros2/ros2_ws
 source /opt/ros/lyrical/setup.bash
-colcon build --symlink-install
+vcs import src < deps.repos             # 최초 1회 (외부 소스 받기)
+colcon build --symlink-install          # Pi 4는 --parallel-workers 2 (메모리)
 ```
+
+설정·launch·URDF 파일을 **새로 추가**했는데 설치 폴더에 안 보이면: `rm -rf build/tb3_bringup install/tb3_bringup` 후 다시 빌드.
 
 ## bringup (tb3_bringup)
 
-명령 경로와 상태는 [ARCH.md 2장](ARCH.md#2-바퀴-명령-경로--state_manager--cmd_managermux): 모든 바퀴 명령은 **cmd_manager(mux)** 를 거치고,
-무엇을 보낼지(MANUAL/AUTO · RL on/off · 비상정지)는 **state_manager** 의 `/state_*` 가 정합니다.
+모든 바퀴 명령은 **cmd_manager(mux)** 를 거치고, 무엇을 보낼지(MANUAL/AUTO · RL on/off · 비상정지)는
+**state_manager** 의 `/state_*` 가 정합니다 — [ARCH.md 2장](ARCH.md#2-바퀴-명령-경로--state_manager--cmd_managermux).
 
 | launch | 어디서 | 내용 |
 |---|---|---|
-| `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다. RL off로 시작 |
+| `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다(+몸통 필터·고정 칸). RL off로 시작 |
 | `tb-for-rl.launch.py` | Pi | tb-only를 RL on으로 시작 (PC의 rl-only가 있어야 움직임, 끊기면 정지) |
 | `rl-only.launch.py` | PC | RL 노드만: corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
-| `basic_bringup.launch.py` | PC | OpenCR 없이 시험: state_manager · cmd_manager · mock_base (같은 명령 경로) |
+| `basic_bringup.launch.py` | PC | OpenCR 없이 시험: state_manager · cmd_manager · mock_base (실기와 같은 명령 경로) |
+
+보통은 `tool/run-cli base start`가 `tb-only`를 띄웁니다. 직접 띄우려면:
 
 ```bash
-# Pi
-ros2 launch tb3_bringup tb-only.launch.py
-# RL 켜기/끄기 (실행 중) — PC에서 rl-only를 먼저
-ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx   # PC
-ros2 topic pub --once /cmd_manual_rl std_msgs/msg/Bool "{data: true}"             # 또는 tool: ./run-cli rl on
-# 모드 · 비상정지
-ros2 topic pub --once /cmd_manual_mode std_msgs/msg/String "{data: AUTO}"         # ./run-cli mode auto
-ros2 topic pub --once /cmd_manual_estop std_msgs/msg/Bool "{data: true}"          # ./run-cli estop on
+ros2 launch tb3_bringup tb-only.launch.py                     # Pi
+ros2 launch tb3_bringup tb-only.launch.py lidar:=false        # 라이다 없이
 ```
 
-`opencr_driver` (`tb3_bringup/opencr_driver_node.py`): `/cmd_vel_base` → `C,l,r` (20Hz 재전송), `S` → `/odom` · TF `odom→base_footprint` ·
-`/joint_states`(effort=전류 A) · `/diagnostics`(전류·온도·모터 에러). `E` 에러 시 `ros2 topic pub --once /opencr/reboot std_msgs/msg/Empty`.
-파라미터: `config/robot.yaml` (바퀴 반지름·간격·좌우 방향 부호).
+외부에서 보내는 명령 (`/cmd_manual_*` → state_manager / cmd_manager):
 
-로봇 모델: `urdf/robot.urdf.xacro` — TB3 Waffle Pi 개조(맨 위 판 제거, 라이다 1층 앞). 실측 값은 파일 위쪽 property에.
+| 토픽 | 타입 | tool | 효과 |
+|---|---|---|---|
+| `/cmd_manual_vel` | Twist | `teleop` · `drive` | MANUAL일 때 바퀴로 |
+| `/cmd_manual_mode` | String `MANUAL`·`AUTO` | `mode manual/auto` | 누가 운전 (RViz Nav2 Goal → 자동 AUTO) |
+| `/cmd_manual_rl` | Bool | `rl on/off` | RL 보정 거치기 (실행 중 전환) |
+| `/cmd_manual_estop` | Bool | `estop on/off` | 비상정지 |
+| `/opencr/reboot` | Empty | `reboot-motors` | 모터 에러(E) 해제 |
 
-## 기본 주행 (실기 없이 PC에서)
+상태는 `/state_mode` · `/state_rl` · `/state_estop` (latched) 로 나옵니다.
 
-`tb3_bringup` 패키지: corrector(passthrough) + mock base + eval. LiDAR 없이 주행 체인 검증용.
+`opencr_driver`: `/cmd_vel_base` → `C,l,r` (20 Hz 재전송), `S` → `/odom` · TF `odom→base_footprint` · `/joint_states`(effort=전류 A) ·
+`/diagnostics`(전류·온도·모터 에러). 파라미터 `config/robot.yaml` (바퀴 반지름 0.033 · 간격 0.287 · 방향 부호 -1/-1).
+라이다: `config/lidar.yaml` (`/scan_raw` → 몸통 상자 필터 → `/scan_filtered` → 400칸 고정 → `/scan`).
+로봇 모델: `urdf/robot.urdf.xacro` — 실측 값은 파일 위쪽 property에 (`view-model.launch.py`로 확인).
+
+## RL 보정 Before / After
+
+RL은 bringup을 바꾸지 않고 **실행 중에** 켜고 끕니다. 같은 경로·같은 계측으로 두 번 수집해서 비교합니다.
 
 ```bash
-# 터미널 1: bringup
+# PC — RL 노드 (켤 때만 필요)
+ros2 launch tb3_bringup rl-only.launch.py enable:=false label:=before output:=/tmp/before.csv   # 보정 없이 통과
+./run-cli rl on                 # 바퀴 명령이 PC를 거치게
+#   ... 같은 경로 주행 (teleop 또는 goal) ...
+# Ctrl+C 후 정책을 켜서 다시
+ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx label:=after output:=/tmp/after.csv
+#   ... 같은 경로 주행 ...
+./run-cli rl off                # 끝나면 직결로
+```
+
+- `enable:=false`는 보정 없이 통과 — WiFi 왕복 지연까지 같은 조건으로 "Before"를 잽니다.
+- RL on인데 rl-only가 없거나 WiFi가 끊기면 0.3초 뒤 정지 (cmd_manager 안전).
+
+Pi에서 직접 추론할 경우 (탑재 전 체크):
+
+```bash
+python3 src/rl_eval/benchmark_onnx.py model.onnx --iters 1000   # 평균 50 ms 이하 권장 (10-20 Hz 루프)
+pip install --break-system-packages onnxruntime                  # Pi에는 torch 설치 금지 (무거움)
+```
+
+## PC 시험 (실기 없이)
+
+```bash
 source install/setup.bash
-ros2 launch tb3_bringup basic_bringup.launch.py
-
-# 터미널 2: 조종 (별도 실행, 키보드 입력 필요)
-source /opt/ros/lyrical/setup.bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=cmd_vel_raw
-
-# 터미널 3: 확인
+ros2 launch tb3_bringup basic_bringup.launch.py        # state_manager · cmd_manager · mock_base
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=cmd_manual_vel   # 다른 터미널
 ros2 topic echo /odom --once
-head /tmp/basic.csv
 ```
 
-체인: teleop(`cmd_vel_raw`) → corrector → `cmd_vel` → mock_base → `odom`.
-실기 전환: `mock_base`만 TurtleBot3 드라이버(OpenCR/Dynamixel)로 교체, 토픽 동일.
-LiDAR 장착 후: `hls_lfcd_lds_driver` + `slam_toolbox` 추가 예정.
+경로: `/cmd_manual_vel` → cmd_manager(MANUAL) → `/cmd_vel_base` → mock_base → `/odom` — 실기와 같고 드라이버만 다름.
+tool로 하려면 `TOOL_LOCAL=1 TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py' ./run-cli base start` ([tool README 시험](../tool/README.md#시험-실기-없이-pc에서)).
+직접 `ros2 launch`는 셸의 `ROS_DOMAIN_ID`를 씁니다 (이 PC `~/.bashrc`는 99 → 실기 25와 안 섞임).
+**tool은 25로 고정**이라 실기가 켜져 있으면 섞이니 실기를 끄거나 시험 동안 도메인을 바꿔서.
