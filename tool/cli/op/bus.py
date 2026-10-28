@@ -625,6 +625,14 @@ class Bus:
         print(f'삑 전송 ("{text}" → {len(text_to_tones(text))}음)')
         return 0
 
+    def cmd_say(self, args) -> int:
+        """타이핑삑 한 번 명령 — `say 안녕 hello`."""
+        text = ' '.join(getattr(args, 'text', None) or []).strip()
+        if not text:
+            print('사용법: say <글> (예: say 안녕 hello)')
+            return 1
+        return self.say_text(text)
+
     # ------------------------------------------------------------- 노드
     def node_names(self) -> list[str]:
         self._poll(0.5)

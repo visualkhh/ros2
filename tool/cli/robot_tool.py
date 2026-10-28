@@ -183,6 +183,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser('reboot-motors', help='모터 에러 해제 — 두 바퀴 재부팅 (/opencr/reboot)')
     p = sub.add_parser('beep', help='OpenCR 부저 — 삑 또는 beep <Hz 100~8000> <ms 10~2000>')
     p.add_argument('value', nargs='*', help='예: 4000 300')
+    p = sub.add_parser('say', help='타이핑삑 — 한/영 문자열을 자모별 주파수 삑으로 (/cmd_say)')
+    p.add_argument('text', nargs='+', help='예: say 안녕 hello')
     sub.add_parser('stop-all', help='띄운 것 전부 종료 (바퀴 정지 먼저)')
     return parser
 
