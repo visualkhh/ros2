@@ -143,15 +143,17 @@ flowchart TD
 | `/explore/resume` · `/explore/status` | Bool · ExploreStatus (latched) | explore_bridge · explore_lite | explore_lite · explore_bridge |
 | `/explore_status` | String | explore_bridge (사람이 읽는 진행) | tool 상태바 |
 | `/state_control` · `/state_rl` · `/state_estop` · `/state_operation` · `/state_map` | String · Bool · Bool · String · String (latched) | state_manager | cmd_manager · explore_bridge · tool |
-| `/odom` | Odometry | opencr_driver | slam_toolbox · Nav2 · eval_recorder · tool |
+| `/odom` | Odometry | opencr_driver | cartographer · Nav2 · eval_recorder · tool |
 | `/joint_states` | JointState | opencr_driver (effort = 전류 A) | robot_state_publisher |
 | `/diagnostics` | DiagnosticArray | opencr_driver (전류·온도·모터 에러) | tool · rqt |
 | `/opencr/reboot` | Empty | 사람 · tool | opencr_driver → `R` |
-| `/opencr/beep` | Empty | 사람 · tool (`run-cli beep` · 텔레오퍼 b) | opencr_driver → `B` (부저) |
+| `/cmd_beep` | Empty | 사람 · tool (`run-cli beep` · 텔레오퍼 b) | cmd_manager → `/opencr/beep` → `B` (부저) |
+| `/cmd_beep_tone` | Int32MultiArray `[Hz, ms]` | 사람 · tool (`beep <Hz> <ms>`) | cmd_manager → `/opencr/beep_tone` → `B,Hz,ms` |
+| `/cmd_say` | String | 사람 · tool (텔레오퍼 t 타이핑삑) | cmd_manager (자모별 주파수로 변환·재생) → `/opencr/beep_tone` |
 | `/scan_raw` | LaserScan | coin_d4_driver | scan_filter |
 | `/scan_filtered` | LaserScan | scan_filter (몸통 가림 제거) | scan_resample |
-| `/scan` | LaserScan | scan_resample (400칸 고정) | slam_toolbox · amcl · Nav2 costmap |
-| `/map` | OccupancyGrid | slam_toolbox · map_server | Nav2 · RViz · tool map save |
+| `/scan` | LaserScan | scan_resample (400칸 고정) | cartographer · amcl · Nav2 costmap |
+| `/map` | OccupancyGrid | cartographer · map_server | Nav2 · RViz · tool map save |
 | `/initialpose` · `/goal_pose` | Pose… | RViz · tool | amcl · Nav2 |
 
 ## 5. 장치 · 포트

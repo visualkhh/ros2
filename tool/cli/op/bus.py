@@ -30,6 +30,27 @@ DIAG_RADIUS = 0.5   # [m] 사선 원호 반경
 DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
 
+def text_to_tones(text: str) -> list[tuple[int, int]]:
+    """한/영 타이핑 → [(Hz, ms)] 삑 순서. 한글 음절은 초·중·(종)성 자모별 음높이,
+    영문은 알파벳별 음높이, 숫자는 별도 대역, 띄어쓰기는 쉼. 그 밖은 버림."""
+    tones: list[tuple[int, int]] = []
+    for ch in text:
+        o = ord(ch)
+        if 0xAC00 <= o <= 0xD7A3:  # 한글 음절: 초성 19 · 중성 21 · 종성 28(없음=0)
+            j = o - 0xAC00
+            tones.append((500 + (j // 588) * 130, 90))
+            tones.append((600 + ((j % 588) // 28) * 100, 90))
+            if j % 28:
+                tones.append((700 + (j % 28) * 80, 90))
+        elif 'a' <= (lo := ch.lower()) <= 'z':
+            tones.append((500 + (ord(lo) - 97) * 100, 90))
+        elif ch.isdigit():
+            tones.append((3200 + int(ch) * 100, 90))
+        elif ch == ' ':
+            tones.append((0, 180))
+    return tones
+
+
 def yaw_quat(yaw: float):
     return math.sin(yaw / 2.0), math.cos(yaw / 2.0)
 
@@ -45,9 +66,10 @@ class Bus:
         self._vel_pub = node.create_publisher(msg_type, CMD_VEL, 10)
         self._init_pub = node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         self._reboot_pub = node.create_publisher(Empty, '/opencr/reboot', 10)
-        self._beep_pub = node.create_publisher(Empty, '/opencr/beep', 10)
+        self._beep_pub = node.create_publisher(Empty, '/cmd_beep', 10)
         from std_msgs.msg import Int32MultiArray
-        self._beep_tone_pub = node.create_publisher(Int32MultiArray, '/opencr/beep_tone', 10)
+        self._beep_tone_pub = node.create_publisher(Int32MultiArray, '/cmd_beep_tone', 10)
+        self._say_pub = None   # /cmd_say — say_text 첫 사용 때 생성
         from std_msgs.msg import Bool, String
         self._req = {'control': (node.create_publisher(String, '/cmd_manual_control', 10), String),
                      'rl': (node.create_publisher(Bool, '/cmd_manual_rl', 10), Bool),
@@ -381,7 +403,7 @@ class Bus:
                                 f'map  {self.state.map_txt()}',
                                 f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
                                 self.term.paint('w/x/a/d·방향키 이동 · q/e/z/c 사선 · s/space 정지', DIM),
-                                self.term.paint('-/= 속도± · b 삑 · Esc 종료', DIM)]
+                                self.term.paint('-/= 속도± · b 삑 · t 타이핑삑 · Esc 종료', DIM)]
                     box.draw('key')
                     now = time.monotonic()
                     if now - last_send >= 0.1:
@@ -400,6 +422,19 @@ class Bus:
                         move = TELEOP_MOVES[key]
                     elif key == 'b':
                         self._beep_pub.publish(Empty())
+                    elif key == 't':   # 타이핑삑: 정지 후 한 줄 입력 → 자모별 주파수 삑
+                        move = (0, 0)
+                        self.send_velocity(0.0, 0.0)
+                        keys.suspend()
+                        try:
+                            print()
+                            text = input('삑으로 보낼 글 (한/영): ').strip()
+                        except (EOFError, KeyboardInterrupt):
+                            text = ''
+                        finally:
+                            keys.resume()
+                        if text:
+                            self.say_text(text)
                     elif key in ('=', '+'):   # 상한 = Waffle Pi 사양
                         lin_speed, ang_speed = min(lin_speed + 0.05, MAX_LIN), min(ang_speed + 0.3, MAX_ANG)
                     elif key in ('-', '_'):
@@ -578,18 +613,29 @@ class Bus:
             except ValueError:
                 print('숫자로: beep <Hz 100~8000> <ms 10~2000> (예: beep 4000 300)')
                 return 1
-            if not self.wait_subscriber(self._beep_tone_pub, DRIVER_MISSING):
+            if not self.wait_subscriber(self._beep_tone_pub, 'cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인'):
                 return 1
             from std_msgs.msg import Int32MultiArray
             self._beep_tone_pub.publish(Int32MultiArray(data=[hz, ms]))
             self._poll(0.2)
             print(f'삑 {hz}Hz {ms}ms (B,{hz},{ms})')
             return 0
-        if not self.wait_subscriber(self._beep_pub, DRIVER_MISSING):
+        if not self.wait_subscriber(self._beep_pub, 'cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인'):
             return 1
         self._beep_pub.publish(Empty())
         self._poll(0.2)
         print('삑 (B)')
+        return 0
+
+    def say_text(self, text: str) -> int:
+        """타이핑한 한/영을 로봇에 문자열로 — 변환·재생은 cmd_manager(/cmd_say)."""
+        from std_msgs.msg import String
+        if not self._say_pub:
+            self._say_pub = self.node.create_publisher(String, '/cmd_say', 10)
+        if not self.wait_subscriber(self._say_pub, 'cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인'):
+            return 1
+        self._say_pub.publish(String(data=text))
+        print(f'삑 전송 ("{text}" → {len(text_to_tones(text))}음)')
         return 0
 
     # ------------------------------------------------------------- 노드

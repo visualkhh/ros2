@@ -52,6 +52,21 @@ class KeyReader:
             except Exception:
                 pass
 
+    def suspend(self):
+        """cbreak 잠시 해제 — input() 한 줄 입력용. resume()으로 복귀."""
+        if self._old is not None:
+            try:
+                termios.tcsetattr(self.fd, termios.TCSADRAIN, self._old)
+            except Exception:
+                pass
+
+    def resume(self):
+        if self.fd is not None:
+            try:
+                tty.setcbreak(self.fd)
+            except Exception:
+                pass
+
     def read(self, timeout=0.1):
         """키 하나 → ('enter'|'esc'|'up'|'down'|'left'|'right'|'pgup'|'pgdn'|
         'home'|'end'|'backspace'|'ctrl_u'|<문자>) · 없으면 None."""

@@ -1,6 +1,6 @@
 # tool
 
-로봇 운영 도구. **지도 만들기(SLAM, slam_toolbox)** · **지도 주행(Nav2)** 켜고 끄기, 텔레오퍼, 지도 저장, 목표 보내기,
+로봇 운영 도구. **지도 만들기(SLAM, cartographer)** · **지도 주행(Nav2)** 켜고 끄기, 텔레오퍼, 지도 저장, 목표 보내기,
 제어 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING 자동 맵핑) · 경로(직결/RL) · 비상정지 전환. **ROS 토픽이 보이는 곳 어디서나** 같은 `./run-cli`로 씁니다 (로봇 Pi든 PC든).
 
 ```text
@@ -10,7 +10,7 @@ tool/
 ├── run-rviz         # RViz: 맵핑·주행 보기 (화면 있는 곳)
 ├── peers.sh         # 로봇이 아닌 곳에서 Pi DDS 노드를 유니캐스트로 찾게 (WiFi 멀티캐스트 불안정)
 ├── config/
-│   ├── slam_toolbox.yaml   # slam_toolbox online_async + base_footprint · 지도 갱신 2초 · 최소 사거리 0.12 m
+│   ├── slam_toolbox.yaml   # (구) slam_toolbox 설정 — 현 SLAM은 cartographer (`tb3_bringup` cartographer.launch + config/cartographer_2d.lua)
 │   └── nav2_params.yaml    # nav2_bringup + Waffle Pi footprint · Twist cmd_vel · amcl base_footprint
 ├── rviz/
 │   ├── start.sh · stop.sh · restart.sh
@@ -30,7 +30,7 @@ tool/
 | 상태바 · 텔레오퍼 · drive · goal · initpose · 모드/RL/비상정지 · 모터 재부팅 | ROS 토픽·액션 | 그대로 됨 |
 | 베이스·SLAM·Nav 켜기/끄기/재시작 · 로그 | 로봇의 프로세스 | tool이 **SSH로 로봇의 run-cli에 넘김** (`[pak.local] …`로 표시) |
 | 지도 저장 · 목록 · 내용 | 로봇의 파일 (Nav가 거기서 읽음) | 위와 같이 SSH — 지도는 항상 **로봇** `~/ros2/ros2_ws/map/`에 |
-| 켜짐 표시 (● / ○) | 로봇: pid 파일 · 그 밖: **ROS 노드 그래프** (`opencr_driver`·`slam_toolbox`·`amcl`·`bt_navigator`) | `pak.local (원격)`으로 표시 |
+| 켜짐 표시 (● / ○) | 로봇: pid 파일 · 그 밖: **ROS 노드 그래프** (`opencr_driver`·`cartographer_node`·`amcl`·`bt_navigator`) | `pak.local (원격)`으로 표시 |
 
 필요한 것 (로봇이 아닌 곳): 같은 WiFi · `ssh pak@pak.local`이 비번 없이 됨
 ([AI·SSH 키 문서](../documents/ai/ai-passwordless-robot-access.md)). `ROS_DOMAIN_ID=25`·DDS 피어는 스크립트가 맞춥니다.
@@ -84,7 +84,7 @@ tool/
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
 ./run-cli nodes
 ./run-cli reboot-motors        # 모터 에러(E) 해제 — 두 바퀴 재부팅 (/opencr/reboot)
-./run-cli beep                 # OpenCR 부저 삑 (/opencr/beep · 메뉴 1) 상태 → 6 · 텔레오퍼 b)
+./run-cli beep                 # OpenCR 부저 삑 (/cmd_beep · 메뉴 1) 상태 → 6 · 텔레오퍼 b · t 타이핑삑(/cmd_say))
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
 ./run-cli route direct|rl       # 바퀴 명령 경로: 직결 / PC RL 경유 (= rl off|on)
@@ -136,7 +136,7 @@ cmd_manager·opencr_driver는 `Twist`를 받기 때문입니다 (안 맞으면 N
 
 ```bash
 ./run-cli status                # odom/scan/map 중 뭐가 안 오는지
-./run-cli slam log              # slam_toolbox 에러
+./run-cli slam log              # cartographer 에러
 ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
 ```
 
