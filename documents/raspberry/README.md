@@ -32,11 +32,11 @@
 | 항목 | 값 | 문서 |
 |---|---|---|
 | 배포판 | Lyrical (ros-base 0.13.0) · 공식 apt | [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) |
-| apt 패키지 | slam_toolbox 2.10 · nav2_bringup 1.5 · nav2 amcl/map_server · laser_filters 2.3 · robot_state_publisher · xacro · teleop_twist_keyboard · tf2_tools · turtlebot3_msgs · dynamixel_sdk · ros-dev-tools | |
-| 소스 의존 | `coin_d4_driver` (LDS-03) · `explore_lite` (자동 맵핑) — `ros2_ws/deps.repos`로 받아 빌드 · `/scan` 10 Hz | [ros2_ws README](../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
-| 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드: tb3_bringup · coin_d4_driver · rl_correction · rl_eval · nav2_rl_controller | [ARCH](../../ros2_ws/ARCH.md) |
+| apt 패키지 | nav2_bringup 1.5 · nav2 amcl/map_server · laser_filters 2.3 · robot_state_publisher · xacro · teleop_twist_keyboard · tf2_tools · turtlebot3_msgs · dynamixel_sdk · ros-dev-tools (+ libceres-dev 등 cartographer 빌드 의존) | |
+| 소스 의존 | `coin_d4_driver` (LDS-03) · `explore_lite` (자동 맵핑) · `cartographer`+`cartographer_ros` (SLAM) — `ros2_ws/deps.repos`로 받아 `patches/*.patch` 적용 후 빌드 · `/scan` 10 Hz | [ros2_ws README](../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
+| 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드: tb3_bringup · coin_d4_driver · cartographer(·_ros·_msgs) · rl_correction · rl_eval · nav2_rl_controller | [ARCH](../../ros2_ws/ARCH.md) |
 | 상시 노드 (`run-cli base start` = tb-only) | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample | [ARCH 2장](../../ros2_ws/ARCH.md) |
-| 필요할 때 (`run-cli`, 어디서나) | slam_toolbox (`slam start`) · Nav2 (`nav start` / `explore start`) — 지도 `~/ros2/ros2_ws/map/` | [tool](../../tool/README.md) |
+| 필요할 때 (`run-cli`, 어디서나) | cartographer (`slam start`: `cartographer.launch.py` + `config/cartographer_2d.lua`) · Nav2 (`nav start` / `explore start`) — 지도 `~/ros2/ros2_ws/map/` | [tool](../../tool/README.md) |
 | `~/.bashrc` | `source /opt/ros/lyrical/setup.bash` · ros2_ws `install/setup.bash` · `ROS_DOMAIN_ID=25` · `ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET` | |
 
 ### 장치 · 펌웨어

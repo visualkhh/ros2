@@ -1,7 +1,7 @@
 # ROS 2 Lyrical 설치 — Raspberry Pi 4 (Ubuntu 26.04 Server) 기준
 
 이 프로젝트 로봇 SBC(`pak`) 기준입니다. 로봇에서 도는 것만 설치합니다:
-**베이스(OpenCR) · slam_toolbox(지도 만들기) · Nav2(지도 주행) · tool**.
+**베이스(OpenCR) · cartographer(지도 만들기) · Nav2(지도 주행) · tool**.
 화면(RViz)은 PC에서 보므로 Pi에는 GUI를 깔지 않습니다.
 
 - 대상: Raspberry Pi 4 Model B · 4GB RAM · 4코어 · arm64 · Ubuntu 26.04 LTS Server (resolute) · Python 3.14
@@ -86,9 +86,10 @@ sudo apt install -y \
   포트 `/dev/tb3_lidar`는 udev 규칙으로 만든다 → [udev 세팅](../../raspberry/udev-setup.md).
   (`hls-lfcd-lds-driver`(LDS-01) · `ld08-driver`(LDS-02)도 Lyrical arm64 apt에 없음)
 - 자동 맵핑 frontier 탐색: `explore_lite` (m-explore-ros2, BSD, apt 없음). `ros2_ws/deps.repos`로 받아 빌드 (4장).
-- Google Cartographer (코어 + `cartographer_ros`): Lyrical apt에 없음 → `ros2_ws/deps.repos`로 소스 빌드 (아래 4-1절).
+- Google Cartographer (코어 + `cartographer_ros` + `cartographer_rviz`): Lyrical apt에 없음 → `ros2_ws/deps.repos`로 소스 빌드 (아래 4-1절).
   Pi 빌드 전제: `sudo apt install -y libceres-dev libprotobuf-dev libeigen3-dev liblua5.2-dev libcairo2-dev libgoogle-glog-dev libgflags-dev`
-  (Ceres 2.x 대응 패치 포함: `Manifold` 전환 — `src/cartographer` 직접 수정분, `deps.repos` 커밋에 고정된 버전에 적용됨)
+  (Ceres 2.x 대응 패치 `Manifold` 전환 + 신형 abseil `ABSL_` 접두어 패치 — `ros2_ws/patches/*.patch`를 `src/cartographer`,
+  `src/cartographer_ros`에 각각 `patch -p1`로 적용. `src/`는 `.gitignore`라 패치 파일이 정본임. 4장 빌드 전 적용법 참조)
 - (선택) RL 모델 추론: `pip install --break-system-packages onnxruntime` — torch는 Pi에 깔지 않음.
 
 ## 3. 셸 설정 (`~/.bashrc`)
@@ -113,7 +114,10 @@ source ~/.bashrc
 git clone https://github.com/visualkhh/ros2.git ~/ros2   # 이미 있으면 cd ~/ros2 && git pull
 cd ~/ros2/ros2_ws
 source /opt/ros/lyrical/setup.bash
-vcs import src < deps.repos                               # apt에 없는 소스 (LDS-03 coin_d4_driver · 자동 맵핑 explore_lite)
+vcs import src < deps.repos                               # apt에 없는 소스 (LDS-03 coin_d4_driver · 자동 맵핑 explore_lite · cartographer 코어+래퍼)
+# cartographer 패치 적용 (최초 1회 + patches/*.patch가 바뀔 때마다 — src/는 gitignore라 pull로 안 넘어옴)
+(cd src/cartographer && patch -p1 --forward < ../../patches/cartographer-ceres2.patch)
+(cd src/cartographer_ros && patch -p1 --forward < ../../patches/cartographer_ros-ceres2.patch)
 colcon build --symlink-install --parallel-workers 2       # Pi 4: 2개로 제한 (메모리)
 source install/setup.bash
 ```
@@ -130,6 +134,8 @@ apt로 안 되는 것만 모음. 받는 위치·버전은 저장소 파일에 �
 |---|---|---|---|---|
 | `coin_d4_driver` | LDS-03 라이다 드라이버 (Lyrical apt 없음) | `ros2_ws/deps.repos` — ROBOTIS, 커밋 `79d1833` | `vcs import` → `colcon build` | [ros2_ws README](../../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
 | `explore_lite` · `explore_lite_msgs` | 자동 맵핑 frontier 탐색 (Lyrical apt 없음) | `ros2_ws/deps.repos` — robo-friends/m-explore-ros2, 커밋 `326cf8a` | `vcs import` → `colcon build` (Pi 약 2분, 경고만) | 같음 |
+| `cartographer` (코어) | 2D SLAM 코어 (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `877157a` | `vcs import` → 패치 → `colcon build` (Pi 약 20분) | `ros2_ws/patches/cartographer-ceres2.patch` (Ceres 2.x `Manifold` + abseil `ABSL_` 접두어) |
+| `cartographer_ros` (+`cartographer_ros_msgs`·`cartographer_rviz`) | SLAM ROS 래퍼 — `cartographer_node`·`occupancy_grid_node` (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `7433452` | `vcs import` → 패치 → `colcon build` | `ros2_ws/patches/cartographer_ros-ceres2.patch` (abseil `ABSL_` 접두어 7파일) |
 | 우리 패키지 (`tb3_bringup` · `rl_correction` · `rl_eval` · `nav2_rl_controller`) | 이 프로젝트 코드 | 저장소 `ros2_ws/src/` | `colcon build` | [ros2_ws README](../../../ros2_ws/README.md) |
 | OpenCR 펌웨어 `tb3_wheels` | 바퀴·부저 펌웨어 | 저장소 `firmware/opencr/` | `compile.sh` → `upload.sh` (Pi에서) | [OpenCR 세팅](../../opencr/opencr-setup-ubuntu26.04.md) |
 | arduino-cli + OpenCR 보드 패키지 | 펌웨어 빌드 도구 (arm64는 armhf 툴체인·core min/max 패치 필요) | `firmware/opencr/setup.sh`가 설치·패치 | `setup.sh` 1회 | 같음 |
@@ -150,7 +156,7 @@ PC 셸도 `ROS_DOMAIN_ID=25`여야 Pi가 보입니다 (`tool/run-rviz`는 자동
 
 ```bash
 printenv ROS_DISTRO ROS_DOMAIN_ID           # lyrical 25
-ros2 pkg list | grep -E 'slam_toolbox|nav2_bringup|tb3_bringup'
+ros2 pkg list | grep -E 'cartographer_ros|nav2_bringup|tb3_bringup'
 cd ~/ros2/tool && ./run-cli status          # 프로세스·토픽 표
 ./run-cli base start && ./run-cli status    # tb-only: 로봇 ok · 모드 MANUAL · odom 20Hz · scan 10Hz
 ./run-cli stop-all
