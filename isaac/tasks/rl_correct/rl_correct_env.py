@@ -27,8 +27,11 @@ class RlCorrectEnv(DirectRLEnv):
 
     def __init__(self, cfg: RlCorrectEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
-        self._left_idx, _ = self.robot.find_joints("left_wheel_joint")
-        self._right_idx, _ = self.robot.find_joints("right_wheel_joint")
+        self._left_idx, _ = self.robot.find_joints("wheel_left_joint")
+        self._right_idx, _ = self.robot.find_joints("wheel_right_joint")
+        self._arm_idx, _ = self.robot.find_joints(
+            ["joint1", "joint2", "joint3", "joint4", "joint5",
+             "gripper_left_joint", "gripper_right_joint"])
 
         self.v_cmd = torch.zeros(self.num_envs, device=self.device)
         self.w_cmd = torch.zeros(self.num_envs, device=self.device)
@@ -124,7 +127,6 @@ class RlCorrectEnv(DirectRLEnv):
         root_pos[:, :2] += self.scene.env_origins[env_ids, :2]
         root_pos[:, 0] += sample_uniform(-2.0, 2.0, (n,), self.device)
         root_pos[:, 1] += sample_uniform(-2.0, 2.0, (n,), self.device)
-        root_pos[:, 2] = 0.075
         yaw = sample_uniform(-3.14, 3.14, (n,), self.device)
         root_quat = self.robot.data.default_root_state.torch[env_ids, 3:7].clone()
         root_quat[:, 0] = torch.cos(yaw / 2.0)
@@ -134,9 +136,13 @@ class RlCorrectEnv(DirectRLEnv):
         self.robot.write_root_velocity_to_sim(
             torch.zeros(n, 6, device=self.device), env_ids)
         ids = torch.as_tensor(env_ids, device=self.device) if not isinstance(env_ids, torch.Tensor) else env_ids
+        nj = len(self._left_idx) + len(self._right_idx) + len(self._arm_idx)
         self.robot.write_joint_state_to_sim(
-            torch.zeros(n, 2, device=self.device),
-            torch.zeros(n, 2, device=self.device), slice(None), ids)
+            torch.zeros(n, nj, device=self.device),
+            torch.zeros(n, nj, device=self.device), slice(None), ids)
+        # hold arm+gripper at USD default pose (tasks drive wheels only)
+        hold = self.robot.data.default_joint_pos.torch[ids][:, self._arm_idx]
+        self.robot.set_joint_position_target(hold, joint_ids=self._arm_idx, env_ids=ids)
         self._sample_command(ids)
         lo, hi = self.cfg.radius_scale_range
         self.radius_scale[ids] = sample_uniform(lo, hi, (len(ids),), self.device)

@@ -40,8 +40,11 @@ class Nav2RlEnv(DirectRLEnv):
 
     def __init__(self, cfg: Nav2RlEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
-        self._left_idx, _ = self.robot.find_joints("left_wheel_joint")
-        self._right_idx, _ = self.robot.find_joints("right_wheel_joint")
+        self._left_idx, _ = self.robot.find_joints("wheel_left_joint")
+        self._right_idx, _ = self.robot.find_joints("wheel_right_joint")
+        self._arm_idx, _ = self.robot.find_joints(
+            ["joint1", "joint2", "joint3", "joint4", "joint5",
+             "gripper_left_joint", "gripper_right_joint"])
 
     # ------------------------------------------------------------- scene
     def _setup_scene(self):
@@ -193,7 +196,6 @@ class Nav2RlEnv(DirectRLEnv):
         goal = -start + sample_uniform(-0.5, 0.5, (n, 2), self.device)
         root_pos = self.robot.data.default_root_state.torch[ids, :3].clone()
         root_pos[:, :2] = self.scene.env_origins[ids, :2] + start
-        root_pos[:, 2] = 0.075
         yaw = torch.atan2(-start[:, 1], -start[:, 0])
         root_quat = self.robot.data.default_root_state.torch[ids, 3:7].clone()
         root_quat[:, 0] = torch.cos(yaw / 2.0)
@@ -201,8 +203,12 @@ class Nav2RlEnv(DirectRLEnv):
         root_quat[:, 1:3] = 0.0
         self.robot.write_root_pose_to_sim(torch.cat([root_pos, root_quat], dim=-1), ids)
         self.robot.write_root_velocity_to_sim(torch.zeros(n, 6, device=self.device), ids)
-        self.robot.write_joint_state_to_sim(torch.zeros(n, 2, device=self.device),
-                                            torch.zeros(n, 2, device=self.device), None, ids)
+        nj = len(self._left_idx) + len(self._right_idx) + len(self._arm_idx)
+        self.robot.write_joint_state_to_sim(
+            torch.zeros(n, nj, device=self.device),
+            torch.zeros(n, nj, device=self.device), slice(None), ids)
+        hold = self.robot.data.default_joint_pos.torch[ids][:, self._arm_idx]
+        self.robot.set_joint_position_target(hold, joint_ids=self._arm_idx, env_ids=ids)
         self.goal[ids] = goal
         rel = goal - start
         self.prev_goal_dist[ids] = rel.norm(dim=-1)

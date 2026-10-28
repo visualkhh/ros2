@@ -11,7 +11,7 @@ from isaaclab.sim import SimulationCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils import configclass
 
-_USDA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common", "tb3_simple.usda")
+_USDA = "/home/pank/workspaces/visualkhh/source/ros2/isaac/usd/beebot/beebot.usda"
 
 
 @configclass
@@ -29,14 +29,28 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     # robot (Waffle Pi scale: r=0.033, sep=0.287)
     robot_cfg: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
-        spawn=UsdFileCfg(usd_path=_USDA),
+        spawn=UsdFileCfg(usd_path=_USDA, variants={"Physics": "physx"}),
         actuators={
             "wheels": ImplicitActuatorCfg(
-                joint_names_expr=[".*_wheel_joint"],
+                joint_names_expr=["wheel_left_joint", "wheel_right_joint"],
                 effort_limit=2.0,
                 velocity_limit=8.0,
                 stiffness=0.0,
                 damping=40.0,  # velocity servo
+            ),
+            "arm": ImplicitActuatorCfg(
+                joint_names_expr=["joint1", "joint2", "joint3", "joint4", "joint5"],
+                effort_limit=5.0,
+                velocity_limit=3.0,
+                stiffness=100.0,
+                damping=10.0,  # hold default pose (task uses wheels only)
+            ),
+            "gripper": ImplicitActuatorCfg(
+                joint_names_expr=["gripper_left_joint", "gripper_right_joint"],
+                effort_limit=5.0,
+                velocity_limit=0.5,
+                stiffness=100.0,
+                damping=10.0,  # hold default pose
             ),
         },
     )

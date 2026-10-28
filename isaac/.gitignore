@@ -1,7 +1,8 @@
-# checkpoints, logs, exports — 코드는 커밋, 산출물은 제외
+# checkpoints, logs, exports, big binaries — 코드는 커밋, 산출물은 제외
 export/**/*.onnx
 export/**/*.pt
 logs/
 checkpoints/
+usd/
 __pycache__/
 /export/
