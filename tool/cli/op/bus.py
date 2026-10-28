@@ -230,6 +230,12 @@ class Bus:
     def cmd_route(self, args) -> int:
         """바퀴 명령 경로: direct = cmd_manager → opencr_driver · rl = PC RL 보정을 거침."""
         want = args.value in ('rl', 'on')
+        if want and not self.rl_node_up():
+            print(self.term.paint('RL 노드(rl_corrector)가 없음 — 켜면 바퀴가 바로 멈춥니다. 먼저 PC에서:', RED))
+            print('  ros2 launch tb3_bringup rl-only.launch.py            # 보정 없이 통과 (연결 확인)')
+            print('  ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/경로/policy.onnx')
+            print('  (ROS_DOMAIN_ID=25 · 자세히: ros2_ws/STATE_CONTROL.md 2장)')
+            return 1
         ok = self.request('rl', want)
         if ok and self.state.st_rl:
             print('경로 → RL 경유 — PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 떠 있어야 바퀴가 움직입니다')
@@ -240,6 +246,16 @@ class Bus:
         return 0 if ok else 1
 
     cmd_rl = cmd_route   # 예전 이름 (rl on|off)
+
+    def rl_node_up(self, timeout: float = 3.0) -> bool:
+        """rl-only의 rl_corrector가 그래프에 보이나 (막 켠 CLI는 탐색 시간을 조금 줌)."""
+        end = time.monotonic() + timeout
+        while True:
+            if any(n == 'rl_corrector' for n, _ in self.node.get_node_names_and_namespaces()):
+                return True
+            if time.monotonic() >= end:
+                return False
+            self._poll(0.3)
 
     def cmd_control(self, args) -> int:
         return self.cmd_mode(args)

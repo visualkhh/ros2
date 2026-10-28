@@ -140,7 +140,7 @@ class StateStore:
         if not self.st_rl:
             return '경로 직결'
         age = self.rl_out.age()
-        return '경로 RL 경유' + ('' if age is not None and age < 1.0 else ' (PC RL 응답 없음 → 정지)')
+        return '경로 RL 경유' + ('' if age is not None and age < 1.0 else ' (PC RL 응답 없음 → 정지 · PC에서 rl-only.launch.py 켜기)')
 
     def domain_txt(self) -> str:
         if self.st_control is None:

@@ -83,6 +83,7 @@ ros2 topic echo --once /state_rl
 ```
 
 - `/cmd_vel_rl_out`이 **0.3초 넘게 안 오면 0** → 로봇이 멈춘다(PC 꺼짐·WiFi 끊김·rl-only 안 띄움). 의도된 안전 동작.
+- tool(`route rl` · 메뉴 `1) 상태 → 4)`)은 `rl_corrector` 노드가 안 보이면 **거부하고 띄우는 법을 알려준다**. RL 경유 중 PC 응답이 끊기면 상태바에 `PC RL 응답 없음 → 정지 · PC에서 rl-only.launch.py 켜기`.
 - WiFi 한 번 왕복만큼 반응이 늦어진다.
 - 처음엔 `enable:=false`(통과)로 띄워 텔레오퍼로 움직이는지부터 확인.
 - 처음부터 RL로 켜기: `tb-only.launch.py rl:=true`.
