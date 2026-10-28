@@ -3,7 +3,7 @@
 #
 #   ./run-cli                      대화형 메뉴 (TTY 아니면 status)
 #   ./run-cli <명령> [...]          한 번 실행 — 명령 목록·옵션: 아래 (또는 ./run-cli <명령> --help)
-#   ./run-cli stop                 실행 중인 CLI 프로세스 종료 (띄운 SLAM·Nav는 계속 돔 → stop-all)
+#   ./run-cli stop                 CLI 프로그램만 종료 (로봇의 ROS는 계속 돔 — ROS까지 끄려면 stop-all)
 #   ./run-cli restart              CLI 프로세스 재시작
 #   ./run-cli -h | --help          이 도움말
 #
@@ -14,6 +14,7 @@
 #   ./run-cli nav start office | initpose 0 0 0 | goal 1.0 0.5 90
 #   ./run-cli teleop                         w/x/a/d · s 정지 · q 종료
 #   ./run-cli mode manual|auto · rl on|off · estop on|off
+#   ./run-cli stop-all                       ROS 전부 끄기: 바퀴 정지 → Nav·SLAM·베이스 종료 (base|slam|nav stop = 하나씩)
 #
 # 로봇이 아닌 곳에서는 켜기/끄기·지도·로그를 SSH(pak@pak.local)로 로봇에 넘깁니다. ROS_DOMAIN_ID=25 고정.
 set -eo pipefail
