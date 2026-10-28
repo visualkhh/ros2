@@ -12,6 +12,7 @@ from ..defs import BACK, STAY
 from ..procs import RUN_DIR, SERVICES, TOOL_DIR
 from ..terminal import DIM, GREEN, YELLOW
 from .base import Menu, MenuItem, Page
+from .drive import TeleopItem
 
 
 def _xyyaw(raw: str) -> str | None:
@@ -203,14 +204,8 @@ class SlamMenu(ServiceMenu):
     name = 'slam'
 
     def extra(self):
-        from .drive import TeleopItem
-
-        class ManualDrive(TeleopItem):
-            key = 't'
-
-            def label(self):
-                return '수동으로 이동하기 (텔레오퍼)'
-        return [SaveMapItem(self.app), RvizItem(self.app, 'slam'), ManualDrive(self.app), AutoMapItem(self.app)]
+        return [SaveMapItem(self.app), RvizItem(self.app, 'slam'),
+                TeleopItem(self.app, 't', '수동으로 이동하기 (텔레오퍼)'), AutoMapItem(self.app)]
 
     def hint(self):
         return [self.term.paint(' 맵핑: 1) 시작 → v) RViz로 보기 → t) 수동으로 돌기 또는 a) 자동 맵핑 → 3) 지도 저장', DIM),

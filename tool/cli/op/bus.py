@@ -20,6 +20,7 @@ CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
 # 텔레오퍼 e 상한 — TurtleBot3 Waffle Pi 사양 (펌웨어도 바퀴 속도를 따로 자름)
 MAX_LIN, MAX_ANG = 0.26, 1.82
+DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
 
 def yaw_quat(yaw: float):
@@ -36,7 +37,6 @@ class Bus:
         msg_type = TwistStamped if CMD_VEL_STAMPED else Twist
         self._vel_pub = node.create_publisher(msg_type, CMD_VEL, 10)
         self._init_pub = node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
-        from std_msgs.msg import Empty
         self._reboot_pub = node.create_publisher(Empty, '/opencr/reboot', 10)
         self._beep_pub = node.create_publisher(Empty, '/opencr/beep', 10)
         from std_msgs.msg import Bool, String
@@ -178,11 +178,7 @@ class Bus:
     def request(self, key: str, value) -> bool:
         """/cmd_manual_<key> 발행 → /state_<key>가 그 값이 될 때까지 (최대 3초) 기다림."""
         pub, typ = self._req[key]
-        end = time.monotonic() + 5.0  # 방금 만든 발행자 — cmd_manager와 연결될 때까지
-        while pub.get_subscription_count() == 0 and time.monotonic() < end:
-            self._poll(0.2)
-        if pub.get_subscription_count() == 0:
-            print(self.term.paint('cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
+        if not self.wait_subscriber(pub, 'cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인', 5.0):
             return False
         pub.publish(typ(data=value))
         end = time.monotonic() + 3.0
@@ -280,6 +276,16 @@ class Bus:
         return 0 if ok else 1
 
     # ------------------------------------------------------------- 주행
+    def wait_subscriber(self, pub, missing: str, timeout: float = 10.0) -> bool:
+        """방금 만든 발행자는 상대와 연결(discovery)되기 전 — 구독자가 생길 때까지 기다림. 없으면 missing 출력."""
+        end = time.monotonic() + timeout
+        while pub.get_subscription_count() == 0 and time.monotonic() < end:
+            self._poll(0.2)
+        if pub.get_subscription_count() == 0:
+            print(self.term.paint(missing, RED))
+            return False
+        return True
+
     def send_velocity(self, linear: float, angular: float) -> None:
         if CMD_VEL_STAMPED:
             msg = TwistStamped()
@@ -316,33 +322,25 @@ class Bus:
             return 2
         if not self.ensure_manual():
             return 1
-        from .dialogs import KeyReader
+        from .dialogs import Dialog, KeyReader
         linear = angular = 0.0
         lin_speed, ang_speed = args.linear, args.angular
         last_send = 0.0
         last_key, key_count = '-', 0
-        con = getattr(self.term, 'out', None) or sys.stdout  # 캡처를 우회해 화면에 직접
+        box = Dialog(self.ui, f'텔레오퍼 → {CMD_VEL}', [])   # 공용 박스 — console로 그려 캡처를 우회
         alias = {'up': 'w', 'down': 'x', 'left': 'a', 'right': 'd', ' ': 's'}
         try:
             with KeyReader(self.term) as keys:
                 while rclpy.ok():
-                    cols, rows = self.term.size()
-                    w = min(cols - 4, 64)
-                    left = max(1, (cols - w) // 2 + 1)
-                    top = max(1, (rows - 11) // 2 + 1)
                     key_txt = f'키 {last_key} ×{key_count}' if key_count else '키 입력 대기 중'
-                    rows_txt = [f'텔레오퍼 → {CMD_VEL}',
+                    box.lines = [box.title,
                                 f'명령 v={linear:+.2f} m/s ω={angular:+.2f} rad/s',
                                 f'odom {self.state.odom_txt()}',
                                 f'scan {self.state.scan_txt()}',
                                 f'map  {self.state.map_txt()}',
                                 f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
                                 self.term.paint('w/x/a/d·방향키 이동 · s/space 정지 · e/c 속도± · b 삑 · q/Esc 종료', DIM)]
-                    con.write(f'\033[{top};{left}H┌' + '─' * (w - 2) + '┐')
-                    for i, line in enumerate(rows_txt):
-                        con.write(f'\033[{top + 1 + i};{left}H│' + self.term.fit(line, w - 2) + '│')
-                    con.write(f'\033[{top + 1 + len(rows_txt)};{left}H└' + '─' * (w - 2) + '┘')
-                    con.flush()
+                    box.draw('key')
                     now = time.monotonic()
                     if now - last_send >= 0.1:
                         self.send_velocity(linear, angular)
@@ -393,11 +391,7 @@ class Bus:
         msg.pose.pose.orientation.z, msg.pose.pose.orientation.w = qz, qw
         msg.pose.covariance[0] = msg.pose.covariance[7] = 0.25
         msg.pose.covariance[35] = 0.07
-        end = time.monotonic() + 10.0  # 방금 만든 발행자는 amcl과 연결(discovery)되기 전 — 기다린다
-        while self._init_pub.get_subscription_count() == 0 and time.monotonic() < end:
-            self._poll(0.2)
-        if self._init_pub.get_subscription_count() == 0:
-            print(self.term.paint('/initialpose 구독자 없음 — Nav(amcl)가 떠 있는지 확인', RED))
+        if not self.wait_subscriber(self._init_pub, '/initialpose 구독자 없음 — Nav(amcl)가 떠 있는지 확인'):
             return 1
         before = self.state.amcl_rate.age()
         for _ in range(3):
@@ -500,12 +494,7 @@ class Bus:
     # ------------------------------------------------------------- 모터
     def cmd_reboot_motors(self, args) -> int:
         """모터 에러(과열·과부하 등) 해제 — /opencr/reboot → opencr_driver가 펌웨어에 R (양쪽 재부팅)."""
-        from std_msgs.msg import Empty
-        end = time.monotonic() + 10.0  # 방금 만든 발행자 — 드라이버와 연결될 때까지
-        while self._reboot_pub.get_subscription_count() == 0 and time.monotonic() < end:
-            self._poll(0.2)
-        if self._reboot_pub.get_subscription_count() == 0:
-            print(self.term.paint('opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
+        if not self.wait_subscriber(self._reboot_pub, DRIVER_MISSING):
             return 1
         self.send_velocity(0.0, 0.0)
         self._reboot_pub.publish(Empty())
@@ -516,12 +505,7 @@ class Bus:
 
     def cmd_beep(self, args) -> int:
         """OpenCR 부저 삑 — /opencr/beep → opencr_driver가 펌웨어에 B."""
-        from std_msgs.msg import Empty
-        end = time.monotonic() + 10.0  # 방금 만든 발행자 — 드라이버와 연결될 때까지
-        while self._beep_pub.get_subscription_count() == 0 and time.monotonic() < end:
-            self._poll(0.2)
-        if self._beep_pub.get_subscription_count() == 0:
-            print(self.term.paint('opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
+        if not self.wait_subscriber(self._beep_pub, DRIVER_MISSING):
             return 1
         self._beep_pub.publish(Empty())
         self._poll(0.2)

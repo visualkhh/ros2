@@ -9,10 +9,15 @@ from .base import Menu, MenuItem
 
 
 class TeleopItem(MenuItem):
-    key = '1'
+    """수동 주행 메뉴 · SLAM 맵핑 메뉴(t)가 같이 씀 — 키와 이름만 다름."""
+
+    def __init__(self, app, key: str = '1', label: str = '텔레오퍼 (키보드)'):
+        super().__init__(app)
+        self.key = key
+        self._label = label
 
     def label(self):
-        return '텔레오퍼 (키보드)'
+        return self._label
 
     def run(self):
         m = self.app.drive_cfg
