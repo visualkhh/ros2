@@ -162,6 +162,9 @@ class Bus:
             ok, msg = self.procs.save_map(name)
             print(msg)
             return 0 if ok else 1
+        end = time.monotonic() + 5.0   # 막 켠 프로세스(원격 저장)는 latched /map을 받기까지 몇 초
+        while self.state.map.age() is None and time.monotonic() < end:
+            self._poll(0.2)
         if self.state.map.age() is None:
             print(self.term.paint('/map 수신 없음 — SLAM이 지도를 내고 있지 않습니다 (라이다 /scan이 있어야 지도가 생김)', RED))
             return 1
