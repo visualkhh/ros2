@@ -11,3 +11,4 @@ build/
 **/cmake-build-debug/
 # ros2_ws/deps.repos로 받는 외부 소스
 **/ros2_ws/src/coin_d4_driver/
+**/ros2_ws/src/m-explore-ros2/

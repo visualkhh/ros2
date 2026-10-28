@@ -29,7 +29,7 @@ setup(
             'scan_resample = tb3_bringup.scan_resample_node:main',
             'state_manager = tb3_bringup.state_manager_node:main',
             'cmd_manager = tb3_bringup.cmd_manager_node:main',
-            'frontier_explorer = tb3_bringup.frontier_explorer_node:main',
+            'explore_bridge = tb3_bringup.explore_bridge_node:main',
         ],
     },
 )

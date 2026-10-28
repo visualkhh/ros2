@@ -222,7 +222,7 @@ class AutoMapItem(MenuItem):
         if self.state.st_control == 'SLAM_AUTO_MAPPING':
             self.bus.cmd_automap(argparse.Namespace(value='stop'))
             return STAY
-        body = ['frontier_explorer가 지도의 모르는 쪽 경계로 Nav2 목표를 계속 보냅니다.',
+        body = ['explore_lite가 지도의 모르는 쪽 경계(frontier)로 Nav2 목표를 계속 보냅니다.',
                 'SLAM · SLAM 중 Nav가 꺼져 있으면 켭니다 (Nav2 준비에 수십 초).',
                 '주변을 비우세요. 끝나면 MANUAL로 돌아오고, 지도는 직접 저장 (3).']
         if self.ui.confirm('자동 맵핑을 시작할까요?', default=True, body=body):

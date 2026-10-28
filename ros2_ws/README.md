@@ -6,11 +6,12 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계
 
 | 패키지 | 내용 |
 |---|---|
-| `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `frontier_explorer`(자동 맵핑) · launch 3개 · URDF |
+| `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `explore_bridge`(자동 맵핑 ↔ 제어 상태) · launch 4개 · URDF |
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out`. rl-only가 `/cmd_vel_rl_in` → `/cmd_vel_rl_out`으로 띄움 |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom을 CSV로 · `benchmark_onnx.py` (Pi 추론 속도) |
 | `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력(`cmd_vel_nav`) 단계 보정. **아직 launch에 연결 안 함** |
 | `coin_d4_driver` (외부) | LDS-03 라이다 드라이버 (ROBOTIS) — 아래 `deps.repos`로 받음 |
+| `explore_lite` · `explore_lite_msgs` (외부) | 자동 맵핑 frontier 탐색 (m-explore-ros2) — 아래 `deps.repos`로 받음 |
 
 SLAM(slam_toolbox)·Nav2는 apt 패키지이고, 켜고 끄는 건 [`tool/run-cli`](../tool/README.md)가 합니다 (토픽이 보이는 곳 어디서나).
 
@@ -22,11 +23,12 @@ SLAM(slam_toolbox)·Nav2는 apt 패키지이고, 켜고 끄는 건 [`tool/run-cl
 | 저장소 | 왜 | 버전 |
 |---|---|---|
 | `coin_d4_driver` (ROBOTIS) | LDS-03 라이다 드라이버. Lyrical apt에 없음 (TurtleBot3 `LDS_MODEL=LDS-03`과 같은 드라이버) | 커밋 `79d1833` 고정 |
+| `m-explore-ros2` (robo-friends, BSD) | 자동 맵핑 `explore_lite`. Lyrical apt에 없음. Lyrical 빌드 확인(경고만) | 커밋 `326cf8a` 고정 |
 
 - `version`은 ROS 배포판이 아니라 **그 저장소의 git 커밋/브랜치**입니다. ROBOTIS는 `humble`·`jazzy`·`main` 브랜치만 있고
   lyrical 브랜치가 없어서, 코드가 같은 최신(jazzy 끝)을 커밋으로 고정했습니다. 순수 rclcpp 코드라 Lyrical에서 빌드됩니다.
-- 받은 폴더(`src/coin_d4_driver/`)는 `.gitignore` — 우리 저장소엔 `deps.repos` 한 파일만 올라갑니다.
-- 없어도 빌드·실행은 됩니다 (`tb-only`가 라이다만 빼고 뜸, 경고 출력).
+- 받은 폴더(`src/coin_d4_driver/` · `src/m-explore-ros2/`)는 `.gitignore` — 우리 저장소엔 `deps.repos` 한 파일만 올라갑니다.
+- coin_d4_driver가 없어도 빌드·실행은 됩니다 (`tb-only`가 라이다만 빼고 뜸, 경고 출력). m-explore-ros2가 없으면 tb3_bringup이 `explore_lite_msgs`를 못 찾아 빌드는 되지만 자동 맵핑(`explore-nav`)이 안 뜸.
 
 ## 빌드
 

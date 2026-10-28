@@ -78,7 +78,7 @@ sudo apt install -y \
 | `robot-state-publisher` | 로봇 TF (`base_link → 라이다`) |
 | `teleop-twist-keyboard` · `tf2-tools` | 수동 조종 · `view_frames` 디버그 |
 | `turtlebot3-msgs` · `dynamixel-sdk` | 베이스 드라이버(OpenCR) 작업용 |
-| `python3-numpy` | `ros2_ws` (frontier_explorer · rl 노드) |
+| `python3-numpy` | `ros2_ws` (rl 노드) |
 | `socat` | 가상 시리얼 시험 |
 
 **apt에 없는 것**
@@ -111,7 +111,7 @@ source ~/.bashrc
 git clone https://github.com/visualkhh/ros2.git ~/ros2   # 이미 있으면 cd ~/ros2 && git pull
 cd ~/ros2/ros2_ws
 source /opt/ros/lyrical/setup.bash
-vcs import src < deps.repos                               # apt에 없는 소스 (LDS-03 coin_d4_driver)
+vcs import src < deps.repos                               # apt에 없는 소스 (LDS-03 coin_d4_driver · 자동 맵핑 explore_lite)
 colcon build --symlink-install --parallel-workers 2       # Pi 4: 2개로 제한 (메모리)
 source install/setup.bash
 ```

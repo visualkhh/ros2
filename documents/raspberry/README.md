@@ -33,7 +33,7 @@
 |---|---|---|
 | 배포판 | Lyrical (ros-base 0.13.0) · 공식 apt | [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) |
 | apt 패키지 | slam_toolbox 2.10 · nav2_bringup 1.5 · nav2 amcl/map_server · laser_filters 2.3 · robot_state_publisher · xacro · teleop_twist_keyboard · tf2_tools · turtlebot3_msgs · dynamixel_sdk · ros-dev-tools | |
-| 소스 의존 | `coin_d4_driver` (LDS-03) — `ros2_ws/deps.repos`로 받아 빌드 · `/scan` 10 Hz | [ros2_ws README](../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
+| 소스 의존 | `coin_d4_driver` (LDS-03) · `explore_lite` (자동 맵핑) — `ros2_ws/deps.repos`로 받아 빌드 · `/scan` 10 Hz | [ros2_ws README](../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
 | 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드: tb3_bringup · coin_d4_driver · rl_correction · rl_eval · nav2_rl_controller | [ARCH](../../ros2_ws/ARCH.md) |
 | 상시 노드 (`run-cli base start` = tb-only) | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample | [ARCH 2장](../../ros2_ws/ARCH.md) |
 | 필요할 때 (`run-cli`, 어디서나) | slam_toolbox (`slam start`) · Nav2 (`nav start` / `explore start`) — 지도 `~/ros2/ros2_ws/map/` | [tool](../../tool/README.md) |

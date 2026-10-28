@@ -245,7 +245,7 @@ class Bus:
         return self.cmd_mode(args)
 
     def cmd_automap(self, args) -> int:
-        """자동 맵핑: SLAM + SLAM 중 Nav를 켜고 제어 상태 SLAM_AUTO_MAPPING (frontier_explorer가 돌아다님)."""
+        """자동 맵핑: SLAM + SLAM 중 Nav를 켜고 제어 상태 SLAM_AUTO_MAPPING (explore_lite가 돌아다님 — explore_bridge가 켜고 끔)."""
         if args.value == 'stop':
             ok = self.request('control', 'MANUAL')
             print('자동 맵핑 중지 → MANUAL (지도 저장: ./run-cli map save 이름)' if ok else self.term.paint('중지 실패', RED))

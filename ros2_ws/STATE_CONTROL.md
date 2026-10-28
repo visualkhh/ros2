@@ -29,9 +29,9 @@
 
 | 값 | 바퀴로 가는 명령 | 이렇게 바뀜 |
 |---|---|---|
-| `MANUAL` | `/cmd_manual_vel` (텔레오퍼·drive)만 | 기본값 · 자동 맵핑이 끝나면 frontier_explorer가 요청 |
+| `MANUAL` | `/cmd_manual_vel` (텔레오퍼·drive)만 | 기본값 · 자동 맵핑이 끝나면 explore_bridge가 요청 |
 | `NAV_PLAN` | Nav2 `/cmd_vel`만 | RViz **Nav2 Goal**(`/goal_pose`)을 찍으면 자동 · tool goal |
-| `SLAM_AUTO_MAPPING` | Nav2 `/cmd_vel`만 + frontier_explorer가 목표를 계속 보냄 | `run-cli automap start` |
+| `SLAM_AUTO_MAPPING` | Nav2 `/cmd_vel`만 + explore_lite가 frontier 목표를 계속 보냄 | `run-cli automap start` |
 
 ```bash
 ros2 topic pub --once /cmd_manual_control std_msgs/msg/String "{data: MANUAL}"

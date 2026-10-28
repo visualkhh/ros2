@@ -91,11 +91,12 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 
 ### 1-1. 자동 맵핑 (스스로 탐색)
 
-로봇이 지도의 **모르는 쪽 경계(frontier)** 로 Nav2 목표를 스스로 계속 보내며 지도를 넓힙니다 (`frontier_explorer`, 베이스에 포함).
+로봇이 지도의 **모르는 쪽 경계(frontier)** 로 Nav2 목표를 스스로 계속 보내며 지도를 넓힙니다.
+탐색은 **explore_lite**(m-explore-ros2, BSD), 우리 제어 상태와의 연결은 `explore_bridge` — 둘 다 "SLAM 중 Nav"(`explore-nav.launch.py`)에 포함.
 
 ```bash
 ./run-cli automap start       # SLAM·SLAM 중 Nav가 꺼져 있으면 켜고 → 제어 상태 SLAM_AUTO_MAPPING
-./run-rviz slam               # 보기 · 상태바 "탐색" 줄에 진행 (이동 목표 · 남은 frontier 수)
+./run-rviz slam               # 보기 · 상태바 "탐색" 줄에 진행 (탐색 중 · 완료) · RViz에 /explore/frontiers 추가하면 후보 경계가 보임
 ./run-cli automap stop        # 도중에 멈추기 → MANUAL
 ./run-cli map save office     # 다 찾으면 스스로 MANUAL로 — 그다음 저장
 ```
@@ -103,7 +104,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 메뉴: `./run-cli` → `3) SLAM 맵핑` → `a) 자동 맵핑 시작` (확인창) → `v) RViz로 보기` → 끝나면 `3) 지도 저장`.
 
 - 주변을 비우세요. 라이다 뒤쪽 135°가 몸통에 가려 안 보이므로 **후진은 위험** — Nav2가 주로 앞으로 갑니다.
-- 갈 수 없는 frontier(막힘·60초 초과)는 건너뜁니다. 덜 찍힌 구석은 `t) 수동으로 이동`으로 마저.
+- 갈 수 없는 frontier(30초 동안 진척 없음)는 건너뜁니다. 시작 15초 안에 "완료"가 나오면(빈 지도) 무시하고 다시 탐색. 덜 찍힌 구석은 `t) 수동으로 이동`으로 마저.
 - RViz에서 Nav2 Goal을 찍거나 텔레오퍼로 MANUAL로 바꾸면 자동 맵핑은 그 자리에서 멈춥니다.
 
 ## 2. 지도 저장

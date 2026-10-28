@@ -1,4 +1,7 @@
-"""explore-nav — SLAM 중 Nav: SLAM이 /map·map→odom을 내는 동안 Nav2 주행부만 (지도·amcl 없이).
+"""explore-nav — SLAM 중 Nav: SLAM이 /map·map→odom을 내는 동안 Nav2 주행부만 (지도·amcl 없이) + 자동 맵핑.
+
+  Nav2 navigation_launch.py + lifecycle_manager + explore_lite(frontier 탐색) + explore_bridge(제어 상태 연결).
+  explore_lite는 제어 상태가 SLAM_AUTO_MAPPING일 때만 탐색한다 (그 밖엔 explore_bridge가 바로 멈춤).
 
   ros2 launch tb3_bringup explore-nav.launch.py params_file:=tool/config/nav2_params.yaml
 
@@ -33,4 +36,8 @@ def generate_launch_description():
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'autostart': 'true'}.items()),
         OpaqueFunction(function=lifecycle_manager),
+        Node(package='explore_lite', executable='explore', name='explore_node', output='screen',
+             parameters=[os.path.join(get_package_share_directory('tb3_bringup'), 'config', 'explore.yaml'),
+                         {'use_sim_time': LaunchConfiguration('use_sim_time')}]),
+        Node(package='tb3_bringup', executable='explore_bridge', name='explore_bridge'),
     ])

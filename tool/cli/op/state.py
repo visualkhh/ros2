@@ -48,7 +48,7 @@ class StateStore:
         self.st_estop: bool | None = None
         self.st_operation: str | None = None                       # 운행 상태 SLAM · LOCALIZATION · IDLE
         self.st_map: str | None = None                             # 적용된 지도
-        self.explore_status = ''                                   # frontier_explorer /explore_status
+        self.explore_status = ''                                   # explore_bridge /explore_status
         self.rl_out = Rate(5)                                      # /cmd_vel_rl_out (PC RL 응답)
 
     @staticmethod

@@ -1,0 +1,16 @@
+# explore_lite (m-explore-ros2) — 자동 맵핑에서 frontier 고르기. explore-nav.launch.py가 씀.
+# 켜고 끄는 건 explore_bridge가 /explore/resume으로 (제어 상태 SLAM_AUTO_MAPPING일 때만 탐색).
+/**:
+  ros__parameters:
+    robot_base_frame: base_footprint   # REP-105 루트 (기본 base_link)
+    return_to_init: false              # 끝나면 그 자리 → MANUAL (explore_bridge)
+    costmap_topic: map                 # SLAM 지도 그대로
+    costmap_updates_topic: map_updates
+    visualize: true                    # RViz: /explore/frontiers (MarkerArray)
+    planner_frequency: 0.5             # [Hz] 다음 목표 다시 고르기
+    progress_timeout: 30.0             # [s] 진척 없으면 그 frontier 포기(블랙리스트)
+    potential_scale: 3.0               # 거리 가중 (가까운 곳 우선)
+    orientation_scale: 0.0
+    gain_scale: 1.0                    # frontier 크기 가중
+    transform_tolerance: 0.3
+    min_frontier_size: 0.5             # [m] 이보다 작은 경계는 무시
