@@ -120,6 +120,7 @@ class Menu(Page):
             item = next((it for it in visible if it.key == choice), None)
             if item is None:
                 continue
+            self.ui.busy(item.label())   # 누른 즉시 표시 — 하위 메뉴·확인창이 뜨면 그 위로 덮임
             # 실행 중 print는 화면을 스크롤시키므로 가로채서 결과창에 넣는다.
             with self.ui.capture() as (buf_out, buf_err):
                 result = item.run()

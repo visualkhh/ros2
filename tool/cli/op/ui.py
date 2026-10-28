@@ -87,6 +87,13 @@ class Ui:
         """한 줄 입력 — Enter 확인 · Esc/◀ 취소(None). validate는 Dialog.input 참고."""
         return Dialog(self, title, body).input(prompt, default, validate)
 
+    def busy(self, label: str) -> None:
+        """누르자마자 '처리 중' 창 — 기다리지 않음 (원격 SSH·ROS 대기로 몇 초 걸려도 눌린 걸 알게)."""
+        import sys
+        if not sys.stdout.isatty():
+            return
+        Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM)]).draw('key')
+
     def modal_key(self, title: str, body: list[str]) -> str | None:
         """단일 키 확인 — Enter='enter' · Esc/◀=None · 문자 그대로."""
         return Dialog(self, title, body).key()
