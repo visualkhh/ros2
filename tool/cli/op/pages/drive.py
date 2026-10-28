@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 
-from ..bus import CMD_VEL
+from ..bus import CMD_VEL, MAX_ANG, MAX_LIN
 from ..defs import STAY
 from .base import Menu, MenuItem
 
@@ -44,8 +44,9 @@ class StepItem(MenuItem):
 
 
 class SpeedItem(MenuItem):
-    def __init__(self, app, key: str, field: str, name: str, unit: str):
+    def __init__(self, app, key: str, field: str, name: str, unit: str, maximum: float):
         super().__init__(app)
+        self.maximum = maximum
         self.key = key
         self.field = field
         self.name = name
@@ -56,7 +57,7 @@ class SpeedItem(MenuItem):
 
     def run(self):
         value, ok = self.ui.read_float(f'{self.name} [{self.unit}]', self.app.drive_cfg[self.field],
-                                       positive=True)
+                                       positive=True, maximum=self.maximum)
         if ok:
             self.app.drive_cfg[self.field] = value
         return STAY
@@ -69,8 +70,8 @@ class DriveMenu(Menu):
         return [TeleopItem(self.app),
                 StepItem(self.app, '2', 'forward', '전진'), StepItem(self.app, '3', 'back', '후진'),
                 StepItem(self.app, '4', 'left', '좌회전'), StepItem(self.app, '5', 'right', '우회전'),
-                SpeedItem(self.app, '6', 'linear', '선속도', 'm/s'),
-                SpeedItem(self.app, '7', 'angular', '각속도', 'rad/s'),
+                SpeedItem(self.app, '6', 'linear', '선속도', 'm/s', MAX_LIN),
+                SpeedItem(self.app, '7', 'angular', '각속도', 'rad/s', MAX_ANG),
                 SpeedItem(self.app, '8', 'duration', '한 번 이동 시간', 's')]
 
     def center(self):

@@ -51,7 +51,7 @@ class Ui:
         return key == 'y'
 
     def read_float(self, prompt: str, current: float,
-                   positive: bool = False) -> tuple[float, bool]:
+                   positive: bool = False, maximum: float | None = None) -> tuple[float, bool]:
         """숫자 한 개 — (값, 확정). Enter 빈칸=현재값 유지 · Esc=(current, False)."""
         def check(raw: str) -> str | None:
             if not raw.strip():
@@ -66,9 +66,11 @@ class Ui:
                 return '0보다 커야 합니다'
             if not positive and value < 0:
                 return '0 이상이어야 합니다'
+            if maximum is not None and value > maximum:
+                return f'최대 {maximum:g}'
             return None
 
-        raw = self.modal_input('값 입력', [prompt, f'현재: {current:g} (빈칸 Enter=유지)'],
+        raw = self.modal_input('값 입력', [prompt, f'현재: {current:g} (빈칸 Enter=유지)'] + ([f'최대: {maximum:g}'] if maximum is not None else []),
                                '값>', validate=check)
         if raw is None:
             return current, False

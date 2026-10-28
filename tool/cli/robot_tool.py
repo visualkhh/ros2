@@ -154,8 +154,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser('drive', help='정해진 시간만큼 이동')
     d.add_argument('direction', type=str.lower, choices=('forward', 'back', 'left', 'right', 'stop'))
-    d.add_argument('--speed', type=_positive, default=0.10)
-    d.add_argument('--angular', type=_positive, default=0.5)
+    d.add_argument('--speed', type=_positive, default=0.15, help='최대 0.26')
+    d.add_argument('--angular', type=_positive, default=0.8, help='최대 1.82')
     d.add_argument('--duration', type=_positive, default=1.0)
 
     ip = sub.add_parser('initpose', help='amcl 초기 위치 (map 좌표)')

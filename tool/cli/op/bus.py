@@ -18,7 +18,7 @@ from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
 # Nav2(Lyrical)는 TwistStamped를 낸다. cmd_manager·드라이버가 Twist라 0.
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
-# 텔레오퍼 e 상한 — TurtleBot3 Waffle Pi 사양 (펌웨어도 바퀴 속도를 따로 자름)
+# 수동 주행 속도 상한 (텔레오퍼 e · 메뉴 속도 설정) — Waffle Pi 사양 = 펌웨어 바퀴 상한 8 rad/s × 0.033 m
 MAX_LIN, MAX_ANG = 0.26, 1.82
 DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
@@ -302,8 +302,9 @@ class Bus:
     def cmd_drive(self, args) -> int:
         if not self.ensure_manual():
             return 1
-        v = {'forward': args.speed, 'back': -args.speed}.get(args.direction, 0.0)
-        w = {'left': args.angular, 'right': -args.angular}.get(args.direction, 0.0)
+        speed, ang = min(args.speed, MAX_LIN), min(args.angular, MAX_ANG)
+        v = {'forward': speed, 'back': -speed}.get(args.direction, 0.0)
+        w = {'left': ang, 'right': -ang}.get(args.direction, 0.0)
         end = time.monotonic() + (args.duration if args.direction != 'stop' else 0.0)
         try:
             while time.monotonic() < end and rclpy.ok():
@@ -324,7 +325,7 @@ class Bus:
             return 1
         from .dialogs import Dialog, KeyReader
         linear = angular = 0.0
-        lin_speed, ang_speed = args.linear, args.angular
+        lin_speed, ang_speed = min(args.linear, MAX_LIN), min(args.angular, MAX_ANG)
         last_send = 0.0
         last_key, key_count = '-', 0
         box = Dialog(self.ui, f'텔레오퍼 → {CMD_VEL}', [])   # 공용 박스 — console로 그려 캡처를 우회
