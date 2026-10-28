@@ -2,6 +2,7 @@
 
 TurtleBot3 RL 2종(`rl_correction`, `nav2_rl_controller`) 정책 학습용.
 스펙: [../documents/isaac/task-spec.md](../documents/isaac/task-spec.md)
+**처음이면 [START_HERE.md](START_HERE.md)부터 읽으세요 (개념 → 실행).**
 
 ## 환경 (2026-10-28 실측)
 
