@@ -126,6 +126,9 @@ class Dialog:
                 if self._geom is not None:
                     self.ui._erase_rect(*self._geom)
                     self._geom = None
+                busy = getattr(self.ui, '_busy', None)   # 확인창 밑에 깔린 처리 중 창을 바로 다시 (빈 화면 방지)
+                if busy is not None and busy is not self:
+                    busy.draw('key')
         return _cm()
 
     def _width(self, extra: int = 0):

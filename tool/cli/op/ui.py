@@ -97,8 +97,17 @@ class Ui:
         import sys
         if not sys.stdout.isatty():
             return
-        self._busy = Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM)])
+        self._busy = Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM), ''])
         self._busy.draw('key')
+
+    def step(self, text: str) -> None:
+        """처리 중 창의 단계 줄 (예: '1/3 SLAM 켜는 중') — 여러 단계를 거치는 작업용. 메뉴 밖이면 무시."""
+        dlg = self._busy
+        if dlg is None:
+            return
+        dlg.lines[3] = self.term.paint(f'▶ {text}', CYAN)
+        dlg.lines[4] = ''
+        dlg.draw('key')
 
     def progress(self, text: str) -> None:
         """처리 중 창 맨 아래 줄을 갱신 (오래 걸리는 단계가 지금 뭘 기다리는지). 메뉴 밖(명령줄)이면 무시."""
@@ -106,7 +115,7 @@ class Ui:
         if dlg is None:
             return
         spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[int(time.monotonic() * 4) % 10]
-        dlg.lines = dlg.lines[:3] + [self.term.paint(f'{spin} {text}', DIM)]
+        dlg.lines[4] = self.term.paint(f'{spin} {text}', DIM)
         dlg.draw('key')
 
     def _remote_wait(self, elapsed: float) -> None:

@@ -270,14 +270,17 @@ class Bus:
             ok = self.request('control', 'MANUAL')
             print('자동 맵핑 중지 → MANUAL (지도 저장: ./run-cli map save 이름)' if ok else self.term.paint('중지 실패', RED))
             return 0 if ok else 1
+        self.ui.step('0/3 베이스 확인 중')
         if not self.base_ready():
             return 1
-        for name in ('slam', 'explore'):
+        for i, name in enumerate(('slam', 'explore'), 1):
             if not self.procs.running(name):
+                self.ui.step(f'{i}/3 {SERVICES[name].label} 켜는 중 (로봇에서 ~10초)')
                 ok, msg = self.procs.start(name)
                 print(msg)
                 if not ok:
                     return 1
+        self.ui.step('3/3 Nav2 활성화 대기')
         start = time.monotonic()
         end = start + 60.0  # Nav2 주행부가 켜질 때까지 (Pi에서 수십 초)
         client = self._client()

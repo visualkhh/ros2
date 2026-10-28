@@ -120,14 +120,15 @@ class Menu(Page):
             item = next((it for it in visible if it.key == choice), None)
             if item is None:
                 continue
-            self.ui.busy(item.label())   # 누른 즉시 표시 — 하위 메뉴·확인창이 뜨면 그 위로 덮임
+            label = item.label()   # 누른 순간 이름 (실행 뒤엔 바뀔 수 있음 — 시작 → 중지)
+            self.ui.busy(label)   # 누른 즉시 표시 — 하위 메뉴·확인창이 뜨면 그 위로 덮임
             # 실행 중 print는 화면을 스크롤시키므로 가로채서 결과창에 넣는다.
             with self.ui.capture() as (buf_out, buf_err):
                 result = item.run()
             self.ui._busy = None
             out = (buf_out.getvalue() + buf_err.getvalue()).strip('\n')
             if out:
-                self.ui.pager(item.label(), out)
+                self.ui.pager(label, out)
             # 하위 화면의 BACK은 '그 화면을 닫음'이라 여기는 그대로 남는다 (두 단계 뒤로 가지 않게)
             if result in (MAIN, QUIT):
                 return result
