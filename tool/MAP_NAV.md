@@ -127,7 +127,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ## 3. 저장한 지도로 주행 (Nav)
 
 ```bash
-# ① Nav 시작 (SLAM이 켜져 있으면 거부 → 먼저 slam stop)
+# ① Nav 시작 (SLAM·SLAM 중 Nav가 켜져 있으면 자동 정지 후 시작 — SLAM 지도는 저장 안 했으면 사라지니 먼저 저장)
 ./run-cli nav start office   # 이름 생략 = 가장 최근 지도 · 상태바: 운행 LOCALIZATION (지도 office)
 
 # ② 주행 화면

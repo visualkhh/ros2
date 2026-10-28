@@ -105,6 +105,14 @@ class Bus:
     def start(self, name: str, map_yaml: str | None = None) -> int:
         if name != 'base' and not self.base_ready():
             return 1
+        if 'slam' in [c for c in SERVICES[name].conflicts if self.procs.running(c)]:
+            warn = 'SLAM 맵핑을 끕니다 — 저장 안 한 지도는 사라집니다 (먼저 저장하려면 취소)'
+            if self.ui.console.isatty():
+                if not self.ui.confirm(f'{SERVICES[name].label}를 시작할까요?',
+                                       body=[self.term.paint(warn, YELLOW)], default=True):
+                    return 1
+            else:
+                print(self.term.paint('주의: ' + warn, YELLOW))
         ok, msg = self.procs.start(name, map_yaml)
         print(msg)
         return 0 if ok else 1

@@ -127,9 +127,11 @@ class Procs:
         svc = SERVICES[name]
         if self.running(name):
             return False, f'{svc.label}: 이미 실행 중 (pid {self.pid(name)})'
-        busy = [SERVICES[c].label for c in svc.conflicts if self.running(c)]
-        if busy:
-            return False, f'{svc.label}: 먼저 끄세요 → {", ".join(busy)}'
+        busy = [c for c in svc.conflicts if self.running(c)]
+        stopped = []
+        for c in busy:
+            self.stop(c)
+            stopped.append(SERVICES[c].label)
         try:
             cmd = svc.command(map_yaml)
         except ValueError as exc:
@@ -145,7 +147,8 @@ class Procs:
             self._pidfile(name).unlink(missing_ok=True)
             return False, f'{svc.label}: 시작 직후 종료 (code {p.returncode}) — 로그: {self.logfile(name)}\n' \
                           + self.tail(name, 15)
-        return True, f'{svc.label}: 시작 (pid {p.pid}) · 로그 {self.logfile(name)}'
+        auto = f'({" · ".join(stopped)} 자동 정지 →) ' if stopped else ''
+        return True, f'{auto}{svc.label}: 시작 (pid {p.pid}) · 로그 {self.logfile(name)}'
 
     def stop(self, name: str, timeout: float = 10.0) -> tuple[bool, str]:
         svc = SERVICES[name]
