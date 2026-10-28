@@ -49,7 +49,7 @@ ssh -t pak 'cd ~/ros2/tool && ./run-cli base start'   # 또는 Pi에 들어가�
 
 # ④ 확인
 ./run-cli status
-#   ● 베이스 · 로봇 ● ok · 모드 MANUAL · RL off · 비상정지 off · odom 20Hz · scan 10Hz 이면 OK
+#   ● 베이스 · 로봇 ● ok · 제어 MANUAL · 운행 IDLE · 경로 직결 · 비상정지 off · odom 20Hz · scan 10Hz 이면 OK
 ```
 
 메뉴: `./run-cli` → `2) 베이스` → `1) 시작` → 위쪽 상태바가 `● 베이스` · `로봇 ● ok`가 되면 OK.
@@ -70,7 +70,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 
 ```bash
 # ① SLAM 시작 (로봇에서 돔)
-./run-cli slam start
+./run-cli slam start     # 상태바: ● SLAM 맵핑 · 운행 SLAM (지도 (SLAM 작성 중)) · map …m
 
 # ② 터미널 1 — 지도 커지는 거 보기
 ./run-rviz slam
@@ -125,7 +125,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 
 ```bash
 # ① Nav 시작 (SLAM이 켜져 있으면 거부 → 먼저 slam stop)
-./run-cli nav start office   # 이름 생략 = 가장 최근 지도
+./run-cli nav start office   # 이름 생략 = 가장 최근 지도 · 상태바: 운행 LOCALIZATION (지도 office)
 
 # ② 주행 화면
 ./run-rviz nav
@@ -154,8 +154,8 @@ Nav2는 로봇이 지도 어디에 있는지 알아야 켜집니다. 초기 위�
 
 ## 4. 특정 위치로 보내기
 
-제어 상태: Nav2 명령은 `/state_control`가 **NAV_PLAN**(또는 SLAM_AUTO_MAPPING)일 때만 바퀴로 갑니다. RViz Nav2 Goal·`./run-cli goal`은 자동으로 NAV로 바꾸고,
-텔레오퍼·`drive`는 MANUAL이 아니면 바꿀지 **물어봅니다** (수동 명령은 MANUAL에서만). 상단 상태바 `모드 …`로 확인.
+제어 상태: Nav2 명령은 `/state_control`가 **NAV_PLAN**(또는 SLAM_AUTO_MAPPING)일 때만 바퀴로 갑니다. RViz Nav2 Goal·`./run-cli goal`은 자동으로 NAV_PLAN으로 바꾸고,
+텔레오퍼·`drive`는 MANUAL이 아니면 바꿀지 **물어봅니다** (수동 명령은 MANUAL에서만). 상단 상태바 `제어 …`로 확인.
 
 ### RViz에서 찍기
 
