@@ -46,6 +46,8 @@ class Bus:
         self._init_pub = node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         self._reboot_pub = node.create_publisher(Empty, '/opencr/reboot', 10)
         self._beep_pub = node.create_publisher(Empty, '/opencr/beep', 10)
+        from std_msgs.msg import Int32MultiArray
+        self._beep_tone_pub = node.create_publisher(Int32MultiArray, '/opencr/beep_tone', 10)
         from std_msgs.msg import Bool, String
         self._req = {'control': (node.create_publisher(String, '/cmd_manual_control', 10), String),
                      'rl': (node.create_publisher(Bool, '/cmd_manual_rl', 10), Bool),
@@ -568,7 +570,21 @@ class Bus:
         return 0 if self.state.robot_parts()[0] == 0 else 1
 
     def cmd_beep(self, args) -> int:
-        """OpenCR 부저 삑 — /opencr/beep → opencr_driver가 펌웨어에 B."""
+        """OpenCR 부저 — 인자 없으면 기본 삑, `beep <Hz> <ms>`면 높이·길이 지정."""
+        vals = getattr(args, 'value', None) or []
+        if len(vals) == 2:
+            try:
+                hz, ms = max(100, min(8000, int(vals[0]))), max(10, min(2000, int(vals[1])))
+            except ValueError:
+                print('숫자로: beep <Hz 100~8000> <ms 10~2000> (예: beep 4000 300)')
+                return 1
+            if not self.wait_subscriber(self._beep_tone_pub, DRIVER_MISSING):
+                return 1
+            from std_msgs.msg import Int32MultiArray
+            self._beep_tone_pub.publish(Int32MultiArray(data=[hz, ms]))
+            self._poll(0.2)
+            print(f'삑 {hz}Hz {ms}ms (B,{hz},{ms})')
+            return 0
         if not self.wait_subscriber(self._beep_pub, DRIVER_MISSING):
             return 1
         self._beep_pub.publish(Empty())

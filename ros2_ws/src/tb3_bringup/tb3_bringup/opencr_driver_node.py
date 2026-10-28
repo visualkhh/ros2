@@ -9,7 +9,8 @@ Topics:
   sub  <cmd_topic> (Twist, default cmd_vel_base)   final wheel command from cmd_manager (mux)
   sub  opencr/reboot (Empty)                   -> R (clears DYNAMIXEL hardware error)
   sub  opencr/beep (Empty)                     -> B (OpenCR buzzer, 2000 Hz 150 ms)
-  pub  odom, TF odom->base_footprint (REP-105), joint_states, diagnostics
+  sub  opencr/beep_tone (Int32MultiArray)     -> B,<hz>,<ms> (100~8000 Hz, 10~2000 ms)
+  pub  odom, TF odom->base_footprint (REP-105), joint_states, diagnostics, battery_state
 The firmware stops the wheels by itself if no C arrives for 500 ms, so a dead PC/RL link stops the robot.
 """
 import math
@@ -23,8 +24,8 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from sensor_msgs.msg import JointState
-from std_msgs.msg import Empty
+from sensor_msgs.msg import BatteryState, JointState
+from std_msgs.msg import Empty, Int32MultiArray
 from tf2_ros import TransformBroadcaster
 
 ERR_BITS = {1: 'input voltage', 4: 'overheating', 8: 'motor encoder', 16: 'electrical shock', 32: 'overload'}
@@ -83,8 +84,10 @@ class OpencrDriver(Node):
         self.create_subscription(Twist, cmd_topic, self.on_cmd, 10)
         self.create_subscription(Empty, 'opencr/reboot', lambda _m: self.write('R'), 10)
         self.create_subscription(Empty, 'opencr/beep', lambda _m: self.write('B'), 10)
+        self.create_subscription(Int32MultiArray, 'opencr/beep_tone', self.on_beep_tone, 10)
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
         self.js_pub = self.create_publisher(JointState, 'joint_states', 10)
+        self.bat_pub = self.create_publisher(BatteryState, 'battery_state', 10)
         self.diag_pub = self.create_publisher(DiagnosticArray, 'diagnostics', 10)
         self.tf = TransformBroadcaster(self)
         self.create_timer(0.005, self.read_serial)
@@ -153,6 +156,13 @@ class OpencrDriver(Node):
     def on_cmd(self, msg: Twist) -> None:
         self.cmd = wheel_speeds(msg.linear.x, msg.angular.z, self.r, self.sep, self.max_wheel)
         self.last_cmd = time.monotonic()
+
+    def on_beep_tone(self, msg: Int32MultiArray) -> None:
+        hz = int(msg.data[0]) if len(msg.data) > 0 else 2000
+        ms = int(msg.data[1]) if len(msg.data) > 1 else 150
+        hz = max(100, min(8000, hz))
+        ms = max(10, min(2000, ms))
+        self.write(f'B,{hz},{ms}')
 
     def send_cmd(self) -> None:
         wl, wr = self.cmd
@@ -236,6 +246,17 @@ class OpencrDriver(Node):
             js.effort = [v[5], v[6]]  # current [A]
         self.js_pub.publish(js)
 
+        if len(v) >= 10:
+            # 3S LiPo: full 12.6 V, empty ~9.6 V
+            volt = v[9]
+            bat = BatteryState()
+            bat.header.stamp = odom.header.stamp
+            bat.present = True
+            bat.voltage = volt
+            bat.percentage = max(0.0, min(1.0, (volt - 9.6) / 3.0))
+            bat.design_capacity = 1.8  # Ah (TB3 LB-040 class)
+            self.bat_pub.publish(bat)
+
     def publish_diag(self) -> None:
         st = DiagnosticStatus()
         st.name = 'opencr'
@@ -255,6 +276,8 @@ class OpencrDriver(Node):
             st.values = [KeyValue(key=k, value=f'{x:g}') for k, x in (
                 ('left_current_A', v[5]), ('right_current_A', v[6]),
                 ('left_temp_C', v[7]), ('right_temp_C', v[8]), ('uptime_ms', v[4]))]
+            if len(v) >= 10:
+                st.values.append(KeyValue(key='battery_V', value=f'{v[9]:g}'))
         st.values.append(KeyValue(key='position_jumps', value=str(self.jumps)))
         arr = DiagnosticArray()
         arr.header.stamp = self.get_clock().now().to_msg()

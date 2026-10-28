@@ -14,7 +14,7 @@
 //                   position restarts within one turn (expect a jump in S pos).
 //   SBC -> OpenCR : B | B,<Hz>,<ms>                 (buzzer beep; bare B = 2000 Hz 150 ms, non-blocking)
 //   OpenCR -> SBC : S,<l_pos rad>,<l_vel rad/s>,<r_pos rad>,<r_vel rad/s>,<uptime ms>,
-//                     <l_cur A>,<r_cur A>,<l_temp C>,<r_temp C>
+//                     <l_cur A>,<r_cur A>,<l_temp C>,<r_temp C>,<battery V>
 //                   at STATUS_HZ. Positions are continuous multi-turn radians.
 //                   Current/temp are appended after uptime so fields 0-5 keep their index.
 //   OpenCR -> SBC : E,<l_err>,<r_err>
@@ -240,7 +240,8 @@ void loop() {
     Serial.print(lc * CUR_UNIT_A, 3); Serial.print(",");
     Serial.print(rc * CUR_UNIT_A, 3); Serial.print(",");
     Serial.print(lt); Serial.print(",");
-    Serial.println(rt);
+    Serial.print(rt); Serial.print(",");
+    Serial.println(getPowerInVoltage(), 2);  // battery [V] (OpenCR core API)
 
     // Error report: on change, then repeat while any wheel is in error
     int16_t el = dxl_read_hw_error(WHEEL_LEFT_ID);
