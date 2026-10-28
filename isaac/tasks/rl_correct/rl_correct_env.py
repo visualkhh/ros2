@@ -121,6 +121,7 @@ class RlCorrectEnv(DirectRLEnv):
         super()._reset_idx(env_ids)
         n = len(env_ids)
         root_pos = self.robot.data.default_root_state.torch[env_ids, :3].clone()
+        root_pos[:, :2] += self.scene.env_origins[env_ids, :2]
         root_pos[:, 0] += sample_uniform(-2.0, 2.0, (n,), self.device)
         root_pos[:, 1] += sample_uniform(-2.0, 2.0, (n,), self.device)
         root_pos[:, 2] = 0.075
