@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import math
+import os
 import re
+import shutil
+import subprocess
 
 from ..defs import BACK, STAY
-from ..procs import SERVICES
+from ..procs import RUN_DIR, SERVICES, TOOL_DIR
 from ..terminal import DIM, GREEN, YELLOW
 from .base import Menu, MenuItem, Page
 
@@ -145,6 +148,32 @@ class BaseMenu(ServiceMenu):
                 self.term.paint(' 실기 드라이버는 TOOL_BASE_CMD 로 바꿈', DIM)]
 
 
+class RvizItem(MenuItem):
+    """이 컴퓨터에 RViz 창 띄우기 (tool/run-rviz <preset>) — CLI는 그대로 쓰면서 따로 창으로."""
+
+    key = 'v'
+
+    def __init__(self, app, preset: str):
+        super().__init__(app)
+        self.preset = preset
+
+    def label(self):
+        return f'RViz로 보기 ({self.preset})'
+
+    def run(self):
+        if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+            print('화면이 없는 터미널입니다 (SSH 등) — 화면이 있는 PC에서 ./run-rviz ' + self.preset)
+            return STAY
+        if shutil.which('pgrep') and subprocess.run(['pgrep', '-x', 'rviz2'], capture_output=True).returncode == 0:
+            print('RViz가 이미 떠 있습니다 — 다른 화면으로 바꾸려면 ./run-rviz restart ' + self.preset)
+            return STAY
+        log = open(RUN_DIR / 'rviz.log', 'w')
+        subprocess.Popen([str(TOOL_DIR / 'run-rviz'), self.preset], stdin=subprocess.DEVNULL,
+                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        print(f'RViz 여는 중 ({self.preset}) — 창이 뜨는 데 몇 초 · 로그 {RUN_DIR / "rviz.log"}')
+        return STAY
+
+
 # ---------------------------------------------------------------- SLAM
 class SaveMapItem(MenuItem):
     key = '3'
@@ -173,11 +202,10 @@ class SlamMenu(ServiceMenu):
     name = 'slam'
 
     def extra(self):
-        return [SaveMapItem(self.app)]
+        return [SaveMapItem(self.app), RvizItem(self.app, 'slam')]
 
     def hint(self):
-        return [self.term.paint(' 맵핑: 시작 → 텔레오퍼(메인 5)로 천천히 돌기 → 지도 저장', DIM),
-                self.term.paint(' 보기: PC에서 tool/run-rviz slam', DIM)]
+        return [self.term.paint(' 맵핑: 시작 → v) RViz로 보기 → 텔레오퍼(메인 5)로 천천히 돌기 → 지도 저장', DIM)]
 
 
 # ---------------------------------------------------------------- Nav
@@ -276,20 +304,21 @@ class NavMenu(ServiceMenu):
     def items(self):
         return [MapStartItem(self.app), StopItem(self.app, '1', self.name),
                 RestartItem(self.app, '2', self.name), InitPoseItem(self.app),
-                GoalItem(self.app), CancelGoalItem(self.app), LogItem(self.app, 'l', self.name)]
+                GoalItem(self.app), CancelGoalItem(self.app), RvizItem(self.app, 'nav'),
+                LogItem(self.app, 'l', self.name)]
 
     def hint(self):
         info = self.bus.procs.info('nav')
         return ([f' 지도: {info}'] if info else []) + [
             self.term.paint(' 순서: 시작 → 초기 위치 → 목표', DIM),
-            self.term.paint(' 보기: PC에서 tool/run-rviz nav', DIM)]
+            self.term.paint(' 보기: v) RViz로 보기', DIM)]
 
 
 class ExploreMenu(ServiceMenu):
     name = 'explore'
 
     def extra(self):
-        return [GoalItem(self.app), CancelGoalItem(self.app)]
+        return [GoalItem(self.app), CancelGoalItem(self.app), RvizItem(self.app, 'slam')]
 
     def hint(self):
         warn = [] if self.bus.procs.running('slam') else [

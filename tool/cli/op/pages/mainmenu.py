@@ -26,7 +26,7 @@ class MainMenu(Menu):
 
     def center(self):
         return self.bus.status_lines() + ['', self.term.paint(
-            ' 지도 보기: PC에서 tool/run-rviz slam · 주행 보기: tool/run-rviz nav', '\033[2m')]
+            ' 화면 보기: 3) SLAM · 4) Nav · 7) 메뉴의 v) RViz로 보기 (또는 ./run-rviz slam|nav)', '\033[2m')]
 
     def show(self) -> int:
         self.app.poll(0.6)
