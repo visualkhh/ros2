@@ -17,6 +17,8 @@ flowchart LR
   end
 
   subgraph PI["Raspberry Pi 4 — pak (tb3_bringup + tool)"]
+    SM["state_manager<br/>/state_mode · rl · estop"]
+    CM["cmd_manager<br/>(mux)"]
     DRV["opencr_driver"]
     RSP["robot_state_publisher<br/>(URDF)"]
     LIDAR["coin_d4_driver"]
@@ -32,6 +34,11 @@ flowchart LR
     RVIZ["RViz<br/>(tool/run-rviz)"]
   end
 
+  TELE -->|"/cmd_manual_vel"| CM
+  NAV -->|"/cmd_vel"| CM
+  SM -->|"/state_*"| CM
+  CM -->|"/cmd_vel_base"| DRV
+  CM <-.->|"rl on: /cmd_vel_rl_in · _out"| RL
   OPENCR <-->|"USB CDC /dev/opencr<br/>C·T·R ↓ · S·E ↑"| DRV
   LDS -->|"/dev/tb3_lidar 230400"| LIDAR
   LIDAR -->|"/scan_raw"| FILT
@@ -45,44 +52,50 @@ flowchart LR
   NAV -.->|"경로 · 코스트맵"| RVIZ
 ```
 
-## 2. 바퀴 명령 경로 — 3가지 bringup
+## 2. 바퀴 명령 경로 — state_manager · cmd_manager(mux)
 
-| launch | 어디서 | 띄우는 것 | 드라이버가 받는 토픽 |
+명령은 모두 **cmd_manager**를 거쳐 드라이버로 갑니다. 무엇을 보낼지는 **state_manager**의 상태(`/state_*`)가 정합니다.
+RL은 bringup을 바꾸지 않고 **실행 중에** `/cmd_manual_rl`로 켜고 끕니다.
+
+```mermaid
+flowchart LR
+  subgraph IN["명령 입력"]
+    MAN["/cmd_manual_vel<br/>텔레오퍼 · tool drive"]
+    NAV["/cmd_vel<br/>Nav2"]
+    REQ["/cmd_manual_mode · _rl · _estop<br/>tool · 사람"]
+    GOAL["/goal_pose<br/>RViz Nav2 Goal"]
+  end
+  SM["state_manager<br/>상태의 주인"]
+  CM["cmd_manager (mux)<br/>estop → 0<br/>MANUAL → 수동 · AUTO → Nav2"]
+  RL["[PC] rl_corrector<br/>(rl-only)"]
+  DRV["opencr_driver"]
+  REQ --> SM
+  GOAL -->|"→ AUTO"| SM
+  SM -->|"/state_mode · /state_rl · /state_estop (latched)"| CM
+  MAN --> CM
+  NAV --> CM
+  CM -->|"rl off: /cmd_vel_base"| DRV
+  CM -->|"rl on: /cmd_vel_rl_in"| RL
+  RL -->|"/cmd_vel_rl_out"| CM
+```
+
+| 상태 | 토픽 (latched) | 바꾸는 법 | 효과 |
 |---|---|---|---|
-| `tb-only.launch.py` | Pi | opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter | `cmd_vel` |
-| `tb-for-rl.launch.py` | Pi | tb-only와 같음 (`rl:=true`만 넘김) — **RL 노드는 안 띄움** | `cmd_vel_rl` |
-| `rl-only.launch.py` | PC | rl_corrector · eval_recorder — **로봇 노드는 안 띄움** | — |
+| 모드 | `/state_mode` = `MANUAL` · `AUTO` | `/cmd_manual_mode` · tool 텔레오퍼/drive → MANUAL · tool goal/RViz Goal → AUTO | MANUAL이면 `/cmd_manual_vel`만, AUTO면 Nav2 `/cmd_vel`만 바퀴로 |
+| RL | `/state_rl` = true/false | `/cmd_manual_rl` · `./run-cli rl on/off` · `tb-for-rl` = true로 시작 | true면 `/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out`을 거침 |
+| 비상정지 | `/state_estop` | `/cmd_manual_estop` · `./run-cli estop on/off` | true면 항상 0 |
 
-### tb-only — RL 없음 (보정 없이 그대로, PC 불필요)
+안전: 고른 입력이 0.5초 넘게 끊기면 0, RL 켰는데 `/cmd_vel_rl_out`이 0.3초 넘게 끊기면(PC 꺼짐·WiFi) 0.
+cmd_manager는 20 Hz로 계속 보내고, 드라이버(0.5초)와 펌웨어(500 ms watchdog)도 각자 멈춥니다.
 
-```mermaid
-flowchart LR
-  T["teleop / Nav2"] -->|"cmd_vel"| D["opencr_driver"] -->|"C,l,r 20Hz"| O["OpenCR"]
-```
+| launch | 어디서 | 띄우는 것 |
+|---|---|---|
+| `tb-only.launch.py` | Pi | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample (RL off로 시작) |
+| `tb-for-rl.launch.py` | Pi | tb-only를 **RL on으로 시작** (RL 노드는 안 띄움) |
+| `rl-only.launch.py` | PC | rl_corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) · eval_recorder — 로봇 노드는 안 띄움 |
+| `basic_bringup.launch.py` | PC 시험 | state_manager · cmd_manager · mock_base (OpenCR 없이 같은 명령 경로) |
 
-### tb-for-rl (Pi) + rl-only (PC) — RL 보정
-
-```mermaid
-flowchart LR
-  subgraph Pi
-    T["teleop / Nav2"]
-    D["opencr_driver"]
-    O["OpenCR"]
-  end
-  subgraph PC
-    C["rl_corrector<br/>cmd_vel → cmd_vel_rl"]
-    E["eval_recorder<br/>CSV"]
-  end
-  T -->|"cmd_vel"| C
-  T -->|"cmd_vel"| E
-  C -->|"cmd_vel_rl"| D
-  C -->|"cmd_vel_rl"| E
-  D -->|"C,l,r"| O
-  D -.->|"odom"| E
-```
-
-- PC가 꺼지거나 WiFi가 끊기면 `cmd_vel_rl`이 끊김 → 드라이버가 0.5초 뒤 0 → 펌웨어도 500 ms watchdog로 정지 (안전 쪽).
-- `nav2_rl_controller`(Nav2 내부 `cmd_vel_nav` 단계 보정)는 패키지만 있고 아직 launch에 연결 안 함.
+`nav2_rl_controller`(Nav2 내부 `cmd_vel_nav` 단계 보정)는 패키지만 있고 아직 launch에 연결 안 함.
 
 ## 3. TF 트리 (REP-105)
 
@@ -107,8 +120,12 @@ flowchart TD
 
 | 토픽 | 타입 | 내는 노드 | 받는 노드 |
 |---|---|---|---|
-| `/cmd_vel` | Twist | teleop · Nav2(`enable_stamped_cmd_vel: false`) · tool drive | opencr_driver(tb-only) · rl_corrector |
-| `/cmd_vel_rl` | Twist | rl_corrector (PC) | opencr_driver(tb-for-rl) · eval_recorder |
+| `/cmd_manual_vel` | Twist | tool teleop · drive | cmd_manager (MANUAL) |
+| `/cmd_vel` | Twist | Nav2 (`enable_stamped_cmd_vel: false`) | cmd_manager (AUTO) |
+| `/cmd_vel_base` | Twist | cmd_manager | opencr_driver · mock_base |
+| `/cmd_vel_rl_in` · `/cmd_vel_rl_out` | Twist | cmd_manager · rl_corrector (PC) | rl_corrector · cmd_manager · eval_recorder |
+| `/cmd_manual_mode` · `_rl` · `_estop` | String · Bool · Bool | tool · 사람 | state_manager |
+| `/state_mode` · `/state_rl` · `/state_estop` | String · Bool · Bool (latched) | state_manager | cmd_manager · tool |
 | `/odom` | Odometry | opencr_driver | slam_toolbox · Nav2 · eval_recorder · tool |
 | `/joint_states` | JointState | opencr_driver (effort = 전류 A) | robot_state_publisher |
 | `/diagnostics` | DiagnosticArray | opencr_driver (전류·온도·모터 에러) | tool · rqt |
@@ -131,7 +148,7 @@ flowchart TD
 
 | 패키지 | 내용 |
 |---|---|
-| `tb3_bringup` | `opencr_driver` · `mock_base` · launch 5개 · `config/robot.yaml` · `config/lidar.yaml` · URDF · 바퀴 메시 |
+| `tb3_bringup` | `state_manager` · `cmd_manager` · `opencr_driver` · `scan_resample` · `mock_base` · launch 5개 · `config/robot.yaml` · `config/lidar.yaml` · URDF · 바퀴 메시 |
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out` |
 | `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력 보정 (미연결) |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom CSV · `benchmark_onnx.py` |

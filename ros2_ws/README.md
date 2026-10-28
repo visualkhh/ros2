@@ -40,27 +40,33 @@ colcon build --symlink-install
 
 ## bringup (tb3_bringup)
 
+명령 경로와 상태는 [ARCH.md 2장](ARCH.md#2-바퀴-명령-경로--state_manager--cmd_managermux): 모든 바퀴 명령은 **cmd_manager(mux)** 를 거치고,
+무엇을 보낼지(MANUAL/AUTO · RL on/off · 비상정지)는 **state_manager** 의 `/state_*` 가 정합니다.
+
 | launch | 어디서 | 내용 |
 |---|---|---|
-| `tb-only.launch.py` | Pi | OpenCR 드라이버 + robot_state_publisher. `cmd_vel` → 바퀴 그대로 (보정 없음, PC 불필요) |
-| `tb-for-rl.launch.py` | Pi | 같지만 드라이버가 `cmd_vel_rl`을 받음 → PC의 rl-only가 있어야 움직임 (끊기면 정지) |
-| `rl-only.launch.py` | PC | RL 노드만: corrector(`cmd_vel` → `cmd_vel_rl`) + eval_recorder |
+| `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다. RL off로 시작 |
+| `tb-for-rl.launch.py` | Pi | tb-only를 RL on으로 시작 (PC의 rl-only가 있어야 움직임, 끊기면 정지) |
+| `rl-only.launch.py` | PC | RL 노드만: corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
-| `basic_bringup.launch.py` | PC | OpenCR 없이 시험: corrector + mock_base + eval |
+| `basic_bringup.launch.py` | PC | OpenCR 없이 시험: state_manager · cmd_manager · mock_base (같은 명령 경로) |
 
 ```bash
-# Pi — RL 없이
+# Pi
 ros2 launch tb3_bringup tb-only.launch.py
-# Pi + PC — RL 연동
-ros2 launch tb3_bringup tb-for-rl.launch.py                       # Pi
+# RL 켜기/끄기 (실행 중) — PC에서 rl-only를 먼저
 ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx   # PC
+ros2 topic pub --once /cmd_manual_rl std_msgs/msg/Bool "{data: true}"             # 또는 tool: ./run-cli rl on
+# 모드 · 비상정지
+ros2 topic pub --once /cmd_manual_mode std_msgs/msg/String "{data: AUTO}"         # ./run-cli mode auto
+ros2 topic pub --once /cmd_manual_estop std_msgs/msg/Bool "{data: true}"          # ./run-cli estop on
 ```
 
-`opencr_driver` (`tb3_bringup/opencr_driver_node.py`): `cmd_vel` → `C,l,r` (20Hz 재전송), `S` → `/odom` · TF `odom→base_link` ·
+`opencr_driver` (`tb3_bringup/opencr_driver_node.py`): `/cmd_vel_base` → `C,l,r` (20Hz 재전송), `S` → `/odom` · TF `odom→base_footprint` ·
 `/joint_states`(effort=전류 A) · `/diagnostics`(전류·온도·모터 에러). `E` 에러 시 `ros2 topic pub --once /opencr/reboot std_msgs/msg/Empty`.
 파라미터: `config/robot.yaml` (바퀴 반지름·간격·좌우 방향 부호).
 
-로봇 모델: `urdf/robot.urdf.xacro` — TB3 Burger 개조(맨 위 판 제거, 라이다 1층 앞). 실측 값은 파일 위쪽 property에.
+로봇 모델: `urdf/robot.urdf.xacro` — TB3 Waffle Pi 개조(맨 위 판 제거, 라이다 1층 앞). 실측 값은 파일 위쪽 property에.
 
 ## 기본 주행 (실기 없이 PC에서)
 

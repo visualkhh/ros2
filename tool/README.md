@@ -89,12 +89,16 @@ cd ~/ros2/tool                  # (저장소 위치)
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
 ./run-cli nodes
 ./run-cli reboot-motors        # 모터 에러(E) 해제 — 두 바퀴 재부팅 (/opencr/reboot)
+./run-cli mode manual|auto      # 누가 운전: 텔레오퍼 / Nav2 (텔레오퍼·drive는 MANUAL, goal·RViz Goal은 AUTO로 자동 전환)
+./run-cli rl on|off             # 바퀴 명령이 PC RL(rl-only)을 거치게 — on이면 PC rl-only 필요
+./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
 ./run-cli stop-all              # 바퀴 정지 → 띄운 것 전부 종료
 ./run-cli stop                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
 ```
 
 상단 상태바 3줄: ① 프로세스(이 컴퓨터 기준) ② `odom`·`scan`·`map` 수신 Hz ③ **로봇** — opencr_driver의 `/diagnostics`
 (● ok / ✗ motor error·no S line / ? 수신 없음 · 바퀴 온도 좌/우 · 전류 좌/우). 모터 에러면 `1) 상태 → 2) 모터 재부팅`.
+그 아래 줄 = state_manager의 `/state_*`: `모드 MANUAL · RL off · 비상정지 off` (비상정지면 빨강). 전환은 `1) 상태 → 3·4·5`.
 
 CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
 로그: `./run-cli slam log` 또는 `.run/slam.log`.
@@ -112,8 +116,8 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). �
 
 | 변수 | 기본 | 뜻 |
 |---|---|---|
-| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL 연동은 `tb-for-rl.launch.py`, PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
-| `TOOL_CMD_VEL` | `/cmd_vel` | 텔레오퍼·drive가 내는 토픽 |
+| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL on으로 시작은 `tb-for-rl.launch.py` (실행 중엔 `./run-cli rl on`), PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
+| `TOOL_CMD_VEL` | `/cmd_manual_vel` | 텔레오퍼·drive가 내는 토픽 (cmd_manager 수동 입력) |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) |
 | `TOOL_SLAM_PARAMS` / `TOOL_NAV_PARAMS` | `config/*.yaml` | 파라미터 파일 |

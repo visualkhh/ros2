@@ -1,30 +1,17 @@
-"""Basic bringup: corrector(passthrough) + mock base + eval recorder.
+"""Basic bringup (PC test, no OpenCR): state_manager + cmd_manager + mock base.
 
-Chain: teleop(cmd_vel_raw) -> corrector -> cmd_vel -> mock_base -> odom
-Run teleop separately (needs keyboard stdin):
-  ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=cmd_vel_raw
+Same command path as the robot (tb-only) with mock_base in place of opencr_driver:
+  /cmd_manual_vel (teleop) · /cmd_vel (Nav2) -> cmd_manager -> /cmd_vel_base -> mock_base -> odom
+RL: ros2 launch tb3_bringup rl-only.launch.py + /cmd_manual_rl true (tool: ./run-cli rl on).
 """
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    corrector = Node(
-        package='rl_correction',
-        executable='corrector',
-        name='rl_corrector',
-        remappings=[('cmd_vel_in', 'cmd_vel_raw'), ('cmd_vel_out', 'cmd_vel')],
-        parameters=[{'enable': False, 'model_path': ''}],
-    )
-    mock_base = Node(
-        package='tb3_bringup',
-        executable='mock_base',
-        name='mock_base',
-    )
-    eval_recorder = Node(
-        package='rl_eval',
-        executable='eval_recorder',
-        name='eval_recorder',
-        parameters=[{'output': '/tmp/basic.csv', 'label': 'basic'}],
-    )
-    return LaunchDescription([corrector, mock_base, eval_recorder])
+    return LaunchDescription([
+        Node(package='tb3_bringup', executable='state_manager', name='state_manager'),
+        Node(package='tb3_bringup', executable='cmd_manager', name='cmd_manager'),
+        Node(package='tb3_bringup', executable='mock_base', name='mock_base',
+             remappings=[('cmd_vel', 'cmd_vel_base')]),
+    ])

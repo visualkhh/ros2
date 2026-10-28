@@ -4,8 +4,8 @@
   ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx
   ros2 launch tb3_bringup rl-only.launch.py label:=after output:=/tmp/after.csv
 
-흐름: teleop/Nav2(Pi) -> cmd_vel -> [PC] corrector -> cmd_vel_rl -> (Pi) opencr_driver
-로봇은 tb-for-rl.launch.py 로 떠 있어야 한다. 같은 ROS_DOMAIN_ID(25)·같은 WiFi.
+흐름: (Pi) cmd_manager -> /cmd_vel_rl_in -> [PC] corrector -> /cmd_vel_rl_out -> (Pi) cmd_manager -> 드라이버
+로봇은 RL 켠 상태여야 한다 (tb-for-rl.launch.py 또는 ./run-cli rl on). 같은 ROS_DOMAIN_ID(25)·같은 WiFi.
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -21,10 +21,10 @@ def generate_launch_description():
         DeclareLaunchArgument('label', default_value='rl'),
         DeclareLaunchArgument('output', default_value='/tmp/rl_eval.csv'),
         Node(package='rl_correction', executable='corrector', name='rl_corrector',
-             remappings=[('cmd_vel_in', 'cmd_vel'), ('cmd_vel_out', 'cmd_vel_rl')],
+             remappings=[('cmd_vel_in', 'cmd_vel_rl_in'), ('cmd_vel_out', 'cmd_vel_rl_out')],
              parameters=[{'enable': arg('enable'), 'model_path': arg('model')}],
              output='screen'),
         Node(package='rl_eval', executable='eval_recorder', name='eval_recorder',
-             remappings=[('cmd_vel_raw', 'cmd_vel'), ('cmd_vel', 'cmd_vel_rl')],
+             remappings=[('cmd_vel_raw', 'cmd_vel_rl_in'), ('cmd_vel', 'cmd_vel_rl_out')],
              parameters=[{'output': arg('output'), 'label': arg('label')}]),
     ])

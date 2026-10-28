@@ -12,7 +12,8 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, Twi
 from .procs import MAP_DIR, SERVICES, Procs
 from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 
-CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_vel')
+# 수동 주행 명령은 cmd_manager(mux)의 수동 입력으로 — /state_mode=MANUAL일 때만 바퀴로 감 (ARCH.md)
+CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
 # Nav2(Lyrical)는 TwistStamped를 낸다. mock_base·자체 드라이버가 Twist면 0.
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
 
@@ -33,6 +34,10 @@ class Bus:
         self._init_pub = node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         from std_msgs.msg import Empty
         self._reboot_pub = node.create_publisher(Empty, '/opencr/reboot', 10)
+        from std_msgs.msg import Bool, String
+        self._req = {'mode': (node.create_publisher(String, '/cmd_manual_mode', 10), String),
+                     'rl': (node.create_publisher(Bool, '/cmd_manual_rl', 10), Bool),
+                     'estop': (node.create_publisher(Bool, '/cmd_manual_estop', 10), Bool)}
         self._nav_client = None
         self._goal_handle = None
 
@@ -60,7 +65,7 @@ class Bus:
         for _, label, on, extra in self.service_rows():
             mark = self.term.paint('●', GREEN) if on else self.term.paint('○', DIM)
             lines.append(f' {mark} {label + ' ' * max(0, 16 - self.term.disp_len(label))} {extra}')
-        lines += ['', '[로봇]', f' {self.state.robot_txt()}']
+        lines += ['', '[로봇]', f' {self.state.robot_txt()}', f' {self.state.domain_txt()}']
         lines += ['', '[토픽]',
                   f' odom  {self.state.odom_txt()}',
                   f' scan  {self.state.scan_txt()}',
@@ -146,6 +151,50 @@ class Bus:
         print(msg)
         return 0 if ok else 1
 
+    # ------------------------------------------------------------- 상태 요청 (state_manager)
+    def request(self, key: str, value) -> bool:
+        """/cmd_manual_<key> 발행 → /state_<key>가 그 값이 될 때까지 (최대 3초) 기다림."""
+        pub, typ = self._req[key]
+        end = time.monotonic() + 5.0  # 방금 만든 발행자 — state_manager와 연결될 때까지
+        while pub.get_subscription_count() == 0 and time.monotonic() < end:
+            self._poll(0.2)
+        if pub.get_subscription_count() == 0:
+            print(self.term.paint('state_manager 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
+            return False
+        pub.publish(typ(data=value))
+        end = time.monotonic() + 3.0
+        while getattr(self.state, f'st_{key}') != value and time.monotonic() < end:
+            self._poll(0.1)
+        return getattr(self.state, f'st_{key}') == value
+
+    def ensure_mode(self, mode: str) -> None:
+        """주행 명령 전에 모드 맞추기 (텔레오퍼·drive = MANUAL, 목표 = AUTO). 이미 그 모드면 아무것도 안 함."""
+        end = time.monotonic() + 2.0  # 새로 켠 CLI는 latched /state_mode를 받기 전 — 잠깐 기다림
+        while self.state.st_mode is None and time.monotonic() < end:
+            self._poll(0.1)
+        if self.state.st_mode != mode and self.request('mode', mode):
+            print(f'모드 → {mode}')
+
+    def cmd_mode(self, args) -> int:
+        ok = self.request('mode', args.value.upper())
+        print(f'모드: {self.state.st_mode}' if ok else self.term.paint('모드 변경 실패', RED))
+        return 0 if ok else 1
+
+    def cmd_rl(self, args) -> int:
+        ok = self.request('rl', args.value == 'on')
+        if ok and self.state.st_rl:
+            print('RL 켬 — PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 떠 있어야 바퀴가 움직입니다')
+        print(f'RL: {"on" if self.state.st_rl else "off"}' if ok else self.term.paint('RL 변경 실패', RED))
+        return 0 if ok else 1
+
+    def cmd_estop(self, args) -> int:
+        on = args.value == 'on'
+        if on:
+            self.send_velocity(0.0, 0.0)
+        ok = self.request('estop', on)
+        print(f'비상정지: {"ON" if self.state.st_estop else "OFF"}' if ok else self.term.paint('비상정지 변경 실패', RED))
+        return 0 if ok else 1
+
     # ------------------------------------------------------------- 주행
     def send_velocity(self, linear: float, angular: float) -> None:
         if CMD_VEL_STAMPED:
@@ -161,6 +210,7 @@ class Bus:
         self.state.last_cmd = (linear, angular)
 
     def cmd_drive(self, args) -> int:
+        self.ensure_mode('MANUAL')
         v = {'forward': args.speed, 'back': -args.speed}.get(args.direction, 0.0)
         w = {'left': args.angular, 'right': -args.angular}.get(args.direction, 0.0)
         end = time.monotonic() + (args.duration if args.direction != 'stop' else 0.0)
@@ -179,6 +229,7 @@ class Bus:
         if not sys.stdin.isatty():
             print('거부: teleop은 터미널에서 실행해야 합니다', file=sys.stderr)
             return 2
+        self.ensure_mode('MANUAL')
         from .dialogs import KeyReader
         linear = angular = 0.0
         lin_speed, ang_speed = args.linear, args.angular
@@ -289,6 +340,7 @@ class Bus:
         if not client.server_is_ready():
             print(self.term.paint('navigate_to_pose 서버 없음 — Nav 또는 SLAM 중 Nav를 먼저 켜세요', RED))
             return 1
+        self.ensure_mode('AUTO')  # Nav2 /cmd_vel은 AUTO일 때만 바퀴로 감
         goal = NavigateToPose.Goal()
         goal.pose = PoseStamped()
         goal.pose.header.frame_id = 'map'

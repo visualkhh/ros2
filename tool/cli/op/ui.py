@@ -225,5 +225,7 @@ class Ui:
         mark = {0: '●', 1: '▲', 2: '✗'}.get(level, '?')
         hint = ' → 상태 메뉴 2) 모터 재부팅' if level == 2 and 'motor error' in st.robot_msg else ''
         lines.append(f'  {self.term.paint(f"로봇 {mark} {summary}{hint}", color)}')
+        dom_color = RED + BOLD if st.st_estop else (YELLOW if st.st_mode is None else CYAN)
+        lines.append(f'  {self.term.paint(st.domain_txt(), dom_color)}')
         lines.append('-' * width)
         return lines

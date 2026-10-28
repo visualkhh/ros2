@@ -1,6 +1,8 @@
 """상태 화면 — 2초마다 갱신되는 요약 + 한 번 출력."""
 from __future__ import annotations
 
+import argparse
+
 from ..defs import STAY
 from .base import Menu, MenuItem
 
@@ -32,11 +34,44 @@ class RebootMotorsItem(MenuItem):
         return STAY
 
 
+class ToggleItem(MenuItem):
+    """모드·RL·비상정지 전환 — state_manager에 /cmd_manual_* 요청."""
+
+    def __init__(self, app, key: str, what: str):
+        super().__init__(app)
+        self.key = key
+        self.what = what
+
+    def label(self):
+        st = self.state
+        return {'mode': f'모드 전환 (지금 {st.st_mode or "?"})',
+                'rl': f'RL 보정 {"끄기" if st.st_rl else "켜기"}',
+                'estop': f'비상정지 {"해제" if st.st_estop else "ON"}'}[self.what]
+
+    def run(self):
+        st = self.state
+        if self.what == 'mode':
+            value = 'AUTO' if st.st_mode == 'MANUAL' else 'MANUAL'
+            self.bus.cmd_mode(argparse.Namespace(value=value))
+        elif self.what == 'rl':
+            body = ['켜면 바퀴 명령이 PC의 rl-only(rl_corrector)를 거칩니다.',
+                    'PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 없으면 바퀴가 멈춥니다.']
+            if st.st_rl or self.ui.confirm('RL 보정을 켤까요?', body=body):
+                self.bus.cmd_rl(argparse.Namespace(value='off' if st.st_rl else 'on'))
+        elif st.st_estop:
+            if self.ui.confirm('비상정지를 해제할까요?', body=['해제하면 다시 명령대로 움직입니다.']):
+                self.bus.cmd_estop(argparse.Namespace(value='off'))
+        else:
+            self.bus.cmd_estop(argparse.Namespace(value='on'))  # ON은 확인 없이 바로
+        return STAY
+
+
 class StatusMenu(Menu):
     title = '상태'
 
     def items(self):
-        return [PrintStatusItem(self.app), RebootMotorsItem(self.app)]
+        return [PrintStatusItem(self.app), RebootMotorsItem(self.app), ToggleItem(self.app, '3', 'mode'),
+                ToggleItem(self.app, '4', 'rl'), ToggleItem(self.app, '5', 'estop')]
 
     def center(self):
         return self.bus.status_lines() + [

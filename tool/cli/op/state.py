@@ -43,6 +43,9 @@ class StateStore:
         self.robot_msg = ''
         self.robot_vals: dict[str, str] = {}                       # 전류·온도·uptime·jumps
         self.last_cmd: tuple[float, float] = (0.0, 0.0)
+        self.st_mode: str | None = None                            # state_manager /state_* (None = 수신 없음)
+        self.st_rl: bool | None = None
+        self.st_estop: bool | None = None
 
     @staticmethod
     def yaw(q) -> float:
@@ -128,6 +131,12 @@ class StateStore:
 
     def robot_txt(self) -> str:
         return self.robot_parts()[1]
+
+    def domain_txt(self) -> str:
+        if self.st_mode is None:
+            return '상태 없음 (state_manager 꺼짐?)'
+        return (f'모드 {self.st_mode} · RL {"on" if self.st_rl else "off"} · '
+                f'비상정지 {"ON" if self.st_estop else "off"}')
 
     def amcl_txt(self) -> str:
         if self.amcl is None:

@@ -28,6 +28,8 @@ setup(
             'mock_base = tb3_bringup.mock_base_node:main',
             'opencr_driver = tb3_bringup.opencr_driver_node:main',
             'scan_resample = tb3_bringup.scan_resample_node:main',
+            'state_manager = tb3_bringup.state_manager_node:main',
+            'cmd_manager = tb3_bringup.cmd_manager_node:main',
         ],
     },
 )

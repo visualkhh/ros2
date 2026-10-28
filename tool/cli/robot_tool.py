@@ -75,6 +75,10 @@ class RobotTool(Node):
         self.create_subscription(OccupancyGrid, '/map', self.state.on_map, LATCHED)
         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.state.on_amcl, LATCHED)
         self.create_subscription(DiagnosticArray, '/diagnostics', self.state.on_diagnostics, 10)
+        from std_msgs.msg import Bool, String
+        for key, typ in (('mode', String), ('rl', Bool), ('estop', Bool)):
+            self.create_subscription(typ, f'/state_{key}',
+                                     lambda m, k=key: setattr(self.state, f'st_{k}', m.data), LATCHED)
 
     def screen(self, name: str):
         from op import pages
@@ -163,6 +167,11 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument('--cancel', action='store_true', help='이 CLI가 보낸 목표 취소')
 
     sub.add_parser('nodes', help='보이는 ROS 노드 목록')
+    for name, choices, help_ in (('mode', ('manual', 'auto'), '누가 운전: manual=텔레오퍼 · auto=Nav2 (/cmd_manual_mode)'),
+                                 ('rl', ('on', 'off'), 'RL 보정 거치기 (/cmd_manual_rl) — on이면 PC rl-only 필요'),
+                                 ('estop', ('on', 'off'), '비상정지 (/cmd_manual_estop)')):
+        p = sub.add_parser(name, help=help_)
+        p.add_argument('value', type=str.lower, choices=choices)
     sub.add_parser('reboot-motors', help='모터 에러 해제 — 두 바퀴 재부팅 (/opencr/reboot)')
     sub.add_parser('stop-all', help='띄운 것 전부 종료 (바퀴 정지 먼저)')
     return parser

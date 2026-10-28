@@ -1,10 +1,11 @@
-"""tb-for-rl — 로봇(Pi) 쪽만, PC RL 보정을 받아 움직임 (RL 노드는 안 띄움): tb-only와 같지만 드라이버가 cmd_vel_rl(PC 보정 결과)을 받는다.
+"""tb-for-rl — tb-only를 RL 켠 상태(/state_rl=true)로 시작 (RL 노드는 안 띄움 — PC의 rl-only가 보정).
+   실행 중에 바꾸려면 tb-only로 띄우고 /cmd_manual_rl (tool: ./run-cli rl on|off).
 
   ros2 launch tb3_bringup tb-for-rl.launch.py            # Pi
   ros2 launch tb3_bringup rl-only.launch.py          # PC (같은 ROS_DOMAIN_ID=25, 같은 WiFi)
 
-흐름: teleop/Nav2(Pi) -> cmd_vel -> [PC] corrector -> cmd_vel_rl -> (Pi) opencr_driver
-PC가 없거나 WiFi가 끊기면 cmd_vel_rl이 안 와서 바퀴가 선다 (안전 쪽).
+흐름: cmd_manager -> /cmd_vel_rl_in -> [PC] corrector -> /cmd_vel_rl_out -> cmd_manager -> /cmd_vel_base -> 드라이버
+PC가 없거나 WiFi가 끊기면 cmd_vel_rl_out이 끊겨 cmd_manager가 0을 보낸다 (안전 쪽).
 """
 import os
 
