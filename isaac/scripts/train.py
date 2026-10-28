@@ -63,9 +63,32 @@ def main():
     runner = OnPolicyRunner(env, agent_dict, log_dir=log_dir, device=agent_cfg.device)
     runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
 
-    from isaaclab_rl.rsl_rl.exporter import export_policy_as_onnx  # noqa: E402
+    import copy  # noqa: E402
 
-    export_policy_as_onnx(runner.alg.actor_critic, normalizer=None, path=log_dir, filename=f"{exp_name}.onnx")
+    actor = runner.alg._raw_actor
+    actor.eval()
+
+    class ActorExport(torch.nn.Module):  # noqa: E402
+        def __init__(self):
+            super().__init__()
+            self.norm = copy.deepcopy(actor.obs_normalizer)
+            self.mlp = copy.deepcopy(actor.mlp)
+            self.dist = copy.deepcopy(actor.distribution)
+
+        def forward(self, x):
+            return self.dist.deterministic_output(self.mlp(self.norm(x)))
+
+    obs_dim = actor.mlp[0].in_features
+    wrapper = ActorExport().eval().to("cuda")
+    torch.onnx.export(
+        wrapper,
+        torch.zeros(1, obs_dim, device="cuda"),
+        os.path.join(log_dir, f"{exp_name}.onnx"),
+        input_names=["obs"],
+        output_names=["actions"],
+        opset_version=18,
+        dynamo=False,
+    )
     print(f"[train] exported {log_dir}/{exp_name}.onnx")
     env.close()
 
