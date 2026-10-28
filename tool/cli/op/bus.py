@@ -20,9 +20,13 @@ CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
 # 수동 주행 속도 상한 (텔레오퍼 e · 메뉴 속도 설정) — Waffle Pi 사양 = 펌웨어 바퀴 상한 8 rad/s × 0.033 m
 MAX_LIN, MAX_ANG = 0.26, 1.82
-# 텔레오퍼 키 → (전후, 회전) 방향. 사선 = 전진/후진하며 회전 (teleop_twist_keyboard와 같은 부호: 후진 사선은 회전 부호 반대)
+# 텔레오퍼 키 → (전후, 회전) 방향. 사선(둘 다 0 아님) = 설정 선속도 그대로 + 반경 DIAG_RADIUS 원호
+#   (ω = v / R → 속도를 바꿔도 휘는 모양이 같음). 0.20 m/s까지 속도 그대로, 그 위는 바깥 바퀴가 상한이라
+#   opencr_driver가 두 바퀴를 같은 비율로 줄임 (모양 유지).
+# 후진 사선은 회전 부호 반대 (teleop_twist_keyboard와 같음: z = 뒤로 가며 왼쪽으로 휘어짐)
 TELEOP_MOVES = {'w': (1, 0), 'x': (-1, 0), 'a': (0, 1), 'd': (0, -1), 's': (0, 0),
                 'q': (1, 1), 'e': (1, -1), 'z': (-1, -1), 'c': (-1, 1)}
+DIAG_RADIUS = 0.5   # [m] 사선 원호 반경
 DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
 
@@ -354,7 +358,8 @@ class Bus:
         try:
             with KeyReader(self.term) as keys:
                 while rclpy.ok():
-                    linear, angular = move[0] * lin_speed, move[1] * ang_speed
+                    linear = move[0] * lin_speed
+                    angular = move[1] * (lin_speed / DIAG_RADIUS if move[0] else ang_speed)
                     key_txt = f'키 {last_key} ×{key_count}' if key_count else '키 입력 대기 중'
                     box.lines = [box.title,
                                 f'명령 v={linear:+.2f} m/s ω={angular:+.2f} rad/s',

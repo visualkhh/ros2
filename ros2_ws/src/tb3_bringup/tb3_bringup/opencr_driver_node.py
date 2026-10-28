@@ -38,6 +38,17 @@ def err_text(code: int) -> str:
     return '+'.join(name for bit, name in ERR_BITS.items() if code & bit) or str(code)
 
 
+def wheel_speeds(v: float, w: float, r: float, sep: float, max_wheel: float) -> tuple[float, float]:
+    """Twist -> (left, right) wheel rad/s. If one wheel would exceed max_wheel, scale BOTH by the same ratio
+    so the arc keeps its shape (firmware clips each wheel alone -> a fast arc turns into a pivot on the inner wheel)."""
+    wl = (v - w * sep / 2.0) / r
+    wr = (v + w * sep / 2.0) / r
+    peak = max(abs(wl), abs(wr))
+    if max_wheel > 0.0 and peak > max_wheel:
+        wl, wr = wl * max_wheel / peak, wr * max_wheel / peak
+    return wl, wr
+
+
 class OpencrDriver(Node):
     def __init__(self):
         super().__init__('opencr_driver')
@@ -46,6 +57,7 @@ class OpencrDriver(Node):
         self.baud = p('baud', 115200).value
         self.r = p('wheel_radius', 0.033).value            # TB3 Waffle Pi
         self.sep = p('wheel_separation', 0.287).value      # TB3 Waffle Pi
+        self.max_wheel = p('max_wheel_speed', 8.0).value     # [rad/s] = firmware VEL_LIMIT_RAD_S (0.26 m/s)
         # Mounting direction per wheel. TB3 mounts the motors mirrored -> right = -1.
         # Check: ./run-cli drive forward → both wheels must roll forward.
         self.dir_l = p('left_dir', 1.0).value
@@ -139,10 +151,7 @@ class OpencrDriver(Node):
 
     # ------------------------------------------------------------ commands
     def on_cmd(self, msg: Twist) -> None:
-        v, w = msg.linear.x, msg.angular.z
-        wl = (v - w * self.sep / 2.0) / self.r
-        wr = (v + w * self.sep / 2.0) / self.r
-        self.cmd = (wl, wr)
+        self.cmd = wheel_speeds(msg.linear.x, msg.angular.z, self.r, self.sep, self.max_wheel)
         self.last_cmd = time.monotonic()
 
     def send_cmd(self) -> None:
