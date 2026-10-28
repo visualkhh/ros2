@@ -83,7 +83,17 @@ class Bus:
         return 0
 
     # ------------------------------------------------------------- 프로세스
+    def base_ready(self) -> bool:
+        """SLAM·Nav는 베이스(odom·scan·TF·로봇 모델)가 있어야 의미가 있음 — 없으면 안내하고 False."""
+        if self.procs.running('base'):
+            return True
+        print(self.term.paint('베이스가 꺼져 있음 — 먼저 ./run-cli base start (메뉴 2) 베이스 → 1) 시작)', RED))
+        print('  (베이스 없이 SLAM·Nav를 켜면 odom·scan이 없어 지도·RViz에 아무것도 안 나옵니다)')
+        return False
+
     def start(self, name: str, map_yaml: str | None = None) -> int:
+        if name != 'base' and not self.base_ready():
+            return 1
         ok, msg = self.procs.start(name, map_yaml)
         print(msg)
         return 0 if ok else 1
@@ -234,6 +244,8 @@ class Bus:
             ok = self.request('control', 'MANUAL')
             print('자동 맵핑 중지 → MANUAL (지도 저장: ./run-cli map save 이름)' if ok else self.term.paint('중지 실패', RED))
             return 0 if ok else 1
+        if not self.base_ready():
+            return 1
         for name in ('slam', 'explore'):
             if not self.procs.running(name):
                 ok, msg = self.procs.start(name)
