@@ -36,12 +36,65 @@ class RebootMotorsItem(MenuItem):
 
 class BeepItem(MenuItem):
     key = '6'
+    shows_busy = False
 
     def label(self):
-        return '비프음 (삑)'
+        return '비프음 (삑·톤·타이핑)'
+
+    def run(self):
+        return BeepMenu(self.app).show()
+
+
+class BeepMenu(Menu):
+    title = '비프음'
+
+    def items(self):
+        return [BeepNowItem(self.app), BeepToneItem(self.app), SayItem(self.app)]
+
+    def center(self):
+        return ['/cmd_beep(삑) · /cmd_beep_tone(높이·길이) · /cmd_say(문자열→삑) — cmd_manager 경유']
+
+
+class BeepNowItem(MenuItem):
+    key = '1'
+
+    def label(self):
+        return '삑 (기본음)'
 
     def run(self):
         self.bus.cmd_beep(None)
+        return STAY
+
+
+class BeepToneItem(MenuItem):
+    key = '2'
+
+    def label(self):
+        return '높이·길이 지정'
+
+    def run(self):
+        raw = self.ui.modal_input('부저 톤', ['Hz 100~8000 · ms 10~2000 (예: 2000 300)'], 'Hz ms: ')
+        if raw is None:
+            return STAY
+        parts = raw.split()
+        if len(parts) != 2:
+            print(f'두 숫자: {raw!r} (예: 2000 300)')
+            return STAY
+        self.bus.cmd_beep(argparse.Namespace(value=list(parts)))
+        return STAY
+
+
+class SayItem(MenuItem):
+    key = '3'
+
+    def label(self):
+        return '타이핑삑 (한/영 → 삑)'
+
+    def run(self):
+        text = self.ui.modal_input('타이핑삑', ['한글·영문·숫자·띄어쓰기 → 자모별 주파수 삑'], '글: ')
+        if not text:
+            return STAY
+        self.bus.say_text(text)
         return STAY
 
 

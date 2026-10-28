@@ -403,7 +403,7 @@ class Bus:
                                 f'map  {self.state.map_txt()}',
                                 f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
                                 self.term.paint('w/x/a/d·방향키 이동 · q/e/z/c 사선 · s/space 정지', DIM),
-                                self.term.paint('-/= 속도± · b 삑 · t 타이핑삑 · Esc 종료', DIM)]
+                                self.term.paint('-/= 속도± · b 삑 · Esc 종료', DIM)]
                     box.draw('key')
                     now = time.monotonic()
                     if now - last_send >= 0.1:
@@ -422,19 +422,6 @@ class Bus:
                         move = TELEOP_MOVES[key]
                     elif key == 'b':
                         self._beep_pub.publish(Empty())
-                    elif key == 't':   # 타이핑삑: 정지 후 한 줄 입력 → 자모별 주파수 삑
-                        move = (0, 0)
-                        self.send_velocity(0.0, 0.0)
-                        keys.suspend()
-                        try:
-                            print()
-                            text = input('삑으로 보낼 글 (한/영): ').strip()
-                        except (EOFError, KeyboardInterrupt):
-                            text = ''
-                        finally:
-                            keys.resume()
-                        if text:
-                            self.say_text(text)
                     elif key in ('=', '+'):   # 상한 = Waffle Pi 사양
                         lin_speed, ang_speed = min(lin_speed + 0.05, MAX_LIN), min(ang_speed + 0.3, MAX_ANG)
                     elif key in ('-', '_'):
