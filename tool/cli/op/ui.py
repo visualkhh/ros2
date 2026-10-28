@@ -22,6 +22,9 @@ class Ui:
         self._poll = poll
         self._sel_idx = 0
         self._frame_size = None
+        self._busy = None   # 지금 떠 있는 처리 중 창 (메뉴 항목 실행 동안)
+        if hasattr(procs, 'on_wait'):
+            procs.on_wait = self._remote_wait
 
     def capture(self):
         """with 블록 안의 print()를 가로챈다. 메뉴 실행 결과를 결과창에 넣기용.
@@ -92,7 +95,17 @@ class Ui:
         import sys
         if not sys.stdout.isatty():
             return
-        Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM)]).draw('key')
+        self._busy = Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM)])
+        self._busy.draw('key')
+
+    def _remote_wait(self, elapsed: float) -> None:
+        """SSH로 로봇에서 실행되는 동안 처리 중 창에 경과 초 (로봇 run-cli는 ~8초 걸림)."""
+        dlg = self._busy
+        if dlg is None:
+            return
+        spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[int(elapsed * 4) % 10]
+        dlg.lines = dlg.lines[:3] + [self.term.paint(f'{spin} 로봇({self.procs.host})에서 실행 중 … {elapsed:.0f}초 (보통 8~15초)', DIM)]
+        dlg.draw('key')
 
     def modal_key(self, title: str, body: list[str]) -> str | None:
         """단일 키 확인 — Enter='enter' · Esc/◀=None · 문자 그대로."""

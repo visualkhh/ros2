@@ -61,7 +61,7 @@ class RobotTool(Node):
         self.procs = make_procs(self)   # 로봇이 아니면 RemoteProcs (SSH + 노드 그래프)
         self.ui = Ui(self.term, self.state, self.procs, self.poll)
         self.bus = Bus(self, self.state, self.ui, self.term)
-        self.drive_cfg = {'linear': 0.10, 'angular': 0.5, 'duration': 1.0}
+        self.drive_cfg = {'linear': 0.15, 'angular': 0.8, 'duration': 1.0}
         self._wire()
 
     def poll(self, seconds: float = 0.2):
@@ -149,8 +149,8 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument('name', nargs='?', help='save 이름 (기본: 날짜_시각)')
 
     t = sub.add_parser('teleop', help='키보드 수동 주행')
-    t.add_argument('--linear', type=_positive, default=0.10, help='선속도 [m/s] (기본 0.10)')
-    t.add_argument('--angular', type=_positive, default=0.5, help='각속도 [rad/s] (기본 0.5)')
+    t.add_argument('--linear', type=_positive, default=0.15, help='선속도 [m/s] (기본 0.15 · e/c로 ±, 최대 0.26)')
+    t.add_argument('--angular', type=_positive, default=0.8, help='각속도 [rad/s] (기본 0.8 · 최대 1.82)')
 
     d = sub.add_parser('drive', help='정해진 시간만큼 이동')
     d.add_argument('direction', type=str.lower, choices=('forward', 'back', 'left', 'right', 'stop'))

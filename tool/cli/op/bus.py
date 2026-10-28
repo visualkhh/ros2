@@ -17,6 +17,8 @@ from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
 # Nav2(Lyrical)는 TwistStamped를 낸다. cmd_manager·드라이버가 Twist라 0.
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
+# 텔레오퍼 e 상한 — TurtleBot3 Waffle Pi 사양 (펌웨어도 바퀴 속도를 따로 자름)
+MAX_LIN, MAX_ANG = 0.26, 1.82
 
 
 def yaw_quat(yaw: float):
@@ -330,7 +332,7 @@ class Bus:
                                 f'scan {self.state.scan_txt()}',
                                 f'map  {self.state.map_txt()}',
                                 f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
-                                self.term.paint('w/x/a/d·방향키 이동 · s/space 정지 · e/c 속도 · q/Esc 종료', DIM)]
+                                self.term.paint('w/x/a/d·방향키 이동 · s/space 정지 · e/c 속도± · q/Esc 종료', DIM)]
                     con.write(f'\033[{top};{left}H┌' + '─' * (w - 2) + '┐')
                     for i, line in enumerate(rows_txt):
                         con.write(f'\033[{top + 1 + i};{left}H│' + self.term.fit(line, w - 2) + '│')
@@ -359,10 +361,13 @@ class Bus:
                         linear, angular = 0.0, -ang_speed
                     elif key == 's':
                         linear = angular = 0.0
-                    elif key == 'e':
-                        lin_speed = min(lin_speed + 0.05, 0.30)
+                    elif key == 'e':   # Waffle Pi 사양 최대 0.26 m/s · 1.82 rad/s
+                        lin_speed, ang_speed = min(lin_speed + 0.05, MAX_LIN), min(ang_speed + 0.3, MAX_ANG)
                     elif key == 'c':
-                        lin_speed = max(lin_speed - 0.05, 0.05)
+                        lin_speed, ang_speed = max(lin_speed - 0.05, 0.05), max(ang_speed - 0.3, 0.2)
+                    if key in ('e', 'c') and (linear or angular):   # 달리는 중이면 바로 새 속도로
+                        linear = math.copysign(lin_speed, linear) if linear else 0.0
+                        angular = math.copysign(ang_speed, angular) if angular else 0.0
         finally:
             for _ in range(3):
                 self.send_velocity(0.0, 0.0)

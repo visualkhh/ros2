@@ -246,14 +246,24 @@ class RemoteProcs(Procs):
         self.map_dir_txt = f'{ROBOT_HOST}:{ROBOT_TOOL_DIR}/../ros2_ws/map'
         self._maps: tuple[float, list] = (0.0, [])
         self._discovered = False
+        self.on_wait = None   # (경과 초) → 화면 갱신 — Ui가 연결
 
     def _ssh(self, remote_cmd: str, timeout: float = 120) -> tuple[int, str]:
         cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ROBOT_SSH, remote_cmd]
-        try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            return 124, f'{self.host}: 시간 초과 ({timeout:.0f}s)'
-        out = '\n'.join(ln for ln in (r.stdout + r.stderr).splitlines()
+        r = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        t0 = time.monotonic()
+        while True:   # 로봇 쪽 run-cli는 rclpy 띄우느라 ~8초 — 그동안 경과 시간을 보여줌
+            try:
+                text = r.communicate(timeout=0.25)[0]   # 반복 호출해도 출력은 안에서 계속 모임 (파이프 막힘 없음)
+                break
+            except subprocess.TimeoutExpired:
+                if time.monotonic() - t0 > timeout:
+                    r.kill()
+                    r.communicate()
+                    return 124, f'{self.host}: 시간 초과 ({timeout:.0f}s)'
+                if self.on_wait:
+                    self.on_wait(time.monotonic() - t0)
+        out = '\n'.join(ln for ln in text.splitlines()
                         if not ln.startswith(('ROS_DOMAIN_ID=', 'DDS 피어', 'ROS_STATIC_PEERS')))
         if r.returncode == 255:
             out += f'\n(SSH 실패 — `ssh {ROBOT_SSH}`가 비번 없이 되는지 확인: documents/ai/ai-passwordless-robot-access.md)'

@@ -124,6 +124,7 @@ class Menu(Page):
             # 실행 중 print는 화면을 스크롤시키므로 가로채서 결과창에 넣는다.
             with self.ui.capture() as (buf_out, buf_err):
                 result = item.run()
+            self.ui._busy = None
             out = (buf_out.getvalue() + buf_err.getvalue()).strip('\n')
             if out:
                 self.ui.pager(item.label(), out)
