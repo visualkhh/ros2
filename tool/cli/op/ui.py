@@ -96,8 +96,7 @@ class Ui:
 
     def busy(self, label: str) -> None:
         """누르자마자 '처리 중' 창 — 기다리지 않음 (원격 SSH·ROS 대기로 몇 초 걸려도 눌린 걸 알게)."""
-        import sys
-        if not sys.stdout.isatty():
+        if not self.console.isatty():   # sys.stdout 아님 — 하위 메뉴 안에선 capture()가 바꿔치기해서 늘 False였음
             return
         self._busy = Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM), ''])
         self._busy.draw('key')

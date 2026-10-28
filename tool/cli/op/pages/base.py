@@ -40,6 +40,7 @@ class MenuItem(ABC):
     """메뉴 항목 한 개 — 라벨·노출·실행을 한 몸에."""
 
     key: str = ''
+    shows_busy = True   # 누르면 '처리 중' 창 (하위 화면으로 들어가는 항목은 바로 열리니 False)
 
     def __init__(self, app):
         self.app = app
@@ -62,6 +63,8 @@ class MenuItem(ABC):
 
 class GoMenu(MenuItem):
     """하위 화면 진입 항목."""
+
+    shows_busy = False
 
     def __init__(self, app, key: str, label: str, page):
         super().__init__(app)
@@ -121,7 +124,8 @@ class Menu(Page):
             if item is None:
                 continue
             label = item.label()   # 누른 순간 이름 (실행 뒤엔 바뀔 수 있음 — 시작 → 중지)
-            self.ui.busy(label)   # 누른 즉시 표시 — 하위 메뉴·확인창이 뜨면 그 위로 덮임
+            if item.shows_busy:
+                self.ui.busy(label)   # 누른 즉시 표시 — 확인창이 뜨면 그 위로 덮였다가 닫히면 다시 보임
             # 실행 중 print는 화면을 스크롤시키므로 가로채서 결과창에 넣는다.
             with self.ui.capture() as (buf_out, buf_err):
                 result = item.run()
