@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
-# run-rviz — rviz/{start,stop,restart}.sh 실행기. 기본은 start slam.
-#   ./run-rviz [slam|nav]          # RViz 시작 (기본 slam = 맵핑 보기)
-#   ./run-rviz stop                # 켜져 있는 RViz 종료
-#   ./run-rviz restart [slam|nav]  # RViz 재시작
+# run-rviz — 로봇 화면 보기 (RViz). 화면이 있는 곳에서 — 보통 PC. 자세히: tool/README.md · tool/MAP_NAV.md
+#
+#   ./run-rviz                     = ./run-rviz slam
+#   ./run-rviz slam                맵핑 보기: 지도(/map) · 스캔 · odom · TF · 포즈 그래프 · 2D Goal Pose
+#   ./run-rviz nav                 주행 보기: 지도 · 코스트맵 · 경로 · 2D Pose Estimate(초기 위치) · Nav2 Goal(목표)
+#   ./run-rviz stop                켜져 있는 RViz 종료
+#   ./run-rviz restart [slam|nav]  RViz 재시작
+#   ./run-rviz -h | --help         이 도움말
+#
+# 마우스: 왼쪽 드래그 회전·기울이기 · 가운데(Shift+왼쪽) 이동 · 휠 확대. 2D 위에서 보기: Views 패널 → TopDown (2D) → Load.
+# 로봇이 아닌 곳에서는 tool/peers.sh가 Pi를 유니캐스트로 찾게 설정합니다 (WiFi 멀티캐스트 불안정). ROS_DOMAIN_ID=25 고정.
+# 그 밖의 인자는 rviz2로 그대로 넘어갑니다 (예: ./run-rviz nav --fixed-frame odom).
 set -eo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cmd="${1:-start}"
 case "$cmd" in
+  -h|--help)
+    sed -n '2,/^set -eo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+    ;;
   start|stop|restart)
     [ $# -gt 0 ] && shift
     exec "$HERE/rviz/$cmd.sh" "$@"
