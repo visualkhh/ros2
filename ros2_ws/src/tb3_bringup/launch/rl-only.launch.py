@@ -5,7 +5,7 @@
   ros2 launch tb3_bringup rl-only.launch.py label:=after output:=/tmp/after.csv
 
 흐름: (Pi) cmd_manager -> /cmd_vel_rl_in -> [PC] corrector -> /cmd_vel_rl_out -> (Pi) cmd_manager -> 드라이버
-로봇은 RL 켠 상태여야 한다 (tb-for-rl.launch.py 또는 ./run-cli rl on). 같은 ROS_DOMAIN_ID(25)·같은 WiFi.
+로봇은 RL 켠 상태여야 한다 (./run-cli rl on 또는 tb-only.launch.py rl:=true). 같은 ROS_DOMAIN_ID(25)·같은 WiFi.
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument

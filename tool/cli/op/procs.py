@@ -27,7 +27,7 @@ MAP_DIR = Path(os.environ.get('TOOL_MAP_DIR', WS_DIR / 'map'))
 SLAM_PARAMS = Path(os.environ.get('TOOL_SLAM_PARAMS', CONFIG_DIR / 'slam_toolbox.yaml'))
 NAV_PARAMS = Path(os.environ.get('TOOL_NAV_PARAMS', CONFIG_DIR / 'nav2_params.yaml'))
 # 베이스(바퀴·odom·라이다) bringup. 기본 = 로봇만(RL 없음).
-#   RL 연동: TOOL_BASE_CMD='ros2 launch tb3_bringup tb-for-rl.launch.py' (PC에서 rl-only.launch.py)
+#   RL on으로 시작: TOOL_BASE_CMD='ros2 launch tb3_bringup tb-only.launch.py rl:=true' (보통은 ./run-cli rl on)
 #   PC 시험(OpenCR 없음): TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py'
 BASE_CMD = os.environ.get('TOOL_BASE_CMD', 'ros2 launch tb3_bringup tb-only.launch.py')
 SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')

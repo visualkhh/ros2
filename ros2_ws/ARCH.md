@@ -83,7 +83,7 @@ flowchart LR
 | 상태 | 토픽 (latched) | 바꾸는 법 | 효과 |
 |---|---|---|---|
 | 모드 | `/state_mode` = `MANUAL` · `AUTO` | `/cmd_manual_mode` · tool 텔레오퍼/drive → MANUAL · tool goal/RViz Goal → AUTO | MANUAL이면 `/cmd_manual_vel`만, AUTO면 Nav2 `/cmd_vel`만 바퀴로 |
-| RL | `/state_rl` = true/false | `/cmd_manual_rl` · `./run-cli rl on/off` · `tb-for-rl` = true로 시작 | true면 `/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out`을 거침 |
+| RL | `/state_rl` = true/false | `/cmd_manual_rl` · `./run-cli rl on/off` · `tb-only.launch.py rl:=true` = true로 시작 | true면 `/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out`을 거침 |
 | 비상정지 | `/state_estop` | `/cmd_manual_estop` · `./run-cli estop on/off` | true면 항상 0 |
 
 안전: 고른 입력이 0.5초 넘게 끊기면 0, RL 켰는데 `/cmd_vel_rl_out`이 0.3초 넘게 끊기면(PC 꺼짐·WiFi) 0.
@@ -91,8 +91,7 @@ cmd_manager는 20 Hz로 계속 보내고, 드라이버(0.5초)와 펌웨어(500 
 
 | launch | 어디서 | 띄우는 것 |
 |---|---|---|
-| `tb-only.launch.py` | Pi | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample (RL off로 시작) |
-| `tb-for-rl.launch.py` | Pi | tb-only를 **RL on으로 시작** (RL 노드는 안 띄움) |
+| `tb-only.launch.py` | Pi | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample. RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로) |
 | `rl-only.launch.py` | PC | rl_corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) · eval_recorder — 로봇 노드는 안 띄움 |
 | `basic_bringup.launch.py` | PC 시험 | state_manager · cmd_manager · mock_base (OpenCR 없이 같은 명령 경로) |
 
@@ -149,7 +148,7 @@ flowchart TD
 
 | 패키지 | 내용 |
 |---|---|
-| `tb3_bringup` | `state_manager` · `cmd_manager` · `opencr_driver` · `scan_resample` · `mock_base` · launch 5개 · `config/robot.yaml` · `config/lidar.yaml` · URDF · 바퀴 메시 |
+| `tb3_bringup` | `state_manager` · `cmd_manager` · `opencr_driver` · `scan_resample` · `mock_base` · launch 4개 · `config/robot.yaml` · `config/lidar.yaml` · URDF · 바퀴 메시 |
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out` |
 | `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력 보정 (미연결) |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom CSV · `benchmark_onnx.py` |

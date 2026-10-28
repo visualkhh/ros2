@@ -111,7 +111,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 
 | 변수 | 기본 | 뜻 |
 |---|---|---|
-| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL on으로 시작은 `tb-for-rl.launch.py` (실행 중엔 `./run-cli rl on`), PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
+| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL on으로 시작은 `… tb-only.launch.py rl:=true` (보통은 실행 중 `./run-cli rl on`), PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
 | `TOOL_CMD_VEL` | `/cmd_manual_vel` | 텔레오퍼·drive가 내는 토픽 (cmd_manager 수동 입력) |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) — 로봇·`TOOL_LOCAL`에서 |

@@ -9,7 +9,7 @@
 
 명령 경로 (ARCH.md): /cmd_manual_vel(텔레오퍼)·/cmd_vel(Nav2) → cmd_manager → /cmd_vel_base → 드라이버.
 RL은 실행 중 /cmd_manual_rl(Bool)로 켜고 끔 — 켜면 /cmd_vel_rl_in → [PC rl-only] → /cmd_vel_rl_out을 거침.
-rl:=true = RL 켠 상태로 시작 (tb-for-rl.launch.py가 씀).
+rl:=true = RL 켠 상태로 시작 (PC rl-only가 있어야 움직임). 이 launch에 RL 노드는 없음.
 SLAM·Nav는 tool/run-cli가 따로 띄운다 (TOOL_BASE_CMD로 이 launch를 지정).
 """
 import os
