@@ -149,10 +149,10 @@ controller_server:
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.4
-      vx_max: 0.5
-      vx_min: -0.35
+      vx_max: 0.26   # Waffle Pi 최대 (펌웨어 바퀴 상한 8 rad/s × 0.033 m)
+      vx_min: -0.10  # 뒤 ~135°는 라이다가 몸통에 가려 안 보임 → 후진은 천천히
       vy_max: 0.5
-      wz_max: 1.9
+      wz_max: 1.82   # Waffle Pi 최대
       iteration_count: 1
       temperature: 0.3
       gamma: 0.015
@@ -497,8 +497,8 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.5, 0.0, 2.0]
-    min_velocity: [-0.5, 0.0, -2.0]
+    max_velocity: [0.26, 0.0, 1.82]    # Waffle Pi 최대 — MPPI vx_max·wz_max와 같게
+    min_velocity: [-0.10, 0.0, -1.82]  # 후진은 천천히 (뒤가 안 보임)
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "odom"
