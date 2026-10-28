@@ -7,15 +7,38 @@ SLAM·Nav는 로봇(Pi)에서 돌고, 조작은 **토픽이 보이는 곳 어디
 - 텔레오퍼·목표·초기 위치·모드는 토픽이라 어디서나 바로.
 - 아래 명령은 PC든 Pi든 `tool/` 폴더에서 그대로 실행.
 
-## 0. 준비 (매번)
+## 0. 로봇 켜고 bringup (매번 먼저)
+
+로봇 전원을 켜면 Pi는 부팅만 하고 **ROS는 아무것도 안 떠 있습니다** (자동 시작 없음). 바퀴·odom·라이다를 내는
+**베이스(bringup = `tb-only`)** 를 먼저 띄워야 SLAM·Nav·텔레오퍼가 동작합니다.
 
 ```bash
+# ① 로봇 전원 ON (OpenCR 스위치 + 배터리) → Pi 부팅 1~2분 → 접속되는지
+ping -c2 pak.local                       # 응답 없으면 아직 부팅 중 · WiFi 확인
+
+# ② 코드 최신화 (PC에서 고친 게 있으면)
+ssh pak 'cd ~/ros2 && git pull'          # ros2_ws를 바꿨으면: cd ~/ros2/ros2_ws && colcon build --symlink-install
+
+# ③ 베이스 bringup — 둘 중 하나
+./run-cli base start                     # PC에서 (tool이 SSH로 Pi에 띄움)
+ssh -t pak 'cd ~/ros2/tool && ./run-cli base start'   # 또는 Pi에 들어가서 직접
+
+# ④ 확인
 ./run-cli status
-#   ● 베이스 · 로봇 ok · 모드 … · odom 20Hz · scan 10Hz 이면 OK
-#   ○ 베이스면:  ./run-cli base start
+#   ● 베이스 · 로봇 ● ok · 모드 MANUAL · RL off · 비상정지 off · odom 20Hz · scan 10Hz 이면 OK
 ```
 
-`✗`·`수신 없음`이면 [README 문제 확인](README.md#문제-확인).
+베이스가 띄우는 것 (`ros2 launch tb3_bringup tb-only.launch.py`): state_manager · cmd_manager · opencr_driver ·
+robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resample — [ARCH.md](../ros2_ws/ARCH.md).
+한 번 띄우면 끌 때까지(또는 Pi 재부팅) 계속 돕니다. 이미 떠 있으면 ③은 "이미 실행 중"으로 끝납니다.
+
+| 증상 | 확인 |
+|---|---|
+| `로봇 ? 대기 중` · `odom ✗` | 베이스가 안 떴거나 죽음 → `./run-cli base log` · OpenCR 전원·USB (`/dev/opencr`) |
+| `로봇 ✗ no S line` | OpenCR 펌웨어 응답 없음 → OpenCR 전원 스위치 · [OpenCR 문서](../documents/opencr/opencr-setup-ubuntu26.04.md) |
+| `scan ✗` | 라이다 USB (`/dev/tb3_lidar`) · `./run-cli base log`에 `coin_d4_driver` |
+| 상태바가 다 `✗` (ping은 됨) | WiFi DDS 탐색 → `run-cli`로 실행했는지 (피어 설정 자동) · [README 문제 확인](README.md#문제-확인) |
+| `[pak.local] … SSH 실패` | `ssh pak@pak.local`이 비번 없이 되는지 |
 
 ## 1. 지도 만들기 (SLAM)
 
