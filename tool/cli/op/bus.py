@@ -9,6 +9,7 @@ import time
 
 import rclpy
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped
+from std_msgs.msg import Empty
 
 from .procs import SERVICES
 from .terminal import DIM, GREEN, RED, YELLOW, Terminal
@@ -37,6 +38,7 @@ class Bus:
         self._init_pub = node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         from std_msgs.msg import Empty
         self._reboot_pub = node.create_publisher(Empty, '/opencr/reboot', 10)
+        self._beep_pub = node.create_publisher(Empty, '/opencr/beep', 10)
         from std_msgs.msg import Bool, String
         self._req = {'control': (node.create_publisher(String, '/cmd_manual_control', 10), String),
                      'rl': (node.create_publisher(Bool, '/cmd_manual_rl', 10), Bool),
@@ -332,7 +334,7 @@ class Bus:
                                 f'scan {self.state.scan_txt()}',
                                 f'map  {self.state.map_txt()}',
                                 f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
-                                self.term.paint('w/x/a/d·방향키 이동 · s/space 정지 · e/c 속도± · q/Esc 종료', DIM)]
+                                self.term.paint('w/x/a/d·방향키 이동 · s/space 정지 · e/c 속도± · b 삑 · q/Esc 종료', DIM)]
                     con.write(f'\033[{top};{left}H┌' + '─' * (w - 2) + '┐')
                     for i, line in enumerate(rows_txt):
                         con.write(f'\033[{top + 1 + i};{left}H│' + self.term.fit(line, w - 2) + '│')
@@ -361,6 +363,8 @@ class Bus:
                         linear, angular = 0.0, -ang_speed
                     elif key == 's':
                         linear = angular = 0.0
+                    elif key == 'b':
+                        self._beep_pub.publish(Empty())
                     elif key == 'e':   # Waffle Pi 사양 최대 0.26 m/s · 1.82 rad/s
                         lin_speed, ang_speed = min(lin_speed + 0.05, MAX_LIN), min(ang_speed + 0.3, MAX_ANG)
                     elif key == 'c':
@@ -506,6 +510,20 @@ class Bus:
         self._poll(3.0)  # 재부팅(바퀴당 ~1초) 후 진단 갱신
         print(f'로봇: {self.state.robot_txt()}')
         return 0 if self.state.robot_parts()[0] == 0 else 1
+
+    def cmd_beep(self, args) -> int:
+        """OpenCR 부저 삑 — /opencr/beep → opencr_driver가 펌웨어에 B."""
+        from std_msgs.msg import Empty
+        end = time.monotonic() + 10.0  # 방금 만든 발행자 — 드라이버와 연결될 때까지
+        while self._beep_pub.get_subscription_count() == 0 and time.monotonic() < end:
+            self._poll(0.2)
+        if self._beep_pub.get_subscription_count() == 0:
+            print(self.term.paint('opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인', RED))
+            return 1
+        self._beep_pub.publish(Empty())
+        self._poll(0.2)
+        print('삑 (B)')
+        return 0
 
     # ------------------------------------------------------------- 노드
     def node_names(self) -> list[str]:

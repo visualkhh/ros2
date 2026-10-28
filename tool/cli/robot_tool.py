@@ -181,6 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
         p = sub.add_parser(name, help=help_)
         p.add_argument('value', type=str.lower, choices=choices)
     sub.add_parser('reboot-motors', help='모터 에러 해제 — 두 바퀴 재부팅 (/opencr/reboot)')
+    sub.add_parser('beep', help='OpenCR 부저 삑 (/opencr/beep)')
     sub.add_parser('stop-all', help='띄운 것 전부 종료 (바퀴 정지 먼저)')
     return parser
 

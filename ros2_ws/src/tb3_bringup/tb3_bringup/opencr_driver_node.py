@@ -8,6 +8,7 @@ Protocol (firmware/opencr/README.md):
 Topics:
   sub  <cmd_topic> (Twist, default cmd_vel_base)   final wheel command from cmd_manager (mux)
   sub  opencr/reboot (Empty)                   -> R (clears DYNAMIXEL hardware error)
+  sub  opencr/beep (Empty)                     -> B (OpenCR buzzer, 2000 Hz 150 ms)
   pub  odom, TF odom->base_footprint (REP-105), joint_states, diagnostics
 The firmware stops the wheels by itself if no C arrives for 500 ms, so a dead PC/RL link stops the robot.
 """
@@ -69,6 +70,7 @@ class OpencrDriver(Node):
 
         self.create_subscription(Twist, cmd_topic, self.on_cmd, 10)
         self.create_subscription(Empty, 'opencr/reboot', lambda _m: self.write('R'), 10)
+        self.create_subscription(Empty, 'opencr/beep', lambda _m: self.write('B'), 10)
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
         self.js_pub = self.create_publisher(JointState, 'joint_states', 10)
         self.diag_pub = self.create_publisher(DiagnosticArray, 'diagnostics', 10)

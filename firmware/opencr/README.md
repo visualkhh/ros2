@@ -13,6 +13,7 @@ IMU·팔·그리퍼 없음. Beebot용(`beebot_opencr`)이 아니라 기본 주�
 | SBC → OpenCR | `C,<좌 rad/s>,<우 rad/s>` (빈칸=유지) | 제어 주기 |
 | SBC → OpenCR | `T,0` / `T,1` (토크 off/on) | 필요시 |
 | SBC → OpenCR | `R` (양쪽) / `R,<좌 0·1>,<우 0·1>` (다이나믹셀 재부팅, 빈칸·0=그대로) | 에러 시 |
+| SBC → OpenCR | `B` (2000Hz 150ms) / `B,<Hz>,<ms>` (부저 삑, 100~8000Hz · 10~2000ms, 안 기다림) | 필요시 |
 | OpenCR → SBC | `S,<좌pos rad>,<좌vel>,<우pos>,<우vel>,<uptime ms>,<좌전류 A>,<우전류 A>,<좌온도 ℃>,<우온도 ℃>` | 20Hz |
 | OpenCR → SBC | `E,<좌err>,<우err>` (Hardware Error Status 비트마스크, 0=정상, -1=무응답) | 변화 시 + 에러 중 1Hz |
 
@@ -20,7 +21,7 @@ IMU·팔·그리퍼 없음. Beebot용(`beebot_opencr`)이 아니라 기본 주�
 
 재부팅(`R`): 과열·과부하 등 하드웨어 에러 해제용. 재부팅된 바퀴는 속도모드·목표 0·현재 `T` 상태로 복구. 다회전 위치가 1바퀴 이내로 초기화되므로 `S` pos가 튐 → SBC 오도메트리에서 처리 필요. 바퀴당 최대 ~1초 블로킹.
 
-안전: 500ms(`CMD_TIMEOUT_MS`) 동안 `C` 없으면 자동 정지. 속도 ±6.0 rad/s clip.
+안전: 500ms(`CMD_TIMEOUT_MS`) 동안 `C` 없으면 자동 정지. 속도 ±8.0 rad/s clip (Waffle Pi 사양 0.26 m/s ÷ 바퀴 반지름 0.033 m ≈ 7.9).
 
 ## 스크립트 (로봇 Pi·PC 공통, 이 폴더에서 실행)
 

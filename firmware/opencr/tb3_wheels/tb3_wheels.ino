@@ -12,6 +12,7 @@
 //                   Reboot clears hardware error; wheel restarts in velocity mode,
 //                   goal 0, torque restored to current T state. Its multi-turn
 //                   position restarts within one turn (expect a jump in S pos).
+//   SBC -> OpenCR : B | B,<Hz>,<ms>                 (buzzer beep; bare B = 2000 Hz 150 ms, non-blocking)
 //   OpenCR -> SBC : S,<l_pos rad>,<l_vel rad/s>,<r_pos rad>,<r_vel rad/s>,<uptime ms>,
 //                     <l_cur A>,<r_cur A>,<l_temp C>,<r_temp C>
 //                   at STATUS_HZ. Positions are continuous multi-turn radians.
@@ -46,7 +47,7 @@
 #define VEL_UNIT_RPM     0.229f     // 1 unit = 0.229 rpm (X series velocity)
 #define POS_UNIT_RAD     (2.0f * 3.14159265f / 4096.0f)
 #define CUR_UNIT_A       0.00269f   // 1 unit = 2.69 mA (XM430)
-#define VEL_LIMIT_RAD_S  6.0f       // XM430-W350 no-load ~61 rpm ~= 6.4 rad/s
+#define VEL_LIMIT_RAD_S  8.0f       // Waffle Pi spec 0.26 m/s / r 0.033 = 7.9 rad/s (DYNAMIXEL Velocity Limit also caps)
 #define STATUS_HZ        20
 #define CMD_TIMEOUT_MS   500
 #define ERR_REPEAT_MS    1000       // E line repeat period while in error
@@ -123,7 +124,7 @@ static bool dxl_reboot(uint8_t id) {
   return true;
 }
 
-// Parse "C,vl,vr" / "T,x" / "R[,l,r]". Empty numeric field = keep previous value.
+// Parse "C,vl,vr" / "T,x" / "R[,l,r]" / "B[,hz,ms]". Empty numeric field = keep previous value.
 static void handle_line(char *line) {
   if (line[0] == 'C' && line[1] == ',') {
     char *p = line + 2;
@@ -155,6 +156,18 @@ static void handle_line(char *line) {
     // Rebooted wheel comes back with goal 0; keep cmd in sync.
     if (rl && dxl_reboot(WHEEL_LEFT_ID)) cmd_l = 0.0f;
     if (rr && dxl_reboot(WHEEL_RIGHT_ID)) cmd_r = 0.0f;
+  } else if (line[0] == 'B' && (line[1] == '\0' || line[1] == ',')) {
+    long hz = 2000, ms = 150;
+    if (line[1] == ',') {
+      char *comma = strchr(line + 2, ',');
+      if (line[2] != '\0' && line[2] != ',') hz = atol(line + 2);
+      if (comma != NULL && comma[1] != '\0') ms = atol(comma + 1);
+    }
+    if (hz < 100) hz = 100;
+    if (hz > 8000) hz = 8000;
+    if (ms < 10) ms = 10;
+    if (ms > 2000) ms = 2000;
+    tone(BDPIN_BUZZER, (unsigned int)hz, (unsigned long)ms);  // timer-driven, returns at once
   }
 }
 

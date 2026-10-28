@@ -34,6 +34,17 @@ class RebootMotorsItem(MenuItem):
         return STAY
 
 
+class BeepItem(MenuItem):
+    key = '6'
+
+    def label(self):
+        return '비프음 (삑)'
+
+    def run(self):
+        self.bus.cmd_beep(None)
+        return STAY
+
+
 class ToggleItem(MenuItem):
     """모드·RL·비상정지 전환 — state_manager에 /cmd_manual_* 요청."""
 
@@ -100,7 +111,7 @@ class StatusMenu(Menu):
 
     def items(self):
         return [PrintStatusItem(self.app), RebootMotorsItem(self.app), ToggleItem(self.app, '3', 'mode'),
-                ToggleItem(self.app, '4', 'rl'), ToggleItem(self.app, '5', 'estop')]
+                ToggleItem(self.app, '4', 'rl'), ToggleItem(self.app, '5', 'estop'), BeepItem(self.app)]
 
     def center(self):
         return self.bus.status_lines() + [

@@ -84,6 +84,7 @@ tool/
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
 ./run-cli nodes
 ./run-cli reboot-motors        # 모터 에러(E) 해제 — 두 바퀴 재부팅 (/opencr/reboot)
+./run-cli beep                 # OpenCR 부저 삑 (/opencr/beep · 메뉴 1) 상태 → 6 · 텔레오퍼 b)
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
 ./run-cli route direct|rl       # 바퀴 명령 경로: 직결 / PC RL 경유 (= rl off|on)
