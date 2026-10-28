@@ -270,26 +270,26 @@ class Bus:
             ok = self.request('control', 'MANUAL')
             print('자동 맵핑 중지 → MANUAL (지도 저장: ./run-cli map save 이름)' if ok else self.term.paint('중지 실패', RED))
             return 0 if ok else 1
-        self.ui.step('0/3 베이스 확인 중')
+        self.ui.step('0/4 베이스 확인 중')
         if not self.base_ready():
             return 1
         for i, name in enumerate(('slam', 'explore'), 1):
             if not self.procs.running(name):
-                self.ui.step(f'{i}/3 {SERVICES[name].label} 켜는 중 (로봇에서 ~10초)')
+                self.ui.step(f'{i}/4 {SERVICES[name].label} 켜는 중 (로봇에서 ~10초)')
                 ok, msg = self.procs.start(name)
                 print(msg)
                 if not ok:
                     return 1
-        self.ui.step('3/3 Nav2 활성화 대기')
-        start = time.monotonic()
-        end = start + 60.0  # Nav2 주행부가 켜질 때까지 (Pi에서 수십 초)
-        client = self._client()
-        while not client.server_is_ready() and time.monotonic() < end:
-            self.ui.progress(f'Nav2 주행부 켜지는 중 … {time.monotonic() - start:.0f}/60초 (Pi에서 보통 20~40초)')
-            self._poll(0.5)
-        if not client.server_is_ready():
-            print(self.term.paint('Nav2 주행부가 안 켜짐 — ./run-cli explore log', RED))
+        self.ui.step('3/4 Nav2 활성화 대기')
+        if not self.nav2_active(60.0):
+            print(self.term.paint('Nav2 주행부가 활성화 안 됨 (60초) — ./run-cli explore log', RED))
             return 1
+        # 멈춘 채 시작하면 SLAM 지도엔 스캔 1장뿐 → 로봇 바로 옆만 '빈 칸'(min_pass_through 2) → frontier가 다 닿을 수 없는 곳이라
+        # explore_lite가 전부 포기하고 바로 끝남. 제자리 한 바퀴로 스캔을 여러 장 넣어 주변을 먼저 채운다.
+        self.ui.step('4/4 제자리에서 한 바퀴 돌며 주변 찍기')
+        if not self.request('control', 'MANUAL'):
+            return 1
+        self.spin_once()
         ok = self.request('control', 'SLAM_AUTO_MAPPING')
         print('자동 맵핑 시작 — 진행은 상태바 "탐색" 줄 · 끝나면 MANUAL로 돌아옴 · 중지: ./run-cli automap stop'
               if ok else self.term.paint('SLAM_AUTO_MAPPING으로 못 바꿈', RED))
@@ -429,6 +429,41 @@ class Bus:
 
     def cmd_initpose(self, args) -> int:
         return self.set_initial_pose(args.x, args.y, args.yaw)
+
+    def nav2_active(self, timeout: float) -> bool:
+        """Nav2 lifecycle_manager가 노드를 다 활성화했나 — action 서버가 '있기만' 하면 목표를 REJECTED함."""
+        from std_srvs.srv import Trigger
+        cli = self.node.create_client(Trigger, '/lifecycle_manager_navigation/is_active')
+        start = time.monotonic()
+        try:
+            while time.monotonic() - start < timeout:
+                self.ui.progress(f'Nav2 켜지는 중 … {time.monotonic() - start:.0f}/{timeout:.0f}초 (Pi에서 보통 20~40초)')
+                if cli.service_is_ready():
+                    fut = cli.call_async(Trigger.Request())
+                    end = time.monotonic() + 2.0
+                    while not fut.done() and time.monotonic() < end:
+                        self._poll(0.1)
+                    if fut.done() and fut.result() is not None and fut.result().success:
+                        return True
+                self._poll(0.5)
+            return False
+        finally:
+            self.node.destroy_client(cli)
+
+    def spin_once(self, speed: float = 0.5) -> None:
+        """제자리 한 바퀴 (반시계, speed rad/s) — 끝나거나 중단돼도 0을 보냄."""
+        duration = 2.0 * math.pi / speed + 0.5
+        start = time.monotonic()
+        try:
+            while time.monotonic() - start < duration:
+                left = duration - (time.monotonic() - start)
+                self.ui.progress(f'회전 중 … {left:.0f}초 남음 (주변을 비우세요)')
+                self.send_velocity(0.0, speed)
+                self._poll(0.1)
+        finally:
+            for _ in range(3):
+                self.send_velocity(0.0, 0.0)
+                self._poll(0.05)
 
     def _client(self):
         if self._nav_client is None:
