@@ -65,6 +65,7 @@ sudo apt install -y \
   ros-lyrical-robot-state-publisher \
   ros-lyrical-teleop-twist-keyboard \
   ros-lyrical-tf2-tools \
+  espeak-ng \
   ros-lyrical-turtlebot3-msgs \
   ros-lyrical-dynamixel-sdk \
   python3-numpy socat

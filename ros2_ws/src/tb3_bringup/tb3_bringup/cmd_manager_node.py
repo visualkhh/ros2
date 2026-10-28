@@ -37,8 +37,74 @@ ALIASES = {'AUTO': 'NAV_PLAN', 'NAV': 'NAV_PLAN', 'NAV-PLAN': 'NAV_PLAN',
            'AUTO_MAPPING': 'SLAM_AUTO_MAPPING', 'AUTO-MAPPING': 'SLAM_AUTO_MAPPING', 'MAPPING': 'SLAM_AUTO_MAPPING'}
 
 
-def text_to_tones(text: str) -> list[tuple[int, int]]:
-    """한/영 문자열 → [(Hz, ms)] 삑 순서. tool/cli/op/bus.py와 같은 표 (로봇 쪽 변환본)."""
+import time
+from collections import deque
+from functools import lru_cache
+
+
+# espeak-ng 음소 → 주파수. 모음(길게·낮게) · 자음(짧게·높게), 이중모음은 두 음으로 미끄러지듯.
+_VOWEL_HZ = {'a': 500, 'A': 550, 'O': 600, 'o': 650, '@': 700, '3': 750,
+             'e': 800, 'E': 850, 'I': 900, 'i': 950, 'U': 1000, 'u': 1050, 'V': 1100}
+_CONS_HZ = {'w': 1350, 'j': 1450, 'm': 1400, 'n': 1500, 'N': 1600, 'l': 1550, 'r': 1650,
+            'p': 1700, 'b': 1750, 'f': 1800, 'v': 1900, 's': 2000, 'z': 2100,
+            'S': 2200, 'Z': 2300, 'h': 2400, 'T': 2500, 'D': 2600, 't': 2700,
+            'd': 2750, 'k': 2900, 'g': 2950}
+_DIPHTHONGS = ('aI', 'eI', 'oU', 'aU', '@U', 'I@', 'e@', 'U@', 'OI', 'tS', 'dZ')
+_VOWEL_MS, _CONS_MS = 140, 70
+
+
+@lru_cache(maxsize=1)
+def _espeak_bin() -> str | None:
+    import shutil
+    return shutil.which('espeak-ng')
+
+
+def _espeak_phonemes(text: str) -> str | None:
+    """espeak-ng -x 음소열 (실패·없음 → None). 한글 포함이면 ko, 아니면 en."""
+    if _espeak_bin() is None:
+        return None
+    import subprocess
+    lang = 'ko' if any(0xAC00 <= ord(c) <= 0xD7A3 for c in text) else 'en'
+    try:
+        r = subprocess.run([_espeak_bin(), '-v', lang, '-x', text],
+                           capture_output=True, text=True, timeout=5,
+                           stderr=subprocess.DEVNULL)
+        pho = r.stdout.strip()
+        return pho or None
+    except Exception:
+        return None
+
+
+def _phonemes_to_tones(pho: str) -> list[tuple[int, int]]:
+    tones: list[tuple[int, int]] = []
+    i, stress = 0, False
+    while i < len(pho):
+        c = pho[i]
+        if c == "'":  # 강세 — 다음 모음 길게
+            stress, i = True, i + 1
+            continue
+        if c in (' ', '_'):
+            tones.append((0, 180))
+            i += 1
+            continue
+        two = pho[i:i + 2]
+        if two in _DIPHTHONGS and two[0] in _VOWEL_HZ:
+            for v in two:  # 이중모음 = 두 모음 미끄러지듯
+                tones.append((_VOWEL_HZ[v], int(_VOWEL_MS * (1.6 if stress else 1) // 2)))
+            stress, i = False, i + 2
+            continue
+        if c in _VOWEL_HZ:
+            tones.append((_VOWEL_HZ[c], int(_VOWEL_MS * (1.6 if stress else 1))))
+            stress = False
+        elif c in _CONS_HZ:
+            tones.append((_CONS_HZ[c], _CONS_MS))
+        # ':'(장음 표시) · 그 밖 기호는 버림
+        i += 1
+    return tones
+
+
+def _table_tones(text: str) -> list[tuple[int, int]]:
+    """예비용 자모·알파벳 직매핑 (espeak-ng 없을 때). tool/cli/op/bus.py와 같은 표."""
     tones: list[tuple[int, int]] = []
     for ch in text:
         o = ord(ch)
@@ -55,6 +121,16 @@ def text_to_tones(text: str) -> list[tuple[int, int]]:
         elif ch == ' ':
             tones.append((0, 180))
     return tones
+
+
+def text_to_tones(text: str) -> list[tuple[int, int]]:
+    """문자열 → [(Hz, ms)]. espeak-ng 음소 우선, 없으면 직매핑표."""
+    pho = _espeak_phonemes(text)
+    if pho:
+        tones = _phonemes_to_tones(pho)
+        if tones:
+            return tones
+    return _table_tones(text)
 
 
 class CmdManager(Node):
