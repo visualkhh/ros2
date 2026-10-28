@@ -16,9 +16,9 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyri
 
 | 위치 | 내용 |
 |---|---|
-| [../ros2_ws/ARCH.md](../ros2_ws/ARCH.md) | **시스템 노드 계통도** — 노드·TF·토픽·장치, tb-only / tb-for-rl / rl-only |
-| [../ros2_ws/README.md](../ros2_ws/README.md) | 워크스페이스 패키지 · bringup 사용법 · RL Before/After |
-| [../tool/README.md](../tool/README.md) | 운영 CLI (`run-cli`: 베이스·SLAM·Nav·텔레오퍼·지도 저장) · RViz (`run-rviz`) |
+| [../ros2_ws/ARCH.md](../ros2_ws/ARCH.md) | **시스템 노드 계통도** — state_manager · cmd_manager(mux) 명령 경로 · TF · 토픽 · 장치 |
+| [../ros2_ws/README.md](../ros2_ws/README.md) | 워크스페이스 패키지 · `deps.repos` · 빌드 · bringup · `/cmd_manual_*` · RL Before/After |
+| [../tool/README.md](../tool/README.md) · [MAP_NAV.md](../tool/MAP_NAV.md) | 운영 CLI (`run-cli`, 토픽 보이는 곳 어디서나: 베이스·SLAM·Nav·텔레오퍼·지도·모드/RL/비상정지) · RViz (`run-rviz`) · 지도 만들기→주행 순서 |
 | [../firmware/opencr/README.md](../firmware/opencr/README.md) | OpenCR 펌웨어 `tb3_wheels` 프로토콜 (`C`·`T`·`R` → `S`·`E`) · 스크립트 |
 
 공통 규칙: `ROS_DOMAIN_ID=25` (PC·Pi·docker) · 코드 갱신은 PC에서 push → `ssh pak 'cd ~/ros2 && git pull'`.

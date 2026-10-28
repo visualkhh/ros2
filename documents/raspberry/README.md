@@ -2,7 +2,7 @@
 
 로봇 SBC 세팅 문서 모음. **1장 = 지금 설치·설정된 내역(스펙 요약)**, **2장 = 처음부터 세팅하는 순서**.
 
-## 1. 설치·설정 요약 (2026-10-27 실측)
+## 1. 설치·설정 요약 (2026-10-28 실측)
 
 ### 하드웨어
 
@@ -33,8 +33,10 @@
 |---|---|---|
 | 배포판 | Lyrical (ros-base 0.13.0) · 공식 apt | [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) |
 | apt 패키지 | slam_toolbox 2.10 · nav2_bringup 1.5 · nav2 amcl/map_server · laser_filters 2.3 · robot_state_publisher · xacro · teleop_twist_keyboard · tf2_tools · turtlebot3_msgs · dynamixel_sdk · ros-dev-tools | |
-| 소스 의존 | `coin_d4_driver` (LDS-03) — `ros2_ws/deps.repos` (**아직 안 받음**) | |
-| 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드: tb3_bringup · rl_correction · rl_eval · nav2_rl_controller | [ARCH](../../ros2_ws/ARCH.md) |
+| 소스 의존 | `coin_d4_driver` (LDS-03) — `ros2_ws/deps.repos`로 받아 빌드 · `/scan` 10 Hz | [ros2_ws README](../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
+| 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드: tb3_bringup · coin_d4_driver · rl_correction · rl_eval · nav2_rl_controller | [ARCH](../../ros2_ws/ARCH.md) |
+| 상시 노드 (`run-cli base start` = tb-only) | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample | [ARCH 2장](../../ros2_ws/ARCH.md) |
+| 필요할 때 (`run-cli`, 어디서나) | slam_toolbox (`slam start`) · Nav2 (`nav start` / `explore start`) — 지도 `~/ros2/ros2_ws/map/` | [tool](../../tool/README.md) |
 | `~/.bashrc` | `source /opt/ros/lyrical/setup.bash` · ros2_ws `install/setup.bash` · `ROS_DOMAIN_ID=25` · `ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET` | |
 
 ### 장치 · 펌웨어
@@ -43,12 +45,15 @@
 |---|---|---|
 | udev | `/dev/opencr` → ttyACM0 · `/dev/tb3_lidar` → ttyUSB0 (`99-opencr.rules` · `99-tb3-lidar.rules`) | [udev](udev-setup.md) |
 | 펌웨어 툴 | arduino-cli 1.5.1 · OpenCR 코어 1.5.3 (min/max 패치) · gcc-arm-none-eabi 14.2 · `opencr_ld_shell_arm` | [OpenCR](../opencr/opencr-setup-ubuntu26.04.md) |
-| OpenCR 펌웨어 | `tb3_wheels` 업로드됨 — `S` 20 Hz 수신 확인 (온도 22·23℃, 에러 없음) | [firmware](../../firmware/opencr/README.md) |
+| OpenCR 펌웨어 | `tb3_wheels` 업로드됨 (**ID 2 = 왼쪽 · ID 1 = 오른쪽**) — `S` 20 Hz · 텔레오퍼 주행 확인 | [firmware](../../firmware/opencr/README.md) |
+| 바퀴 방향 | `robot.yaml` `left_dir: -1` · `right_dir: -1` (두 모터 모두 +속도 = 뒤로) | [OpenCR 4장](../opencr/opencr-setup-ubuntu26.04.md) |
 
 ### 아직 안 한 것
 
-- [ ] `coin_d4_driver` 받아서 빌드 → `/scan` 확인
-- [ ] 바퀴 띄우고 방향 부호 확인 (`right_dir: -1` 맞는지) — `./run-cli teleop` 또는 `test-firmware --wheel 0.5 --yes`
+- [x] `coin_d4_driver` 받아서 빌드 → `/scan` 10 Hz (뒤 135°는 몸통에 가려 안 보임 — 정상)
+- [x] 바퀴 ID·방향 확인 (펌웨어 ID 2=왼쪽·1=오른쪽, dir -1/-1)
+- [ ] 실기 SLAM → 지도 저장 → Nav 목표 주행 ([MAP_NAV](../../tool/MAP_NAV.md))
+- [ ] 몸통 필터 범위 확인 (앞 최근접 0.17~0.2 m 점이 몸통인지)
 - [ ] URDF 실측 값 (`lidar_x` · `lidar_z` · `lidar_yaw` · `plate_z2`) — `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`
 
 ## 2. 처음부터 세팅하는 순서
@@ -64,7 +69,8 @@
 | 7 | 운영 (베이스 · SLAM · Nav · 텔레오퍼) | [../../tool/README.md](../../tool/README.md) | 지도 만들기 |
 
 - 시스템 구성(노드·TF·토픽): [../../ros2_ws/ARCH.md](../../ros2_ws/ARCH.md)
-- 코드 갱신: PC에서 push → `ssh pak 'cd ~/ros2 && git pull'`
+- 코드 갱신: PC에서 push → `ssh pak 'cd ~/ros2 && git pull'` (ros2_ws를 바꿨으면 빌드 후 `./run-cli base restart`)
+- 운영은 토픽이 보이는 곳 어디서나 `tool/run-cli` (켜기/끄기·지도는 tool이 SSH로 Pi에 넘김)
 - `ROS_DOMAIN_ID=25` (PC·Pi·docker 공통). PC 시험대(Docker): [../docker/README.md](../docker/README.md)
 
 ## 3. 이 폴더

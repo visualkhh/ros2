@@ -129,7 +129,7 @@ PC 셸도 `ROS_DOMAIN_ID=25`여야 Pi가 보입니다 (`tool/run-rviz`는 자동
 printenv ROS_DISTRO ROS_DOMAIN_ID           # lyrical 25
 ros2 pkg list | grep -E 'slam_toolbox|nav2_bringup|tb3_bringup'
 cd ~/ros2/tool && ./run-cli status          # 프로세스·토픽 표
-./run-cli base start && ./run-cli status    # mock_base면 odom 20Hz
+./run-cli base start && ./run-cli status    # tb-only: 로봇 ok · 모드 MANUAL · odom 20Hz · scan 10Hz
 ./run-cli stop-all
 ```
 

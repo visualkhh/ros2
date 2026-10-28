@@ -127,7 +127,7 @@ HDMI는 전원 켜기 전에 먼저 연결 (나중에 꼽으면 화면 안 나�
 
 ## 5. 다시 굽기 체크리스트
 
-- [ ] Imager 장치: `Raspberry Pi 4`, OS: `Ubuntu Server 22.04.5 LTS (64-bit)` — 26.04 아님 (TurtleBot3는 22.04)
+- [ ] Imager 장치: `Raspberry Pi 4`, OS: `Ubuntu Server 26.04 LTS (64-bit)` — 이 프로젝트는 26.04 + ROS 2 Lyrical (TurtleBot3 공식은 22.04/Humble이지만 여기선 안 씀)
 - [ ] 일반탭: hostname 유일하게 (`pak`, `pak2`…), 사용자 `pak`, 시간대 `Asia/Seoul`, 무선 LAN 국가 `KR`
 - [ ] 서비스탭: `SSH 사용` + `비밀번호 인증 사용`
 - [ ] Wi-Fi: 일반 공유기/핫스팟으로 먼저 성공시킨 뒤 사내망 시도
