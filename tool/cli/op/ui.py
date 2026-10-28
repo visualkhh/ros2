@@ -23,6 +23,8 @@ class Ui:
         self._sel_idx = 0
         self._frame_size = None
         self._busy = None   # 지금 떠 있는 처리 중 창 (메뉴 항목 실행 동안)
+        self._title = None  # 마지막으로 그린 화면 제목 (창이 떠 있는 동안 상단 상태바만 다시 그리기용)
+        self._top_at = 0.0
         if hasattr(procs, 'on_wait'):
             procs.on_wait = self._remote_wait
 
@@ -109,6 +111,23 @@ class Ui:
         dlg.lines[4] = ''
         dlg.draw('key')
 
+    def tick(self, seconds: float) -> None:
+        """창(결과·확인·입력)이 떠 있는 동안: ROS 폴링 + 상단 상태바를 1초마다 갱신 (창 밑 화면이 멈춰 보이지 않게)."""
+        self._poll(seconds)
+        self.refresh_top()
+
+    def refresh_top(self) -> None:
+        cols, rows = self.term.size()
+        if self._title is None or self._frame_size != (cols, rows) or cols < 70 or rows < 18:
+            return   # 메뉴 화면을 아직 안 그렸거나 좁은 화면(세로 쌓기)
+        now = time.monotonic()
+        if now - self._top_at < 1.0:
+            return
+        self._top_at = now
+        for i, ln in enumerate(self.top_lines(self._title, cols)):
+            self.console.write(f'\033[{i + 1};1H\033[K' + self.term.fit(ln, cols))
+        self.console.flush()
+
     def progress(self, text: str) -> None:
         """처리 중 창 맨 아래 줄을 갱신 (오래 걸리는 단계가 지금 뭘 기다리는지). 메뉴 밖(명령줄)이면 무시."""
         dlg = self._busy
@@ -116,6 +135,7 @@ class Ui:
             return
         spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[int(time.monotonic() * 4) % 10]
         dlg.lines[4] = self.term.paint(f'{spin} {text}', DIM)
+        self.refresh_top()   # 상태바 먼저 → 창이 위에 (겹치는 줄이 있어도 창이 이김)
         dlg.draw('key')
 
     def _remote_wait(self, elapsed: float) -> None:
@@ -149,6 +169,7 @@ class Ui:
         """
         if poll:
             self._poll(0.3)
+        self._title = title
         cols, rows = self.term.size()
         size = (cols, rows)
         if cols < 70 or rows < 18:

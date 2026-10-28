@@ -188,7 +188,7 @@ class Dialog:
             while True:
                 self.draw('input', buf, prompt, error=error)
                 k = keys.read(0.1)
-                self.ui._poll(0.01)
+                self.ui.tick(0.01)
                 if k is None:
                     continue
                 if k == 'enter':
@@ -221,7 +221,7 @@ class Dialog:
             while True:
                 self.draw('key')
                 k = keys.read(0.1)
-                self.ui._poll(0.01)
+                self.ui.tick(0.01)
                 if k is None:
                     continue
                 if k == 'enter':
@@ -252,7 +252,7 @@ class Dialog:
                 off = max(0, min(off, max(0, len(lines) - h)))
                 self.draw('pager', off=off, h=h)
                 k = keys.read(0.1)
-                self.ui._poll(0.01)
+                self.ui.tick(0.01)
                 if k is None:
                     continue
                 if k in ('enter', 'esc', 'left', 'eof'):
