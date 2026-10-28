@@ -7,6 +7,29 @@ SLAM·Nav는 로봇(Pi)에서 돌고, 조작은 **토픽이 보이는 곳 어디
 - 텔레오퍼·목표·초기 위치·모드는 토픽이라 어디서나 바로.
 - 아래 명령은 PC든 Pi든 `tool/` 폴더에서 그대로 실행.
 
+## 두 가지 방법: 명령 한 줄 · 메뉴
+
+같은 기능을 두 방식으로 씁니다. 아래 각 단계에 둘 다 적었습니다.
+
+- **명령 한 줄**: `./run-cli slam start`처럼 바로 실행 (스크립트·복붙에 편함).
+- **메뉴**: `./run-cli` (인자 없이) → 화면에서 `↑↓`로 고르고 `Enter`, 또는 번호 키. `Esc` 뒤로 · `m` 메인 · `q` 종료.
+  위쪽 상태바(베이스·SLAM·Nav ●/○ · 로봇 · 모드/RL/비상정지 · odom·scan·map)가 2초마다 갱신돼서 보면서 하기 좋습니다.
+
+```text
+./run-cli                       메인 메뉴
+├─ 1) 상태                      1 상태 출력 · 2 모터 재부팅 · 3 모드 전환 · 4 RL 켜기/끄기 · 5 비상정지
+├─ 2) 베이스                    1 시작/정지 · 2 재시작 · l 로그
+├─ 3) SLAM 맵핑                 1 시작/정지 · 2 재시작 · 3 지도 저장 · l 로그
+├─ 4) Nav (지도 주행)           1 시작(지도 선택)/정지 · 2 재시작 · 3 초기 위치 · 4 목표 보내기 · 5 목표 취소 · l 로그
+├─ 5) 수동 주행 / 텔레오퍼      1 텔레오퍼 · 2~5 전진·후진·좌·우 한 번 · 6~8 속도·시간 설정
+├─ 6) 지도 파일                 s 지금 지도 저장 · 번호 = 지도 내용 보기
+├─ 7) SLAM 중 Nav               1 시작/정지 · 2 재시작 · 4 목표 보내기 · 5 목표 취소 · l 로그
+├─ 8) 노드 목록
+└─ 9) 전부 정지                 = stop-all
+```
+
+`1 시작/정지`는 같은 자리에 지금 상태에 맞는 쪽만 보입니다 (꺼져 있으면 시작, 켜져 있으면 정지).
+
 ## 0. 로봇 켜고 bringup (매번 먼저)
 
 로봇 전원을 켜면 Pi는 부팅만 하고 **ROS는 아무것도 안 떠 있습니다** (자동 시작 없음). 바퀴·odom·라이다를 내는
@@ -27,6 +50,8 @@ ssh -t pak 'cd ~/ros2/tool && ./run-cli base start'   # 또는 Pi에 들어가�
 ./run-cli status
 #   ● 베이스 · 로봇 ● ok · 모드 MANUAL · RL off · 비상정지 off · odom 20Hz · scan 10Hz 이면 OK
 ```
+
+메뉴: `./run-cli` → `2) 베이스` → `1) 시작` → 위쪽 상태바가 `● 베이스` · `로봇 ● ok`가 되면 OK.
 
 베이스가 띄우는 것 (`ros2 launch tb3_bringup tb-only.launch.py`): state_manager · cmd_manager · opencr_driver ·
 robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resample — [ARCH.md](../ros2_ws/ARCH.md).
@@ -53,6 +78,9 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ./run-cli teleop        # w 전진 · x 후진 · a/d 제자리 회전 · s 정지 · e/c 속도 · q 종료
 ```
 
+메뉴: `./run-cli` → `3) SLAM 맵핑` → `1) 시작` → `m` 메인 → `5) 수동 주행 / 텔레오퍼` → `1) 텔레오퍼` (`q`로 나옴).
+RViz(`./run-rviz slam`)는 메뉴 밖에서 따로 — 다른 터미널.
+
 요령:
 
 - **천천히.** 0.10 m/s, 회전은 `a`/`d` 짧게 → `s`. 빨리 돌면 스캔 정합이 깨져 지도가 겹치거나 휩니다.
@@ -71,7 +99,8 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ```
 
 - 저장 위치 (항상 로봇): `~/ros2/ros2_ws/map/office/map.yaml` + `map.pgm`
-- 메뉴: `./run-cli` → `3) SLAM 맵핑` → `3) 지도 저장` / 목록·내용은 `6) 지도 파일`
+- 메뉴: `./run-cli` → `3) SLAM 맵핑` → `3) 지도 저장` → 이름 입력 (빈칸 Enter = 날짜_시각) → 끝나면 같은 메뉴 `1) 정지`.
+  목록·내용은 `6) 지도 파일` (`s`로 저장도 됨).
 - `/map 수신 없음`으로 거부되면 SLAM이 지도를 안 내는 중 → `./run-cli slam log`, 라이다 `scan` 확인.
 
 ## 3. 저장한 지도로 주행 (Nav)
@@ -83,6 +112,8 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 # ② 주행 화면
 ./run-rviz nav
 ```
+
+메뉴: `./run-cli` → `4) Nav (지도 주행)` → `1) 시작 (지도 선택)` → 목록에서 지도 고르기 (최신 먼저) → 같은 메뉴에서 `3) 초기 위치` → `4) 목표 보내기`.
 
 ### ③ 초기 위치 — **반드시 먼저**
 
@@ -143,12 +174,18 @@ for p in "1.0 0.0 0" "1.0 1.0 90" "0 0 180"; do ./run-cli goal $p || break; done
 # 끝나면: map save → explore stop → slam stop
 ```
 
+메뉴: `./run-cli` → `3) SLAM 맵핑` → `1) 시작` → `m` → `7) SLAM 중 Nav` → `1) 시작` → `4) 목표 보내기` (또는 RViz에서 찍기).
+끝나면 `3) SLAM 맵핑` → `3) 지도 저장` → `7) SLAM 중 Nav` → `1) 정지` → `3) SLAM 맵핑` → `1) 정지`.
+
 ## 6. 끄기
 
 ```bash
 ./run-cli nav stop        # 또는 slam stop / explore stop
 ./run-cli stop-all        # 바퀴 정지 → 베이스까지 전부
 ```
+
+메뉴: 각 메뉴(`2)`·`3)`·`4)`·`7)`)의 `1) 정지` · 전부는 메인 `9) 전부 정지` (확인창 — SLAM이 켜져 있으면 "저장 안 한 지도는 사라짐" 경고).
+`./run-cli stop`·메뉴에서 `q`는 **CLI만** 끄고 로봇 ROS는 계속 돕니다.
 
 ## 7. 문제
 
