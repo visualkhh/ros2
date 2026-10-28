@@ -44,7 +44,7 @@ class StepItem(MenuItem):
 
 
 class SpeedItem(MenuItem):
-    def __init__(self, app, key: str, field: str, name: str, unit: str, maximum: float):
+    def __init__(self, app, key: str, field: str, name: str, unit: str, maximum: float | None = None):
         super().__init__(app)
         self.maximum = maximum
         self.key = key
