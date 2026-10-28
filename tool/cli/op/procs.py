@@ -245,6 +245,7 @@ class RemoteProcs(Procs):
         self.host = ROBOT_HOST
         self.map_dir_txt = f'{ROBOT_HOST}:{ROBOT_TOOL_DIR}/../ros2_ws/map'
         self._maps: tuple[float, list] = (0.0, [])
+        self._discovered = False
 
     def _ssh(self, remote_cmd: str, timeout: float = 120) -> tuple[int, str]:
         cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ROBOT_SSH, remote_cmd]
@@ -262,6 +263,9 @@ class RemoteProcs(Procs):
         return self._ssh(f'cd {ROBOT_TOOL_DIR} && ./run-cli {shlex.join(args)}', timeout)
 
     def running(self, name: str) -> bool:
+        if not self._discovered:   # 막 켠 CLI는 아직 로봇 노드를 못 봄 → 처음 한 번 탐색 시간을 줌
+            self.node.poll(2.5)
+            self._discovered = True
         names = {n for n, _ in self.node.get_node_names_and_namespaces()}
         if name == 'explore':   # SLAM 중 Nav = 주행부는 있는데 amcl은 없음
             return 'bt_navigator' in names and 'amcl' not in names
@@ -289,6 +293,10 @@ class RemoteProcs(Procs):
 
     def restart(self, name: str) -> tuple[bool, str]:
         rc, out = self._cli(name, 'restart')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def stop_all(self) -> tuple[bool, str]:
+        rc, out = self._cli('stop-all')
         return rc == 0, f'[{self.host}] {out}'
 
     def tail(self, name: str, n: int = 40) -> str:

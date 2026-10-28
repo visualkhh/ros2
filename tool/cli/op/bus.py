@@ -119,6 +119,10 @@ class Bus:
 
     def cmd_stop_all(self, args) -> int:
         self.send_velocity(0.0, 0.0)
+        if hasattr(self.procs, 'stop_all'):   # 원격: 로봇의 stop-all이 pid로 확실히 끔
+            ok, msg = self.procs.stop_all()
+            print(msg)
+            return 0 if ok else 1
         for name in reversed(list(SERVICES)):
             if self.procs.running(name):
                 self.stop(name)
