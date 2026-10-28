@@ -9,7 +9,7 @@ import time
 import rclpy
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped
 
-from .procs import MAP_DIR, SERVICES, Procs
+from .procs import SERVICES
 from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 
 # 수동 주행 명령은 cmd_manager(mux)의 수동 입력으로 — /state_mode=MANUAL일 때만 바퀴로 감 (ARCH.md)
@@ -28,7 +28,7 @@ class Bus:
         self.state = state
         self.ui = ui
         self.term = term
-        self.procs = Procs()
+        self.procs = node.procs
         msg_type = TwistStamped if CMD_VEL_STAMPED else Twist
         self._vel_pub = node.create_publisher(msg_type, CMD_VEL, 10)
         self._init_pub = node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
@@ -50,14 +50,15 @@ class Bus:
         rows = []
         for name, svc in SERVICES.items():
             pid = self.procs.pid(name)
-            extra = ''
+            on = self.procs.running(name)
+            extra = '' if pid or not on else f'{self.procs.host} (원격)'
             if pid:
                 up = self.procs.uptime(name) or 0
                 extra = f'pid {pid} · {int(up // 60)}분 {int(up % 60)}초'
                 info = self.procs.info(name)
                 if info:
                     extra += f' · {os.path.basename(os.path.dirname(info))}'
-            rows.append((name, svc.label, pid is not None, extra))
+            rows.append((name, svc.label, on, extra))
         return rows
 
     def status_lines(self) -> list[str]:
@@ -98,16 +99,16 @@ class Bus:
             if name == 'nav':
                 path = self.procs.resolve_map(args.map)
                 if path is None:
-                    print(f'지도 없음: {args.map or "(최근 지도)"} — {MAP_DIR} 확인 · `map list`', file=sys.stderr)
+                    print(f'지도 없음: {args.map or "(최근 지도)"} — {self.procs.map_dir_txt} 확인 · `map list`', file=sys.stderr)
                     return 1
                 map_yaml = str(path)
             return self.start(name, map_yaml)
         if args.action == 'stop':
             return self.stop(name)
         if args.action == 'restart':
-            info = self.procs.info(name) or None
-            self.stop(name)
-            return self.start(name, info)
+            ok, msg = self.procs.restart(name)
+            print(msg)
+            return 0 if ok else 1
         if args.action == 'log':
             print(self.procs.tail(name, args.lines))
             return 0
@@ -132,20 +133,20 @@ class Bus:
         if args.action == 'list':
             maps = self.procs.maps()
             if not maps:
-                print(f'지도 없음 ({MAP_DIR})')
-            for name, path in maps:
-                stamp = time.strftime('%m-%d %H:%M', time.localtime(path.stat().st_mtime))
-                print(f'{name:<24} {stamp}  {path}')
+                print(f"지도 없음 ({self.procs.map_dir_txt})")
+            for name, path in maps:   # 최신 먼저 (원격이면 로봇의 경로)
+                print(f'{name:<24} {path}')
             return 0
         name = args.name or self.default_map_name()
         from .procs import IS_ROBOT
-        if not IS_ROBOT:
-            print(self.term.paint(f'주의: 여기는 로봇이 아님 — 지도는 이 컴퓨터의 {MAP_DIR}에 저장됩니다 '
-                                  '(Nav는 로봇에서 도니 로봇에서 저장하는 게 맞음)', YELLOW))
+        if not IS_ROBOT:   # 로봇의 run-cli가 저장 (지도는 로봇에 — Nav가 거기서 씀)
+            ok, msg = self.procs.save_map(name)
+            print(msg)
+            return 0 if ok else 1
         if self.state.map.age() is None:
             print(self.term.paint('/map 수신 없음 — SLAM이 지도를 내고 있지 않습니다 (라이다 /scan이 있어야 지도가 생김)', RED))
             return 1
-        if not self.procs.running('slam') and IS_ROBOT:
+        if not self.procs.running('slam'):
             print(self.term.paint('주의: SLAM이 꺼져 있음 — /map을 내는 노드(map_server 등)가 있어야 저장됩니다', YELLOW))
         ok, msg = self.procs.save_map(name)
         print(msg)

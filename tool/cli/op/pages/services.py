@@ -5,7 +5,7 @@ import math
 import re
 
 from ..defs import BACK, STAY
-from ..procs import MAP_DIR, SERVICES
+from ..procs import SERVICES
 from ..terminal import DIM, GREEN, YELLOW
 from .base import Menu, MenuItem, Page
 
@@ -87,9 +87,7 @@ class RestartItem(MenuItem):
             body = [self.term.paint('재시작하면 지금까지 만든 지도가 사라집니다 (먼저 저장)', YELLOW)]
         if not self.ui.confirm(f'{svc.label}를 재시작할까요?', body=body):
             return STAY
-        info = self.bus.procs.info(self.name) or None
-        self.bus.stop(self.name)
-        self.bus.start(self.name, info)
+        print(self.bus.procs.restart(self.name)[1])
         return STAY
 
 
@@ -160,11 +158,11 @@ class SaveMapItem(MenuItem):
         def check(raw):
             return None if re.fullmatch(r'[\w.-]+', raw) else '영문·숫자·_ . - 만'
 
-        name = self.ui.modal_input('지도 저장', [f'저장 위치: {MAP_DIR}/<이름>/map.yaml',
+        name = self.ui.modal_input('지도 저장', [f'저장 위치: {self.bus.procs.map_dir_txt}/<이름>/map.yaml',
                                               f'빈칸 Enter = {default}'], '이름>', default, check)
         if name is None:
             return STAY
-        if (MAP_DIR / name / 'map.yaml').exists() and not self.ui.confirm(f'{name} 이(가) 이미 있습니다. 덮어쓸까요?'):
+        if name in [n for n, _ in self.bus.procs.maps()] and not self.ui.confirm(f'{name} 이(가) 이미 있습니다. 덮어쓸까요?'):
             return STAY
         ok, msg = self.bus.procs.save_map(name)
         print(msg)
@@ -263,11 +261,11 @@ class MapPickMenu(Menu):
         from .base import InfoItem
         maps = self.bus.procs.maps()
         if not maps:
-            return [InfoItem(self.app, f'지도 없음 — SLAM으로 만들고 저장 ({MAP_DIR})')]
+            return [InfoItem(self.app, f'지도 없음 — SLAM으로 만들고 저장 ({self.bus.procs.map_dir_txt})')]
         return [PickItem(self.app, str(i), name, path) for i, (name, path) in enumerate(maps, 1)]
 
     def center(self):
-        return ['[지도 목록] 최신 먼저', f' {MAP_DIR}', '',
+        return ['[지도 목록] 최신 먼저', f' {self.bus.procs.map_dir_txt}', '',
                 ' 고르면 nav2 bringup(map_server+amcl+주행)을 띄웁니다',
                 ' 그다음 초기 위치(3)를 꼭 넣으세요']
 

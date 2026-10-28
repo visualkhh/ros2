@@ -42,7 +42,7 @@ from sensor_msgs.msg import LaserScan
 from diagnostic_msgs.msg import DiagnosticArray
 
 from op.bus import Bus
-from op.procs import SERVICES, Procs
+from op.procs import SERVICES, make_procs
 from op.state import StateStore
 from op.terminal import Terminal
 from op.ui import Ui
@@ -58,7 +58,8 @@ class RobotTool(Node):
         super().__init__('robot_tool')
         self.term = Terminal()
         self.state = StateStore()
-        self.ui = Ui(self.term, self.state, Procs(), self.poll)
+        self.procs = make_procs(self)   # 로봇이 아니면 RemoteProcs (SSH + 노드 그래프)
+        self.ui = Ui(self.term, self.state, self.procs, self.poll)
         self.bus = Bus(self, self.state, self.ui, self.term)
         self.drive_cfg = {'linear': 0.10, 'angular': 0.5, 'duration': 1.0}
         self._wire()

@@ -15,7 +15,7 @@ import signal
 import subprocess
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 TOOL_DIR = Path(__file__).resolve().parents[2]          # tool/
 REPO_DIR = TOOL_DIR.parent                               # ros2/
@@ -31,9 +31,12 @@ NAV_PARAMS = Path(os.environ.get('TOOL_NAV_PARAMS', CONFIG_DIR / 'nav2_params.ya
 #   PC 시험(OpenCR 없음): TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py'
 BASE_CMD = os.environ.get('TOOL_BASE_CMD', 'ros2 launch tb3_bringup tb-only.launch.py')
 SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')
-# 베이스·SLAM·Nav는 로봇(Pi)에서 띄운다. PC에서 메뉴로 시작하면 PC에 떠서 /dev/opencr를 못 찾고,
-# 지도도 PC 폴더에 저장돼 헷갈림 (2026-10-27 실제로 겪음) → 로봇이 아니면 거부. PC 시뮬레이션은 TOOL_LOCAL=1.
+# 베이스·SLAM·Nav 프로세스와 지도 파일은 로봇(Pi)에 있어야 한다. 로봇이 아닌 곳에서 run-cli를 쓰면
+# RemoteProcs가 켜기/끄기·지도 저장/목록·로그를 SSH로 로봇의 run-cli에 넘기고, 켜짐 여부는 ROS 노드 그래프로 본다
+# (그래서 토픽이 보이는 곳 어디서나 같은 CLI). PC 시뮬레이션(로컬에 띄우기)은 TOOL_LOCAL=1.
 ROBOT_HOST = os.environ.get('ROBOT_HOST', 'pak.local')
+ROBOT_TOOL_DIR = os.environ.get('TOOL_ROBOT_DIR', '~/ros2/tool')   # 로봇의 tool 위치
+ROBOT_SSH = os.environ.get('TOOL_ROBOT_SSH', f'pak@{ROBOT_HOST}')   # SSH 대상 (키 인증 필요)
 IS_ROBOT = socket.gethostname() == ROBOT_HOST.removesuffix('.local') or os.environ.get('TOOL_LOCAL') == '1'
 
 
@@ -74,6 +77,7 @@ SERVICES: dict[str, Service] = {s.name: s for s in (
 class Procs:
     def __init__(self):
         RUN_DIR.mkdir(parents=True, exist_ok=True)
+        self.map_dir_txt = str(MAP_DIR)   # 화면 표시용 (원격이면 로봇:경로)
 
     # ------------------------------------------------------------ pid 파일
     @staticmethod
@@ -122,10 +126,6 @@ class Procs:
     # ------------------------------------------------------------ start/stop
     def start(self, name: str, map_yaml: str | None = None) -> tuple[bool, str]:
         svc = SERVICES[name]
-        if not IS_ROBOT:
-            return False, (f'{svc.label}: 여기({socket.gethostname()})는 로봇이 아님 — 로봇에서 시작하세요:\n'
-                           f'  ssh -t {ROBOT_HOST.removesuffix(".local")} \'cd ~/ros2/tool && ./run-cli {name} start\'\n'
-                           f'  (PC 시뮬레이션이면 TOOL_LOCAL=1 ./run-cli ...)')
         if self.running(name):
             return False, f'{svc.label}: 이미 실행 중 (pid {self.pid(name)})'
         busy = [SERVICES[c].label for c in svc.conflicts if self.running(c)]
@@ -166,6 +166,12 @@ class Procs:
         self._pidfile(name).unlink(missing_ok=True)
         return True, f'{svc.label}: 종료 (pid {pid})'
 
+    def restart(self, name: str) -> tuple[bool, str]:
+        info = self.info(name) or None   # nav: 같은 지도로
+        _, msg = self.stop(name)
+        ok, msg2 = self.start(name, info)
+        return ok, f'{msg}\n{msg2}'
+
     @staticmethod
     def _group_alive(pgid: int) -> bool:
         try:
@@ -191,6 +197,10 @@ class Procs:
             return []
         found = [(d.name, d / 'map.yaml') for d in MAP_DIR.iterdir() if (d / 'map.yaml').is_file()]
         return sorted(found, key=lambda x: x[1].stat().st_mtime, reverse=True)
+
+    @staticmethod
+    def read_map(path) -> str:
+        return Path(path).read_text(errors='replace')
 
     @staticmethod
     def resolve_map(name_or_path: str | None) -> Path | None:
@@ -220,3 +230,95 @@ class Procs:
         if not ok and not any(out.iterdir()):
             out.rmdir()
         return ok, (f'저장: {out}/map.yaml · map.pgm' if ok else '저장 실패') + '\n' + text[-1500:]
+
+
+# 켜짐 판단에 쓰는 노드 (ROS 그래프 — 연결된 곳 어디서나 보임)
+MARKER_NODES = {'base': ('opencr_driver', 'mock_base'), 'slam': ('slam_toolbox',),
+                'nav': ('amcl',), 'explore': ('bt_navigator',)}
+
+
+class RemoteProcs(Procs):
+    """로봇이 아닌 곳: 켜기/끄기·지도·로그는 SSH로 로봇의 run-cli에, 켜짐 여부는 노드 그래프로."""
+
+    def __init__(self, node):
+        super().__init__()
+        self.node = node
+        self.host = ROBOT_HOST
+        self.map_dir_txt = f'{ROBOT_HOST}:{ROBOT_TOOL_DIR}/../ros2_ws/map'
+        self._maps: tuple[float, list] = (0.0, [])
+
+    def _ssh(self, remote_cmd: str, timeout: float = 120) -> tuple[int, str]:
+        cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ROBOT_SSH, remote_cmd]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return 124, f'{self.host}: 시간 초과 ({timeout:.0f}s)'
+        out = '\n'.join(ln for ln in (r.stdout + r.stderr).splitlines()
+                        if not ln.startswith(('ROS_DOMAIN_ID=', 'DDS 피어', 'ROS_STATIC_PEERS')))
+        if r.returncode == 255:
+            out += f'\n(SSH 실패 — `ssh {ROBOT_SSH}`가 비번 없이 되는지 확인: documents/ai/ai-passwordless-robot-access.md)'
+        return r.returncode, out.strip()
+
+    def _cli(self, *args: str, timeout: float = 120) -> tuple[int, str]:
+        return self._ssh(f'cd {ROBOT_TOOL_DIR} && ./run-cli {shlex.join(args)}', timeout)
+
+    def running(self, name: str) -> bool:
+        names = {n for n, _ in self.node.get_node_names_and_namespaces()}
+        if name == 'explore':   # SLAM 중 Nav = 주행부는 있는데 amcl은 없음
+            return 'bt_navigator' in names and 'amcl' not in names
+        return any(m in names for m in MARKER_NODES[name])
+
+    def pid(self, name: str) -> int | None:
+        return None
+
+    def uptime(self, name: str) -> float | None:
+        return None
+
+    def info(self, name: str) -> str:
+        return ''
+
+    def logfile(self, name: str) -> str:
+        return f'{self.host}:{ROBOT_TOOL_DIR}/.run/{name}.log'
+
+    def start(self, name: str, map_yaml: str | None = None) -> tuple[bool, str]:
+        rc, out = self._cli(name, 'start', *([map_yaml] if map_yaml else []))
+        return rc == 0, f'[{self.host}] {out}'
+
+    def stop(self, name: str, timeout: float = 10.0) -> tuple[bool, str]:
+        rc, out = self._cli(name, 'stop')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def restart(self, name: str) -> tuple[bool, str]:
+        rc, out = self._cli(name, 'restart')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def tail(self, name: str, n: int = 40) -> str:
+        return self._ssh(f'tail -n {int(n)} {ROBOT_TOOL_DIR}/.run/{name}.log 2>&1', 15)[1]
+
+    def maps(self) -> list[tuple[str, PurePosixPath]]:
+        # 메뉴가 2초마다 다시 그리므로 5초 캐시 (SSH 왕복)
+        if time.monotonic() - self._maps[0] < 5.0:
+            return self._maps[1]
+        rc, out = self._ssh(f'ls -1t {ROBOT_TOOL_DIR}/../ros2_ws/map/*/map.yaml 2>/dev/null', 15)
+        paths = [PurePosixPath(ln) for ln in out.splitlines() if ln.endswith('/map.yaml')]
+        found = [(p.parent.name, p) for p in paths]
+        self._maps = (time.monotonic(), found)
+        return found
+
+    def read_map(self, path) -> str:
+        return self._ssh(f'cat {shlex.quote(str(path))}', 15)[1]
+
+    def resolve_map(self, name_or_path: str | None):
+        maps = self.maps()
+        if not name_or_path:
+            return maps[0][1] if maps else None
+        return next((p for n, p in maps if name_or_path in (n, str(p))), None)
+
+    def save_map(self, name: str) -> tuple[bool, str]:
+        self._maps = (0.0, [])
+        rc, out = self._cli('map', 'save', name)
+        return rc == 0, f'[{self.host}] {out}'
+
+
+def make_procs(node) -> Procs:
+    return Procs() if IS_ROBOT else RemoteProcs(node)

@@ -1,36 +1,32 @@
 # 지도 만들기 → 지도로 주행 → 특정 위치로 보내기
 
-로봇 Pi(`pak`)에서 SLAM·Nav를 켜고, PC에서 RViz로 보면서 조종·목표를 찍습니다.
+SLAM·Nav는 로봇(Pi)에서 돌고, 조작은 **토픽이 보이는 곳 어디서나** `./run-cli`로 합니다 (보통 화면이 있는 PC에서 RViz와 같이).
 명령 전체는 [README.md](README.md), 노드 구성은 [../ros2_ws/ARCH.md](../ros2_ws/ARCH.md).
 
-| 어디서 | 무엇 |
-|---|---|
-| **Pi** (`ssh -t pak`, `cd ~/ros2/tool`) | 베이스 · SLAM · Nav **켜기/끄기**, **지도 저장** |
-| **PC** (`cd ~/workspaces/visualkhh/source/ros2/tool`) | RViz(보기·찍기) · 텔레오퍼 · `goal` · `initpose` |
-
-PC에서 베이스·SLAM·Nav를 시작하면 거부합니다 (PC에 뜨면 안 되므로). 지도도 Pi에서 저장해야 Pi Nav가 씁니다.
+- 켜기/끄기·지도 저장은 로봇의 프로세스·파일이라, 로봇이 아닌 곳에서는 tool이 SSH로 로봇에 넘깁니다 (`[pak.local] …`). 지도는 항상 로봇 `~/ros2/ros2_ws/map/`.
+- 텔레오퍼·목표·초기 위치·모드는 토픽이라 어디서나 바로.
+- 아래 명령은 PC든 Pi든 `tool/` 폴더에서 그대로 실행.
 
 ## 0. 준비 (매번)
 
 ```bash
-# Pi — 베이스(바퀴·odom·라이다)가 떠 있는지
-ssh -t pak 'cd ~/ros2/tool && ./run-cli status'
-#   ● 베이스 · 로봇 ok · odom 20Hz · scan 10Hz 이면 OK
-#   ○ 베이스면:  ssh -t pak 'cd ~/ros2/tool && ./run-cli base start'
+./run-cli status
+#   ● 베이스 · 로봇 ok · 모드 … · odom 20Hz · scan 10Hz 이면 OK
+#   ○ 베이스면:  ./run-cli base start
 ```
 
-PC CLI 상단 상태바도 `odom 20Hz | scan 10Hz` · `로봇 ● ok` 여야 합니다. `✗`면 [README 문제 확인](README.md#문제-확인).
+`✗`·`수신 없음`이면 [README 문제 확인](README.md#문제-확인).
 
 ## 1. 지도 만들기 (SLAM)
 
 ```bash
-# ① Pi — SLAM 시작
-ssh -t pak 'cd ~/ros2/tool && ./run-cli slam start'
+# ① SLAM 시작 (로봇에서 돔)
+./run-cli slam start
 
-# ② PC 터미널 1 — 지도 커지는 거 보기
+# ② 터미널 1 — 지도 커지는 거 보기
 ./run-rviz slam
 
-# ③ PC 터미널 2 — 천천히 돌아다니기
+# ③ 터미널 2 — 천천히 돌아다니기
 ./run-cli teleop        # w 전진 · x 후진 · a/d 제자리 회전 · s 정지 · e/c 속도 · q 종료
 ```
 
@@ -46,22 +42,22 @@ ssh -t pak 'cd ~/ros2/tool && ./run-cli slam start'
 **SLAM을 끄기 전에** 저장 (끄면 만든 지도가 사라짐).
 
 ```bash
-ssh -t pak 'cd ~/ros2/tool && ./run-cli map save office'    # 이름 생략 = 날짜_시각
-ssh pak 'cd ~/ros2/tool && ./run-cli map list'               # 확인
-ssh -t pak 'cd ~/ros2/tool && ./run-cli slam stop'           # 저장 후 SLAM 끄기
+./run-cli map save office    # 이름 생략 = 날짜_시각
+./run-cli map list           # 확인
+./run-cli slam stop          # 저장 후 SLAM 끄기
 ```
 
-- 저장 위치(Pi): `~/ros2/ros2_ws/map/office/map.yaml` + `map.pgm`
+- 저장 위치 (항상 로봇): `~/ros2/ros2_ws/map/office/map.yaml` + `map.pgm`
 - 메뉴: `./run-cli` → `3) SLAM 맵핑` → `3) 지도 저장` / 목록·내용은 `6) 지도 파일`
 - `/map 수신 없음`으로 거부되면 SLAM이 지도를 안 내는 중 → `./run-cli slam log`, 라이다 `scan` 확인.
 
 ## 3. 저장한 지도로 주행 (Nav)
 
 ```bash
-# ① Pi — Nav 시작 (SLAM이 켜져 있으면 거부 → 먼저 slam stop)
-ssh -t pak 'cd ~/ros2/tool && ./run-cli nav start office'   # 이름 생략 = 가장 최근 지도
+# ① Nav 시작 (SLAM이 켜져 있으면 거부 → 먼저 slam stop)
+./run-cli nav start office   # 이름 생략 = 가장 최근 지도
 
-# ② PC — 주행 화면
+# ② 주행 화면
 ./run-rviz nav
 ```
 
@@ -76,12 +72,12 @@ Nav2는 로봇이 지도 어디에 있는지 알아야 켜집니다. 초기 위�
   ./run-cli initpose 0 0 0          # 지도 만들기 시작한 자리 = (0, 0, 0°)
   ```
 
-  메뉴: `./run-cli` → `4) Nav` → `3) 초기 위치 (x y yaw°)`. PC·Pi 어디서 해도 됨 (`/initialpose` 토픽 → Pi amcl).
+  메뉴: `./run-cli` → `4) Nav` → `3) 초기 위치 (x y yaw°)`. 어디서 해도 됨 (`/initialpose` 토픽 → 로봇 amcl).
 
   출력이 `→ amcl 반영: x=… y=…` 이면 성공. RViz에서 초록 화살표 구름(파티클)이 로봇 주변에 모이고,
   빨간 스캔 점이 지도 벽과 겹치면 맞은 것. 어긋나면 다시 찍습니다.
 
-초기 위치 후 Nav 주행부가 켜지기까지 Pi에서 수십 초 걸릴 수 있습니다 (`./run-cli nav log`에
+초기 위치 후 Nav 주행부가 켜지기까지 로봇에서 수십 초 걸릴 수 있습니다 (`./run-cli nav log`에
 `lifecycle_manager_navigation … Managed nodes are active`가 뜨면 준비 완료).
 
 ## 4. 특정 위치로 보내기
@@ -119,23 +115,23 @@ for p in "1.0 0.0 0" "1.0 1.0 90" "0 0 180"; do ./run-cli goal $p || break; done
 지도를 아직 다 안 만든 상태에서 목표를 찍어 움직이며 지도를 넓힐 때. 초기 위치 불필요 (SLAM이 위치를 냄).
 
 ```bash
-ssh -t pak 'cd ~/ros2/tool && ./run-cli slam start && ./run-cli explore start'
-./run-rviz slam                      # PC — 2D Goal Pose로 찍기 (또는 ./run-cli goal x y yaw)
-# 끝나면: Pi에서 map save → explore stop → slam stop
+./run-cli slam start && ./run-cli explore start
+./run-rviz slam                      # 2D Goal Pose로 찍기 (또는 ./run-cli goal x y yaw)
+# 끝나면: map save → explore stop → slam stop
 ```
 
 ## 6. 끄기
 
 ```bash
-ssh -t pak 'cd ~/ros2/tool && ./run-cli nav stop'       # 또는 slam stop / explore stop
-ssh -t pak 'cd ~/ros2/tool && ./run-cli stop-all'       # 바퀴 정지 → 베이스까지 전부
+./run-cli nav stop        # 또는 slam stop / explore stop
+./run-cli stop-all        # 바퀴 정지 → 베이스까지 전부
 ```
 
 ## 7. 문제
 
 | 증상 | 확인 |
 |---|---|
-| RViz에 지도가 안 보임 | PC CLI 상단 `map ✗`? → Pi `./run-cli status`에서 SLAM/Nav 켜졌는지 · PC는 `run-rviz`로 켰는지 (DDS 피어 설정이 들어감) |
+| RViz에 지도가 안 보임 | 상단 `map ✗`? → `./run-cli status`에서 SLAM/Nav 켜졌는지 · RViz는 `run-rviz`로 켰는지 (DDS 피어 설정이 들어감) |
 | 목표를 찍어도 안 움직임 | 초기 위치를 줬는지 · Nav 준비 완료됐는지 (`nav log`) · 텔레오퍼가 같이 켜져 있으면 끄기 (명령이 섞임) |
 | `실패(ABORTED)` | 목표가 벽 안/지도 밖 · 좁은 통로(로봇 폭 31 cm + 여유) · `nav log` |
 | 베이스를 재시작한 뒤 위치가 튐 | 베이스(드라이버)를 다시 켜면 **odom이 0으로 초기화**됨 → Nav면 2D Pose Estimate로 다시, SLAM이면 저장 후 `slam restart` |
@@ -149,5 +145,5 @@ ssh -t pak 'cd ~/ros2/tool && ./run-cli stop-all'       # 바퀴 정지 → 베�
 | `config/slam_toolbox.yaml` | SLAM 설정 (`base_frame: base_footprint` · 지도 갱신 2초 · 최소 사거리 0.12 m) |
 | `config/nav2_params.yaml` | Nav2 설정 (Waffle Pi footprint 다각형 · Twist cmd_vel · amcl `base_footprint`) |
 | `rviz/slam.rviz` · `rviz/nav.rviz` | RViz 화면 |
-| Pi `~/ros2/ros2_ws/map/<이름>/` | 저장한 지도 (`map.yaml` · `map.pgm`) |
-| Pi `~/ros2/tool/.run/<slam·nav·…>.log` | 실행 로그 (`./run-cli slam log`) |
+| 로봇 `~/ros2/ros2_ws/map/<이름>/` | 저장한 지도 (`map.yaml` · `map.pgm`) |
+| 로봇 `~/ros2/tool/.run/<slam·nav·…>.log` | 실행 로그 (`./run-cli slam log`) |

@@ -1,60 +1,57 @@
 # tool
 
-로봇 운영 도구. **지도 만들기(SLAM, slam_toolbox)** 와 **지도 주행(Nav2)** 을 켜고 끄고,
-텔레오퍼로 몰고, 지도를 저장합니다. 상주 노드(state_manager 등) 없이 tool이 `ros2 launch`를 직접 띄웁니다.
+로봇 운영 도구. **지도 만들기(SLAM, slam_toolbox)** · **지도 주행(Nav2)** 켜고 끄기, 텔레오퍼, 지도 저장, 목표 보내기,
+모드(MANUAL/AUTO)·RL·비상정지 전환. **ROS 토픽이 보이는 곳 어디서나** 같은 `./run-cli`로 씁니다 (로봇 Pi든 PC든).
 
 ```text
 tool/
-├── README.md
-├── run-cli          # 로봇(Pi)에서: 메뉴 / 한 번 명령
-├── run-rviz         # PC에서: 맵핑·주행 보기
+├── README.md · MAP_NAV.md  # MAP_NAV = 지도 만들기 → 저장 → 주행 → 목표 순서
+├── run-cli          # 메뉴 / 한 번 명령 (어디서나)
+├── run-rviz         # RViz: 맵핑·주행 보기 (화면 있는 곳)
+├── peers.sh         # 로봇이 아닌 곳에서 Pi DDS 노드를 유니캐스트로 찾게 (WiFi 멀티캐스트 불안정)
 ├── config/
-│   ├── slam_toolbox.yaml   # slam_toolbox online_async 기본값 + base_frame=base_link · 지도 갱신 2초
-│   └── nav2_params.yaml    # nav2_bringup 기본값 + base_link · Twist cmd_vel
+│   ├── slam_toolbox.yaml   # slam_toolbox online_async + base_footprint · 지도 갱신 2초 · 최소 사거리 0.12 m
+│   └── nav2_params.yaml    # nav2_bringup + Waffle Pi footprint · Twist cmd_vel · amcl base_footprint
 ├── rviz/
 │   ├── start.sh · stop.sh · restart.sh
-│   ├── slam.rviz           # 지도(/map)·스캔·odom·TF·포즈 그래프 — 위에서 내려다봄
-│   └── nav.rviz            # nav2 기본 화면 (코스트맵·경로 · 2D Pose Estimate · Goal)
+│   ├── slam.rviz           # 지도·스캔·odom·TF·포즈 그래프 (Orbit 3D, 저장된 TopDown 2D)
+│   └── nav.rviz            # nav2 화면 (코스트맵·경로 · 2D Pose Estimate · Nav2 Goal)
 ├── cli/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── robot_tool.py       # 배선 + argparse + main
-│   └── op/                 # terminal · dialogs · ui · state · procs · bus · pages/
-└── .run/                   # (git 무시) 띄운 launch의 pid · 로그
+│   └── op/                 # terminal · dialogs · ui · state · procs(로컬/원격) · bus · pages/
+└── .run/                   # (git 무시) 띄운 launch의 pid · 로그 · DDS 피어 프로필
 ```
 
-## 어디서 무엇을
+## 어디서나 — 어떻게 동작하나
 
-| 어디 | 무엇 | 왜 |
+| 기능 | 방식 | 로봇이 아닌 곳(PC 등)에서 |
 |---|---|---|
-| 로봇 Pi (`ssh pak`) | `./run-cli` — 베이스·SLAM·Nav 켜기/끄기, 텔레오퍼, 지도 저장 | SLAM·Nav는 라이다·odom 옆에서 돌아야 함 |
-| PC | `./run-rviz slam` / `./run-rviz nav` | 지도가 커지는 모습·주행 경로를 화면으로 봄 |
+| 상태바 · 텔레오퍼 · drive · goal · initpose · 모드/RL/비상정지 · 모터 재부팅 | ROS 토픽·액션 | 그대로 됨 |
+| 베이스·SLAM·Nav 켜기/끄기/재시작 · 로그 | 로봇의 프로세스 | tool이 **SSH로 로봇의 run-cli에 넘김** (`[pak.local] …`로 표시) |
+| 지도 저장 · 목록 · 내용 | 로봇의 파일 (Nav가 거기서 읽음) | 위와 같이 SSH — 지도는 항상 **로봇** `~/ros2/ros2_ws/map/`에 |
+| 켜짐 표시 (● / ○) | 로봇: pid 파일 · 그 밖: **ROS 노드 그래프** (`opencr_driver`·`slam_toolbox`·`amcl`·`bt_navigator`) | `pak.local (원격)`으로 표시 |
 
-"맵핑 모드로 전송" 같은 명령은 따로 없습니다. **Pi에서 SLAM을 켜면 그게 맵핑 중**이고,
-PC RViz는 같은 `ROS_DOMAIN_ID`(=25)로 `/map`·`/scan`·TF를 받아 그릴 뿐입니다.
+필요한 것 (로봇이 아닌 곳): 같은 WiFi · `ssh pak@pak.local`이 비번 없이 됨
+([AI·SSH 키 문서](../documents/ai/ai-passwordless-robot-access.md)). `ROS_DOMAIN_ID=25`·DDS 피어는 스크립트가 맞춥니다.
+"맵핑 모드로 전송" 같은 건 없고, **SLAM이 켜져 있으면 맵핑 중**입니다. RViz는 `/map`·`/scan`·TF를 받아 그릴 뿐.
 
-`ROS_DOMAIN_ID`는 **25로 통일**합니다. `cli/start.sh`·`rviz/start.sh`가 `export ROS_DOMAIN_ID=25`를 하므로 `~/.bashrc` 값과 무관합니다.
+`ROS_DOMAIN_ID`는 **25로 통일** — `cli/start.sh`·`rviz/start.sh`가 `export ROS_DOMAIN_ID=25` (`~/.bashrc` 무관).
 
 > 지도 만들기 → 저장 → 지도로 주행 → 특정 위치로 보내기 전체 순서: **[MAP_NAV.md](MAP_NAV.md)**
 
 ## 지도 만들기 (SLAM)
 
 ```bash
-# Pi
-ssh pak
-cd ~/ros2/tool                  # (저장소 위치)
-./run-cli base start            # 바퀴·odom·라이다 (TOOL_BASE_CMD)
-./run-cli slam start            # 맵핑 시작
-
-# PC — 지도 커지는 거 보기
-./run-rviz slam
-
-# Pi — 천천히 돌기 (0.10 m/s · 0.5 rad/s 정도, 벽을 따라 한 바퀴 → 가운데)
-./run-cli teleop
-./run-cli map save office       # → ros2_ws/map/office/map.yaml + map.pgm
+./run-cli base start            # 바퀴·odom·라이다 (로봇에 이미 떠 있으면 생략)
+./run-cli slam start            # 맵핑 시작 (로봇에서 돔)
+./run-rviz slam                 # 지도 커지는 거 보기 (다른 터미널)
+./run-cli teleop                # 천천히 돌기 (0.10 m/s · 벽을 따라 한 바퀴 → 출발점 → 가운데)
+./run-cli map save office       # → 로봇 ~/ros2/ros2_ws/map/office/map.yaml + map.pgm
 ./run-cli slam stop
 ```
 
-메뉴로 하면: `./run-cli` → `2) 베이스` → `3) SLAM 맵핑` → `5) 수동 주행` → `3) SLAM → 3) 지도 저장`.
+메뉴: `./run-cli` → `2) 베이스` · `3) SLAM 맵핑` · `5) 수동 주행` · `3) SLAM → 3) 지도 저장`.
 
 ## 지도로 주행 (Nav)
 
@@ -62,14 +59,12 @@ cd ~/ros2/tool                  # (저장소 위치)
 ./run-cli nav start office      # 이름 없으면 가장 최근 지도
 ./run-cli initpose 0 0 0        # 지도 위 로봇 위치 (x y yaw°) — 또는 RViz 2D Pose Estimate
 ./run-cli goal 1.0 0.5 90       # 도착까지 기다림 · --no-wait · goal --cancel
-# PC: ./run-rviz nav            # 2D Goal Pose로 찍어도 됨
+./run-rviz nav                  # Nav2 Goal로 찍어도 됨
 ```
 
 `SLAM 중 Nav`(`./run-cli explore start`)는 SLAM을 켠 채 Nav2 주행만 띄웁니다. 맵핑 중에 목표를 찍어
-움직이며 지도를 넓힐 때 씁니다 (초기 위치 불필요).
+움직이며 지도를 넓힐 때 (초기 위치 불필요).
 
-**베이스·SLAM·Nav 시작/정지는 로봇(Pi)에서만** 됩니다. PC에서 누르면 거부하고 `ssh -t pak '...'` 명령을 알려 줍니다
-(PC에 뜨면 `/dev/opencr`를 못 찾고 지도도 PC에 저장돼 헷갈림). PC 시뮬레이션만 `TOOL_LOCAL=1`.
 지도 저장은 `/map`이 들어올 때만 하고, 없으면 "라이다 /scan이 있어야 지도가 생김"으로 알려 줍니다.
 
 동시에 못 켜는 조합: `slam` ↔ `nav`, `nav` ↔ `explore` (지도·위치를 내는 쪽이 둘이 됨). 켜려 하면 거부합니다.
@@ -96,12 +91,12 @@ cd ~/ros2/tool                  # (저장소 위치)
 ./run-cli stop                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
 ```
 
-상단 상태바 3줄: ① 프로세스(이 컴퓨터 기준) ② `odom`·`scan`·`map` 수신 Hz ③ **로봇** — opencr_driver의 `/diagnostics`
+상단 상태바: ① 프로세스 (로봇: pid · 그 밖: 노드 그래프로 `pak.local (원격)`) ② `odom`·`scan`·`map` 수신 Hz ③ **로봇** — opencr_driver의 `/diagnostics`
 (● ok / ✗ motor error·no S line / ? 수신 없음 · 바퀴 온도 좌/우 · 전류 좌/우). 모터 에러면 `1) 상태 → 2) 모터 재부팅`.
 그 아래 줄 = state_manager의 `/state_*`: `모드 MANUAL · RL off · 비상정지 off` (비상정지면 빨강). 전환은 `1) 상태 → 3·4·5`.
 
-CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
-로그: `./run-cli slam log` 또는 `.run/slam.log`.
+CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
+로그: `./run-cli slam log` (어디서나 — 원격이면 SSH로 로봇의 `.run/slam.log`).
 
 메뉴 키 규약 (참고: `cli/op/dialogs.py` 맨 위):
 
@@ -119,9 +114,13 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (pid는 `.run/<이름>.pid`). �
 | `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL on으로 시작은 `tb-for-rl.launch.py` (실행 중엔 `./run-cli rl on`), PC 시험(OpenCR 없음)은 `basic_bringup.launch.py` |
 | `TOOL_CMD_VEL` | `/cmd_manual_vel` | 텔레오퍼·drive가 내는 토픽 (cmd_manager 수동 입력) |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
-| `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) |
+| `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) — 로봇·`TOOL_LOCAL`에서 |
 | `TOOL_SLAM_PARAMS` / `TOOL_NAV_PARAMS` | `config/*.yaml` | 파라미터 파일 |
 | `TOOL_USE_SIM_TIME` | `false` | Gazebo면 `true` |
+| `ROBOT_HOST` | `pak.local` | 로봇 이름 (DDS 피어 · 원격 실행 대상) |
+| `TOOL_ROBOT_SSH` | `pak@pak.local` | 원격 실행 SSH 대상 (키 인증) |
+| `TOOL_ROBOT_DIR` | `~/ros2/tool` | 로봇의 tool 위치 |
+| `TOOL_LOCAL` | — | `1`이면 로봇이 아니어도 **이 컴퓨터에** 띄움 (PC 시뮬레이션) |
 
 프레임 규약 (REP-105, TurtleBot3와 같음): `map → odom → base_footprint(바닥) → base_link(바퀴축 +0.010) → base_scan`.
 `odom → base_footprint`는 드라이버(opencr_driver·mock_base), 나머지는 URDF(robot_state_publisher). 스캔은 `/scan`.
@@ -138,21 +137,26 @@ SLAM·amcl은 `base_footprint`, costmap·footprint 다각형은 `base_link` 기�
 ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
 ```
 
-- PC RViz에 아무것도 안 보임 → PC와 Pi가 같은 WiFi · 둘 다 `ROS_DOMAIN_ID=25` · `ROS_LOCALHOST_ONLY`/`ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST` 아님
-- PC에서 Pi 노드가 보였다 안 보였다 함 (`odom ✗`, `ros2 node list` 빔, ping은 됨) → WiFi가 멀티캐스트를 버림.
-  `run-cli`·`run-rviz`는 PC에서 자동으로 Fast DDS 프로필(`.run/fastdds_peers.xml`)을 만들어 Pi IP의 참가자 슬롯 0~31을
+- RViz·상태바에 아무것도 안 보임 → 같은 WiFi · 둘 다 `ROS_DOMAIN_ID=25` · `ROS_LOCALHOST_ONLY`/`ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST` 아님
+- 로봇 노드가 보였다 안 보였다 함 (`odom ✗`, `ros2 node list` 빔, ping은 됨) → WiFi가 멀티캐스트를 버림.
+  `run-cli`·`run-rviz`는 로봇이 아닌 곳에서 자동으로 Fast DDS 프로필(`.run/fastdds_peers.xml`)을 만들어 Pi IP의 참가자 슬롯 0~31을
   유니캐스트로 찾습니다 (`tool/peers.sh`). `ROS_STATIC_PEERS`는 슬롯 0~3만 찾아서 Pi 노드가 많아지면 일부가 안 보임.
   터미널에서 직접 `ros2` 명령을 칠 때: `export ROS_DOMAIN_ID=25 && source ~/workspaces/visualkhh/source/ros2/tool/peers.sh`
   (그다음 `ros2 daemon stop` 한 번).
 - 지도가 안 커짐 → `scan` 수신 확인, 라이다 TF 확인, 너무 빨리 돌면 스캔 매칭 실패 (천천히)
 - Nav 목표 거부 → `initpose` 먼저, `./run-cli nav log`
+- `[pak.local] … SSH 실패` → `ssh pak@pak.local`이 비번 없이 되는지 (켜기/끄기·지도만 SSH, 나머지는 토픽이라 됨)
+- 바퀴가 안 움직임 → 상태바 `모드`: 텔레오퍼는 MANUAL, Nav는 AUTO여야 · `비상정지 off` · RL on이면 PC `rl-only` 떠 있는지
 
 ## 시험 (실기 없이 PC에서)
 
 mock_base(odom)에 가짜 라이다를 붙여 전체 흐름(SLAM → 저장 → Nav 목표 → SLAM 중 Nav)을 확인했습니다 (2026-10-27).
 
+주의: 스크립트가 `ROS_DOMAIN_ID=25`로 고정하므로 **실기가 켜져 있으면 같은 도메인에 섞입니다** (시험 명령이 로봇을 움직일 수 있음).
+실기를 끄고 하거나, 시험 동안만 `cli/start.sh`의 `export ROS_DOMAIN_ID=25`를 다른 값으로 바꿨다가 되돌리세요.
+
 ```bash
-export TOOL_LOCAL=1 TOOL_MAP_DIR=/tmp/maps   # PC에서 시작 허용 · 시험 지도는 따로
+export TOOL_LOCAL=1 TOOL_MAP_DIR=/tmp/maps ROBOT_HOST=none.local   # 이 PC에 띄움 · Pi 피어 끔
 TOOL_BASE_CMD='ros2 launch tb3_bringup basic_bringup.launch.py' ./run-cli base start   # mock_base
 # + /scan을 내는 무언가 (Gazebo turtlebot3 또는 가짜 스캔 노드)
 ./run-cli slam start && ./run-cli drive left --duration 4 && ./run-cli map save test
