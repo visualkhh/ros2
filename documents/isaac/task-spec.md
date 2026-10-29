@@ -28,8 +28,7 @@
 | 회전 미끄러짐 · 유효 바퀴 간격 오차 | ⚠ 엔코더로는 안 보임 → **OpenCR 내장 IMU 자이로**로 보임 | ✅ (자이로 추가 시) |
 | 바퀴 반지름 오차(직진 거리) | ❌ 엔코더·자이로 모두 안 보임 (외부 기준 필요) | ✗ 범위 밖 |
 
-→ **결정 필요 D1**: OpenCR IMU 자이로 z를 펌웨어 `S` 줄에 추가하고 `/imu`로 낼까? (권장 — 회전 보정이 Before/After에서 가장 눈에 띄는 개선)
-  안 하면 관측은 엔코더만, 보정 대상은 모터 동특성(지연·비대칭·데드밴드·포화)으로 한정.
+→ **D1 결정 (2026-10-29): 자이로 추가.** 펌웨어 별도 `I` 줄(자이로·가속도·자세, `S` 필드는 그대로) → 드라이버 `/imu` (`imu_link`).
 
 ## 3. Task `rl_correct` v2
 
@@ -62,8 +61,8 @@
 
 ## 6. 할 일 (순서)
 
-1. D1 결정 → (예) 펌웨어 `S` 줄에 gyro_z 추가 · 드라이버 `/imu` · 업로드
-2. `robot_spec.py` 공통값 · 우리 URDF USD 생성
-3. `rl_correct` v2 환경 (모터 모델·지연·명령 패턴·obs/reward) + 짧은 스모크 학습
-4. ROS `corrector` obs N=6(5) · 한계 0.26/1.82 · eval_recorder에 enc/gyro 열 추가 · 스크립트 패턴
-5. 학습 → export v2 → Before/After 실측 → 결과를 issue-tracking에
+1. ✅ 펌웨어 `I` 줄 · 드라이버 `/imu` (컴파일 OK — **업로드 대기**)
+2. ✅ `robot_spec.py` · 우리 URDF → USD (캐스터 충돌·마찰 0, 몸체 질량 추가)
+3. ✅ v2 환경 + 물리 스모크 + 60회 학습 (트래킹 오차 0.128 → 0.090) + ONNX
+4. ✅ ROS `corrector` v2 (obs 6 · 0.26/1.82 · 정지 명령 보정 0) · eval_recorder enc/gyro 열 · `compare_csv.py` — ☐ 스크립트 주행 패턴
+5. ☐ 본학습(300회) → export v2 → Before/After 실측 → 결과를 issue-tracking에

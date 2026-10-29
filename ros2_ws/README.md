@@ -94,6 +94,14 @@ ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx 
 
 - `enable:=false`는 보정 없이 통과 — WiFi 왕복 지연까지 같은 조건으로 "Before"를 잽니다.
 - RL on인데 rl-only가 없거나 WiFi가 끊기면 0.3초 뒤 정지 (cmd_manager 안전).
+- 정책 v2 입력은 `/odom`(엔코더) · **`/imu`(OpenCR 자이로 — 펌웨어 `I` 줄)** · 명령. 설계: [documents/isaac/task-spec.md](../documents/isaac/task-spec.md).
+- **PC에 `onnxruntime` 필요** (rl-only가 PC에서 돎): `pip install --break-system-packages onnxruntime`. 없으면 경고 후 그냥 통과(보정 0).
+
+비교 (같은 패턴을 두 번 달린 CSV):
+
+```bash
+python3 src/rl_eval/compare_csv.py /tmp/before.csv /tmp/after.csv   # 직진 RMS · 회전 RMS(자이로·엔코더) · 보정량
+```
 
 Pi에서 직접 추론할 경우 (탑재 전 체크):
 

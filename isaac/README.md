@@ -1,30 +1,32 @@
-# isaac — RL 학습 워크스페이스 (lab PC 전용, Pi에 안 올라감)
+# isaac — RL 이동 보정 학습 (lab PC 전용, Pi에 안 올라감)
 
-TurtleBot3 RL 2종(`rl_correction`, `nav2_rl_controller`) 정책 학습용.
-스펙: [../documents/isaac/task-spec.md](../documents/isaac/task-spec.md)
-**처음이면 [START_HERE.md](START_HERE.md)부터 읽으세요 (개념 → 실행).**
+목적·설계: **[../documents/isaac/task-spec.md](../documents/isaac/task-spec.md)** (v2) · 처음이면 [START_HERE.md](START_HERE.md).
 
-## 환경 (2026-10-28 실측)
+## 환경 (2026-10-29 실측)
 
-- GPU: RTX 5060 Laptop 8GB · driver 595.91
-- Isaac Sim: 6.1 standalone (`/home/pank/install/isaac-sim-standalone-6.1.0-linux-x86_64`)
-- Isaac Lab: 6.1 (`/home/pank/pa-course/IsaacLab-6.1`, `.venv`, `import isaaclab` OK) — 확인됨
-- torch: 2.14.1+cpu (학습용 CUDA torch는 Lab 설치 시 같이 옴)
+- GPU RTX 5060 Laptop 8GB · Isaac Sim 6.1 standalone · Isaac Lab 6.1 (`/home/pank/pa-course/IsaacLab-6.1`, `.venv`)
+- 주의: Lab 6.1 쿼터니언은 **(x, y, z, w)** — 손으로 풀지 말고 `root_*_b`·`quat_from_euler_xyz` 사용
 
 ## 구조
 
-- `tasks/` — 커스텀 Task (rl_correct · nav2_rl, task-spec 기준)
-- `scripts/` — 학습 실행 + ONNX export 스크립트
-- `export/` — 산출물 (`*.onnx`, git 제외) → 로봇 `~/rl_models/`로 scp
+| 경로 | 내용 |
+|---|---|
+| `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + **우리 URDF → USD** |
+| `tasks/common/onnx_export.py` | actor → ONNX (출력 = 물리 보정량, train·export 공용) |
+| `tasks/rl_correct/` | v2 환경: 모터 지연·좌우 비대칭·데드밴드 · WiFi 지연 · 계단식 명령 · 엔코더+자이로 관측 |
+| `scripts/smoke_rl_correct.py` | 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
+| `scripts/load_urdf.py` | URDF만 띄워 보기 |
+| `scripts/train.py · export.py · play.py` | 학습 · ONNX 뽑기 · 구경 |
+| `logs/` · `export/` | 산출물 (git 제외) |
 
 ## 흐름
 
 ```bash
-# 1. 학습 (Lab 설치 후)
-./scripts/train.sh rl_correct
-# 2. export
-./scripts/export.sh export/rl_correct_v1.onnx
-# 3. Pi 벤치 (로봇에서)
-scp export/rl_correct_v1.onnx pak@pak.local:~/rl_models/
-# Pi: python3 ~/ros2/ros2_ws/src/rl_eval/benchmark_onnx.py ~/rl_models/rl_correct_v1.onnx
+cd /home/pank/workspaces/visualkhh/source/ros2/isaac
+./train_rl_correct.sh 300                     # 창 보기: 뒤에 --visualizer kit (기본은 창 없음)
+./export_rl.sh rl_correct logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./play_rl_correct.sh export/rl_correct/rl_correct_v2.onnx 4
+# 로봇: PC에서 rl-only.launch.py enable:=true model:=... → Before/After (ros2_ws README)
 ```
+
+ONNX: 입력 `obs` `[1, 6]` = `[v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]` → 출력 `actions` `[1, 2]` = `[dV m/s, dW rad/s]`.

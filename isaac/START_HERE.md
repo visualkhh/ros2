@@ -13,27 +13,26 @@ ROS는 아는데 Isaac이 처음인 사람을 위한 문서. 수식 없음.
 
 ```
 isaac/
-├── tasks/rl_correct/     1번 연습장 (빈 방, 직진·회전 트래킹 보정)
-├── tasks/nav2_rl/        2번 연습장 (장애물 방, Nav2 명령 다듬기)
-├── tasks/common/tb3_simple.usda   연습용 가짜 로봇 (바퀴 2개짜리 단순 모델)
-├── urdf/beebot/          진짜 로봇 설계도 (학습용, 무거워서 1번·2번엔 안 씀)
-├── usd/beebot/           진짜 로봇 3D (나중에 씀)
-├── scripts/train.py      학습 시작 버튼
-├── scripts/play.py       학습된 애 구경하기
-├── scripts/export.py     학습 결과 ONNX로 뽑기
-├── logs/<task>/<날짜>/   학습 기록 (체크포인트 .pt)
-└── export/<task>/        로봇에 올릴 모델 (.onnx)
+├── tasks/rl_correct/         연습장 (빈 바닥, 명령대로 움직이게 보정)
+├── tasks/common/robot_spec.py  우리 로봇 숫자 한 곳 + 우리 URDF를 Isaac용(USD)으로 변환
+├── scripts/train.py          학습 시작 버튼
+├── scripts/play.py           학습된 애 구경하기
+├── scripts/export.py         학습 결과 ONNX로 뽑기
+├── logs/<task>/<날짜>/       학습 기록 (체크포인트 .pt)
+└── export/<task>/            로봇에 쓸 모델 (.onnx)
 ```
+
+시뮬 로봇 = **우리 로봇 URDF** (`ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`) 그대로.
 
 ## 3. 강화학습 5단어
 
 | 단어 | 뜻 | 우리 예시 |
 |---|---|---|
-| 환경(env) | 연습장 | 빈 방 / 장애물 방 |
-| 관측(obs) | 로봇이 보는 것 | `[v_cmd, w_cmd, v_odom, w_odom]` 숫자 4개 |
+| 환경(env) | 연습장 | 빈 바닥 + 모터가 늦고 좌우가 다르고 WiFi가 늦는 가짜 로봇 수백 대 |
+| 관측(obs) | 로봇이 보는 것 | `[명령 v, 명령 w, 엔코더 v, 엔코더 w, 자이로 w, 명령 바뀐 뒤 시간]` 6개 — **실제 로봇에서도 보이는 것만** |
 | 행동(action) | 로봇이 내는 답 | `[Δv, Δw]` 보정량 2개 |
-| 보상(reward) | 칭찬·꾸중 점수 | 명령대로 움직이면 + , 어긋나면 − |
-| 에피소드 | 한 판 | 10초 주행 후 리셋 |
+| 보상(reward) | 칭찬·꾸중 점수 | 진짜 몸체 속도가 명령에 가까우면 + , 보정을 크게·출렁이게 하면 − |
+| 에피소드 | 한 판 | 10초 (그 안에서 명령이 0.5~2초마다 바뀜) |
 
 **PPO**는 점수 잘 받는 방향으로 정책을 조금씩 고치는 알고리즘이고, 우리는 그냥 씁니다 (만들 필요 없음).
 
@@ -49,29 +48,28 @@ isaac/
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
-# 1번 학습 (빈 방) — 창 보면서: 뒤에 --visualizer kit
-./train_rl_correct.sh 300 --visualizer kit
+# 물리 확인 (오차 0이면 명령대로 가나) — 고친 뒤 먼저
+cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/scripts/smoke_rl_correct.py; cd -
 
-# 2번 학습 (장애물 방)
-./train_nav2_rl.sh 300 --visualizer kit
+# 학습 — 창 보면서: 뒤에 --visualizer kit
+./train_rl_correct.sh 300
 
-# 구경 (학습된 모델로 움직이는 거 보기)
-./play_rl_correct.sh export/rl_correct/rl_correct_v1.onnx 4
+# 체크포인트 → ONNX
+./export_rl.sh rl_correct logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
 
-# 체크포인트 → ONNX 뽑기
-./export_rl.sh rl_correct logs/rl_correct/<날짜_시간>/model_29.pt rl_correct_v2.onnx
+# 구경
+./play_rl_correct.sh export/rl_correct/rl_correct_v2.onnx 4
 ```
 
 ## 6. 로봇(ROS) 연결
 
-- 학습 결과물은 숫자 덩어리(`[1,4] → [1,2]`) ONNX 파일 하나입니다.
-- Pi `~/rl_models/`에 복사 → ROS 노드(`corrector`)가 `model_path`로 읽음.
-- ROS 쪽은 이미 준비됨: `ros2_ws/src/rl_correction/` (4-obs), `nav2_rl_controller/` (5-obs).
-- Before/After 비교: `rl_eval/eval_recorder` → `/tmp/before.csv` vs `/tmp/after.csv`.
+- 결과물은 ONNX 하나: `[1,6]` → `[1,2]` (물리 보정량 m/s, rad/s).
+- PC에서 `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>` → `./run-cli route rl` (PC에 `onnxruntime` 필요).
+- 로봇이 `/imu`를 내야 함 (OpenCR 펌웨어 `I` 줄 — 펌웨어 업로드 필요).
+- Before/After: `rl_eval/eval_recorder` CSV 두 개 → `rl_eval/compare_csv.py`.
 
 ## 7. 자주 묻는 것
 
-- **Q. 왜 가짜 로봇으로 연습하나요?** A. 진짜 로봇으로 수천 번 부딪히면 부서지니까. 시뮬에서 수백 대로 병렬 연습합니다.
-- **Q. 1번과 2번 차이가 뭔가요?** A. 1번은 "명령대로 안 움직이는 것" 보정, 2번은 "장애물 보고 속도 다듬기"입니다.
-- **Q. 창이 안 떠요.** A. `--visualizer kit` (또는 `newton_gl`)을 붙이세요. 안 붙이면 헤드리스(창 없음)로 돕니다.
-- **Q. beebot 풀모델은 언제 쓰나요?** A. 팔 쓰는 3번 Task 만들 때. 1·2번은 바퀴만 써서 가벼운 모델로 돌립니다.
+- **Q. 왜 가짜 로봇으로 연습하나요?** A. 진짜 로봇으로 수천 번 하면 오래 걸리고 위험해서. 시뮬에서 수백 대로 병렬 연습합니다.
+- **Q. 무엇을 고치나요?** A. 모터 반응 지연·좌우 차이·저속에서 안 도는 구간·회전 미끄러짐 (엔코더·자이로로 보이는 것). 직진 거리 오차는 못 고칩니다 (실제에서 보이지 않음).
+- **Q. 창이 안 떠요.** A. `--visualizer kit`을 붙이세요. 안 붙이면 창 없이 돕니다.
