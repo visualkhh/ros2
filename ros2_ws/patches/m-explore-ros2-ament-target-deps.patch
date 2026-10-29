@@ -1,0 +1,24 @@
+diff --git a/map_merge/CMakeLists.txt b/map_merge/CMakeLists.txt
+index 702b4e1..eb86e81 100644
+--- a/map_merge/CMakeLists.txt
++++ b/map_merge/CMakeLists.txt
+@@ -17,6 +17,7 @@ endif()
+ 
+ # find dependencies
+ find_package(ament_cmake REQUIRED)
++find_package(ament_cmake_target_dependencies REQUIRED)
+ find_package(rclcpp REQUIRED)
+ find_package(geometry_msgs REQUIRED)
+ find_package(image_geometry REQUIRED)
+diff --git a/map_merge/package.xml b/map_merge/package.xml
+index a60e0a7..80245d0 100644
+--- a/map_merge/package.xml
++++ b/map_merge/package.xml
+@@ -12,6 +12,7 @@
+   <license>BSD</license>
+ 
+   <buildtool_depend>ament_cmake</buildtool_depend>
++  <buildtool_depend>ament_cmake_target_dependencies</buildtool_depend>
+ 
+   <test_depend>ament_lint_auto</test_depend>
+   <test_depend>ament_lint_common</test_depend>

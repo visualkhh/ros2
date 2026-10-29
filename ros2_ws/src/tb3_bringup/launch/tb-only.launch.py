@@ -53,7 +53,7 @@ def lidar_nodes(share, condition):
     try:
         get_package_share_directory('coin_d4_driver')
     except PackageNotFoundError:
-        return [LogInfo(msg='WARN: coin_d4_driver 없음 → 라이다 안 띄움 (cd ros2_ws && vcs import src < deps.repos && colcon build)',
+        return [LogInfo(msg='WARN: coin_d4_driver 없음 → 라이다 안 띄움 (~/ros2/setup/pi/build.sh 로 외부 소스 받기)',
                         condition=condition)]
     return [
         Node(package='coin_d4_driver', executable='single_coin_d4_node', name='coin_d4_driver',

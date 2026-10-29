@@ -1,6 +1,10 @@
 # 외부 소스 의존성 (vcstool 형식) — apt에 없어서 소스로 받아 우리 워크스페이스에서 Lyrical로 빌드하는 것만.
-#   받기: cd ros2_ws && vcs import src < deps.repos && colcon build
-#   받은 폴더(src/coin_d4_driver/ · src/m-explore-ros2/)는 .gitignore — 이 파일만 커밋한다.
+#   권장: ~/ros2/setup/pi/build.sh (vcs import + rosdep install + patches/*.patch 적용 + colcon build까지 한 번에)
+#   수동: cd ros2_ws && vcs import src < deps.repos && rosdep install --from-paths src --ignore-src -r -y \
+#     && (cd src/cartographer && patch -p1 < ../../patches/cartographer-ceres2.patch) \
+#     && (cd src/cartographer_ros && patch -p1 < ../../patches/cartographer_ros-ceres2.patch) \
+#     && colcon build --symlink-install --parallel-workers 2 --cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+#   받은 폴더(src/coin_d4_driver/ · src/m-explore-ros2/ · src/cartographer/ · src/cartographer_ros/)는 .gitignore — 이 파일만 커밋한다.
 #
 # version = 그 저장소의 git 브랜치/커밋 (ROS 배포판 설정이 아님).
 #   ROBOTIS는 humble · jazzy · main 브랜치만 있고 lyrical 브랜치는 없음 → 코드가 같은 최신(jazzy 끝 = main + 머지 커밋)을

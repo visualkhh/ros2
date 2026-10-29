@@ -65,11 +65,15 @@ sudo apt install -y \
   ros-lyrical-robot-state-publisher \
   ros-lyrical-teleop-twist-keyboard \
   ros-lyrical-tf2-tools \
+  ros-lyrical-image-geometry \
   espeak-ng \
   ros-lyrical-turtlebot3-msgs \
   ros-lyrical-dynamixel-sdk \
   python3-numpy socat
 ```
+
+`ros-lyrical-image-geometry`는 `m-explore-ros2`에 딸려 오는 `multirobot_map_merge` 빌드에 필요.
+빠진 시스템 의존성은 `rosdep install --from-paths src --ignore-src -r -y`로 한 번에 받으면 됨 (4장).
 
 | 패키지 | 쓰는 곳 |
 |---|---|
@@ -87,10 +91,16 @@ sudo apt install -y \
   포트 `/dev/tb3_lidar`는 udev 규칙으로 만든다 → [udev 세팅](../../raspberry/udev-setup.md).
   (`hls-lfcd-lds-driver`(LDS-01) · `ld08-driver`(LDS-02)도 Lyrical arm64 apt에 없음)
 - 자동 맵핑 frontier 탐색: `explore_lite` (m-explore-ros2, BSD, apt 없음). `ros2_ws/deps.repos`로 받아 빌드 (4장).
+  같은 저장소에 `multirobot_map_merge`도 딸려 오는데, 얘는 `image_geometry` apt가 필요 (2장 목록에 포함).
+  없으면 `Could not find ... image_geometryConfig.cmake`로 깨지고 `cartographer_ros`까지 중단되므로,
+  빌드 전 `rosdep install --from-paths src --ignore-src -r -y`로 받거나 `ros-lyrical-image-geometry`를 직접 깜.
+  (우리는 `explore_lite`만 쓰고 `multirobot_map_merge`는 안 씀 — 급하면 `--packages-skip multirobot_map_merge`로 제외 가능)
 - Google Cartographer (코어 + `cartographer_ros` + `cartographer_rviz`): Lyrical apt에 없음 → `ros2_ws/deps.repos`로 소스 빌드 (아래 4-1절).
   Pi 빌드 전제: `sudo apt install -y libceres-dev libprotobuf-dev libeigen3-dev liblua5.2-dev libcairo2-dev libgoogle-glog-dev libgflags-dev`
   (Ceres 2.x 대응 패치 `Manifold` 전환 + 신형 abseil `ABSL_` 접두어 패치 — `ros2_ws/patches/*.patch`를 `src/cartographer`,
   `src/cartographer_ros`에 각각 `patch -p1`로 적용. `src/`는 `.gitignore`라 패치 파일이 정본임. 4장 빌드 전 적용법 참조)
+  Ubuntu 26.04의 CMake 4.x는 `cmake_minimum_required(<3.5)`를 거부 → cartographer 코어가 그대로는 configure 실패
+  (`Compatibility with CMake < 3.5 has been removed`). 빌드 시 `--cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5` 필수 (4장 참조).
 - (선택) RL 모델 추론: `pip install --break-system-packages onnxruntime` — torch는 Pi에 깔지 않음.
 
 ## 3. 셸 설정 (`~/.bashrc`)
@@ -111,15 +121,28 @@ source ~/.bashrc
 
 ## 4. 저장소 + 워크스페이스 빌드
 
+권장은 `setup/pi/build.sh` 한 줄 (vcs import + rosdep install + 패치 + colcon build까지, 몇 번 돌려도 같은 결과):
+
 ```bash
 git clone https://github.com/visualkhh/ros2.git ~/ros2   # 이미 있으면 cd ~/ros2 && git pull
+~/ros2/setup/pi/build.sh
+```
+
+수동으로 할 때만 아래 순서 (build.sh와 같은 내용):
+
+```bash
 cd ~/ros2/ros2_ws
 source /opt/ros/lyrical/setup.bash
 vcs import src < deps.repos                               # apt에 없는 소스 (LDS-03 coin_d4_driver · 자동 맵핑 explore_lite · cartographer 코어+래퍼)
 # cartographer 패치 적용 (최초 1회 + patches/*.patch가 바뀔 때마다 — src/는 gitignore라 pull로 안 넘어옴)
+# 주의: 반드시 ~/ros2/ros2_ws에서 실행 (src/cartographer 안에서 cd src/... 하면 없음)
 (cd src/cartographer && patch -p1 --forward < ../../patches/cartographer-ceres2.patch)
 (cd src/cartographer_ros && patch -p1 --forward < ../../patches/cartographer_ros-ceres2.patch)
-colcon build --symlink-install --parallel-workers 2       # Pi 4: 2개로 제한 (메모리)
+# 패치가 이미 적용된 상태에서 또 치면 `1 hunk ignored ... .rej`가 남음 → 그때는 각 폴더에서
+# git checkout -- . && git clean -f 후 위 두 줄을 다시 (이력: issue-tracking 2026-10-28 §7-8)
+rosdep install --from-paths src --ignore-src -r -y   # m-explore-ros2의 multirobot_map_merge용 image_geometry 등 (없으면 §9 에러)
+colcon build --symlink-install --parallel-workers 2 \  # Pi 4: 2개로 제한 (메모리)
+  --cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5      # CMake 4.x가 <3.5를 거부하므로 필수
 source install/setup.bash
 ```
 
@@ -134,15 +157,28 @@ apt로 안 되는 것만 모음. 받는 위치·버전은 저장소 파일에 �
 | 무엇 | 왜 | 어디서 받나 / 버전 | 빌드 | 문서 |
 |---|---|---|---|---|
 | `coin_d4_driver` | LDS-03 라이다 드라이버 (Lyrical apt 없음) | `ros2_ws/deps.repos` — ROBOTIS, 커밋 `79d1833` | `vcs import` → `colcon build` | [ros2_ws README](../../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
-| `explore_lite` · `explore_lite_msgs` | 자동 맵핑 frontier 탐색 (Lyrical apt 없음) | `ros2_ws/deps.repos` — robo-friends/m-explore-ros2, 커밋 `326cf8a` | `vcs import` → `colcon build` (Pi 약 2분, 경고만) | 같음 |
-| `cartographer` (코어) | 2D SLAM 코어 (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `877157a` | `vcs import` → 패치 → `colcon build` (Pi 약 20분) | `ros2_ws/patches/cartographer-ceres2.patch` (Ceres 2.x `Manifold` + abseil `ABSL_` 접두어) |
-| `cartographer_ros` (+`cartographer_ros_msgs`·`cartographer_rviz`) | SLAM ROS 래퍼 — `cartographer_node`·`occupancy_grid_node` (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `7433452` | `vcs import` → 패치 → `colcon build` | `ros2_ws/patches/cartographer_ros-ceres2.patch` (abseil `ABSL_` 접두어 7파일) |
+| `explore_lite` · `explore_lite_msgs` (+ 딸림 `multirobot_map_merge`) | 자동 맵핑 frontier 탐색 (Lyrical apt 없음) | `ros2_ws/deps.repos` — robo-friends/m-explore-ros2, 커밋 `326cf8a` | `vcs import` → 패치(`m-explore-ros2-ament-target-deps`) → `rosdep install` (image_geometry) → `colcon build` (Pi 약 2분, 경고만) | `ros2_ws/patches/m-explore-ros2-ament-target-deps.patch` (Lyrical `ament_target_dependencies` 분리 대응) |
+| `cartographer` (코어) | 2D SLAM 코어 (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `877157a` | `vcs import` → 패치 → `colcon build --cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5` (Pi 약 20분, CMake 4.x 필수) | `ros2_ws/patches/cartographer-ceres2.patch` (Ceres 2.x `Manifold` + abseil `ABSL_` 접두어) |
+| `cartographer_ros` (+`cartographer_ros_msgs`·`cartographer_rviz`) | SLAM ROS 래퍼 — `cartographer_node`·`occupancy_grid_node` (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `7433452` | `vcs import` → 패치 → `colcon build` (같은 `--cmake-args` 공유) | `ros2_ws/patches/cartographer_ros-ceres2.patch` (abseil `ABSL_` 접두어 7파일) |
 | 우리 패키지 (`tb3_bringup` · `rl_correction` · `rl_eval` · `nav2_rl_controller`) | 이 프로젝트 코드 | 저장소 `ros2_ws/src/` | `colcon build` | [ros2_ws README](../../../ros2_ws/README.md) |
 | OpenCR 펌웨어 `tb3_wheels` | 바퀴·부저 펌웨어 | 저장소 `firmware/opencr/` | `compile.sh` → `upload.sh` (Pi에서) | [OpenCR 세팅](../../opencr/opencr-setup-ubuntu26.04.md) |
 | arduino-cli + OpenCR 보드 패키지 | 펌웨어 빌드 도구 (arm64는 armhf 툴체인·core min/max 패치 필요) | `firmware/opencr/setup.sh`가 설치·패치 | `setup.sh` 1회 | 같음 |
 
 **빌드 주의**
 
+- Lyrical `ament_cmake` 2.8.8은 `ament_target_dependencies()`를 딸려 주지 않음 (별도 `ament_cmake_target_dependencies`
+  패키지로 분리). 그 매크로를 쓰는 외부 소스(`multirobot_map_merge`)는 `CMakeLists.txt`에
+  `find_package(ament_cmake_target_dependencies REQUIRED)`를 넣는 패치가 필요 — `patches/m-explore-ros2-ament-target-deps.patch`.
+  "Unknown CMake command ament_*"가 뜨면 이 분리를 의심 (이력: issue-tracking 2026-10-28 §10).
+
+- `multirobot_map_merge` (m-explore-ros2 딸림): `image_geometry` 없이 빌드하면
+  `Could not find a package configuration file provided by "image_geometry"`로 실패하고
+  `cartographer_ros`까지 중단됨. `ros-lyrical-image-geometry` 설치 또는
+  `rosdep install --from-paths src --ignore-src -r -y`로 해결. 안 쓰는 패키지라
+  `--packages-skip multirobot_map_merge`로 제외해도 됨 (이력: issue-tracking 2026-10-28 §9).
+- CMake 4.x (Ubuntu 26.04): `cartographer`의 `cmake_minimum_required`가 3.5 미만이라 그대로는 configure 실패
+  (`Compatibility with CMake < 3.5 has been removed from CMake`). `--cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5`를 붙임.
+  소스를 고치지 않으므로 `deps.repos` 갱신·재빌드 때마다 그대로 씀.
 - 노드·실행 파일을 지웠거나 이름을 바꿨으면 colcon이 옛 것을 install에 남긴다 → 그 패키지만 지우고 다시:
   `rm -rf build/tb3_bringup install/tb3_bringup && colcon build --packages-select tb3_bringup`
   (확인: `ros2 pkg executables tb3_bringup`)

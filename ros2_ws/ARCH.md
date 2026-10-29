@@ -177,7 +177,7 @@ flowchart TD
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out` |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom CSV · `benchmark_onnx.py` |
 | `coin_d4_driver` (외부) | LDS-03 드라이버 — `deps.repos`(vcstool 소스 목록)로 받아 같이 빌드 (apt 없음, [README](README.md#depsrepos--apt에-없는-외부-소스)) |
-| `m-explore-ros2` (외부) | `explore_lite` — 자동 맵핑 frontier 탐색 (`deps.repos`) |
+| `m-explore-ros2` (외부) | `explore_lite` — 자동 맵핑 frontier 탐색 (`deps.repos` + Lyrical 대응 `patches/m-explore-ros2-*.patch`) |
 | `cartographer` · `cartographer_ros` (외부) | SLAM — `deps.repos` + `patches/*.patch`로 소스 빌드 (Lyrical apt 없음) |
 | apt | nav2_bringup · laser_filters · robot_state_publisher · xacro |
 
