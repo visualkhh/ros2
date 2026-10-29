@@ -11,7 +11,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyri
 | [docker/](docker/) | PC 시험대 (Lyrical 컨테이너 · 테스트 스크립트) | [docker/README.md](docker/README.md) |
 | [isaac/](isaac/) | Isaac Sim/Lab RL 정책 만들기 (lab PC 학습 → Pi ONNX 추론) | [isaac/README.md](isaac/README.md) |
 | [issue-tracking/](issue-tracking/) | 날짜별 작업·**시행착오** (증상 → 원인 → 해결 → 교훈) | [issue-tracking/README.md](issue-tracking/README.md) |
-| [turtle-bot/](turtle-bot/) | 로봇 실물 사진 (맨 위 판 제거 후) | [images/img.png](turtle-bot/images/img.png) |
+| [turtle-bot/](turtle-bot/) | 로봇 실물 사진 (맨 위 판 제거 후, 위에서 — 위쪽이 앞) | [images/robot-top.jpg](turtle-bot/images/robot-top.jpg) |
 
 저장소의 다른 곳:
 
