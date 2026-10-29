@@ -6,13 +6,19 @@ explore_lite는 켜지자마자 탐색을 시작하고, 시작·멈춤은 /explo
   /explore/status exploration_complete → /cmd_manual_control MANUAL (끝)
     단 시작 후 grace 초 안의 complete는 무시하고 다시 resume — SLAM 막 켠 빈 지도엔 frontier가 없어 바로 끝나버림
   pub /explore_status (String)  사람이 읽는 진행 상황 (tool 상태바)
+  /map → /map_explore (3값 지도): cartographer 지도는 빈 칸이 0이 아니라 1~49 확률이 많고, 아는 곳 둘레에 늘 40대 띠가 있음.
+    explore_lite는 '정확히 0인 칸 옆의 모르는 칸'만 frontier로 봐서 띠에 막혀 frontier 0개 → 바로 완료돼 버림.
+    그래서 <50 → 0 (빈 칸) · ≥50 → 100 · -1 그대로로 바꿔 explore_lite에만 준다 (Nav2는 원래 /map).
 
 explore-nav.launch.py가 explore_lite와 같이 띄운다.
 """
 import time
+from array import array
 
+import numpy as np
 import rclpy
 from explore_lite_msgs.msg import ExploreStatus
+from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Bool, String
@@ -30,6 +36,12 @@ STATUS_TXT = {
     ExploreStatus.RETURNING_TO_ORIGIN: '출발점으로 돌아가는 중',
     ExploreStatus.RETURNED_TO_ORIGIN: '출발점 도착',
 }
+
+
+def ternary(data, free_below: int = 50) -> np.ndarray:
+    """확률 지도(-1 · 0~100) → explore_lite용 3값 (-1 모름 · 0 빈 칸 · 100 막힘)."""
+    a = np.asarray(data, dtype=np.int16)
+    return np.where(a < 0, -1, np.where(a < free_below, 0, 100)).astype(np.int8)
 
 
 def decide(mode: str, status: str, since_start: float, grace: float) -> str | None:
@@ -54,6 +66,15 @@ class ExploreBridge(Node):
         self.create_subscription(String, 'state_control', self.on_mode, LATCHED)
         self.create_subscription(ExploreStatus, 'explore/status', self.on_status,
                                  QoSProfile(depth=10, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL))
+        self.pub_map = self.create_publisher(OccupancyGrid, 'map_explore', 1)
+        # volatile 구독: 발행자가 latched든 아니든 붙음 (cartographer는 지도를 주기적으로 다시 냄)
+        self.create_subscription(OccupancyGrid, 'map', self.on_map,
+                                 QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE))
+
+    def on_map(self, msg: OccupancyGrid) -> None:
+        out = OccupancyGrid(header=msg.header, info=msg.info)
+        out.data = array('b', ternary(msg.data).tobytes())
+        self.pub_map.publish(out)
 
     def resume(self, on: bool) -> None:
         self.pub_resume.publish(Bool(data=on))

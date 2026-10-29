@@ -1,4 +1,4 @@
-from tb3_bringup.explore_bridge_node import MODE, decide
+from tb3_bringup.explore_bridge_node import MODE, decide, ternary
 
 
 def test_not_automapping_pauses_running_explore():
@@ -15,3 +15,8 @@ def test_complete_right_after_start_retries():
 def test_complete_after_grace_goes_manual():
     assert decide(MODE, 'exploration_complete', 120.0, 15.0) == 'manual'
     assert decide(MODE, 'exploration_in_progress', 120.0, 15.0) is None
+
+
+def test_ternary_makes_cartographer_band_free():
+    # cartographer: 빈 칸 0 · 낮은 확신 빈 칸 45~49 · 막힘 ≥50 · 모름 -1
+    assert ternary([-1, 0, 12, 49, 50, 65, 100]).tolist() == [-1, 0, 0, 0, 100, 100, 100]
