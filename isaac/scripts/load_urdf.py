@@ -9,41 +9,21 @@ from isaaclab.app import AppLauncher
 app_launcher = AppLauncher(headless=True)
 from isaaclab.sim import SimulationContext  # noqa: E402
 
-import os
+import sys
 
-import xacro
-from isaaclab.assets import Articulation, ArticulationCfg
-from isaaclab.actuators import ImplicitActuatorCfg
-from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
-from isaaclab.sim import SimulationCfg
-from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
-from isaaclab.sim.spawners.from_files import GroundPlaneCfg, UsdFileCfg, spawn_ground_plane
-from isaaclab.utils import configclass
+sys.path.insert(0, "/home/pank/workspaces/visualkhh/source/ros2/isaac")
+from isaaclab.assets import Articulation, ArticulationCfg  # noqa: E402
+from isaaclab.actuators import ImplicitActuatorCfg  # noqa: E402
+from isaaclab.scene import InteractiveScene, InteractiveSceneCfg  # noqa: E402
+from isaaclab.sim import SimulationCfg  # noqa: E402
+from isaaclab.sim.spawners.from_files import GroundPlaneCfg, UsdFileCfg, spawn_ground_plane  # noqa: E402
+from isaaclab.utils import configclass  # noqa: E402
 
-WS = "/home/pank/workspaces/visualkhh/source/ros2"
-XACRO = WS + "/ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro"
-TMP_URDF = "/tmp/tb3_waffle_pi.urdf"
-USD_DIR = "/tmp/tb3_usd"
+from tasks.common.robot_spec import robot_usd  # noqa: E402
 
 
 def main():
-    doc = xacro.process_file(XACRO)
-    with open(TMP_URDF, "w") as f:
-        f.write(doc.toprettyxml(indent="  "))
-    print(f"[urdf] xacro -> {TMP_URDF} ({os.path.getsize(TMP_URDF)} bytes)")
-
-    cfg = UrdfConverterCfg(
-        asset_path=TMP_URDF,
-        usd_dir=USD_DIR,
-        usd_file_name="tb3_waffle_pi.usd",
-        force_usd_conversion=True,
-        fix_base=False,
-        merge_fixed_joints=False,
-        joint_drive=None,
-        ros_package_paths=[{"name": "tb3_bringup", "path": WS + "/ros2_ws/src/tb3_bringup"}],
-    )
-    converter = UrdfConverter(cfg)
-    usd_path = converter.usd_path
+    usd_path = robot_usd()
     print(f"[urdf] usd -> {usd_path}")
 
     sim_cfg = SimulationCfg(dt=1 / 120)

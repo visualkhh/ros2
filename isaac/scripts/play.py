@@ -13,7 +13,7 @@ sys.path.insert(0, "/home/pank/workspaces/visualkhh/source/ros2/isaac")
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", choices=["rl_correct", "nav2_rl"], default="rl_correct")
+parser.add_argument("--task", choices=["rl_correct"], default="rl_correct")
 parser.add_argument("--model", required=True)
 parser.add_argument("--envs", type=int, default=4)
 AppLauncher.add_app_launcher_args(parser)
@@ -26,20 +26,12 @@ import torch  # noqa: E402
 
 
 def main():
-    if args.task == "rl_correct":
-        from tasks.rl_correct.rl_correct_env import RlCorrectEnv  # noqa: E402
-        from tasks.rl_correct.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
+    from tasks.rl_correct.rl_correct_env import RlCorrectEnv  # noqa: E402
+    from tasks.rl_correct.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
 
-        env_cfg = RlCorrectEnvCfg()
-        Env = RlCorrectEnv
-    else:
-        from tasks.nav2_rl.nav2_rl_env import Nav2RlEnv  # noqa: E402
-        from tasks.nav2_rl.nav2_rl_env_cfg import Nav2RlEnvCfg  # noqa: E402
-
-        env_cfg = Nav2RlEnvCfg()
-        Env = Nav2RlEnv
+    env_cfg = RlCorrectEnvCfg()
     env_cfg.scene.num_envs = args.envs
-    env = Env(env_cfg)
+    env = RlCorrectEnv(env_cfg)
 
     sess = ort.InferenceSession(args.model, providers=["CPUExecutionProvider"])
     in_name = sess.get_inputs()[0].name
@@ -50,9 +42,7 @@ def main():
         o = obs["policy"].cpu().numpy().astype(np.float32)
         outs = [sess.run(None, {in_name: o[i : i + 1]})[0] for i in range(o.shape[0])]
         act = torch.as_tensor(np.concatenate(outs, axis=0), device=env.device)
-        # clamp to action space (policy is delta twist)
-        act[:, 0].clamp_(-0.22, 0.22)
-        act[:, 1].clamp_(-2.84, 2.84)
+        act = act / env.scale  # ONNX는 물리 보정량(scale 곱한 값)을 냄 → env는 [-1, 1]을 받음
         obs, rew, term, tout, _ = env.step(act)
         done = term | tout
         if bool(done.any()):

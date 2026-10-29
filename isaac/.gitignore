@@ -4,6 +4,5 @@ export/**/*.pt
 logs/
 checkpoints/
 usd/*
-!usd/download_beebot_usd.sh
 __pycache__/
 /export/
