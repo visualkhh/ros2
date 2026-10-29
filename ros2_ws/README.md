@@ -32,11 +32,18 @@ SLAM(slam_toolbox)·Nav2는 apt 패키지이고, 켜고 끄는 건 [`tool/run-cl
 
 ## 빌드
 
+**Pi**: 한 줄 — 외부 소스 받기 + cartographer 패치 + 빌드 (처음이든 `git pull` 뒤든 같은 명령, 몇 번 돌려도 같은 결과):
+
 ```bash
-cd ~/ros2/ros2_ws                       # PC: ~/workspaces/visualkhh/source/ros2/ros2_ws
-source /opt/ros/lyrical/setup.bash
-vcs import src < deps.repos             # 최초 1회 (외부 소스 받기)
-colcon build --symlink-install          # Pi 4는 --parallel-workers 2 (메모리)
+~/ros2/setup/pi/build.sh                                  # 전부
+~/ros2/setup/pi/build.sh --packages-select tb3_bringup    # 뒤 인자는 colcon build로
+```
+
+**PC**: 외부 소스(라이다·explore·cartographer)는 Pi 전용이라 필요 없음 — 우리 패키지만:
+
+```bash
+cd ~/workspaces/visualkhh/source/ros2/ros2_ws && source /opt/ros/lyrical/setup.bash
+colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_eval nav2_rl_controller
 ```
 
 설정·launch·URDF 파일을 **새로 추가**했는데 설치 폴더에 안 보이면: `rm -rf build/tb3_bringup install/tb3_bringup` 후 다시 빌드.
