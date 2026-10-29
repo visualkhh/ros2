@@ -37,6 +37,7 @@ def main():
     assert hi[2] < 0.095 and lo[0] > -0.20, f"pole/top plate left? bounds {lo} {hi}"
     os.makedirs(OUT, exist_ok=True)
     body.export(os.path.join(OUT, "body.stl"))
+    body.export(os.path.join(HERE, "meshes/body.stl"))  # beebot.urdf(이 폴더)도 같은 몸통
     for side in ("left", "right"):
         shutil.copy(os.path.join(HERE, f"meshes/wheel_{side}_link.stl"), os.path.join(OUT, f"wheel_{side}.stl"))
     print(f"body.stl: {len(kept)}/{len(pieces)} pieces, {len(body.faces)} faces, "
