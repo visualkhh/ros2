@@ -1,4 +1,4 @@
-"""beebot CAD → 우리 로봇 몸체 메시 (tb3_bringup/meshes/body.stl, wheel_*.stl).
+"""beebot CAD → 우리 로봇 몸체 메시 body.stl · wheel_*.stl — tb3_bringup/meshes(ROS)와 이 폴더 meshes/(Isaac) 둘 다.
 
 우리 로봇 = beebot에서 매니퓰레이터 · 맨 위 판(3층, z≈0.087)과 그 위 전부(바구니·팔 받침) · 뒤 pole(+카메라·브래킷) 제거.
 지지봉(standoff, z 0.044~0.091)과 2층 보드(OpenCR·Pi)는 남김. 라이다는 URDF가 따로 붙임 (1층 앞).
@@ -38,8 +38,9 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     body.export(os.path.join(OUT, "body.stl"))
     body.export(os.path.join(HERE, "meshes/body.stl"))  # beebot.urdf(이 폴더)도 같은 몸통
-    for side in ("left", "right"):
-        shutil.copy(os.path.join(HERE, f"meshes/wheel_{side}_link.stl"), os.path.join(OUT, f"wheel_{side}.stl"))
+    for side in ("left", "right"):  # URDF가 쓰는 이름으로 양쪽(ROS·Isaac)에
+        for dst in (OUT, os.path.join(HERE, "meshes")):
+            shutil.copy(os.path.join(HERE, f"meshes/wheel_{side}_link.stl"), os.path.join(dst, f"wheel_{side}.stl"))
     print(f"body.stl: {len(kept)}/{len(pieces)} pieces, {len(body.faces)} faces, "
           f"x {lo[0]:.3f}..{hi[0]:.3f} y {lo[1]:.3f}..{hi[1]:.3f} z {lo[2]:.3f}..{hi[2]:.3f} m -> {os.path.normpath(OUT)}")
 

@@ -4,125 +4,150 @@
 <!-- |    EDITING THIS FILE BY HAND IS NOT RECOMMENDED                                 | -->
 <!-- =================================================================================== -->
 <!--
-  우리 로봇 (TurtleBot3 Waffle Pi 개조) — beebot CAD(visualkhh/Lv2_bee_Assignment)에서:
-    매니퓰레이터(팔·그리퍼·손목 카메라) · 맨 위 판(3층)과 그 위(바구니·팔 받침) · 뒤 pole + 카메라 제거, 지지봉(standoff) 유지,
-    LDS-03 라이다를 1층 맨 앞에 추가. 몸통 메시 body.stl = make_tb3_body.py가 base_link.stl에서 위 부분을 뺀 것.
-  같은 로봇: ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro (ROS·Isaac 학습이 실제로 쓰는 쪽) — 값을 바꾸면 둘 다.
-  좌표: base_footprint(바닥) → base_link(바퀴 축 아래 0.010m), x 앞 · y 왼쪽 · z 위.
-  xacro 인자: mock_hardware · mock_effort · port (ros2_control, 바퀴만) · mesh_uri (메시 폴더)
-  beebot.urdf = xacro urdf.xacro mesh_uri:=meshes
+  TurtleBot3 Waffle Pi 개조형 = beebot CAD(isaac/urdf/beebot)에서 매니퓰레이터 · 맨 위 판(3층)과 그 위 · 뒤 pole·카메라를 뺀 것
+  + LDS-03 라이다를 1층 맨 앞, 두 바퀴 사이 가운데에.
+  2층(지금 맨 위): 앞쪽 OpenCR · 뒤쪽 Raspberry Pi 4 · 모서리 지지봉(standoff)은 그대로 위로 솟아 있음 (2026-10-27 사진).
+
+  메시: body.stl · wheel_*.stl ← isaac/urdf/beebot/make_tb3_body.py가 beebot 메시에서 만듦 (mm, scale 0.001).
+
+  ★ 같은 파일이 두 곳 (의도적 분리, 내용은 글자까지 같게):
+      ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro  — ROS (robot_state_publisher · RViz)
+      isaac/urdf/beebot/urdf.xacro                   — Isaac 학습
+    고치면 둘 다 고치고 isaac/urdf/check_same.sh 로 확인. 다른 건 메시 위치뿐 → xacro 인자 mesh_uri.
+  ★ 실측해서 고칠 값 = 아래 property 중 "측정" 표시. 바꾸면 colcon build 후 view-model로 다시 확인.
+
+  좌표 (REP-105): base_footprint(바닥, 루트) → base_link(바퀴축 아래, +0.010) — x 앞 · y 왼쪽 · z 위.
+  드라이버가 odom→base_footprint를 낸다. 아래 값은 전부 base_link 기준.
+  몸통 외곽: x -0.197 ~ +0.069 (앞끝 0.069) · y ±0.139 · z -0.010(캐스터) ~ 0.091(지지봉 끝).
 -->
 <robot name="tb3_waffle_pi_lowlidar">
+  <material name="body">
+    <color rgba="0.25 0.25 0.25 1"/>
+  </material>
+  <material name="dark">
+    <color rgba="0.12 0.12 0.12 1"/>
+  </material>
+  <material name="lidar">
+    <color rgba="0.85 0.25 0.1 1"/>
+  </material>
   <link name="base_footprint"/>
   <joint name="base_joint" type="fixed">
     <parent link="base_footprint"/>
     <child link="base_link"/>
-    <origin rpy="0.000000 -0.000000 0.000000" xyz="0.000000 0.000000 0.010000"/>
+    <origin xyz="0 0 0.010"/>
   </joint>
   <link name="base_link">
-    <inertial>
-      <!-- 근사: Waffle Pi 1.8 kg에서 위판 뺀 몸체 (팔·pole 없음). tb3_bringup URDF와 같은 값 -->
-      <origin rpy="0 0 0" xyz="-0.064 0 0.030"/>
-      <mass value="1.4"/>
-      <inertia ixx="0.0090" ixy="0" ixz="0" iyy="0.0090" iyz="0" izz="0.0165"/>
-    </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="meshes/body.stl" scale="0.001 0.001 0.001"/>
       </geometry>
+      <material name="body"/>
     </visual>
+    <!-- 1층~2층 + 지지봉 (판 266×266mm, 중심 x -0.064) -->
     <collision>
-      <origin rpy="0.000000 0.000000 0.000000" xyz="-0.064000 0.000000 0.045500"/>
+      <origin xyz="-0.064 0 0.0455"/>
       <geometry>
-        <box size="0.266000 0.266000 0.091000"/>
+        <box size="0.266 0.266 0.091"/>
       </geometry>
     </collision>
-    <collision>
-      <origin rpy="0 0 0" xyz="-0.177000 0.064000 -0.005237"/>
-      <geometry>
-        <sphere radius="0.004763"/>
-      </geometry>
-    </collision>
-    <collision>
-      <origin rpy="0 0 0" xyz="-0.177000 -0.064000 -0.005237"/>
-      <geometry>
-        <sphere radius="0.004763"/>
-      </geometry>
-    </collision>
+    <!-- 근사: Waffle Pi 1.8 kg에서 위판 뺀 몸체 (배터리·모터·보드·라이다). Isaac 학습용 — 바꾸면 isaac 재학습 -->
+    <inertial>
+      <origin xyz="-0.064 0 0.030"/>
+      <mass value="1.4"/>
+      <inertia ixx="0.0090" ixy="0" ixz="0" iyy="0.0090" iyz="0" izz="0.0165"/>
+    </inertial>
   </link>
   <joint name="wheel_left_joint" type="continuous">
     <parent link="base_link"/>
     <child link="wheel_left_link"/>
-    <origin rpy="0.000000 -0.000000 0.000000" xyz="0.000000 0.143900 0.023000"/>
+    <origin xyz="0 0.1439 0.023"/>
     <axis xyz="0 1 0"/>
-    <limit effort="3.0" velocity="8.063"/>
   </joint>
   <link name="wheel_left_link">
-    <inertial>
-      <origin rpy="0 0 0" xyz="0.000000 -0.000704 0.000002"/>
-      <mass value="0.028500"/>
-      <inertia ixx="1.1098e-05" ixy="5.7318e-09" ixz="3.1818e-09" iyy="2.0549e-05" iyz="-4.8114e-11" izz="1.1095e-05"/>
-    </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/wheel_left_link.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/wheel_left.stl" scale="0.001 0.001 0.001"/>
       </geometry>
+      <material name="dark"/>
     </visual>
     <collision>
-      <origin rpy="1.570796 0 0" xyz="0 0 0"/>
+      <origin rpy="1.5708 0 0"/>
       <geometry>
-        <cylinder length="0.015000" radius="0.033000"/>
+        <cylinder length="0.015" radius="0.033"/>
       </geometry>
     </collision>
+    <inertial>
+      <mass value="0.0285"/>
+      <inertia ixx="1.1e-05" ixy="0" ixz="0" iyy="2.05e-05" iyz="0" izz="1.1e-05"/>
+    </inertial>
   </link>
   <joint name="wheel_right_joint" type="continuous">
     <parent link="base_link"/>
     <child link="wheel_right_link"/>
-    <origin rpy="0.000000 -0.000000 0.000000" xyz="0.000000 -0.143900 0.023000"/>
+    <origin xyz="0 -0.1439 0.023"/>
     <axis xyz="0 1 0"/>
-    <limit effort="3.0" velocity="8.063"/>
   </joint>
   <link name="wheel_right_link">
-    <inertial>
-      <origin rpy="0 0 0" xyz="0.000000 0.000704 -0.000002"/>
-      <mass value="0.028500"/>
-      <inertia ixx="1.1098e-05" ixy="-5.7318e-09" ixz="-3.1818e-09" iyy="2.0549e-05" iyz="-4.8114e-11" izz="1.1095e-05"/>
-    </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/wheel_right_link.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/wheel_right.stl" scale="0.001 0.001 0.001"/>
       </geometry>
+      <material name="dark"/>
     </visual>
     <collision>
-      <origin rpy="1.570796 0 0" xyz="0 0 0"/>
+      <origin rpy="1.5708 0 0"/>
       <geometry>
-        <cylinder length="0.015000" radius="0.033000"/>
+        <cylinder length="0.015" radius="0.033"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.0285"/>
+      <inertia ixx="1.1e-05" ixy="0" ixz="0" iyy="2.05e-05" iyz="0" izz="1.1e-05"/>
+    </inertial>
+  </link>
+  <joint name="caster_back_left_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="caster_back_left_link"/>
+    <origin xyz="-0.177 0.064 -0.005237"/>
+  </joint>
+  <link name="caster_back_left_link">
+    <collision>
+      <geometry>
+        <sphere radius="0.004763"/>
       </geometry>
     </collision>
   </link>
-  <link name="imu_link"/>
+  <joint name="caster_back_right_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="caster_back_right_link"/>
+    <origin xyz="-0.177 -0.064 -0.005237"/>
+  </joint>
+  <link name="caster_back_right_link">
+    <collision>
+      <geometry>
+        <sphere radius="0.004763"/>
+      </geometry>
+    </collision>
+  </link>
+  <!-- OpenCR 내장 IMU (beebot 실측: 보드 윗면). 축은 base_link와 같다고 가정 — 왼쪽 회전에 gz > 0 확인 -->
   <joint name="imu_joint" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
-    <origin rpy="0 0 0" xyz="0.0178 0 0.0585"/>
-    <!-- x: waffle front edge 0.0688 - 0.051 (measured); z: OpenCR board top in base_link mesh -->
+    <origin xyz="0.0178 0 0.0585"/>
   </joint>
-  <!-- basket slots: cell floor center, 3 rows (x, pole -> arm) x 4 cols (y, -y -> +y) -->
-  <!-- ================= ros2_control ================= -->
-  <!-- LDS-03 라이다: 1층 맨 앞, 두 바퀴 사이 가운데 (x·z는 실측 전 — tb3_bringup URDF lidar_x/lidar_z와 같게) -->
+  <link name="imu_link"/>
   <joint name="scan_joint" type="fixed">
     <parent link="base_link"/>
     <child link="base_scan"/>
-    <origin rpy="0 0 0" xyz="0.060 0 0.022"/>
+    <origin rpy="0 0 0.0" xyz="0.06 0.0 0.022"/>
   </joint>
   <link name="base_scan">
+    <!-- LDS-03 외형 (상자로 근사, 스캔 평면이 높이 중앙이라고 가정) -->
     <visual>
       <geometry>
         <box size="0.0397 0.0547 0.034"/>
       </geometry>
+      <material name="lidar"/>
     </visual>
     <collision>
       <geometry>
@@ -130,36 +155,4 @@
       </geometry>
     </collision>
   </link>
-  <ros2_control name="BeebotSystem" type="system">
-    <hardware>
-      <plugin>control/BeebotSystemHardware</plugin>
-      <param name="mock">false</param>
-      <param name="mock_effort">0.0</param>
-      <param name="port">/dev/opencr</param>
-      <param name="baud_rate">1000000</param>
-    </hardware>
-    <joint name="wheel_left_joint">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="wheel_right_joint">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <sensor name="imu">
-      <state_interface name="orientation.x"/>
-      <state_interface name="orientation.y"/>
-      <state_interface name="orientation.z"/>
-      <state_interface name="orientation.w"/>
-      <state_interface name="angular_velocity.x"/>
-      <state_interface name="angular_velocity.y"/>
-      <state_interface name="angular_velocity.z"/>
-      <state_interface name="linear_acceleration.x"/>
-      <state_interface name="linear_acceleration.y"/>
-      <state_interface name="linear_acceleration.z"/>
-      <param name="frame_id">imu_link</param>
-    </sensor>
-  </ros2_control>
 </robot>

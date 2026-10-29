@@ -4,7 +4,12 @@
   + LDS-03 라이다를 1층 맨 앞, 두 바퀴 사이 가운데에.
   2층(지금 맨 위): 앞쪽 OpenCR · 뒤쪽 Raspberry Pi 4 · 모서리 지지봉(standoff)은 그대로 위로 솟아 있음 (2026-10-27 사진).
 
-  메시: meshes/body.stl · wheel_*.stl ← isaac/urdf/beebot/make_tb3_body.py가 beebot 메시에서 만듦 (mm, scale 0.001).
+  메시: body.stl · wheel_*.stl ← isaac/urdf/beebot/make_tb3_body.py가 beebot 메시에서 만듦 (mm, scale 0.001).
+
+  ★ 같은 파일이 두 곳 (의도적 분리, 내용은 글자까지 같게):
+      ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro  — ROS (robot_state_publisher · RViz)
+      isaac/urdf/beebot/urdf.xacro                   — Isaac 학습
+    고치면 둘 다 고치고 isaac/urdf/check_same.sh 로 확인. 다른 건 메시 위치뿐 → xacro 인자 mesh_uri.
   ★ 실측해서 고칠 값 = 아래 property 중 "측정" 표시. 바꾸면 colcon build 후 view-model로 다시 확인.
 
   좌표 (REP-105): base_footprint(바닥, 루트) → base_link(바퀴축 아래, +0.010) — x 앞 · y 왼쪽 · z 위.
@@ -12,6 +17,9 @@
   몸통 외곽: x -0.197 ~ +0.069 (앞끝 0.069) · y ±0.139 · z -0.010(캐스터) ~ 0.091(지지봉 끝).
 -->
 <robot name="tb3_waffle_pi_lowlidar" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- 메시 폴더: ROS는 기본값 그대로 · Isaac은 isaac/urdf/beebot/meshes 를 넘김 (robot_spec.py) -->
+  <xacro:arg name="mesh_uri" default="package://tb3_bringup/meshes"/>
 
   <!-- LDS-03 라이다. base_scan = 스캔 평면 중심 = coin_d4_driver frame_id -->
   <xacro:property name="lidar_x" value="0.060"/>           <!-- 측정: 라이다 중심 — 바퀴축(0)보다 앞, 판 앞끝(0.069) 근처 -->
@@ -34,7 +42,7 @@
 
   <link name="base_link">
     <visual>
-      <geometry><mesh filename="package://tb3_bringup/meshes/body.stl" scale="0.001 0.001 0.001"/></geometry>
+      <geometry><mesh filename="$(arg mesh_uri)/body.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="body"/>
     </visual>
     <!-- 1층~2층 + 지지봉 (판 266×266mm, 중심 x -0.064) -->
@@ -59,7 +67,7 @@
     </joint>
     <link name="wheel_${side}_link">
       <visual>
-        <geometry><mesh filename="package://tb3_bringup/meshes/wheel_${side}.stl" scale="0.001 0.001 0.001"/></geometry>
+        <geometry><mesh filename="$(arg mesh_uri)/wheel_${side}.stl" scale="0.001 0.001 0.001"/></geometry>
         <material name="dark"/>
       </visual>
       <collision>

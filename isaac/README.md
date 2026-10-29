@@ -11,7 +11,9 @@
 
 | 경로 | 내용 |
 |---|---|
-| `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + **우리 URDF → USD** |
+| `urdf/beebot/urdf.xacro` | **학습용 로봇 URDF** — ROS용 `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`와 의도적으로 나눈 파일, **내용은 글자까지 같게** (`urdf/check_same.sh`) |
+| `urdf/beebot/make_tb3_body.py` | beebot CAD → 몸통·바퀴 메시 (팔·윗판·pole 제거) → `meshes/`(git 제외)와 tb3_bringup 둘 다 |
+| `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + 학습용 URDF → USD |
 | `tasks/common/onnx_export.py` | actor → ONNX (출력 = 물리 보정량, train·export 공용) |
 | `tasks/rl_correct/` | v2 환경: 모터 지연·좌우 비대칭·데드밴드 · WiFi 지연 · 계단식 명령 · 엔코더+자이로 관측 |
 | `scripts/smoke_rl_correct.py` | 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
@@ -20,6 +22,8 @@
 | `logs/` · `export/` | 산출물 (git 제외) |
 
 ## 흐름
+
+새 PC: `cd urdf/beebot && ./download_meshes.sh && /home/pank/pa-course/IsaacLab-6.1/.venv/bin/python make_tb3_body.py && ../check_same.sh`
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
