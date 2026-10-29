@@ -1,6 +1,6 @@
 // tb3_wheels — TurtleBot3 style 2-wheel OpenCR firmware (minimal).
 //
-// Hardware: OpenCR 1.0 + DYNAMIXEL XM430-W350 (wheel ID 2 = left, ID 1 = right), 1 Mbps, Protocol 2.0.
+// Hardware: ROBOTIS TurtleBot3 Waffle Pi — OpenCR 1.0 + DYNAMIXEL XM430-W210 (wheel ID 2 = left, ID 1 = right), 1 Mbps, Protocol 2.0.
 // Pair with SBC driver over USB CDC serial (/dev/opencr).
 // SBC side: ros2_ws/src/tb3_bringup/opencr_driver (C -> wheels, S -> odom/TF/joint_states).
 //
