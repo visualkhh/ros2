@@ -17,6 +17,9 @@
 //                     <l_cur A>,<r_cur A>,<l_temp C>,<r_temp C>,<battery V>
 //                   at STATUS_HZ. Positions are continuous multi-turn radians.
 //                   Current/temp are appended after uptime so fields 0-5 keep their index.
+//   OpenCR -> SBC : I,<gx>,<gy>,<gz rad/s>,<ax>,<ay>,<az m/s^2>,<qw>,<qx>,<qy>,<qz>
+//                   on-board IMU (OpenCR MPU9250/ICM20648), right after each S line. Board frame
+//                   (TurtleBot3 imu_link). Gyro bias is calibrated at boot -> keep the robot still ~2 s.
 //   OpenCR -> SBC : E,<l_err>,<r_err>
 //                   Hardware Error Status (addr 70) per wheel, decimal bitmask:
 //                     1=input voltage 4=overheating 8=motor encoder 16=electrical shock
@@ -25,6 +28,7 @@
 //
 // Safety: no C command for CMD_TIMEOUT_MS -> wheels stop (0, 0).
 #include <DynamixelSDK.h>
+#include <IMU.h>
 
 // ---------------- config ----------------
 // 이 로봇 배선: 1번 = 오른쪽, 2번 = 왼쪽 (2026-10-27 실기 확인). C·S·R·E의 l/r 순서는 이 매핑을 따른다.
@@ -49,6 +53,8 @@
 #define CUR_UNIT_A       0.00269f   // 1 unit = 2.69 mA (XM430)
 #define VEL_LIMIT_RAD_S  8.0f       // Waffle Pi spec 0.26 m/s / r 0.033 = 7.9 rad/s (DYNAMIXEL Velocity Limit also caps)
 #define STATUS_HZ        20
+#define GYRO_FACTOR      0.0010642f       // ADC -> rad/s  (+-2000 deg/s, TurtleBot3 turtlebot3_sensor.h)
+#define ACCEL_FACTOR     0.000598550415f  // ADC -> m/s^2  (+-2 g)
 #define CMD_TIMEOUT_MS   500
 #define ERR_REPEAT_MS    1000       // E line repeat period while in error
 #define REBOOT_WAIT_MS   1000       // max wait for DYNAMIXEL to answer ping after reboot
@@ -56,6 +62,7 @@
 // ---------------- state ----------------
 dynamixel::PortHandler *portHandler;
 dynamixel::PacketHandler *packetHandler;
+cIMU imu;
 
 float cmd_l = 0.0f, cmd_r = 0.0f;
 uint32_t last_cmd_ms = 0;
@@ -201,11 +208,16 @@ void setup() {
   packetHandler->write1ByteTxRx(portHandler, WHEEL_LEFT_ID, ADDR_OPERATING_MODE, OP_VELOCITY, &err);
   packetHandler->write1ByteTxRx(portHandler, WHEEL_RIGHT_ID, ADDR_OPERATING_MODE, OP_VELOCITY, &err);
   dxl_set_torque(true);
+
+  imu.begin();
+  imu.SEN.gyro_cali_start();
+  while (!imu.SEN.gyro_cali_get_done()) imu.update();  // gyro bias at rest (~2 s)
   last_cmd_ms = millis();
 }
 
 void loop() {
   poll_serial();
+  imu.update();  // rate-limited inside (200 Hz)
 
   // Watchdog: stop on command loss
   if (torque_on && (millis() - last_cmd_ms > CMD_TIMEOUT_MS)) {
@@ -242,6 +254,12 @@ void loop() {
     Serial.print(lt); Serial.print(",");
     Serial.print(rt); Serial.print(",");
     Serial.println(getPowerInVoltage(), 2);  // battery [V] (OpenCR core API)
+
+    Serial.print("I");
+    for (int i = 0; i < 3; i++) { Serial.print(","); Serial.print(imu.SEN.gyroADC[i] * GYRO_FACTOR, 5); }
+    for (int i = 0; i < 3; i++) { Serial.print(","); Serial.print(imu.SEN.accADC[i] * ACCEL_FACTOR, 4); }
+    for (int i = 0; i < 4; i++) { Serial.print(","); Serial.print(imu.quat[i], 5); }
+    Serial.println();
 
     // Error report: on change, then repeat while any wheel is in error
     int16_t el = dxl_read_hw_error(WHEEL_LEFT_ID);

@@ -117,6 +117,13 @@
     <parent link="base_link"/><child link="base_scan"/>
     <origin xyz="${lidar_x} ${lidar_y} ${lidar_z}" rpy="0 0 ${lidar_yaw}"/>
   </joint>
+  <!-- OpenCR 내장 IMU (보드 위치 = 위 OpenCR 상자, 축은 base_link와 같다고 가정 — 왼쪽 회전에 gz > 0 확인) -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/><child link="imu_link"/>
+    <origin xyz="-0.025 0 ${plate_z2 + 0.010}"/>
+  </joint>
+  <link name="imu_link"/>
+
   <link name="base_scan">
     <!-- LDS-03 외형 (상자로 근사, 스캔 평면이 높이 중앙이라고 가정) -->
     <visual>

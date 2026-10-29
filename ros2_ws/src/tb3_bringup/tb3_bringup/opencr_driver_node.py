@@ -4,13 +4,14 @@ Protocol (firmware/opencr/README.md):
   -> C,<left rad/s>,<right rad/s>   T,0|1   R[,l,r]
   <- S,<l_pos>,<l_vel>,<r_pos>,<r_vel>,<uptime ms>,<l_cur A>,<r_cur A>,<l_temp C>,<r_temp C>
   <- E,<l_err>,<r_err>              (hardware error bitmask, -1 = no response)
+  <- I,<gx,gy,gz rad/s>,<ax,ay,az m/s^2>,<qw,qx,qy,qz>   OpenCR on-board IMU -> imu (frame imu_link)
 
 Topics:
   sub  <cmd_topic> (Twist, default cmd_vel_base)   final wheel command from cmd_manager (mux)
   sub  opencr/reboot (Empty)                   -> R (clears DYNAMIXEL hardware error)
   sub  opencr/beep (Empty)                     -> B (OpenCR buzzer, 2000 Hz 150 ms)
   sub  opencr/beep_tone (Int32MultiArray)     -> B,<hz>,<ms> (100~8000 Hz, 10~2000 ms)
-  pub  odom, TF odom->base_footprint (REP-105), joint_states, diagnostics, battery_state
+  pub  odom, TF odom->base_footprint (REP-105), joint_states, diagnostics, battery_state, imu
 The firmware stops the wheels by itself if no C arrives for 500 ms, so a dead PC/RL link stops the robot.
 """
 import math
@@ -24,7 +25,7 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from sensor_msgs.msg import BatteryState, JointState
+from sensor_msgs.msg import BatteryState, Imu, JointState
 from std_msgs.msg import Empty, Int32MultiArray
 from tf2_ros import TransformBroadcaster
 
@@ -89,6 +90,7 @@ class OpencrDriver(Node):
         self.js_pub = self.create_publisher(JointState, 'joint_states', 10)
         self.bat_pub = self.create_publisher(BatteryState, 'battery_state', 10)
         self.diag_pub = self.create_publisher(DiagnosticArray, 'diagnostics', 10)
+        self.imu_pub = self.create_publisher(Imu, 'imu', 10)
         self.tf = TransformBroadcaster(self)
         self.create_timer(0.005, self.read_serial)
         self.create_timer(1.0 / self.cmd_rate, self.send_cmd)
@@ -180,6 +182,11 @@ class OpencrDriver(Node):
             except ValueError:
                 return
             self.on_status(vals)
+        elif f[0] == 'I' and len(f) >= 11:
+            try:
+                self.on_imu([float(x) for x in f[1:11]])
+            except ValueError:
+                return
         elif f[0] == 'E' and len(f) >= 3:
             try:
                 el, er = int(f[1]), int(f[2])
@@ -190,6 +197,15 @@ class OpencrDriver(Node):
                 log(f'motor error: left {err_text(el)} · right {err_text(er)}'
                     + ('' if (el, er) == (0, 0) else ' → ros2 topic pub --once /opencr/reboot std_msgs/msg/Empty'))
             self.errors = (el, er)
+
+    def on_imu(self, v: list) -> None:
+        msg = Imu()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'imu_link'
+        msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z = v[0:3]
+        msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z = v[3:6]
+        msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z = v[6:10]
+        self.imu_pub.publish(msg)
 
     def on_status(self, v: list) -> None:
         now = self.get_clock().now()
