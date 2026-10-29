@@ -25,7 +25,7 @@ SLAM(cartographer, 소스 빌드)·Nav2(apt)는 켜고 끄는 건 [`tool/run-cli
 | `coin_d4_driver` (ROBOTIS) | LDS-03 라이다 드라이버. Lyrical apt에 없음 (TurtleBot3 `LDS_MODEL=LDS-03`과 같은 드라이버) | 커밋 `79d1833` 고정 |
 | `m-explore-ros2` (robo-friends, BSD) | 자동 맵핑 `explore_lite`. Lyrical apt에 없음. 딸림 `multirobot_map_merge`는 `image_geometry` apt + `patches/m-explore-ros2-ament-target-deps.patch` 필요 → `setup/pi/build.sh`가 둘 다 처리 | 커밋 `326cf8a` 고정 |
 | `cartographer` | SLAM 코어. Lyrical apt에 없음. ceres 2 대응 패치 `patches/cartographer-ceres2.patch`. CMake 4.x 빌드는 `--cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5` 필수 | 커밋 `877157a` 고정 |
-| `cartographer_ros` | SLAM ROS 2 래퍼. 패치 `patches/cartographer_ros-ceres2.patch` + `patches/cartographer_ros-gflags-unique.patch` (같은 `--cmake-args` 공유) | 커밋 `7433452` 고정 |
+| `cartographer_ros` | SLAM ROS 2 래퍼. 패치 `patches/cartographer_ros-ceres2.patch` + `patches/cartographer_ros-gflags-unique.patch` + `patches/cartographer_ros-absl-deadlock.patch` (같은 `--cmake-args` 공유) | 커밋 `7433452` 고정 |
 
 - `version`은 ROS 배포판이 아니라 **그 저장소의 git 커밋/브랜치**입니다. ROBOTIS는 `humble`·`jazzy`·`main` 브랜치만 있고
   lyrical 브랜치가 없어서, 코드가 같은 최신(jazzy 끝)을 커밋으로 고정했습니다. 순수 rclcpp 코드라 Lyrical에서 빌드됩니다.

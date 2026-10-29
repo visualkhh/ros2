@@ -1,0 +1,21 @@
+--- a/cartographer_ros/src/node_main.cpp
++++ b/cartographer_ros/src/node_main.cpp
+@@ -15,6 +15,7 @@
+  */
+ 
+ #include "absl/memory/memory.h"
++#include "absl/synchronization/mutex.h"
+ #include "cartographer/mapping/map_builder.h"
+ #include "cartographer_ros/node.h"
+ #include "cartographer_ros/node_options.h"
+@@ -84,6 +85,10 @@
+ }  // namespace cartographer_ros
+ 
+ int main(int argc, char** argv) {
++  // Lyrical abseil의 lock-order 감지기가 PoseGraph2D+Task 순환을 오진단해 SIGABRT로 죽인다
++  // (upstream Release 빌드에선 감지기 off라 안 터짐 — issue-tracking 2026-10-28 §14).
++  // 감지만 끄는 것이고 mutex 자체는 그대로라 upstream과 동등하게 동작한다.
++  absl::SetMutexDeadlockDetectionMode(absl::OnDeadlockCycle::kIgnore);
+   // Init rclcpp first because gflags reorders command line flags in argv
+   rclcpp::init(argc, argv);
+ 
