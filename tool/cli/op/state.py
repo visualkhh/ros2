@@ -50,6 +50,7 @@ class StateStore:
         self.st_map: str | None = None                             # 적용된 지도
         self.explore_status = ''                                   # explore_bridge /explore_status
         self.rl_out = Rate(5)                                      # /cmd_vel_rl_out (PC RL 응답)
+        self.nodes_seen: dict[str, float] = {}                     # 노드 그래프에서 마지막으로 본 시각
 
     @staticmethod
     def yaw(q) -> float:

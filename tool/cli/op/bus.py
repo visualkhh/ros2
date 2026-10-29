@@ -651,7 +651,23 @@ class Bus:
     def node_names(self) -> list[str]:
         self._poll(0.5)
         names = self.node.get_node_names_and_namespaces()
-        return sorted(f'{ns.rstrip("/")}/{n}' for n, ns in names if n != self.node.get_name())
+        out = sorted(f'{ns.rstrip("/")}/{n}' for n, ns in names if n != self.node.get_name())
+        now = time.monotonic()
+        for n in out:   # 그래프에서 본 시각 기록 (사라진 노드의 마지막 확인용)
+            self.state.nodes_seen[n] = now
+        for n in [k for k, t in self.state.nodes_seen.items() if now - t > 3600]:
+            del self.state.nodes_seen[n]
+        return out
+
+    def node_rows(self) -> list[tuple[str, bool, float]]:
+        """(이름, 현재 보임, 마지막 확인 경과초). 사라진 건 10분까지만 표시."""
+        names = self.node_names()
+        now = time.monotonic()
+        alive = set(names)
+        rows = [(n, True, now - self.state.nodes_seen.get(n, now)) for n in names]
+        rows += [(n, False, now - t) for n, t in sorted(self.state.nodes_seen.items())
+                 if n not in alive and now - t < 600]
+        return rows
 
     def cmd_nodes(self, args) -> int:
         names = self.node_names()

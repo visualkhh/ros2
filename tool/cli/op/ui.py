@@ -256,8 +256,7 @@ class Ui:
             on = self.procs.running(name)
             procs.append(self.term.paint(f'{svc.label} {"ON" if on else "off"}',
                                          GREEN + BOLD if on else DIM))
-        now_wall = time.strftime('%H:%M:%S', time.localtime())
-        lines.append('  ' + ' | '.join(procs) + f' | {self.term.paint(now_wall, DIM)}')
+        lines.append('  ' + ' | '.join(procs))
         st = self.state
 
         def dot(rate, label):

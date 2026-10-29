@@ -139,6 +139,14 @@ class NodesMenu(Menu):
         return [SelectNodeItem(self.app), PrintNodesItem(self.app)]
 
     def center(self):
-        names = self.bus.node_names()
-        return [f'[노드 {len(names)}개]'] + [f' {n}' for n in names] if names else [
-            '노드 없음 — 베이스/SLAM/Nav가 꺼졌거나 ROS_DOMAIN_ID가 다름']
+        rows = self.bus.node_rows()
+        if not rows:
+            return ['노드 없음 — 베이스/SLAM/Nav가 꺼졌거나 ROS_DOMAIN_ID가 다름']
+        n_alive = sum(1 for _, alive, _ in rows if alive)
+        lines = [f'[노드 {n_alive}개 활성]']
+        for name, alive, age in rows:
+            if alive:
+                lines.append(f' {name}')
+            else:
+                lines.append(f' {self.term.paint(name + f" — 사라짐 ({age:.0f}초 전 확인)", YELLOW)}')
+        return lines
