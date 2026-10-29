@@ -17,6 +17,7 @@ SLAM·Nav는 로봇(Pi)에서 돌고, 조작은 **토픽이 보이는 곳 어디
 
 ```text
 ./run-cli                       메인 메뉴
+├─ c) 제어 상태 바꾸기 (지금 …)   MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING (RViz 2D Goal Pose·goal은 자동으로 NAV_PLAN)
 ├─ 1) 상태                      1 상태 출력 · 2 모터 재부팅 · 3 제어 상태 · 4 경로(직결/RL) · 5 비상정지
 ├─ 2) 베이스                    1 시작/정지 · 2 재시작 · l 로그
 ├─ 3) SLAM 맵핑                 1 시작/정지 · 2 재시작 · 3 지도 저장 · v RViz로 보기 · t 수동으로 이동 · a 자동 맵핑 · l 로그

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ..defs import MAIN
 from .base import GoMenu, Menu
+from .status import ToggleItem
 
 ENTRIES = [
     ('1', '상태'),
@@ -23,7 +24,8 @@ class MainMenu(Menu):
     root = True
 
     def items(self):
-        return [GoMenu(self.app, key, label, self.app.screen(key)) for key, label in ENTRIES]
+        # c) 제어 상태는 자주 바꾸니 첫 화면에 (상태 메뉴 3)과 같은 항목)
+        return [ToggleItem(self.app, 'c', 'mode')] + [GoMenu(self.app, key, label, self.app.screen(key)) for key, label in ENTRIES]
 
     def center(self):
         return self.bus.status_lines() + ['', self.term.paint(
