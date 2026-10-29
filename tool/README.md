@@ -14,7 +14,7 @@ tool/
 ├── rviz/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── slam.rviz           # 지도·스캔·odom·TF·포즈 그래프 (Orbit 3D, 저장된 TopDown 2D)
-│   └── nav.rviz            # nav2 화면 (코스트맵·경로 · 2D Pose Estimate · Nav2 Goal)
+│   └── nav.rviz            # nav2 화면 (코스트맵·경로 · 2D Pose Estimate · 2D Goal Pose)
 ├── cli/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── robot_tool.py       # 배선 + argparse + main

@@ -163,7 +163,8 @@ Nav2는 로봇이 지도 어디에 있는지 알아야 켜집니다. 초기 위�
 
 ### RViz에서 찍기
 
-- **Nav2 Goal**(2D Goal Pose) → 갈 곳 클릭 + 도착했을 때 바라볼 방향으로 드래그.
+- 툴바 **2D Goal Pose** → 갈 곳 클릭 + 도착했을 때 바라볼 방향으로 드래그 (`/goal_pose` → 제어 상태가 자동으로 NAV_PLAN).
+  ⚠ Nav2 패널의 다른 목표 버튼(GoalTool)은 `/goal_pose`를 안 거쳐 MANUAL 그대로 → 안 움직임. 그래서 nav.rviz엔 2D Goal Pose만 둠.
 - 경로(초록 선)가 그려지고 출발. 다른 곳을 찍으면 목표가 바뀝니다.
 
 ### CLI로 좌표 보내기
