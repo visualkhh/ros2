@@ -8,7 +8,7 @@ rc=0
 diff -u "$ROS/urdf/robot.urdf.xacro" "$HERE/beebot/urdf.xacro" || rc=1
 for m in body.stl wheel_left.stl wheel_right.stl; do
   if ! cmp -s "$ROS/meshes/$m" "$HERE/beebot/meshes/$m"; then
-    echo "메시 다름/없음: $m (cd beebot && ./download_meshes.sh && <Isaac venv python> make_tb3_body.py)"; rc=1
+    echo "메시 다름/없음: $m (두 meshes/ 폴더에 같은 파일이어야 함)"; rc=1
   fi
 done
 [ $rc = 0 ] && echo "OK: urdf.xacro · 메시 3개 같음"
