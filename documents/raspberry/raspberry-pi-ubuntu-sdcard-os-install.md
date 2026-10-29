@@ -1,8 +1,8 @@
 # Raspberry Pi 4B (TurtleBot3용) - Ubuntu에서 SD카드에 OS 설치 방법
 
 > 호스트 OS: Linux Ubuntu (20.04 / 22.04 / 24.04)
-> 대상 보드: Raspberry Pi 4B 2GB / 4GB / 8GB (TurtleBot3 Burger / Waffle Pi 기본 SBC)
-> TurtleBot3 정석 조합: Ubuntu Server 22.04 LTS 64-bit + ROS 2 Humble
+> 대상 보드: Raspberry Pi 4B 2GB / 4GB / 8GB (TurtleBot3 Waffle Pi 기본 SBC)
+> 이 프로젝트 조합: Ubuntu Server 26.04 LTS 64-bit + ROS 2 Lyrical
 
 ## 1. 준비물
 
@@ -83,15 +83,15 @@ sudo umount /dev/sdb1 /dev/sdb2 2>/dev/null; echo "unmounted"
 2. **라즈베리파이 장치 선택**
    - `Raspberry Pi 4` 선택 (Pi 5 아님)
 3. **운영체제 선택 (중요: arm64 필수)**
-   - `Other general-purpose OS > Ubuntu > Ubuntu Server 22.04.5 LTS (64-bit)` 선택
+   - `Other general-purpose OS > Ubuntu > Ubuntu Server 26.04.1 LTS (64-bit)` 선택
    - 설명에 `RPi 3/4/400 지원` 표시된 버전
    - Desktop이 아닌 **Server** 선택 (TurtleBot 공식 요구)
-   - armhf(32-bit) 선택 금지 - ROS 2 Humble TurtleBot3 패키지가 arm64 기준임
+   - armhf(32-bit) 선택 금지 - ROS 2 Lyrical 패키지가 arm64 기준임
 4. **저장소 선택**: SD카드 선택 (`/dev/sdb` 등)
 5. **다음** 클릭 → `설정 편집하기` 클릭 (톱니바퀴 또는 `Edit Settings`)
 
 ![Raspberry Pi Imager 메인 화면 - 디바이스, OS, 저장소 선택](image/img.png)
-> 위 예시 화면은 Imager v1.8.5에서 `RASPBERRY PI 4` 선택 상태. 단, 예시의 `UBUNTU SERVER 26.04.1`은 TurtleBot3용이 아니므로 반드시 `Ubuntu Server 22.04.5 LTS (64-bit)`로 바꿔 선택할 것.
+> 위 예시 화면은 Imager v1.8.5에서 `RASPBERRY PI 4` 선택 상태. 예시의 `UBUNTU SERVER 26.04.1`이 이 프로젝트가 쓰는 버전.
 
 ### 5-1. 사전 설정 (TurtleBot3 헤드리스 권장)
 
@@ -183,10 +183,10 @@ Imager가 안 될 때만 사용. Ubuntu 이미지 `.img.xz` 사전 다운로드 
 
 ```bash
 # 압축 해제
-unxz ubuntu-22.04.4-preinstalled-server-arm64+raspi.img.xz
+unxz ubuntu-26.04.1-preinstalled-server-arm64+raspi.img.xz
 
 # SD카드에 쓰기 (sdb는 예시, lsblk로 반드시 확인)
-sudo dd if=ubuntu-22.04.4-preinstalled-server-arm64+raspi.img of=/dev/sdb bs=4M status=progress conv=fsync
+sudo dd if=ubuntu-26.04.1-preinstalled-server-arm64+raspi.img of=/dev/sdb bs=4M status=progress conv=fsync
 
 # 동기화
 sync
@@ -215,28 +215,12 @@ sudo wipefs -a /dev/sdb
 sudo dd if=/dev/zero of=/dev/sdb bs=1M count=100 status=progress
 ```
 
-## 9. TurtleBot3 (Pi 4B) 사용자를 위한 다음 단계
+## 9. 다음 단계 (이 프로젝트: Ubuntu 26.04 + ROS 2 Lyrical + Waffle Pi)
 
-- OS는 반드시 Ubuntu Server 22.04 64-bit (ROS 2 Humble용)
-- Desktop 설치 금지 (무겁고 SD카드 수명·발열에 불리, 공식도 Server 요구)
-- ROS 설치는 `ros-humble-ros-base` 권장 (GUI 없는 Bare Bones, Pi 부하 최소화)
-- TurtleBot3 패키지 예시:
-```bash
-sudo apt install python3-argcomplete python3-colcon-common-extensions libboost-system-dev build-essential
-sudo apt install ros-humble-hls-lfcd-lds-driver ros-humble-turtlebot3-msgs ros-humble-dynamixel-sdk libudev-dev
-mkdir -p ~/turtlebot3_ws/src && cd ~/turtlebot3_ws/src
-git clone -b humble https://github.com/ROBOTIS-GIT/turtlebot3.git
-cd turtlebot3 && rm -rf turtlebot3_cartographer turtlebot3_navigation2 && cd ..
-colcon build --symlink-install --parallel-workers 1
-```
-- OpenCR USB 설정 + Domain ID는 TurtleBot 연동 시 필수:
-```bash
-sudo cp `ros2 pkg prefix turtlebot3_bringup`/share/turtlebot3_bringup/script/99-turtlebot3-cdc.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-echo 'export ROS_DOMAIN_ID=25 # 프로젝트 통일값 (PC·docker와 같게)' >> ~/.bashrc
-echo 'export TURTLEBOT3_MODEL=burger' >> ~/.bashrc
-# waffle_pi 모델이면 burger 대신 waffle_pi
-```
+- Server(데스크톱 없음) 그대로 사용 — SD카드 수명·발열·부하에 유리
+- ROS 2 Lyrical 설치 · 프로젝트 패키지: [lyrical-setup-ubuntu26.04.md](../ros/lyrical/lyrical-setup-ubuntu26.04.md)
+- OpenCR·라이다 USB 고정 이름: [udev-setup.md](udev-setup.md)
+- 전체 순서: [README.md 2장](README.md) · `ROS_DOMAIN_ID=25` (PC·Pi·docker 공통)
 
 ## 10. 체크리스트
 

@@ -22,7 +22,7 @@
 
 | 이름 | 토픽 | 값 |
 |---|---|---|
-| 운행 상태 | `/state_operation` | `SLAM` (slam_toolbox) · `LOCALIZATION` (amcl·map_server) · `IDLE` |
+| 운행 상태 | `/state_operation` | `SLAM` (cartographer_node) · `LOCALIZATION` (amcl·map_server) · `IDLE` |
 | 적용 지도 | `/state_map` | 지도 이름 · `(SLAM 작성 중)` · `''` |
 
 ## 1. 제어 상태 — 바퀴를 누가 움직이나

@@ -6,7 +6,7 @@
 
 - 정책은 Isaac Lab에서 학습 → ONNX → `rl_correction/corrector`가 cmd_manager의 **RL 경로**(`/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out`)에서 보정.
 - 비교는 `rl_eval/eval_recorder` CSV 두 개(before/after). RL은 실행 중 `./run-cli route rl|direct`로 켜고 끈다 (bringup 그대로).
-- 범위: **이동 보정 1종(`rl_correction`)만.** `nav2_rl_controller`는 보류 (launch 미연결, 목적 문서에 없음 — 1종이 끝난 뒤 다시 판단).
+- 범위: **이동 보정 1종(`rl_correction`)만.** Nav2 컨트롤러 단계 보정 패키지(`nav2_rl_controller`)는 **삭제(2026-10-29)**.
 
 ## 1. v1이 목적을 못 이루는 이유 (리뷰 결과)
 
@@ -34,7 +34,7 @@
 
 | 항목 | v2 |
 |---|---|
-| 로봇 | **우리 URDF** `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro` → USD (`isaac/scripts/load_urdf.py`가 이미 변환함). 바퀴만 |
+| 로봇 | **우리 URDF** `isaac/urdf/beebot/urdf.xacro` (ROS용과 같은 내용 — `isaac/urdf/check_same.sh`) → USD (`robot_spec.robot_usd()`가 변환). 바퀴만 |
 | 제어 주기 | **20 Hz** (cmd_manager와 같게). sim 120 Hz · decimation 6 |
 | 지연 | 명령·관측 각각 0~4 스텝(0~200 ms) 에피소드마다 무작위 (WiFi 왕복) |
 | 모터 모델 | 바퀴별 1차 지연(τ 0.05~0.25 s) · 좌우 이득 비대칭 ±10% · 데드밴드 0~0.3 rad/s · 바퀴 8 rad/s 포화(두 바퀴 같은 비율, 드라이버와 동일) |

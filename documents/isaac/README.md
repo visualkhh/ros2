@@ -16,7 +16,7 @@ Isaac Lab (우리 URDF) → 학습 → rl_correct_v2.onnx → PC rl-only (correc
 |---|---|---|---|
 | `rl_correction/corrector` (PC, rl-only) | `[v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]` | `[Δv, Δw]` 물리 보정량 | 우리 URDF · 모터 지연/비대칭/데드밴드 · WiFi 지연 · 계단식 명령 |
 
-한계 0.26 m/s · 1.82 rad/s (Waffle Pi). `nav2_rl_controller`는 보류 (launch 미연결) — [task-spec.md](task-spec.md) §0.
+한계 0.26 m/s · 1.82 rad/s (Waffle Pi). Nav2 컨트롤러 단계 보정(`nav2_rl_controller`)은 삭제(2026-10-29) — [task-spec.md](task-spec.md) §0.
 설계·이유·평가 기준: **[task-spec.md](task-spec.md)**. 실행: [../../isaac/README.md](../../isaac/README.md).
 
 ## 로봇 쪽 연결

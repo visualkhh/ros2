@@ -25,7 +25,8 @@ SLAM·Nav는 로봇(Pi)에서 돌고, 조작은 **토픽이 보이는 곳 어디
 ├─ 6) 지도 파일                 s 지금 지도 저장 · 번호 = 지도 내용 보기
 ├─ 7) SLAM 중 Nav               1 시작/정지 · 2 재시작 · 4 목표 보내기 · 5 목표 취소 · v RViz · l 로그
 ├─ 8) 노드 목록
-└─ 9) 전부 정지                 = stop-all
+├─ 9) 전부 정지                 = stop-all
+└─ 0) 비프음                    1 삑 · 2 높이·길이 지정 · 3 타이핑삑 (= beep · say)
 ```
 
 `1 시작/정지`는 같은 자리에 지금 상태에 맞는 쪽만 보입니다 (꺼져 있으면 시작, 켜져 있으면 정지).
@@ -41,7 +42,7 @@ SLAM·Nav는 로봇(Pi)에서 돌고, 조작은 **토픽이 보이는 곳 어디
 ping -c2 pak.local                       # 응답 없으면 아직 부팅 중 · WiFi 확인
 
 # ② 코드 최신화 (PC에서 고친 게 있으면)
-ssh pak 'cd ~/ros2 && git pull'          # ros2_ws를 바꿨으면: cd ~/ros2/ros2_ws && colcon build --symlink-install
+ssh pak 'cd ~/ros2 && git pull'          # ros2_ws를 바꿨으면: ~/ros2/setup/pi/build.sh
 
 # ③ 베이스 bringup — 둘 중 하나
 ./run-cli base start                     # PC에서 (tool이 SSH로 Pi에 띄움)
@@ -79,7 +80,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ./run-cli teleop        # w 전진 · x 후진 · a/d 제자리 회전 · q/e 앞 사선 · z/c 뒤 사선 (설정 속도 유지, 반경 0.5 m 원호 · 0.20 m/s 넘으면 약 0.21에서 모양 유지) · s 정지 · -/= 속도 · b 삑 · Esc 종료
 ```
 
-메뉴: `./run-cli` → `3) SLAM 맵핑` → `1) 시작` → `v) RViz로 보기` → `t) 수동으로 이동하기` (`q`로 나옴).
+메뉴: `./run-cli` → `3) SLAM 맵핑` → `1) 시작` → `v) RViz로 보기` → `t) 수동으로 이동하기` (`Esc`로 나옴).
 텔레오퍼는 제어 상태가 MANUAL이 아니면 바꿀지 먼저 묻습니다.
 
 요령:
@@ -224,7 +225,7 @@ for p in "1.0 0.0 0" "1.0 1.0 90" "0 0 180"; do ./run-cli goal $p || break; done
 
 | 파일 | 내용 |
 |---|---|
-| `config/slam_toolbox.yaml` | SLAM 설정 (`base_frame: base_footprint` · 지도 갱신 2초 · 최소 사거리 0.12 m) |
+| `ros2_ws/src/tb3_bringup/config/cartographer_2d.lua` | SLAM(cartographer) 설정 (오도메트리 사용 · IMU 안 씀 · 사거리 0.12~8 m) |
 | `config/nav2_params.yaml` | Nav2 설정 (Waffle Pi footprint 다각형 · Twist cmd_vel · amcl `base_footprint`) |
 | `rviz/slam.rviz` · `rviz/nav.rviz` | RViz 화면 |
 | 로봇 `~/ros2/ros2_ws/map/<이름>/` | 저장한 지도 (`map.yaml` · `map.pgm`) |

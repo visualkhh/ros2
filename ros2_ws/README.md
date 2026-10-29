@@ -6,14 +6,14 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계
 
 | 패키지 | 내용 |
 |---|---|
-| `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `explore_bridge`(자동 맵핑 ↔ 제어 상태) · launch 4개 · URDF |
+| `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `explore_bridge`(자동 맵핑 ↔ 제어 상태) · launch 5개 · URDF |
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out`. rl-only가 `/cmd_vel_rl_in` → `/cmd_vel_rl_out`으로 띄움 |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom을 CSV로 · `benchmark_onnx.py` (Pi 추론 속도) |
-| `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력(`cmd_vel_nav`) 단계 보정. **아직 launch에 연결 안 함** |
 | `coin_d4_driver` (외부) | LDS-03 라이다 드라이버 (ROBOTIS) — 아래 `deps.repos`로 받음 |
 | `explore_lite` · `explore_lite_msgs` (외부) | 자동 맵핑 frontier 탐색 (m-explore-ros2) — 아래 `deps.repos`로 받음 |
+| `cartographer` · `cartographer_ros` (외부) | SLAM — 아래 `deps.repos` + `patches/`로 소스 빌드 |
 
-SLAM(slam_toolbox)·Nav2는 apt 패키지이고, 켜고 끄는 건 [`tool/run-cli`](../tool/README.md)가 합니다 (토픽이 보이는 곳 어디서나).
+SLAM(cartographer, 소스 빌드)·Nav2(apt)는 켜고 끄는 건 [`tool/run-cli`](../tool/README.md)가 합니다 (토픽이 보이는 곳 어디서나).
 
 ## deps.repos — apt에 없는 외부 소스
 
@@ -24,10 +24,12 @@ SLAM(slam_toolbox)·Nav2는 apt 패키지이고, 켜고 끄는 건 [`tool/run-cl
 |---|---|---|
 | `coin_d4_driver` (ROBOTIS) | LDS-03 라이다 드라이버. Lyrical apt에 없음 (TurtleBot3 `LDS_MODEL=LDS-03`과 같은 드라이버) | 커밋 `79d1833` 고정 |
 | `m-explore-ros2` (robo-friends, BSD) | 자동 맵핑 `explore_lite`. Lyrical apt에 없음. Lyrical 빌드 확인(경고만) | 커밋 `326cf8a` 고정 |
+| `cartographer` | SLAM 코어. Lyrical apt에 없음. ceres 2 대응 패치 `patches/cartographer-ceres2.patch` | 커밋 `877157a` 고정 |
+| `cartographer_ros` | SLAM ROS 2 래퍼. 패치 `patches/cartographer_ros-ceres2.patch` | 커밋 `7433452` 고정 |
 
 - `version`은 ROS 배포판이 아니라 **그 저장소의 git 커밋/브랜치**입니다. ROBOTIS는 `humble`·`jazzy`·`main` 브랜치만 있고
   lyrical 브랜치가 없어서, 코드가 같은 최신(jazzy 끝)을 커밋으로 고정했습니다. 순수 rclcpp 코드라 Lyrical에서 빌드됩니다.
-- 받은 폴더(`src/coin_d4_driver/` · `src/m-explore-ros2/`)는 `.gitignore` — 우리 저장소엔 `deps.repos` 한 파일만 올라갑니다.
+- 받은 폴더(`src/coin_d4_driver/` · `src/m-explore-ros2/` · `src/cartographer/` · `src/cartographer_ros/`)는 `.gitignore` — 우리 저장소엔 `deps.repos` 한 파일만 올라갑니다.
 - coin_d4_driver가 없어도 빌드·실행은 됩니다 (`tb-only`가 라이다만 빼고 뜸, 경고 출력). m-explore-ros2가 없으면 tb3_bringup이 `explore_lite_msgs`를 못 찾아 빌드는 되지만 자동 맵핑(`explore-nav`)이 안 뜸.
 
 ## 빌드
@@ -43,7 +45,7 @@ SLAM(slam_toolbox)·Nav2는 apt 패키지이고, 켜고 끄는 건 [`tool/run-cl
 
 ```bash
 cd ~/workspaces/visualkhh/source/ros2/ros2_ws && source /opt/ros/lyrical/setup.bash
-colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_eval nav2_rl_controller
+colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_eval
 ```
 
 설정·launch·URDF 파일을 **새로 추가**했는데 설치 폴더에 안 보이면: `rm -rf build/tb3_bringup install/tb3_bringup` 후 다시 빌드.
@@ -56,7 +58,8 @@ colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_ev
 | launch | 어디서 | 내용 |
 |---|---|---|
 | `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다(+몸통 필터·고정 칸). RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로, 실행 중엔 `./run-cli rl on`) |
-| `explore-nav.launch.py` | Pi | SLAM 중 Nav — Nav2 `navigation_launch.py` + lifecycle_manager (Lyrical은 manager가 `bringup_launch.py`에만 있음). `run-cli explore start`·자동 맵핑이 씀 |
+| `explore-nav.launch.py` | Pi | SLAM 중 Nav — Nav2 `navigation_launch.py` + lifecycle_manager (Lyrical은 manager가 `bringup_launch.py`에만 있음) + explore_lite(frontier 탐색) + explore_bridge(제어 상태 ↔ 탐색). `run-cli explore start`·자동 맵핑이 씀 |
+| `cartographer.launch.py` | Pi | SLAM — cartographer_node + occupancy_grid_node (`config/cartographer_2d.lua`). `run-cli slam start`가 씀 |
 | `rl-only.launch.py` | PC | RL 노드만: corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
 
@@ -80,7 +83,7 @@ ros2 launch tb3_bringup tb-only.launch.py lidar:=false        # 라이다 없이
 상태는 `/state_control` · `/state_rl` · `/state_estop` (latched) 로 나옵니다.
 
 `opencr_driver`: `/cmd_vel_base` → `C,l,r` (20 Hz 재전송), `S` → `/odom` · TF `odom→base_footprint` · `/joint_states`(effort=전류 A) ·
-`/diagnostics`(전류·온도·모터 에러). 파라미터 `config/robot.yaml` (바퀴 반지름 0.033 · 간격 0.287 · 방향 부호 -1/-1).
+`/diagnostics`(전류·온도·모터 에러) · `/battery_state`(S의 배터리 V), `I` → `/imu`(frame `imu_link`). 파라미터 `config/robot.yaml` (바퀴 반지름 0.033 · 간격 0.287 · 방향 부호 -1/-1).
 라이다: `config/lidar.yaml` (`/scan_raw` → 몸통 상자 필터 → `/scan_filtered` → 400칸 고정 → `/scan`).
 로봇 모델: `urdf/robot.urdf.xacro` — 실측 값은 파일 위쪽 property에 (`view-model.launch.py`로 확인).
 

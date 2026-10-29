@@ -14,6 +14,7 @@ ROS는 아는데 Isaac이 처음인 사람을 위한 문서. 수식 없음.
 ```
 isaac/
 ├── tasks/rl_correct/         연습장 (빈 바닥, 명령대로 움직이게 보정)
+├── urdf/beebot/urdf.xacro     학습용 로봇 URDF (ROS용과 같은 내용 — urdf/check_same.sh)
 ├── tasks/common/robot_spec.py  우리 로봇 숫자 한 곳 + 우리 URDF를 Isaac용(USD)으로 변환
 ├── scripts/train.py          학습 시작 버튼
 ├── scripts/play.py           학습된 애 구경하기
@@ -22,7 +23,7 @@ isaac/
 └── export/<task>/            로봇에 쓸 모델 (.onnx)
 ```
 
-시뮬 로봇 = **우리 로봇 URDF** (`ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`) 그대로.
+시뮬 로봇 = **우리 로봇 URDF** `isaac/urdf/beebot/urdf.xacro` — ROS용(`ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`)과 같은 내용 (`isaac/urdf/check_same.sh`로 확인).
 
 ## 3. 강화학습 5단어
 
@@ -40,7 +41,7 @@ isaac/
 
 ```
 ① Sim에 로봇 수백 대 띄우기 → ② 멋대로 움직이며 점수 따기 → ③ 잘하는 쪽으로 정책 갱신
-→ ④ ONNX 파일로 뽑기 → ⑤ Pi에 복사 → ⑥ ROS 노드가 불러서 실주행에 더하기
+→ ④ ONNX 파일로 뽑기 → ⑤ PC rl-only가 ONNX를 불러옴 → ⑥ ./run-cli route rl 로 실주행에 더하기
 ```
 
 ## 5. 명령어 (복붙용)

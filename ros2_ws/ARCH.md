@@ -24,7 +24,7 @@ flowchart LR
     RSP["robot_state_publisher<br/>(URDF)"]
     LIDAR["coin_d4_driver"]
     FILT["scan_filter<br/>(laser_filters 몸통 상자)"]
-    SLAM["slam_toolbox<br/>(tool: slam start)"]
+    SLAM["cartographer<br/>(tool: slam start)"]
     NAV_PLAN["Nav2<br/>(tool: nav / explore start)"]
     TELE["teleop<br/>(tool: teleop)"]
   end
@@ -40,11 +40,12 @@ flowchart LR
   SM -->|"/state_*"| CM
   CM -->|"/cmd_vel_base"| DRV
   CM <-.->|"rl on: /cmd_vel_rl_in · _out"| RL
-  OPENCR <-->|"USB CDC /dev/opencr<br/>C·T·R ↓ · S·E ↑"| DRV
+  OPENCR <-->|"USB CDC /dev/opencr<br/>C·T·R·B ↓ · S·E·I ↑"| DRV
   LDS -->|"/dev/tb3_lidar 230400"| LIDAR
   LIDAR -->|"/scan_raw"| FILT
-  FILT -->|"/scan"| SLAM
-  FILT -->|"/scan"| NAV_PLAN
+  FILT -->|"/scan_filtered"| RES["scan_resample<br/>(400칸 고정)"]
+  RES -->|"/scan"| SLAM
+  RES -->|"/scan"| NAV_PLAN
   SLAM -->|"/map · TF map→odom"| NAV_PLAN
   DRV -->|"/odom · TF odom→base_footprint"| SLAM
   DRV -->|"/odom"| NAV_PLAN
@@ -96,7 +97,7 @@ flowchart LR
 | | `SLAM_AUTO_MAPPING` | `./run-cli automap start` (SLAM·SLAM 중 Nav 켜고 바꿈) | Nav2 `/cmd_vel`만 · explore_lite가 frontier 목표를 계속 보냄 · 다 찾으면 explore_bridge가 MANUAL로 |
 | 경로 `/state_rl` | false = 직결 · true = RL 경유 | `/cmd_manual_rl` · `./run-cli route direct/rl` · `tb-only.launch.py rl:=true` | RL 경유면 `/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out` |
 | 비상정지 `/state_estop` | | `/cmd_manual_estop` · `./run-cli estop on/off` | true면 항상 0 (요청 즉시 0도 보냄) |
-| **운행 상태** `/state_operation` | `SLAM` · `LOCALIZATION` · `IDLE` | state_manager가 떠 있는 노드로 판단 (slam_toolbox / amcl·map_server / 없음) | 위치를 어떻게 아나 — 맵핑 중인가, 지도로 위치 추정 중인가 |
+| **운행 상태** `/state_operation` | `SLAM` · `LOCALIZATION` · `IDLE` | state_manager가 떠 있는 노드로 판단 (cartographer_node / amcl·map_server / 없음) | 위치를 어떻게 아나 — 맵핑 중인가, 지도로 위치 추정 중인가 |
 | 지도 `/state_map` | `office` · `(SLAM 작성 중)` · `''` | state_manager가 map_server `yaml_filename`에서 | 지금 적용된 지도 |
 
 안전: 고른 입력이 0.5초 넘게 끊기면 0, RL 경유인데 `/cmd_vel_rl_out`이 0.3초 넘게 끊기면(PC 꺼짐·WiFi) 0.
@@ -107,18 +108,19 @@ cmd_manager는 20 Hz로 계속 보내고, 드라이버(0.5초)와 펌웨어(500 
 |---|---|---|
 | `tb-only.launch.py` | Pi | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample. RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로) |
 | `explore-nav.launch.py` | Pi | SLAM 중 Nav — Nav2 `navigation_launch.py` + lifecycle_manager (Lyrical은 manager가 `bringup_launch.py`에만 있음) + **explore_lite**(frontier 탐색, deps.repos) + **explore_bridge**(제어 상태 ↔ `/explore/resume`). `run-cli explore start`·자동 맵핑이 씀 |
+| `cartographer.launch.py` | Pi | SLAM — cartographer_node + occupancy_grid_node (`config/cartographer_2d.lua`). `run-cli slam start`가 씀 |
 | `rl-only.launch.py` | PC | rl_corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) · eval_recorder — 로봇 노드는 안 띄움 |
-
-`nav2_rl_controller`(Nav2 내부 `cmd_vel_nav` 단계 보정)는 패키지만 있고 아직 launch에 연결 안 함.
+| `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
 
 ## 3. TF 트리 (REP-105)
 
 ```mermaid
 flowchart TD
-  MAP["map"] -->|"slam_toolbox 또는 amcl"| ODOM["odom"]
+  MAP["map"] -->|"cartographer 또는 amcl"| ODOM["odom"]
   ODOM -->|"opencr_driver"| FP["base_footprint (바닥)"]
   FP -->|"URDF 고정 +0.010"| BL["base_link (바퀴축)"]
   BL -->|"URDF 고정"| SCAN["base_scan (LDS-03)"]
+  BL -->|"URDF 고정"| IMU["imu_link (OpenCR IMU)"]
   BL -->|"URDF · /joint_states"| WL["wheel_left_link"]
   BL -->|"URDF · /joint_states"| WR["wheel_right_link"]
   BL -->|"URDF 고정"| CA["caster_back_left/right_link"]
@@ -126,7 +128,7 @@ flowchart TD
 
 | 프레임 | 누가 냄 | 기준으로 쓰는 곳 |
 |---|---|---|
-| `map → odom` | slam_toolbox(맵핑) · amcl(지도 주행) | Nav2 global costmap |
+| `map → odom` | cartographer(맵핑) · amcl(지도 주행) | Nav2 global costmap |
 | `odom → base_footprint` | opencr_driver | SLAM `base_frame` · amcl `base_frame_id` |
 | `base_footprint → base_link → …` | robot_state_publisher (`urdf/robot.urdf.xacro`) | Nav2 costmap · footprint 다각형 · 몸통 필터 |
 
@@ -146,10 +148,12 @@ flowchart TD
 | `/odom` | Odometry | opencr_driver | cartographer · Nav2 · eval_recorder · tool |
 | `/joint_states` | JointState | opencr_driver (effort = 전류 A) | robot_state_publisher |
 | `/diagnostics` | DiagnosticArray | opencr_driver (전류·온도·모터 에러) | tool · rqt |
+| `/imu` | Imu (`imu_link`) | opencr_driver (펌웨어 `I` — 자이로·가속도·자세) | rl_corrector · eval_recorder |
+| `/battery_state` | BatteryState | opencr_driver (펌웨어 `S` 배터리 V) | rqt · 표준 소비자용 (tool 상태바는 `/diagnostics`의 battery_V) |
 | `/opencr/reboot` | Empty | 사람 · tool | opencr_driver → `R` |
 | `/cmd_beep` | Empty | 사람 · tool (`run-cli beep` · 텔레오퍼 b) | cmd_manager → `/opencr/beep` → `B` (부저) |
 | `/cmd_beep_tone` | Int32MultiArray `[Hz, ms]` | 사람 · tool (`beep <Hz> <ms>`) | cmd_manager → `/opencr/beep_tone` → `B,Hz,ms` |
-| `/cmd_say` | String | 사람 · tool (텔레오퍼 t 타이핑삑) | cmd_manager (자모별 주파수로 변환·재생) → `/opencr/beep_tone` |
+| `/cmd_say` | String | 사람 · tool (`run-cli say <글>` · 메뉴 0) 비프음) | cmd_manager (자모별 주파수로 변환·재생) → `/opencr/beep_tone` |
 | `/scan_raw` | LaserScan | coin_d4_driver | scan_filter |
 | `/scan_filtered` | LaserScan | scan_filter (몸통 가림 제거) | scan_resample |
 | `/scan` | LaserScan | scan_resample (400칸 고정) | cartographer · amcl · Nav2 costmap |
@@ -169,13 +173,14 @@ flowchart TD
 
 | 패키지 | 내용 |
 |---|---|
-| `tb3_bringup` | `state_manager` · `cmd_manager` · `opencr_driver` · `scan_resample` · `explore_bridge` · launch 4개 · `config/robot.yaml` · `config/lidar.yaml` · `config/explore.yaml` · URDF · 바퀴 메시 |
+| `tb3_bringup` | `state_manager` · `cmd_manager` · `opencr_driver` · `scan_resample` · `explore_bridge` · launch 5개 · `config/robot.yaml` · `config/lidar.yaml` · `config/explore.yaml` · URDF · 바퀴 메시 |
 | `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out` |
-| `nav2_rl_controller` | `controller_corrector` — Nav2 컨트롤러 출력 보정 (미연결) |
 | `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom CSV · `benchmark_onnx.py` |
 | `coin_d4_driver` (외부) | LDS-03 드라이버 — `deps.repos`(vcstool 소스 목록)로 받아 같이 빌드 (apt 없음, [README](README.md#depsrepos--apt에-없는-외부-소스)) |
-| apt | slam_toolbox · nav2_bringup · laser_filters · robot_state_publisher · xacro |
+| `m-explore-ros2` (외부) | `explore_lite` — 자동 맵핑 frontier 탐색 (`deps.repos`) |
+| `cartographer` · `cartographer_ros` (외부) | SLAM — `deps.repos` + `patches/*.patch`로 소스 빌드 (Lyrical apt 없음) |
+| apt | nav2_bringup · laser_filters · robot_state_publisher · xacro |
 
 SLAM·Nav2는 `ros2_ws` launch가 아니라 `tool/run-cli`가 켜고 끕니다 — 베이스(tb-only)는 켜 둔 채
 맵핑 ↔ 지도 주행을 바꿔 켜기 때문. 프로세스는 항상 Pi에 뜨고(로봇이 아닌 곳에서 실행하면 tool이 SSH로 Pi에 넘김),
-켜짐 여부는 노드 그래프로 봅니다. 설정은 `tool/config/slam_toolbox.yaml` · `nav2_params.yaml`.
+켜짐 여부는 노드 그래프로 봅니다. 설정은 `tb3_bringup/config/cartographer_2d.lua` · `tool/config/nav2_params.yaml`.

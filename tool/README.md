@@ -10,7 +10,6 @@ tool/
 ├── run-rviz         # RViz: 맵핑·주행 보기 (화면 있는 곳)
 ├── peers.sh         # 로봇이 아닌 곳에서 Pi DDS 노드를 유니캐스트로 찾게 (WiFi 멀티캐스트 불안정)
 ├── config/
-│   ├── slam_toolbox.yaml   # (구) slam_toolbox 설정 — 현 SLAM은 cartographer (`tb3_bringup` cartographer.launch + config/cartographer_2d.lua)
 │   └── nav2_params.yaml    # nav2_bringup + Waffle Pi footprint · Twist cmd_vel · amcl base_footprint
 ├── rviz/
 │   ├── start.sh · stop.sh · restart.sh
@@ -67,7 +66,7 @@ tool/
 
 지도 저장은 `/map`이 들어올 때만 하고, 없으면 "라이다 /scan이 있어야 지도가 생김"으로 알려 줍니다.
 
-동시에 못 켜는 조합: `slam` ↔ `nav`, `nav` ↔ `explore` (지도·위치를 내는 쪽이 둘이 됨). 켜려 하면 거부합니다.
+동시에 못 켜는 조합: `slam` ↔ `nav`, `nav` ↔ `explore` (지도·위치를 내는 쪽이 둘이 됨). 켜면 반대쪽을 자동으로 끄고 켭니다.
 
 ## 명령
 
@@ -84,7 +83,8 @@ tool/
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
 ./run-cli nodes
 ./run-cli reboot-motors        # 모터 에러(E) 해제 — 두 바퀴 재부팅 (/opencr/reboot)
-./run-cli beep                 # OpenCR 부저 삑 (/cmd_beep · 메뉴 1) 상태 → 6 · 텔레오퍼 b · t 타이핑삑(/cmd_say))
+./run-cli beep [Hz ms]         # OpenCR 부저 삑 (/cmd_beep · /cmd_beep_tone · 메뉴 0) 비프음 · 텔레오퍼 b)
+./run-cli say <글>              # 타이핑삑 — 한/영 → 자모별 삑 (/cmd_say · 메뉴 0) 비프음 → 3)
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
 ./run-cli route direct|rl       # 바퀴 명령 경로: 직결 / PC RL 경유 (= rl off|on)
@@ -108,7 +108,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 | 메뉴 | `↑↓` 이동 · `Enter` 실행 · 번호로 포커스 · `Esc`/`◀`/`b` 뒤로 · `m` 메인 · `r` 새로고침 · `q` 종료 |
 | 확인창 | `y` 예 · `n`/`Esc` 아니오 · `Enter` 기본값 |
 | 입력창 | `Enter` 확인 · `Esc` 취소 |
-| 텔레오퍼 | `w`/`x`/`a`/`d`·방향키 · `s`/`space` 정지 · `e`/`c` 속도 · `q` 종료 (종료 시 0 속도) |
+| 텔레오퍼 | `w`/`x`/`a`/`d`·방향키 · `q`/`e`/`z`/`c` 사선 · `s`/`space` 정지 · `-`/`=` 속도 · `b` 삑 · `Esc` 종료 (종료 시 0 속도) |
 
 ## 설정 (환경변수)
 
@@ -118,7 +118,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 | `TOOL_CMD_VEL` | `/cmd_manual_vel` | 텔레오퍼·drive가 내는 토픽 (cmd_manager 수동 입력) |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) — 로봇·`TOOL_LOCAL`에서 |
-| `TOOL_SLAM_PARAMS` / `TOOL_NAV_PARAMS` | `config/*.yaml` | 파라미터 파일 |
+| `TOOL_NAV_PARAMS` | `config/nav2_params.yaml` | Nav2 파라미터 파일 (SLAM 설정은 `ros2_ws/src/tb3_bringup/config/cartographer_2d.lua`) |
 | `TOOL_USE_SIM_TIME` | `false` | Gazebo면 `true` |
 | `ROBOT_HOST` | `pak.local` | 로봇 이름 (DDS 피어 · 원격 실행 대상) |
 | `TOOL_ROBOT_SSH` | `pak@pak.local` | 원격 실행 SSH 대상 (키 인증) |

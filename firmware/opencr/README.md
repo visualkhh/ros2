@@ -1,7 +1,7 @@
 # OpenCR 2륜 펌웨어 (tb3_wheels)
 
-TurtleBot3 Burger형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W350, **ID 2 = 왼쪽 · ID 1 = 오른쪽**) 속도제어 + 상태 송신.
-IMU·팔·그리퍼 없음. Beebot용(`beebot_opencr`)이 아니라 기본 주행용.
+TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, **ID 2 = 왼쪽 · ID 1 = 오른쪽**) 속도제어 + 상태 송신.
+팔·그리퍼 없음 (OpenCR 내장 IMU는 `I` 줄). Beebot용(`beebot_opencr`)이 아니라 기본 주행용.
 
 - 소스: `tb3_wheels/tb3_wheels.ino` (Arduino 스케치, 폴더명=파일명 유지 필수)
 - 의존: OpenCR 보드 패키지 + DynamixelSDK (보드 설치는 [OpenCR 문서](../../documents/opencr/opencr-setup-ubuntu26.04.md))
@@ -15,6 +15,7 @@ IMU·팔·그리퍼 없음. Beebot용(`beebot_opencr`)이 아니라 기본 주�
 | SBC → OpenCR | `R` (양쪽) / `R,<좌 0·1>,<우 0·1>` (다이나믹셀 재부팅, 빈칸·0=그대로) | 에러 시 |
 | SBC → OpenCR | `B` (2000Hz 150ms) / `B,<Hz>,<ms>` (부저 삑, 100~8000Hz · 10~2000ms, 안 기다림) | 필요시 |
 | OpenCR → SBC | `S,<좌pos rad>,<좌vel>,<우pos>,<우vel>,<uptime ms>,<좌전류 A>,<우전류 A>,<좌온도 ℃>,<우온도 ℃>,<배터리 V>` | 20Hz |
+| OpenCR → SBC | `I,<gx>,<gy>,<gz rad/s>,<ax>,<ay>,<az m/s²>,<qw>,<qx>,<qy>,<qz>` (OpenCR 내장 IMU, 보드 좌표 = `imu_link`). 부팅 때 자이로 바이어스 보정 → **켜고 ~2초 가만히** | `S` 바로 뒤 (20Hz) |
 | OpenCR → SBC | `E,<좌err>,<우err>` (Hardware Error Status 비트마스크, 0=정상, -1=무응답) | 변화 시 + 에러 중 1Hz |
 
 에러(`E`) 비트: `1`=입력전압 `4`=과열 `8`=엔코더 `16`=전기충격 `32`=과부하 (여러 개면 합, 예 `36`=과열+과부하). 에러가 나면 다이나믹셀이 스스로 토크를 끔 → `R`로 재부팅해야 해제. 정상 복귀 시 `E,0,0` 한 번 송신.
@@ -52,6 +53,6 @@ firmware/opencr/
 
 ## SBC 연결 계획
 
-- `test-serial` 방식 그대로 사용 가능 (`/dev/opencr` 가상/실물 동일 이름)
-- 지금은 `tb3_bringup/opencr_driver`가 `C` 송신·`S` 파싱. ros2_control 하드웨어 플러그인으로 옮길 때도 프로토콜 그대로
-- LiDAR 장착 후: `hls_lfcd_lds_driver` + `slam_toolbox` 추가
+- `test-firmware` 방식 그대로 사용 가능 (`/dev/opencr` 가상/실물 동일 이름)
+- 지금은 `tb3_bringup/opencr_driver`가 `C` 송신·`S`·`I`·`E` 파싱. ros2_control 하드웨어 플러그인으로 옮길 때도 프로토콜 그대로
+- LiDAR: LDS-03 → `coin_d4_driver`, SLAM: cartographer ([ros2_ws/README.md](../../ros2_ws/README.md))
