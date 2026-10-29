@@ -1,46 +1,30 @@
 <?xml version="1.0"?>
 <!--
-  TurtleBot3 Waffle Pi 개조형: 맨 위 판(원래 라이다 자리) 걷어냄 · LDS-03 라이다를 1층 맨 앞, 두 바퀴 사이 가운데에.
-  2층(지금 맨 위): 앞쪽 OpenCR · 뒤쪽 Raspberry Pi 4 (2026-10-27 사진 기준).
+  TurtleBot3 Waffle Pi 개조형 = beebot CAD(isaac/urdf/beebot)에서 매니퓰레이터 · 맨 위 판(3층)과 그 위 · 뒤 pole·카메라를 뺀 것
+  + LDS-03 라이다를 1층 맨 앞, 두 바퀴 사이 가운데에.
+  2층(지금 맨 위): 앞쪽 OpenCR · 뒤쪽 Raspberry Pi 4 · 모서리 지지봉(standoff)은 그대로 위로 솟아 있음 (2026-10-27 사진).
 
-  치수 출처: turtlebot3_description/urdf/turtlebot3_waffle_pi.urdf (ROBOTIS, Apache 2.0) —
-  바퀴·캐스터·몸통 외곽은 원본 그대로. 라이다 크기는 LDS-03 e-Manual (54.7 W × 39.7 D × 34 H mm).
+  메시: meshes/body.stl · wheel_*.stl ← isaac/urdf/beebot/make_tb3_body.py가 beebot 메시에서 만듦 (mm, scale 0.001).
   ★ 실측해서 고칠 값 = 아래 property 중 "측정" 표시. 바꾸면 colcon build 후 view-model로 다시 확인.
 
-  좌표 (REP-105, 원본 TB3와 같음): base_footprint(바닥, 루트) → base_link(바퀴축, +0.010) — x 앞 · y 왼쪽 · z 위.
+  좌표 (REP-105): base_footprint(바닥, 루트) → base_link(바퀴축 아래, +0.010) — x 앞 · y 왼쪽 · z 위.
   드라이버가 odom→base_footprint를 낸다. 아래 값은 전부 base_link 기준.
-  원본 몸통: 중심 x -0.064, 266×266mm → x -0.197 ~ +0.069 (앞끝 0.069), 높이 z 0 ~ 0.094.
+  몸통 외곽: x -0.197 ~ +0.069 (앞끝 0.069) · y ±0.139 · z -0.010(캐스터) ~ 0.091(지지봉 끝).
 -->
 <robot name="tb3_waffle_pi_lowlidar" xmlns:xacro="http://www.ros.org/wiki/xacro">
-
-  <!-- 몸통 판 (Waffle 와플판 266×266mm). 원본 3층(맨 위=라이다판) → 맨 위를 뺀 2층만 -->
-  <xacro:property name="body_x" value="-0.064"/>
-  <xacro:property name="plate" value="0.266"/>
-  <xacro:property name="plate_t" value="0.003"/>
-  <xacro:property name="plate_z1" value="0.000"/>          <!-- 측정: 1층 판 윗면 높이 (base_link 기준) -->
-  <xacro:property name="plate_z2" value="0.047"/>          <!-- 측정: 2층 판 (지금 맨 위) -->
 
   <!-- LDS-03 라이다. base_scan = 스캔 평면 중심 = coin_d4_driver frame_id -->
   <xacro:property name="lidar_x" value="0.060"/>           <!-- 측정: 라이다 중심 — 바퀴축(0)보다 앞, 판 앞끝(0.069) 근처 -->
   <xacro:property name="lidar_y" value="0.0"/>
-  <xacro:property name="lidar_z" value="0.022"/>           <!-- 측정: 스캔 평면 높이 (1층 판 위, 2층 판 0.047 아래) -->
+  <xacro:property name="lidar_z" value="0.022"/>           <!-- 측정: 스캔 평면 높이 (1층 판 위, 2층 판 아래) -->
   <xacro:property name="lidar_yaw" value="0.0"/>           <!-- 측정: 라이다 0°가 로봇 앞과 다르면 (rad) -->
-  <xacro:property name="lidar_w" value="0.0547"/>
+  <xacro:property name="lidar_w" value="0.0547"/>          <!-- LDS-03 e-Manual 54.7 W × 39.7 D × 34 H mm -->
   <xacro:property name="lidar_d" value="0.0397"/>
   <xacro:property name="lidar_h" value="0.034"/>
 
-  <material name="plate"><color rgba="0.35 0.35 0.35 1"/></material>
-  <material name="dark"><color rgba="0.15 0.15 0.15 1"/></material>
-  <material name="board"><color rgba="0.1 0.45 0.2 1"/></material>
+  <material name="body"><color rgba="0.25 0.25 0.25 1"/></material>
+  <material name="dark"><color rgba="0.12 0.12 0.12 1"/></material>
   <material name="lidar"><color rgba="0.85 0.25 0.1 1"/></material>
-
-  <xacro:macro name="plate_visual" params="z">
-    <visual>
-      <origin xyz="${body_x} 0 ${z - plate_t / 2}"/>
-      <geometry><box size="${plate} ${plate} ${plate_t}"/></geometry>
-      <material name="plate"/>
-    </visual>
-  </xacro:macro>
 
   <link name="base_footprint"/>
   <joint name="base_joint" type="fixed">
@@ -49,93 +33,72 @@
   </joint>
 
   <link name="base_link">
-    <xacro:plate_visual z="${plate_z1}"/>
-    <xacro:plate_visual z="${plate_z2}"/>
-    <!-- 1층: 모터 2개 (바퀴 안쪽) · 배터리 (뒤쪽) -->
     <visual>
-      <origin xyz="0 0 0.023"/>
-      <geometry><box size="0.034 0.250 0.046"/></geometry>
-      <material name="dark"/>
+      <geometry><mesh filename="package://tb3_bringup/meshes/body.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="body"/>
     </visual>
-    <visual>
-      <origin xyz="-0.110 0 0.018"/>
-      <geometry><box size="0.090 0.070 0.030"/></geometry>
-      <material name="dark"/>
-    </visual>
-    <!-- 2층: 앞쪽 OpenCR (105×75mm) · 뒤쪽 Raspberry Pi 4 (85×56mm) — 사진 기준 대략 위치 -->
-    <visual>
-      <origin xyz="-0.025 0 ${plate_z2 + 0.010}"/>
-      <geometry><box size="0.075 0.105 0.020"/></geometry>
-      <material name="board"/>
-    </visual>
-    <visual>
-      <origin xyz="-0.140 -0.010 ${plate_z2 + 0.010}"/>
-      <geometry><box size="0.056 0.085 0.020"/></geometry>
-      <material name="board"/>
-    </visual>
+    <!-- 1층~2층 + 지지봉 (판 266×266mm, 중심 x -0.064) -->
     <collision>
-      <origin xyz="${body_x} 0 ${(plate_z2 + 0.030) / 2}"/>
-      <geometry><box size="${plate} ${plate} ${plate_z2 + 0.030}"/></geometry>
+      <origin xyz="-0.064 0 0.0455"/>
+      <geometry><box size="0.266 0.266 0.091"/></geometry>
     </collision>
     <!-- 근사: Waffle Pi 1.8 kg에서 위판 뺀 몸체 (배터리·모터·보드·라이다). Isaac 학습용 — 바꾸면 isaac 재학습 -->
     <inertial>
-      <origin xyz="${body_x} 0 0.030"/>
+      <origin xyz="-0.064 0 0.030"/>
       <mass value="1.4"/>
       <inertia ixx="0.0090" ixy="0" ixz="0" iyy="0.0090" iyz="0" izz="0.0165"/>
     </inertial>
   </link>
 
-  <xacro:macro name="wheel" params="side y mesh">
+  <!-- 바퀴 (beebot CAD 위치·메시). +회전 = 앞으로 -->
+  <xacro:macro name="wheel" params="side y">
     <joint name="wheel_${side}_joint" type="continuous">
       <parent link="base_link"/><child link="wheel_${side}_link"/>
-      <origin xyz="0 ${y} 0.023" rpy="-1.5708 0 0"/>
-      <axis xyz="0 0 1"/>
+      <origin xyz="0 ${y} 0.023"/>
+      <axis xyz="0 1 0"/>
     </joint>
     <link name="wheel_${side}_link">
       <visual>
-        <origin rpy="1.5708 0 0"/>
-        <geometry><mesh filename="package://tb3_bringup/meshes/${mesh}" scale="0.001 0.001 0.001"/></geometry>
+        <geometry><mesh filename="package://tb3_bringup/meshes/wheel_${side}.stl" scale="0.001 0.001 0.001"/></geometry>
         <material name="dark"/>
       </visual>
-      <collision><geometry><cylinder length="0.018" radius="0.033"/></geometry></collision>
+      <collision>
+        <origin rpy="1.5708 0 0"/>
+        <geometry><cylinder length="0.015" radius="0.033"/></geometry>
+      </collision>
       <inertial>
         <mass value="0.0285"/>
-        <inertia ixx="1.1e-05" ixy="0" ixz="0" iyy="1.1e-05" iyz="0" izz="2.1e-05"/>
+        <inertia ixx="1.1e-05" ixy="0" ixz="0" iyy="2.05e-05" iyz="0" izz="1.1e-05"/>
       </inertial>
     </link>
   </xacro:macro>
-  <xacro:wheel side="left" y="0.144" mesh="left_tire.stl"/>
-  <xacro:wheel side="right" y="-0.144" mesh="right_tire.stl"/>
+  <xacro:wheel side="left" y="0.1439"/>
+  <xacro:wheel side="right" y="-0.1439"/>
 
+  <!-- 볼 캐스터 (모양은 body.stl에 있음 · 여기는 접지 구만). Isaac은 'caster' 충돌체에 마찰 0을 붙인다 (볼이 굴러감) -->
   <xacro:macro name="caster" params="side y">
     <joint name="caster_back_${side}_joint" type="fixed">
       <parent link="base_link"/><child link="caster_back_${side}_link"/>
-      <origin xyz="-0.177 ${y} -0.004" rpy="-1.5708 0 0"/>
+      <origin xyz="-0.177 ${y} -0.005237"/>
     </joint>
     <link name="caster_back_${side}_link">
-      <visual><geometry><box size="0.030 0.009 0.020"/></geometry><material name="dark"/></visual>
-      <!-- 볼 캐스터 접지점 (링크가 x축 -90° 돌아 있어 base z +0.004 = 링크 y -0.004). 반지름 0.010 → 바닥에 닿음.
-           Isaac은 이 충돌체에 마찰 0을 붙인다 (볼이 굴러감). 없으면 무게중심이 축 뒤라 몸통이 끌림. -->
-      <collision>
-        <origin xyz="0 -0.004 0"/>
-        <geometry><sphere radius="0.010"/></geometry>
-      </collision>
+      <collision><geometry><sphere radius="0.004763"/></geometry></collision>
     </link>
   </xacro:macro>
   <xacro:caster side="left" y="0.064"/>
   <xacro:caster side="right" y="-0.064"/>
 
+  <!-- OpenCR 내장 IMU (beebot 실측: 보드 윗면). 축은 base_link와 같다고 가정 — 왼쪽 회전에 gz > 0 확인 -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/><child link="imu_link"/>
+    <origin xyz="0.0178 0 0.0585"/>
+  </joint>
+  <link name="imu_link"/>
+
   <joint name="scan_joint" type="fixed">
     <parent link="base_link"/><child link="base_scan"/>
     <origin xyz="${lidar_x} ${lidar_y} ${lidar_z}" rpy="0 0 ${lidar_yaw}"/>
   </joint>
-  <!-- OpenCR 내장 IMU (보드 위치 = 위 OpenCR 상자, 축은 base_link와 같다고 가정 — 왼쪽 회전에 gz > 0 확인) -->
-  <joint name="imu_joint" type="fixed">
-    <parent link="base_link"/><child link="imu_link"/>
-    <origin xyz="-0.025 0 ${plate_z2 + 0.010}"/>
-  </joint>
-  <link name="imu_link"/>
-
   <link name="base_scan">
     <!-- LDS-03 외형 (상자로 근사, 스캔 평면이 높이 중앙이라고 가정) -->
     <visual>
