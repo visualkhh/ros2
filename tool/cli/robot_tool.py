@@ -79,7 +79,7 @@ class RobotTool(Node):
         from std_msgs.msg import Bool, String
         for key, typ in (('control', String), ('rl', Bool), ('estop', Bool), ('operation', String), ('map', String)):
             self.create_subscription(typ, f'/state_{key}',
-                                     lambda m, k=key: setattr(self.state, f'st_{k}', m.data), LATCHED)
+                                     lambda m, k=key: self.state.on_state(k, m.data), LATCHED)
         self.create_subscription(String, '/explore_status', lambda m: setattr(self.state, 'explore_status', m.data), 10)
         from geometry_msgs.msg import Twist
         self.create_subscription(Twist, '/cmd_vel_rl_out', lambda _m: self.state.rl_out.tick(), 10)

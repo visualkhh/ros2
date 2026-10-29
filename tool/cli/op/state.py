@@ -48,9 +48,15 @@ class StateStore:
         self.st_estop: bool | None = None
         self.st_operation: str | None = None                       # 운행 상태 SLAM · LOCALIZATION · IDLE
         self.st_map: str | None = None                             # 적용된 지도
+        self.st_time: float | None = None                         # /state_* 마지막 수신 (latched라도 base 죽으면 끊김)
         self.explore_status = ''                                   # explore_bridge /explore_status
         self.rl_out = Rate(5)                                      # /cmd_vel_rl_out (PC RL 응답)
         self.nodes_seen: dict[str, float] = {}                     # 노드 그래프에서 마지막으로 본 시각
+
+    def on_state(self, key: str, value) -> None:
+        """state_manager /state_* 수신 — 값 저장 + 수신 시각 기록 (끊김 판단용)."""
+        setattr(self, f'st_{key}', value)
+        self.st_time = time.monotonic()
 
     @staticmethod
     def yaw(q) -> float:
@@ -145,7 +151,7 @@ class StateStore:
         return '경로 RL 경유' + ('' if age is not None and age < 1.0 else ' (PC RL 응답 없음 → 정지 · PC에서 rl-only.launch.py 켜기)')
 
     def domain_txt(self) -> str:
-        if self.st_control is None:
+        if self.st_control is None or self.st_time is None:
             return '상태 없음 (베이스 꺼짐?)'
         op = self.st_operation or '?'
         if self.st_map:
@@ -153,6 +159,9 @@ class StateStore:
         txt = f'제어 {self.st_control} · 운행 {op} · {self.route_txt()} · 비상정지 {"ON" if self.st_estop else "off"}'
         if self.st_control == 'SLAM_AUTO_MAPPING' and self.explore_status:
             txt += f' · 탐색 {self.explore_status}'
+        age = time.monotonic() - self.st_time
+        if age > 5.0:   # latched 마지막 값이라도 base가 죽으면 stale — 현재인 척 금지
+            txt += f' — {age:.0f}초 전 끊김'
         return txt
 
     def amcl_txt(self) -> str:
