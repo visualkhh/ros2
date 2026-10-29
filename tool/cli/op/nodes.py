@@ -70,7 +70,10 @@ def find_node_procs(name: str) -> list[tuple[int, list[str]]]:
         argv = _argv(pid)
         if not argv or any(SELF in a for a in argv):
             continue
-        if want in argv or os.path.basename(argv[0]) == base(name):
+        exe = os.path.basename(argv[0])
+        if exe == 'python3' or exe.startswith('python3.') or exe == 'python':
+            continue   # 인터프리터명 매칭은 범위 과다 (모든 python 프로세스) — 토큰으로만 식별
+        if want in argv or exe == base(name):
             out.append((pid, argv))
     return out
 
