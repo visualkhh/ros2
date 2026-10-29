@@ -26,6 +26,9 @@
   <!-- coin_d4_driver (LDS-03): apt에 없음 → ros2_ws/deps.repos. 없으면 launch가 라이다만 건너뜀 -->
   <exec_depend>rl_correction</exec_depend>
   <exec_depend>rl_eval</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>rviz2</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

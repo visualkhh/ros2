@@ -2,7 +2,7 @@
 """로봇 운영 CLI — 베이스 · SLAM 맵핑 · 지도 저장 · Nav 주행 · 텔레오퍼를 한 곳에서.
 
 로봇(Pi)에서 실행한다. SLAM·Nav는 이 tool이 `ros2 launch`로 직접 띄우고 끈다
-(state_manager 같은 상주 노드 없음). 지도가 만들어지는 모습은 PC에서 tool/run-rviz로 본다.
+지도가 만들어지는 모습은 PC에서 tool/run-rviz로 본다.
 
   ./tool/run-cli                  # 대화형 메뉴
   ./tool/run-cli status           # 한 번만 출력 (자동화용)

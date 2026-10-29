@@ -12,8 +12,8 @@
 #   ./run-cli base start                     바퀴·odom·라이다 (tb-only)
 #   ./run-cli slam start | map save office | slam stop
 #   ./run-cli nav start office | initpose 0 0 0 | goal 1.0 0.5 90
-#   ./run-cli teleop                         w/x/a/d · s 정지 · q 종료
-#   ./run-cli mode manual|auto · rl on|off · estop on|off
+#   ./run-cli teleop                         w/x/a/d · q/e/z/c 사선 · s 정지 · -/= 속도 · b 삑 · Esc 종료
+#   ./run-cli control manual|nav-plan · route direct|rl · estop on|off · automap start|stop
 #   ./run-cli stop-all                       ROS 전부 끄기: 바퀴 정지 → Nav·SLAM·베이스 종료 (base|slam|nav stop = 하나씩)
 #
 # 로봇이 아닌 곳에서는 켜기/끄기·지도·로그를 SSH(pak@pak.local)로 로봇에 넘깁니다. ROS_DOMAIN_ID=25 고정.

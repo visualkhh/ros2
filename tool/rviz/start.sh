@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tool/rviz 시작 — PC에서 로봇(Pi)의 /map·/scan·TF를 본다.
-#   ./start.sh            # slam.rviz (맵핑 보기: 지도·스캔·odom·포즈 그래프)
+#   ./start.sh            # slam.rviz (맵핑 보기: 지도·스캔·odom·궤적)
 #   ./start.sh nav        # nav.rviz  (주행 보기: 지도·코스트맵·경로 · 2D Pose Estimate / Goal)
 set -eo pipefail
 

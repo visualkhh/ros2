@@ -1,6 +1,6 @@
 """Procs — tool이 직접 띄우는 launch 프로세스 관리 (start/stop/상태/로그).
 
-state_manager 같은 상주 노드가 없으므로 tool이 `ros2 launch`를 자기 세션(setsid)으로
+tool이 `ros2 launch`를 자기 세션(setsid)으로
 띄우고 pid를 tool/.run/<이름>.pid 에 적는다. 끌 때는 프로세스 그룹 전체에
 SIGINT → (10초) SIGTERM → (3초) SIGKILL. 로그는 tool/.run/<이름>.log.
 
@@ -24,7 +24,6 @@ CONFIG_DIR = TOOL_DIR / 'config'
 RUN_DIR = TOOL_DIR / '.run'
 MAP_DIR = Path(os.environ.get('TOOL_MAP_DIR', WS_DIR / 'map'))
 
-SLAM_PARAMS = Path(os.environ.get('TOOL_SLAM_PARAMS', CONFIG_DIR / 'slam_toolbox.yaml'))
 NAV_PARAMS = Path(os.environ.get('TOOL_NAV_PARAMS', CONFIG_DIR / 'nav2_params.yaml'))
 # 베이스(바퀴·odom·라이다) bringup. 기본 = 로봇만(RL 없음).
 #   RL on으로 시작: TOOL_BASE_CMD='ros2 launch tb3_bringup tb-only.launch.py rl:=true' (보통은 ./run-cli rl on)
@@ -236,7 +235,7 @@ class Procs:
 
 # 켜짐 판단에 쓰는 노드 (ROS 그래프 — 연결된 곳 어디서나 보임)
 MARKER_NODES = {'base': ('opencr_driver',), 'slam': ('cartographer_node',),
-                'nav': ('amcl',), 'explore': ('bt_navigator',)}
+                'nav': ('amcl',)}   # explore는 running()이 따로 (bt_navigator 있고 amcl 없음)
 
 
 class RemoteProcs(Procs):

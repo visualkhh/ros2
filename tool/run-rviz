@@ -2,7 +2,7 @@
 # run-rviz — 로봇 화면 보기 (RViz). 화면이 있는 곳에서 — 보통 PC. 자세히: tool/README.md · tool/MAP_NAV.md
 #
 #   ./run-rviz                     = ./run-rviz slam
-#   ./run-rviz slam                맵핑 보기: 지도(/map) · 스캔 · odom · TF · 포즈 그래프 · 2D Goal Pose
+#   ./run-rviz slam                맵핑 보기: 지도(/map) · 스캔 · odom · TF · 궤적(cartographer) · 2D Goal Pose
 #   ./run-rviz nav                 주행 보기: 지도 · 코스트맵 · 경로 · 2D Pose Estimate(초기 위치) · Nav2 Goal(목표)
 #   ./run-rviz stop                켜져 있는 RViz 종료
 #   ./run-rviz restart [slam|nav]  RViz 재시작

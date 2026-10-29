@@ -1,8 +1,8 @@
 """OpenCR(tb3_wheels firmware) driver: cmd_vel -> 'C,l,r' serial, 'S,...' -> odom + TF + joint_states.
 
 Protocol (firmware/opencr/README.md):
-  -> C,<left rad/s>,<right rad/s>   T,0|1   R[,l,r]
-  <- S,<l_pos>,<l_vel>,<r_pos>,<r_vel>,<uptime ms>,<l_cur A>,<r_cur A>,<l_temp C>,<r_temp C>
+  -> C,<left rad/s>,<right rad/s>   T,0|1   R[,l,r]   B[,hz,ms]
+  <- S,<l_pos>,<l_vel>,<r_pos>,<r_vel>,<uptime ms>,<l_cur A>,<r_cur A>,<l_temp C>,<r_temp C>,<battery V>
   <- E,<l_err>,<r_err>              (hardware error bitmask, -1 = no response)
   <- I,<gx,gy,gz rad/s>,<ax,ay,az m/s^2>,<qw,qx,qy,qz>   OpenCR on-board IMU -> imu (frame imu_link)
 
@@ -60,9 +60,9 @@ class OpencrDriver(Node):
         self.r = p('wheel_radius', 0.033).value            # TB3 Waffle Pi
         self.sep = p('wheel_separation', 0.287).value      # TB3 Waffle Pi
         self.max_wheel = p('max_wheel_speed', 8.0).value     # [rad/s] = firmware VEL_LIMIT_RAD_S (0.26 m/s)
-        # Mounting direction per wheel. TB3 mounts the motors mirrored -> right = -1.
+        # Mounting direction per wheel (this robot: both -1, config/robot.yaml).
         # Check: ./run-cli drive forward → both wheels must roll forward.
-        self.dir_l = p('left_dir', 1.0).value
+        self.dir_l = p('left_dir', -1.0).value
         self.dir_r = p('right_dir', -1.0).value
         self.cmd_rate = p('cmd_rate', 20.0).value          # C resend rate (watchdog is 500 ms)
         self.cmd_timeout = p('cmd_timeout', 0.5).value     # no cmd_vel for this long -> send 0

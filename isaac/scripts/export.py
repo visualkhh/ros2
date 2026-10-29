@@ -1,7 +1,7 @@
 """Export a trained checkpoint to ONNX (matches ROS node input [1, N] float32).
 
 Usage:
-  ./isaaclab.sh -p .../export.py --task rl_correct --checkpoint /path/model_2.pt --out name.onnx
+  ./isaaclab.sh -p .../export.py --checkpoint /path/model_2.pt --out name.onnx
 Output: isaac/export/<name.onnx>
 """
 import argparse
@@ -13,7 +13,6 @@ sys.path.insert(0, "/home/pank/workspaces/visualkhh/source/ros2/isaac")
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", choices=["rl_correct"], default="rl_correct")
 parser.add_argument("--checkpoint", required=True)
 parser.add_argument("--out", required=True)
 AppLauncher.add_app_launcher_args(parser)
@@ -36,7 +35,7 @@ def main():
     env_cfg.scene.num_envs = 8
     agent_cfg = Tb3PPORunnerCfg()
     agent_cfg.experiment_name = exp_name
-    log_dir = "/tmp/carto_export_log"
+    log_dir = "/tmp/rl_correct_export_log"
     os.makedirs(log_dir, exist_ok=True)
 
     import importlib.metadata as _md
@@ -47,7 +46,7 @@ def main():
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     runner.load(args.checkpoint)
 
-    out_dir = f"/home/pank/workspaces/visualkhh/source/ros2/isaac/export/{args.task}"
+    out_dir = "/home/pank/workspaces/visualkhh/source/ros2/isaac/export/rl_correct"
     os.makedirs(out_dir, exist_ok=True)
 
     from tasks.common.onnx_export import export_actor  # noqa: E402

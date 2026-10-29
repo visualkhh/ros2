@@ -30,27 +30,6 @@ DIAG_RADIUS = 0.5   # [m] 사선 원호 반경
 DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
 
-def text_to_tones(text: str) -> list[tuple[int, int]]:
-    """한/영 타이핑 → [(Hz, ms)] 삑 순서. 한글 음절은 초·중·(종)성 자모별 음높이,
-    영문은 알파벳별 음높이, 숫자는 별도 대역, 띄어쓰기는 쉼. 그 밖은 버림."""
-    tones: list[tuple[int, int]] = []
-    for ch in text:
-        o = ord(ch)
-        if 0xAC00 <= o <= 0xD7A3:  # 한글 음절: 초성 19 · 중성 21 · 종성 28(없음=0)
-            j = o - 0xAC00
-            tones.append((500 + (j // 588) * 130, 90))
-            tones.append((600 + ((j % 588) // 28) * 100, 90))
-            if j % 28:
-                tones.append((700 + (j % 28) * 80, 90))
-        elif 'a' <= (lo := ch.lower()) <= 'z':
-            tones.append((500 + (ord(lo) - 97) * 100, 90))
-        elif ch.isdigit():
-            tones.append((3200 + int(ch) * 100, 90))
-        elif ch == ' ':
-            tones.append((0, 180))
-    return tones
-
-
 def yaw_quat(yaw: float):
     return math.sin(yaw / 2.0), math.cos(yaw / 2.0)
 
@@ -622,7 +601,7 @@ class Bus:
         if not self.wait_subscriber(self._say_pub, 'cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인'):
             return 1
         self._say_pub.publish(String(data=text))
-        print(f'삑 전송 ("{text}" → {len(text_to_tones(text))}음)')
+        print(f'삑 전송 ("{text}") — 소리는 로봇 cmd_manager가 만듦')
         return 0
 
     def cmd_say(self, args) -> int:

@@ -14,7 +14,7 @@ from tasks.common import robot_spec as spec
 
 @configclass
 class RlCorrectEnvCfg(DirectRLEnvCfg):
-    decimation = 6  # 120 Hz sim -> 20 Hz policy (= cmd_manager)
+    decimation = round(120 / spec.CONTROL_HZ)  # 120 Hz sim -> 20 Hz policy (= cmd_manager)
     episode_length_s = 10.0
     action_space = 2       # [dV, dW]  (ONNX 출력은 action_scale 곱한 물리값)
     observation_space = 6  # [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]

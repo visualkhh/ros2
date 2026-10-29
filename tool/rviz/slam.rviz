@@ -11,8 +11,6 @@ Panels:
       - /Current View1
     Name: Views
     Splitter Ratio: 0.5
-  - Class: slam_toolbox::SlamToolboxPlugin
-    Name: SlamToolboxPlugin
 Visualization Manager:
   Class: ""
   Displays:
@@ -133,7 +131,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: Pose Graph
+      Name: Trajectory (cartographer)
       Namespaces:
         {}
       Topic:
@@ -141,7 +139,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /slam_toolbox/graph_visualization
+        Value: /trajectory_node_list
       Value: true
   Enabled: true
   Global Options:

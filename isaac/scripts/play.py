@@ -1,7 +1,7 @@
 """Watch a trained ONNX policy drive in sim (GUI).
 
 Usage:
-  ./isaaclab.sh -p .../play.py --task rl_correct --model .../export/rl_correct_v1.onnx [--envs 4]
+  ./isaaclab.sh -p .../play.py --model .../export/rl_correct/rl_correct_v2.onnx [--envs 4]
 No --headless flag: window shows the robots. Ctrl+C to stop.
 """
 import argparse
@@ -13,7 +13,6 @@ sys.path.insert(0, "/home/pank/workspaces/visualkhh/source/ros2/isaac")
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", choices=["rl_correct"], default="rl_correct")
 parser.add_argument("--model", required=True)
 parser.add_argument("--envs", type=int, default=4)
 AppLauncher.add_app_launcher_args(parser)

@@ -1,7 +1,7 @@
 """Resample LaserScan to a fixed number of beams.
 
 LDS-03 (coin_d4_driver) emits a slightly different beam count every revolution (395..404).
-slam_toolbox registers the sensor with the first scan's count and drops every later scan whose count
+The SLAM front-end (slam_toolbox when this was written) registers the sensor with the first scan's count and drops every later scan whose count
 differs ("LaserRangeScan contains 403 range readings, expected 404") -> no map. This node bins each
 scan into `beams` fixed angles over 360 deg (nearest beam per bin, closest range wins).
 
@@ -28,7 +28,7 @@ class ScanResample(Node):
         self.create_subscription(LaserScan, 'scan_in', self.cb, qos_profile_sensor_data)
 
     def cb(self, msg: LaserScan) -> None:
-        out = [0.0] * self.beams   # 0 < range_min -> ignored by slam_toolbox / costmap
+        out = [0.0] * self.beams   # 0 < range_min -> ignored by SLAM / costmap
         a = msg.angle_min
         for r in msg.ranges:
             if msg.range_min <= r <= msg.range_max:

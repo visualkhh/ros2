@@ -55,7 +55,7 @@ cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/v
 ./train_rl_correct.sh 300
 
 # 체크포인트 → ONNX
-./export_rl.sh rl_correct logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./export_rl.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
 
 # 구경
 ./play_rl_correct.sh export/rl_correct/rl_correct_v2.onnx 4

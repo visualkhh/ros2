@@ -5,7 +5,7 @@
   ros2 launch tb3_bringup tb-only.launch.py lidar:=false      # 라이다 없이 (coin_d4_driver 미설치여도 됨)
 
 라이다: coin_d4_driver(ros2_ws/deps.repos) → /scan_raw → laser_filters 몸통 상자 제거 → /scan_filtered
-       → scan_resample(고정 400칸: LDS-03 점 개수가 매번 달라 slam_toolbox가 버림) → /scan
+       → scan_resample(고정 400칸: LDS-03 점 개수가 매번 달라 SLAM이 버림) → /scan
 
 명령 경로 (ARCH.md): /cmd_manual_vel(텔레오퍼)·/cmd_vel(Nav2) → cmd_manager → /cmd_vel_base → 드라이버.
 RL은 실행 중 /cmd_manual_rl(Bool)로 켜고 끔 — 켜면 /cmd_vel_rl_in → [PC rl-only] → /cmd_vel_rl_out을 거침.

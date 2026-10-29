@@ -12,7 +12,7 @@
 | 경로 | 내용 |
 |---|---|
 | `urdf/beebot/urdf.xacro` | **학습용 로봇 URDF** — ROS용 `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`와 의도적으로 나눈 파일, **내용은 글자까지 같게** (`urdf/check_same.sh`) |
-| `urdf/beebot/meshes/` | 몸통·바퀴 메시 — 저장소에서 직접 관리 (tb3_bringup/meshes와 같은 파일) · `beebot.urdf` = `xacro urdf.xacro mesh_uri:=meshes` |
+| `urdf/beebot/meshes/` | 몸통·바퀴 메시 — 저장소에서 직접 관리 (tb3_bringup/meshes와 같은 파일) |
 | `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + 학습용 URDF → USD |
 | `tasks/common/onnx_export.py` | actor → ONNX (출력 = 물리 보정량, train·export 공용) |
 | `tasks/rl_correct/` | v2 환경: 모터 지연·좌우 비대칭·데드밴드 · WiFi 지연 · 계단식 명령 · 엔코더+자이로 관측 |
@@ -26,7 +26,7 @@
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./train_rl_correct.sh 300                     # 창 보기: 뒤에 --visualizer kit (기본은 창 없음)
-./export_rl.sh rl_correct logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./export_rl.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
 ./play_rl_correct.sh export/rl_correct/rl_correct_v2.onnx 4
 # 로봇: PC에서 rl-only.launch.py enable:=true model:=... → Before/After (ros2_ws README)
 ```

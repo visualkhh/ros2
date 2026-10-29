@@ -34,17 +34,6 @@ class RebootMotorsItem(MenuItem):
         return STAY
 
 
-class BeepItem(MenuItem):
-    key = '6'
-    shows_busy = False
-
-    def label(self):
-        return '비프음 (삑·톤·타이핑)'
-
-    def run(self):
-        return BeepMenu(self.app).show()
-
-
 class BeepMenu(Menu):
     title = '비프음'
 
@@ -164,7 +153,7 @@ class StatusMenu(Menu):
 
     def items(self):
         return [PrintStatusItem(self.app), RebootMotorsItem(self.app), ToggleItem(self.app, '3', 'mode'),
-                ToggleItem(self.app, '4', 'rl'), ToggleItem(self.app, '5', 'estop'), BeepItem(self.app)]
+                ToggleItem(self.app, '4', 'rl'), ToggleItem(self.app, '5', 'estop')]
 
     def center(self):
         return self.bus.status_lines() + [

@@ -37,8 +37,6 @@ ALIASES = {'AUTO': 'NAV_PLAN', 'NAV': 'NAV_PLAN', 'NAV-PLAN': 'NAV_PLAN',
            'AUTO_MAPPING': 'SLAM_AUTO_MAPPING', 'AUTO-MAPPING': 'SLAM_AUTO_MAPPING', 'MAPPING': 'SLAM_AUTO_MAPPING'}
 
 
-import time
-from collections import deque
 from functools import lru_cache
 
 

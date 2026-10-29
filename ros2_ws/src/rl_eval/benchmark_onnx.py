@@ -17,7 +17,7 @@ def main():
     import onnxruntime as ort
     sess = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
     name = sess.get_inputs()[0].name
-    x = np.zeros((1, 2), dtype=np.float32)
+    x = np.zeros((1, sess.get_inputs()[0].shape[1]), dtype=np.float32)  # 모델 입력 크기대로 (v2 = 6)
     for _ in range(50):  # warmup
         sess.run(None, {name: x})
     t0 = time.perf_counter()

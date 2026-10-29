@@ -2,8 +2,8 @@
 
 Usage (Lab env):
   cd /home/pank/pa-course/IsaacLab-6.1
-  ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/scripts/train.py --task rl_correct
-Watch: run WITHOUT --headless (viewport shows robots). Logs: isaac/logs/<task>/.
+  ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/scripts/train.py [--max-iterations N] [--visualizer kit]
+Watch: add --visualizer kit (default is no window). Logs: isaac/logs/rl_correct/.
 """
 import argparse
 import os
@@ -14,7 +14,6 @@ sys.path.insert(0, "/home/pank/workspaces/visualkhh/source/ros2/isaac")
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", choices=["rl_correct"], default="rl_correct")
 parser.add_argument("--max-iterations", type=int, default=None)
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()

@@ -20,7 +20,7 @@ class EvalRecorder(Node):
     def __init__(self):
         super().__init__('eval_recorder')
         self.declare_parameter('output', '/tmp/rl_eval.csv')
-        self.declare_parameter('label', 'before')
+        self.declare_parameter('label', 'rl')
         self.raw = None
         self.out = None
         self.odom = None

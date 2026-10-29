@@ -6,7 +6,7 @@
         /state_rl      (Bool)    바퀴 명령 경로: false 직결 · true PC RL 경유
         /state_estop   (Bool)    비상정지
   운행 상태 — 위치를 어떻게 아나. 떠 있는 노드로 판단 (2초마다)
-    pub /state_operation (String)  SLAM (slam_toolbox) · LOCALIZATION (amcl·map_server) · IDLE
+    pub /state_operation (String)  SLAM (cartographer_node) · LOCALIZATION (amcl·map_server) · IDLE
         /state_map       (String)  적용된 지도 이름 (map_server의 yaml_filename 폴더명) · SLAM이면 '(SLAM 작성 중)' · 없으면 ''
   전부 latched (나중에 붙은 쪽도 현재 값을 받음).
 """
@@ -50,7 +50,7 @@ class StateManager(Node):
 
     def watch_operation(self) -> None:
         names = {n for n, _ in self.get_node_names_and_namespaces()}
-        if 'slam_toolbox' in names:
+        if 'cartographer_node' in names:
             self.set('operation', 'SLAM')
             self.set('map', SLAM_MAP)
         elif 'amcl' in names or 'map_server' in names:

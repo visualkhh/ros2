@@ -1,4 +1,4 @@
-"""Shared PPO configs (RSL-RL) for the two TB3 correction tasks (Lab 6.1 API)."""
+"""PPO config (RSL-RL) for the rl_correct task (Lab 6.1 API)."""
 from isaaclab.utils import configclass
 
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
