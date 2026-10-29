@@ -36,6 +36,8 @@ echo "=== 2) 외부 소스 (deps.repos)"
 vcs import src < deps.repos
 
 echo "=== 3) 시스템 의존성 (rosdep)"
+sudo rosdep init 2>/dev/null || true   # 최초 1회만 유효, 이미 돼 있으면 무시
+rosdep update
 rosdep install --from-paths src --ignore-src -r -y
 
 echo "=== 4) 패치"

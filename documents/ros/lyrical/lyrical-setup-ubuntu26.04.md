@@ -141,6 +141,7 @@ vcs import src < deps.repos                               # apt에 없는 소스
 # 패치가 이미 적용된 상태에서 또 치면 `1 hunk ignored ... .rej`가 남음 → 그때는 각 폴더에서
 # git checkout -- . && git clean -f 후 위 두 줄을 다시 (이력: issue-tracking 2026-10-28 §7-8)
 rosdep install --from-paths src --ignore-src -r -y   # m-explore-ros2의 multirobot_map_merge용 image_geometry 등 (없으면 §9 에러)
+# (rosdep 최초 1회는 sudo rosdep init && rosdep update 필요 — setup/pi/build.sh는 자동 처리, 수동 빌드는 직접)
 colcon build --symlink-install --parallel-workers 2 \  # Pi 4: 2개로 제한 (메모리)
   --cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5      # CMake 4.x가 <3.5를 거부하므로 필수
 source install/setup.bash
