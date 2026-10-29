@@ -92,7 +92,7 @@ class OpencrDriver(Node):
         self.diag_pub = self.create_publisher(DiagnosticArray, 'diagnostics', 10)
         self.imu_pub = self.create_publisher(Imu, 'imu', 10)
         self.tf = TransformBroadcaster(self)
-        self.create_timer(0.005, self.read_serial)
+        self.create_timer(0.02, self.read_serial)   # S 20Hz 스트림 폴링 (200Hz는 Pi CPU 과다)
         self.create_timer(1.0 / self.cmd_rate, self.send_cmd)
         self.create_timer(1.0, self.publish_diag)
         self.get_logger().info(f'cmd: {cmd_topic} -> {self.port} · r={self.r} sep={self.sep} '

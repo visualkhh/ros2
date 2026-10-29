@@ -170,14 +170,22 @@ class CmdManager(Node):
         self._say_next = 0.0
         self.create_subscription(String, 'cmd_say', self.on_say, 10)
         self.create_timer(1.0 / rate, self.tick)
-        self.create_timer(0.02, self.tick_say)   # 말맛용 빠른 스케줄러 (바퀴 mux는 20 Hz 유지)
+        self.say_timer = self.create_timer(0.02, self.tick_say)   # 말맛용 (보통 꺼둠 · 큐 올 때만 켬)
+        self.say_timer.cancel()
 
     def on_say(self, msg: String) -> None:
         tones = text_to_tones(msg.data.strip())
         if len(self._say) + len(tones) > 200:
             self.get_logger().warning(f'/cmd_say 큐 초과 — 버림 ("{msg.data.strip()}")')
             return
+        was_empty = not self._say
         self._say.extend(tones)
+        if was_empty:
+            self._say_next = 0.0
+            try:
+                self.say_timer.reset()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------ 상태 변경 요청
     def on_mode_request(self, msg: String) -> None:
@@ -210,6 +218,11 @@ class CmdManager(Node):
             if hz:
                 self.pub_beep_tone.publish(Int32MultiArray(data=[hz, ms]))
             self._say_next = now + (ms + _SAY_GAP_MS) / 1000.0
+        if not self._say:   # idle엔 타이머 끔 (50Hz 상시 기상은 Pi CPU 과다)
+            try:
+                self.say_timer.cancel()
+            except Exception:
+                pass
 
     def tick(self) -> None:
         if self.estop:
