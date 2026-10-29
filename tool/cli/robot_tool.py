@@ -171,6 +171,12 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument('--cancel', action='store_true', help='이 CLI가 보낸 목표 취소')
 
     sub.add_parser('nodes', help='보이는 ROS 노드 목록')
+    for cmd, help_ in (('node-kill', '개별 노드 중지 — OS 프로세스 kill (로봇에서 실행 · PC는 SSH 경유)'),
+                       ('node-restart', '개별 노드 재시작 — kill 후 같은 명령으로 재실행 · 추적됨')):
+        p = sub.add_parser(cmd, help=help_)
+        p.add_argument('name', help='노드 이름 (예: scan_resample)')
+        p.add_argument('--force', action='store_true',
+                      help='제어 핵심 노드(state/cmd/opencr)도 강제 (메뉴에서는 확인창으로 대체)')
     for name, choices, help_ in (('control', ('manual', 'nav-plan', 'slam-auto-mapping'),
                                   '제어 상태: manual=텔레오퍼 · nav-plan=Nav2 목표 · slam-auto-mapping=자동 맵핑 (/cmd_manual_control)'),
                                  ('mode', ('manual', 'nav-plan', 'nav', 'slam-auto-mapping', 'auto'), '= control (예전 이름)'),

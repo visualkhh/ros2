@@ -173,6 +173,24 @@ class Procs:
         ok, msg2 = self.start(name, info)
         return ok, f'{msg}\n{msg2}'
 
+    # ------------------------------------------------------------ 개별 노드 (op/nodes.py · 로봇에서만)
+    def node_pids(self, name: str) -> list[tuple[int, list[str]]]:
+        from .nodes import find_node_procs
+        return find_node_procs(name)
+
+    def node_kill(self, name: str, force: bool = False) -> tuple[bool, str]:
+        from .nodes import node_kill
+        return node_kill(name, force=force)
+
+    def node_restart(self, name: str, force: bool = False) -> tuple[bool, str]:
+        from .nodes import node_restart
+        return node_restart(name, force=force)
+
+    def node_cleanup(self) -> str:
+        """stop-all용 — 재시작 추적 노드 전부 종료."""
+        from .nodes import cleanup_tracked
+        return cleanup_tracked()
+
     @staticmethod
     def _group_alive(pgid: int) -> bool:
         try:
@@ -305,6 +323,14 @@ class RemoteProcs(Procs):
 
     def restart(self, name: str) -> tuple[bool, str]:
         rc, out = self._cli(name, 'restart')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def node_kill(self, name: str, force: bool = False) -> tuple[bool, str]:
+        rc, out = self._cli('node-kill', name, *(['--force'] if force else []))
+        return rc == 0, f'[{self.host}] {out}'
+
+    def node_restart(self, name: str, force: bool = False) -> tuple[bool, str]:
+        rc, out = self._cli('node-restart', name, *(['--force'] if force else []))
         return rc == 0, f'[{self.host}] {out}'
 
     def stop_all(self) -> tuple[bool, str]:

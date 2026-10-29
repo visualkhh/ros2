@@ -158,8 +158,43 @@ class Bus:
         for name in reversed(list(SERVICES)):
             if self.procs.running(name):
                 self.stop(name)
+        print(self.procs.node_cleanup())   # 재시작 추적 노드도 같이 정리
         print('전부 종료')
         return 0
+
+    # ------------------------------------------------------------- 개별 노드
+    def _node_guard(self, name: str, force: bool) -> str | None:
+        """빈 이름·핵심 노드 검사 — 문제없으면 None. 한 번 명령용."""
+        from .nodes import CRITICAL, base
+        name = base(name)
+        if not name:
+            return '노드 이름이 비었음'
+        if name in CRITICAL and not force:
+            return (f'{name}: 제어 핵심 노드 — 메뉴에서 확인 후 실행하거나 '
+                    f'`--force` 필요 (예: run-cli node-restart {name} --force)')
+        return None
+
+    def cmd_node_kill(self, args) -> int:
+        from .nodes import base
+        err = self._node_guard(args.name, args.force)
+        if err:
+            print(err)
+            return 2
+        self.send_velocity(0.0, 0.0)
+        ok, msg = self.procs.node_kill(base(args.name), force=args.force)
+        print(msg)
+        return 0 if ok else 1
+
+    def cmd_node_restart(self, args) -> int:
+        from .nodes import base
+        err = self._node_guard(args.name, args.force)
+        if err:
+            print(err)
+            return 2
+        self.send_velocity(0.0, 0.0)
+        ok, msg = self.procs.node_restart(base(args.name), force=args.force)
+        print(msg)
+        return 0 if ok else 1
 
     # ------------------------------------------------------------- 지도
     @staticmethod

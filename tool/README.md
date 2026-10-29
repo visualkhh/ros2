@@ -82,6 +82,8 @@ tool/
 ./run-cli initpose x y [yaw°]
 ./run-cli goal x y [yaw°] [--no-wait] | goal --cancel
 ./run-cli nodes
+./run-cli node-kill <이름> [--force]     # 개별 노드 중지 — OS 프로세스 kill (메뉴 8에서도 선택)
+./run-cli node-restart <이름> [--force]  # 개별 노드 재시작 — kill 후 같은 명령 재실행 · 추적됨
 ./run-cli reboot-motors        # 모터 에러(E) 해제 — 두 바퀴 재부팅 (/opencr/reboot)
 ./run-cli beep [Hz ms]         # OpenCR 부저 삑 (/cmd_beep · /cmd_beep_tone · 메뉴 0) 비프음 · 텔레오퍼 b)
 ./run-cli say <글>              # 타이핑삑 — 한/영 → 자모별 삑 (/cmd_say · 메뉴 0) 비프음 → 3)
