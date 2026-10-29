@@ -1,0 +1,156 @@
+diff --git a/cartographer_ros/src/assets_writer_main.cpp b/cartographer_ros/src/assets_writer_main.cpp
+index 1a37b59..e726473 100644
+--- a/cartographer_ros/src/assets_writer_main.cpp
++++ b/cartographer_ros/src/assets_writer_main.cpp
+@@ -21,23 +21,17 @@
+ #include <regex>
+ #include <string>
+ 
+-DEFINE_string(configuration_directory, "",
+-              "First directory in which configuration files are searched, "
+-              "second is always the Cartographer installation to allow "
+-              "including files from there.");
++DECLARE_string(configuration_directory);
+ DEFINE_string(configuration_basename, "",
+               "Basename, i.e. not containing any directory prefix, of the "
+               "configuration file.");
+ DEFINE_string(
+     urdf_filename, "",
+     "URDF file that contains static links for your sensor configuration.");
+-DEFINE_string(bag_filenames, "",
+-              "Bags to process, must be in the same order as the trajectories "
+-              "in 'pose_graph_filename'.");
++DECLARE_string(bag_filenames);
+ DEFINE_string(pose_graph_filename, "",
+               "Proto stream file containing the pose graph.");
+-DEFINE_bool(use_bag_transforms, true,
+-            "Whether to read and use the transforms from the bag.");
++DECLARE_bool(use_bag_transforms);
+ DEFINE_string(output_file_prefix, "",
+               "Will be prefixed to all output file names and can be used to "
+               "define the output directory. If empty, the first bag filename "
+diff --git a/cartographer_ros/src/node_constants.cpp b/cartographer_ros/src/node_constants.cpp
+index 415ad37..84d7595 100644
+--- a/cartographer_ros/src/node_constants.cpp
++++ b/cartographer_ros/src/node_constants.cpp
+@@ -18,6 +18,32 @@
+ 
+ #include "glog/logging.h"
+ 
++#include "gflags/gflags.h"
++
++// 공유 gflags 정의 (1회만). node_main/offline_node/assets_writer_main에서는
++// DECLARE로 참조한다. Lyrical(gflags 2.2)부터 중복 DEFINE이면 실행 즉시
++// "defined more than once"로 죽는다 (issue-tracking 2026-10-28 §11).
++DEFINE_bool(collect_metrics, false,
++            "Activates the collection of runtime metrics. If activated, the "
++            "metrics can be accessed via a ROS service.");
++DEFINE_string(configuration_directory, "",
++              "First directory in which configuration files are searched, "
++              "second is always the Cartographer installation to allow "
++              "including files from there.");
++DEFINE_string(load_state_filename, "",
++              "If non-empty, filename of a .pbstream file to load, containing "
++              "a saved SLAM state.");
++DEFINE_bool(load_frozen_state, true,
++            "Load the saved state as frozen (non-optimized) trajectories.");
++DEFINE_string(
++    save_state_filename, "",
++    "If non-empty, serialize state and write it to disk before shutting down.");
++DEFINE_string(bag_filenames, "",
++              "Comma-separated list of bags to process. One bag per trajectory. "
++              "Any combination of simultaneous and sequential bags is supported.");
++DEFINE_bool(use_bag_transforms, true,
++            "Whether to read, use and republish transforms from bags.");
++
+ namespace cartographer_ros {
+ 
+ std::vector<std::string> ComputeRepeatedTopicNames(const std::string& topic,
+diff --git a/cartographer_ros/src/node_main.cpp b/cartographer_ros/src/node_main.cpp
+index bdf33b8..7f7ab13 100644
+--- a/cartographer_ros/src/node_main.cpp
++++ b/cartographer_ros/src/node_main.cpp
+@@ -23,27 +23,17 @@
+ #include "rclcpp/rclcpp.hpp"
+ #include "tf2_ros/transform_listener.h"
+ 
+-DEFINE_bool(collect_metrics, false,
+-            "Activates the collection of runtime metrics. If activated, the "
+-            "metrics can be accessed via a ROS service.");
+-DEFINE_string(configuration_directory, "",
+-              "First directory in which configuration files are searched, "
+-              "second is always the Cartographer installation to allow "
+-              "including files from there.");
++DECLARE_bool(collect_metrics);
++DECLARE_string(configuration_directory);
+ DEFINE_string(configuration_basename, "",
+               "Basename, i.e. not containing any directory prefix, of the "
+               "configuration file.");
+-DEFINE_string(load_state_filename, "",
+-              "If non-empty, filename of a .pbstream file to load, containing "
+-              "a saved SLAM state.");
+-DEFINE_bool(load_frozen_state, true,
+-            "Load the saved state as frozen (non-optimized) trajectories.");
++DECLARE_string(load_state_filename);
++DECLARE_bool(load_frozen_state);
+ DEFINE_bool(
+     start_trajectory_with_default_topics, true,
+     "Enable to immediately start the first trajectory with default topics.");
+-DEFINE_string(
+-    save_state_filename, "",
+-    "If non-empty, serialize state and write it to disk before shutting down.");
++DECLARE_string(save_state_filename);
+ 
+ namespace cartographer_ros {
+ namespace {
+diff --git a/cartographer_ros/src/offline_node.cpp b/cartographer_ros/src/offline_node.cpp
+index 4b3f60e..bf03af5 100644
+--- a/cartographer_ros/src/offline_node.cpp
++++ b/cartographer_ros/src/offline_node.cpp
+@@ -40,13 +40,8 @@
+ #include <regex>
+ #include <string>
+ 
+-DEFINE_bool(collect_metrics, false,
+-            "Activates the collection of runtime metrics. If activated, the "
+-            "metrics can be accessed via a ROS service.");
+-DEFINE_string(configuration_directory, "",
+-              "First directory in which configuration files are searched, "
+-              "second is always the Cartographer installation to allow "
+-              "including files from there.");
++DECLARE_bool(collect_metrics);
++DECLARE_string(configuration_directory);
+ DEFINE_string(
+     configuration_basenames, "",
+     "Comma-separated list of basenames, i.e. not containing any "
+@@ -54,25 +49,14 @@ DEFINE_string(
+     "The first configuration file will be used for node options. "
+     "If less configuration files are specified than trajectories, the "
+     "first file will be used the remaining trajectories.");
+-DEFINE_string(
+-    bag_filenames, "",
+-    "Comma-separated list of bags to process. One bag per trajectory. "
+-    "Any combination of simultaneous and sequential bags is supported.");
++DECLARE_string(bag_filenames);
+ DEFINE_string(urdf_filenames, "",
+               "Comma-separated list of one or more URDF files that contain "
+               "static links for the sensor configuration(s).");
+-DEFINE_bool(use_bag_transforms, true,
+-            "Whether to read, use and republish transforms from bags.");
+-DEFINE_string(load_state_filename, "",
+-              "If non-empty, filename of a .pbstream file to load, containing "
+-              "a saved SLAM state.");
+-DEFINE_bool(load_frozen_state, true,
+-            "Load the saved state as frozen (non-optimized) trajectories.");
+-DEFINE_string(save_state_filename, "",
+-              "Explicit name of the file to which the serialized state will be "
+-              "written before shutdown. If left empty, the filename will be "
+-              "inferred from the first bagfile's name as: "
+-              "<bag_filenames[0]>.pbstream");
++DECLARE_bool(use_bag_transforms);
++DECLARE_string(load_state_filename);
++DECLARE_bool(load_frozen_state);
++DECLARE_string(save_state_filename);
+ DEFINE_bool(keep_running, false,
+             "Keep running the offline node after all messages from the bag "
+             "have been processed.");
