@@ -1,7 +1,8 @@
 """개별 ROS 노드 중지·재시작 (OS 프로세스 단위 — 프로세스가 있는 로봇에서만 실행).
 
-ros2 launch는 Node마다 별도 OS 프로세스로 띄우며 argv에 `-r __node:=<이름>` 토큰이
-들어간다. 그 토큰으로 PID를 찾아 kill하고, 재시작은 kill 전 argv 그대로 다시 실행한다.
+ros2 launch는 Node마다 별도 OS 프로세스로 띄운다. PID는 argv의 `-r __node:=<이름>`
+토큰으로 찾고, 토큰이 없으면(launch에 name= 없음) 실행 파일명으로 찾는다.
+kill 후 kill 전 argv 그대로 다시 실행한다.
 launch 파일에 respawn이 없어서(전부 없음) kill한 노드는 그냥 죽은 채로 남는다.
 재시작한 노드는 launch의 자식이 아니라서 서비스 stop-all에 안 걸리므로
 .run/nodes/<이름>.pid로 추적하고 stop-all 때 같이 정리한다.
@@ -52,7 +53,11 @@ def _alive(pid: int) -> bool:
 
 
 def find_node_procs(name: str) -> list[tuple[int, list[str]]]:
-    """argv에 `__node:=<이름>` 토큰이 있는 프로세스. 자기 자신 제외."""
+    """`__node:=<이름>` 토큰이나 실행 파일명 일치 프로세스. 자기 자신 제외.
+
+    launch에 name=이 없으면(예: robot_state_publisher) __node:= 토큰이 없어서
+    argv[0] 파일명으로 찾는다 (관례상 노드명 = 실행 파일명).
+    """
     me = os.getpid()
     want = f'__node:={base(name)}'
     out = []
@@ -63,11 +68,10 @@ def find_node_procs(name: str) -> list[tuple[int, list[str]]]:
         if pid == me:
             continue
         argv = _argv(pid)
-        if not argv or want not in argv:
+        if not argv or any(SELF in a for a in argv):
             continue
-        if any(SELF in a for a in argv):
-            continue
-        out.append((pid, argv))
+        if want in argv or os.path.basename(argv[0]) == base(name):
+            out.append((pid, argv))
     return out
 
 
