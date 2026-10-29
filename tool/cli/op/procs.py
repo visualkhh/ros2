@@ -173,6 +173,22 @@ class Procs:
         ok, msg2 = self.start(name, info)
         return ok, f'{msg}\n{msg2}'
 
+    def restart_all(self) -> tuple[bool, str]:
+        """켜져 있던 서비스만 같은 순서로 전부 재시작 (nav는 같은 지도로)."""
+        running = [n for n in SERVICES if self.running(n)]
+        if not running:
+            return False, '실행 중인 서비스 없음'
+        info = {n: self.info(n) or None for n in running}
+        msgs = []
+        for n in reversed(running):
+            msgs.append(self.stop(n)[1])
+        for n in running:
+            ok, m = self.start(n, info[n])
+            msgs.append(m)
+            if not ok:
+                return False, '\n'.join(msgs)
+        return True, '\n'.join(msgs)
+
     # ------------------------------------------------------------ 개별 노드 (op/nodes.py · 로봇에서만)
     def node_pids(self, name: str) -> list[tuple[int, list[str]]]:
         from .nodes import find_node_procs
@@ -335,6 +351,10 @@ class RemoteProcs(Procs):
 
     def stop_all(self) -> tuple[bool, str]:
         rc, out = self._cli('stop-all')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def restart_all(self) -> tuple[bool, str]:
+        rc, out = self._cli('restart-all')
         return rc == 0, f'[{self.host}] {out}'
 
     def tail(self, name: str, n: int = 40) -> str:

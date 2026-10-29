@@ -92,6 +92,7 @@ tool/
 ./run-cli route direct|rl       # 바퀴 명령 경로: 직결 / PC RL 경유 (= rl off|on)
 ./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
 ./run-cli stop-all              # 바퀴 정지 → 띄운 것 전부 종료
+./run-cli restart-all           # 켜져 있던 것만 전부 재시작 (nav는 같은 지도로)
 ./run-cli stop                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
 ```
 

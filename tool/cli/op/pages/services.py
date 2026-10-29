@@ -11,7 +11,7 @@ import subprocess
 from ..defs import BACK, STAY
 from ..procs import RUN_DIR, SERVICES, TOOL_DIR
 from ..terminal import DIM, GREEN, YELLOW
-from .base import Menu, MenuItem, Page
+from .base import Menu, MenuItem
 from .drive import TeleopItem
 
 
@@ -349,10 +349,13 @@ class ExploreMenu(ServiceMenu):
                        self.term.paint(' 초기 위치 불필요 (SLAM이 map→odom을 냄)', DIM)]
 
 
-class StopAllPage(Page):
-    title = '전부 정지'
+class StopAllItem(MenuItem):
+    key = '1'
 
-    def show(self) -> str:
+    def label(self):
+        return '전부 정지'
+
+    def run(self):
         running = [SERVICES[n].label for n in SERVICES if self.bus.procs.running(n)]
         if not running:
             print('실행 중인 것 없음')
@@ -363,3 +366,34 @@ class StopAllPage(Page):
         if self.ui.confirm('전부 끌까요?', body=body):
             self.bus.cmd_stop_all(None)
         return STAY
+
+
+class RestartAllItem(MenuItem):
+    key = '2'
+
+    def label(self):
+        return '전부 재시작 (켜져 있던 것만)'
+
+    def run(self):
+        running = [SERVICES[n].label for n in SERVICES if self.bus.procs.running(n)]
+        if not running:
+            print('실행 중인 것 없음')
+            return STAY
+        body = ['다시 켤 것: ' + ', '.join(running)]
+        if self.bus.procs.running('slam'):
+            body.append(self.term.paint('SLAM 지도는 저장하지 않으면 사라집니다', YELLOW))
+        if self.ui.confirm('전부 재시작할까요?', body=body):
+            self.bus.cmd_restart_all(None)
+        return STAY
+
+
+class StopAllPage(Menu):
+    title = '전부 정지 · 재시작'
+
+    def items(self):
+        return [StopAllItem(self.app), RestartAllItem(self.app)]
+
+    def center(self):
+        running = [SERVICES[n].label for n in SERVICES if self.bus.procs.running(n)]
+        return ['[켜져 있는 서비스만]'] + [f' {r}' for r in running] if running else [
+            '실행 중인 것 없음 — 정지·재시작할 게 없습니다']

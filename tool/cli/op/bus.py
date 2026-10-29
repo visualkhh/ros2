@@ -196,6 +196,12 @@ class Bus:
         print(msg)
         return 0 if ok else 1
 
+    def cmd_restart_all(self, args) -> int:
+        self.send_velocity(0.0, 0.0)
+        ok, msg = self.procs.restart_all()
+        print(msg)
+        return 0 if ok else 1
+
     # ------------------------------------------------------------- 지도
     @staticmethod
     def default_map_name() -> str:
