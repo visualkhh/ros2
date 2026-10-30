@@ -84,6 +84,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ## 3. 실험 B — 바닥
 
 로봇을 바닥에 내려놓고 **앞뒤좌우 1 m**를 비운다 (0.5 m 사각형이 두 번 그려짐).
+sim도 기본이 **장애물 없는 빈 바닥**이라 주변 사물/벽 충돌 변수를 없앤다 (`--room 0`).
 
 ```bash
 # real

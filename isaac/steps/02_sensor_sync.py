@@ -11,7 +11,7 @@
   # 눈으로 보기 (박스 위, 창 닫을 때까지 반복)
   ./steps/02_sensor_sync.sh --stand --watch
 
-  # 바닥
+  # 바닥 (기본: 장애물 없는 빈 바닥)
   ./steps/02_sensor_sync.sh --viz none
 
 출력: steps/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
@@ -36,7 +36,8 @@ from isaaclab.app import AppLauncher  # noqa: E402
 parser = argparse.ArgumentParser(description="02: sim 센서 싱크")
 parser.add_argument("--stand", action="store_true", help="배 밑 지지 박스 위 (바퀴 공중)")
 parser.add_argument("--stand-height", type=float, default=0.06, help="지지 박스 높이 [m]")
-parser.add_argument("--room", type=float, default=4.0)
+parser.add_argument("--room", type=float, default=0.0,
+                    help="방 크기 [m] (0=빈 바닥, 장애물 없음). 센서 싱크는 0 권장")
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--speed", type=float, default=0.15)
 parser.add_argument("--turn", type=float, default=1.0)
@@ -101,7 +102,8 @@ def main():
     out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
         out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/artifacts/...)
-    print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
+    env = "empty floor (no obstacles)" if args_cli.room <= 0 else f"room {args_cli.room:.1f} m"
+    print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'} · {env}")
     print(f"[02-sim] calib: {calib_desc(condition)}")
     print(f"[02-sim] profile: side={args_cli.side:.2f} m · {total:.1f}s · "
           f"left square → 180° turn → reverse")
