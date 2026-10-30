@@ -5,7 +5,7 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/run.sh 01_random_world.py
+  ./steps/01_random_world.sh
 
 키:
   W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전

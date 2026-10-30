@@ -1,6 +1,6 @@
 """sim vs real 시간파형 비교 (같은 명령에서 같은 신호인지 눈으로).
 
-  python3 steps/plot_compare.py /tmp/sim_step.csv /tmp/real_step.csv
+  ./steps/plot_compare.sh /tmp/sim_step.csv /tmp/real_step.csv
   → steps/artifacts/compare.png
 
 위에서부터:

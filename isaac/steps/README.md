@@ -6,7 +6,7 @@
 | # | 파일/단계 | 내용 | 상태 |
 |---|---|---|---|
 | 01 | `01_random_world.py` | 랜덤 방(3.5~6 m) + 장애물 + 우리 로봇, `N` 다음 방 | ✅ |
-| 02 | `02_sensor_sync.py` + `02_sensor_sync_real.py` | IMU/odom 신호를 real과 같은 명령에서 비교 | sim ✅ · real 대기 |
+| 02 | `02_sensor_sync.sh` (sim) + `02_sensor_sync_real.sh` (real) | IMU/odom/raw wheel 신호를 같은 명령에서 비교 | 둘 다 직접 실행 |
 | 03 | `03_step_stand.py` | 공중(배 밑 지지 박스) 계단응답 sim/real | ☐ |
 | 04 | `04_step_floor.py` | 바닥 계단응답 sim/real | ☐ |
 | 05 | 차이 반영 | URDF / 마찰 / env cfg에 실측값 넣기 | ☐ |
@@ -16,13 +16,16 @@
 
 ```
 steps/
-├── 01_random_world.py     랜덤 환경 + 로봇
-├── 02_sensor_sync.py      sim 센서 기록 (--stand / 바닥)
-├── 02_sensor_sync_real.py real 센서 기록 (PC, rclpy)
+├── 01_random_world.sh     랜덤 환경 + 로봇 실행
+├── 01_random_world.py
+├── 02_sensor_sync.sh      sim 센서 기록 실행 (--stand / 바닥 / --watch)
+├── 02_sensor_sync.py
+├── 02_sensor_sync_real.sh real 센서 기록 실행 (ROS/peers 자동)
+├── 02_sensor_sync_real.py
+├── plot_compare.sh        sim/real 파형 비교 실행
 ├── scene.py               방·로봇 생성 공용
 ├── plot_compare.py        sim/real CSV 파형 비교 도구
-├── artifacts/             실행 산출물 CSV/PNG (git 제외)
-├── baselines/             sim 비교 기준 CSV (커밋)
+├── artifacts/             실행 산출물 CSV/PNG (실행 시 생성, git 제외)
 ├── PRE_RL.md              차이값을 URDF/마찰/env cfg 중 어디에 넣는지
 ├── S3_hypotheses.md       가설·실측 표
 ├── run.sh                 실행 래퍼 (--viz kit 자동)
@@ -33,7 +36,7 @@ steps/
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./steps/run.sh 01_random_world.py
+./steps/01_random_world.sh
 ```
 
 - 방 크기·장애물이 랜덤. `--seed 7`로 재현, 없으면 매번 새 seed.
@@ -43,21 +46,21 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 ```bash
 # 공중(지지 박스) — 눈으로 보기 (9초 기록 후 창 닫을 때까지 반복)
-./steps/run.sh 02_sensor_sync.py --stand --watch
+./steps/02_sensor_sync.sh --stand --watch
 
 # 공중 — 기록만 (창 없이)
-./steps/run.sh 02_sensor_sync.py --viz none --stand
+./steps/02_sensor_sync.sh --viz none --stand
 
 # 바닥 — 기록만
-./steps/run.sh 02_sensor_sync.py --viz none
+./steps/02_sensor_sync.sh --viz none
 ```
 
 `--stand --watch`는 로봇이 **배 밑 박스 위**에 올라가 바퀴만 도는 장면을 옆에서 계속 보여줌.
 박스 높이가 실제와 다르면 `--stand-height 0.04`처럼 지정.
 
-- sim 실행 결과 기본: `artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
-- 비교 기준(커밋): `baselines/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
-  (기준을 갱신할 때만 `./steps/run.sh 02_sensor_sync.py --viz none --stand --out steps/baselines/sim_sensor_stand.csv`)
+- sim 실행 결과: `artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
+- real 실행 결과: `artifacts/<label>.csv`
+- **비교 전에 sim을 먼저 실행**해서 sim CSV를 만들어야 함. 미리 만든 baseline은 없음.
 - real 기록 (PC):
   ```bash
   source /opt/ros/lyrical/setup.bash
@@ -65,20 +68,20 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   source tool/peers.sh
 
   # 로봇 안 움직이고 상태만 확인
-  python3 steps/02_sensor_sync_real.py --check-only
+  ./steps/02_sensor_sync_real.sh --check-only
 
-  python3 steps/02_sensor_sync_real.py --label real_stand
-  python3 steps/02_sensor_sync_real.py --label real_floor
+  ./steps/02_sensor_sync_real.sh --label real_stand
+  ./steps/02_sensor_sync_real.sh --label real_floor
   ```
   `/state_control`은 TRANSIENT_LOCAL(latched)라 스크립트가 그에 맞춰 구독한다.
 - 비교 (기본은 PNG 저장만):
   ```bash
-  python3 steps/plot_compare.py steps/baselines/sim_sensor_stand.csv steps/artifacts/real_stand.csv
-  python3 steps/plot_compare.py steps/baselines/sim_sensor_floor.csv steps/artifacts/real_floor.csv
+  ./steps/plot_compare.sh steps/artifacts/sim_sensor_stand.csv steps/artifacts/real_stand.csv
+  ./steps/plot_compare.sh steps/artifacts/sim_sensor_floor.csv steps/artifacts/real_floor.csv
   ```
 - **창으로 직접 보고 싶을 때만 `--show`**:
   ```bash
-  python3 steps/plot_compare.py     steps/baselines/sim_sensor_stand.csv steps/artifacts/real_stand.csv --show
+  ./steps/plot_compare.sh steps/artifacts/sim_sensor_stand.csv steps/artifacts/real_stand.csv --show
   ```
   창을 닫으면 터미널로 돌아온다. `--show` 없으면 `steps/artifacts/compare.png`만 저장.
 - CSV에는 세 층이 같이 들어감:

@@ -11,7 +11,7 @@ sim 쪽 `02_sensor_sync.py`와 같은 열/프로파일.
       source tool/peers.sh
 
 실행:
-  python3 steps/02_sensor_sync_real.py --label real_stand
+  ./steps/02_sensor_sync_real.sh --label real_stand
   # 바닥이면 --label real_floor
 출력 기본: steps/artifacts/<label>.csv
 """

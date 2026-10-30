@@ -8,19 +8,18 @@
 
 실행:
   # 공중 (배 밑 지지 박스, 바퀴 공중) — 실제 로봇을 박스 위에 올린 상태와 비교
-  ./steps/run.sh 02_sensor_sync.py --viz none --stand
+  ./steps/02_sensor_sync.sh --viz none --stand
 
   # 눈으로 보기 (박스 위, 창 닫을 때까지 반복)
-  ./steps/run.sh 02_sensor_sync.py --stand --watch
+  ./steps/02_sensor_sync.sh --stand --watch
 
   # 바닥
-  ./steps/run.sh 02_sensor_sync.py --viz none
+  ./steps/02_sensor_sync.sh --viz none
 
 출력: steps/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
 CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)
-비교 기준(커밋): steps/baselines/... (갱신할 때만 --out으로 지정)
-real: python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_stand.csv
-비교: python3 steps/plot_compare.py <sim.csv> <real.csv>
+real: ./steps/02_sensor_sync_real.sh --output /tmp/real_sensor_stand.csv
+비교: ./steps/plot_compare.sh <sim.csv> <real.csv>
 """
 import argparse
 import csv
@@ -105,8 +104,8 @@ def main():
     tag = "sim_sensor_stand" if args_cli.stand else "sim_sensor_floor"
     out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
-        out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/baselines/...)
-    print(f"[02] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
+        out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/artifacts/...)
+    print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
 
     rows = []
     ox = oy = oyaw = 0.0
@@ -154,14 +153,14 @@ def main():
                 sum(r[12] for r in part) / len(part))
     lf, rf = seg_wheel(2.5, 4.5)
     lt, rt = seg_wheel(5.5, 7.5)
-    print(f"[02] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f} "
+    print(f"[02-sim] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f} "
           f"| 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
-    print(f"[02] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f} "
+    print(f"[02-sim] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f} "
           f"| 바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")
-    print(f"[02] → {out}")
+    print(f"[02-sim] → {out}")
 
     if args_cli.watch and not headless:
-        print("[02] WATCH — 창을 닫을 때까지 반복 (정지→전진→좌회전→정지)")
+        print("[02-sim] WATCH — 창을 닫을 때까지 반복 (정지→전진→좌회전→정지)")
         sim_t = 0.0
         next_cmd = 0.0
         while simulation_app.is_running():
