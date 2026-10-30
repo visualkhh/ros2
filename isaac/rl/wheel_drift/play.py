@@ -25,8 +25,8 @@ import torch  # noqa: E402
 
 
 def main():
-    from rl.task.rl_correct_env import RlCorrectEnv  # noqa: E402
-    from rl.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
+    from rl.wheel_drift.task.rl_correct_env import RlCorrectEnv  # noqa: E402
+    from rl.wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
 
     env_cfg = RlCorrectEnvCfg()
     env_cfg.scene.num_envs = args.envs

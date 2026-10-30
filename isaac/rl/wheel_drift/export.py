@@ -23,12 +23,12 @@ app_launcher = AppLauncher(args)
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
 from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
-from rl.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
+from rl.wheel_drift.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
 
 
 def main():
-    from rl.task.rl_correct_env import RlCorrectEnv  # noqa: E402
-    from rl.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
+    from rl.wheel_drift.task.rl_correct_env import RlCorrectEnv  # noqa: E402
+    from rl.wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
 
     env_cfg = RlCorrectEnvCfg()
     exp_name = os.path.splitext(args.out)[0]

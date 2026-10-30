@@ -11,7 +11,7 @@
   N  다음 랜덤 방 (방마다 장애물 배치가 다름, --seed로 재현)
   (창을 닫으면 종료)
 
-바퀴 명령은 실제 드라이버와 같은 식(rl.task.rl_correct_env.wheel_targets:
+바퀴 명령은 실제 드라이버와 같은 식(rl.wheel_drift.task.rl_correct_env.wheel_targets:
 반지름 0.033 · 간격 0.287 · 8 rad/s 포화)을 쓴다. 물리 120 Hz, 명령 20 Hz, 화면 60 Hz.
 """
 import argparse
@@ -47,7 +47,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from scene import (FRICTION_GROUND, FRICTION_OBSTACLE, FRICTION_WHEEL,
                    build_world, place_robot, set_camera, settle, spawn_robot)  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
-from rl.task.rl_correct_env import wheel_targets  # noqa: E402
+from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 RENDER_DT = 1.0 / 60.0
 POLICY_DT = 1.0 / spec.CONTROL_HZ     # 20 Hz — 실제 cmd_manager와 같게

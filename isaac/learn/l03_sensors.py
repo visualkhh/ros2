@@ -60,7 +60,7 @@ from isaaclab.utils import configclass  # noqa: E402
 
 from scene import bind_robot_materials, build_world, robot_articulation_cfg, set_camera, settle  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
-from rl.task.rl_correct_env import wheel_targets  # noqa: E402
+from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 FRAME_DT = 1 / 60.0
