@@ -25,6 +25,19 @@
 | `scripts/train.py · export.py · play.py` | 학습 · ONNX 뽑기 · 구경 |
 | `logs/` · `export/` | 산출물 (git 제외) |
 
+## USD 생성
+
+```bash
+cd /home/pank/workspaces/visualkhh/source/ros2/isaac
+./convert_usd.sh          # URDF → USD만 (Isaac headless, ~30 s)
+# → usd/tb3_waffle_pi/tb3_waffle_pi.usda
+```
+
+- 정본: `urdf/beebot/urdf.xacro` (ROS용 `tb3_bringup/urdf/robot.urdf.xacro`와 같은 내용)
+- 변환: `tasks/common/robot_spec.py::robot_usd()` — xacro → URDF → Isaac `UrdfConverter`
+- S1/L1/S2/S5 스크립트도 시작할 때 같은 함수를 자동 호출 — 별도 변환 없이 바로 실행해도 됨
+- `usd/`는 git 제외 (파생물). 이전 변환물(`tb3_waffle_pi_1`, `_2`…)은 변환 전에 자동 삭제
+
 ## 흐름
 
 ```bash

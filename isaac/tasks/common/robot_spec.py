@@ -24,11 +24,18 @@ def robot_usd(out_dir: str = os.path.join(WS, "isaac", "usd")) -> str:
 
     결과는 isaac/usd/ 아래 (git 제외 — URDF가 정본, USDA는 파생물).
     """
+    import glob
+    import shutil
+
     import xacro
     from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
 
-    urdf = os.path.join(out_dir, "tb3_waffle_pi.urdf")
     os.makedirs(out_dir, exist_ok=True)
+    # importer는 같은 이름 폴더가 있으면 tb3_waffle_pi_1, _2...로 쌓는다 — 이전 변환물 먼저 제거
+    for old in glob.glob(os.path.join(out_dir, "tb3_waffle_pi*")):
+        if os.path.isdir(old):
+            shutil.rmtree(old)
+    urdf = os.path.join(out_dir, "tb3_waffle_pi.urdf")
     with open(urdf, "w") as f:
         f.write(xacro.process_file(XACRO, mappings={"mesh_uri": URDF_DIR + "/meshes"}).toprettyxml(indent="  "))
     cfg = UrdfConverterCfg(

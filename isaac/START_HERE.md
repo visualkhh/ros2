@@ -64,6 +64,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./steps/run.sh ../learn/l01_robot_anatomy.py
 #   개념 목록: learn/README.md
 
+# URDF 고친 뒤 USD만 다시 생성
+./convert_usd.sh
+
 # 물리 확인 (오차 0이면 명령대로 가나) — 고친 뒤 먼저
 cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/scripts/smoke_rl_correct.py; cd -
 
