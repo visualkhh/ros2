@@ -3,7 +3,7 @@
 목적: **같은 명령을 RL 끄고(Before) / 켜고(After) 줬을 때 목표에 더 정확히 가는지** 수치로 보인다.
 설계·평가 기준은 [../../../documents/isaac/task-spec.md](../../../documents/isaac/task-spec.md).
 
-- `steps/` = RL 전 셋팅 01~06 (환경·센서·실기기 싱크)
+- `calibration/` = RL 전 셋팅 01~06 (환경·센서·실기기 싱크)
 - `rl/wheel_drift/` = 그 위에서 도는 **바퀴 보정 정책** (환경 · 학습 · export · play)
 
 ## 두 가지 task
@@ -97,7 +97,7 @@ tensorboard --logdir logs/rl_goal_friction
 `steps`의 02도 이 파일을 import하고, 학습 후 `real_square.py`도 같은 waypoint를 쓴다.
 
 ```text
-steps/02_sensor_sync_real.sh   → open-loop 사각형 (Before)
+calibration/02_sensor_sync_real.sh   → open-loop 사각형 (Before)
 real_square.sh                 → 같은 사각형을 RL goal로 (After)
 ```
 
@@ -117,12 +117,12 @@ real_square.sh                 → 같은 사각형을 RL goal로 (After)
 3. **PC**: 같은 사각형을 RL로 주행 + CSV
    ```bash
    ./rl/wheel_drift/real_square.sh --side 0.5
-   # → steps/artifacts/real_goal_square.csv
+   # → calibration/artifacts/real_goal_square.csv
    ```
 4. **비교 그래프**
    ```bash
    ./rl/wheel_drift/plot_goal_square.sh --show
-   # → steps/artifacts/compare_goal_square.png
+   # → calibration/artifacts/compare_goal_square.png
    ```
 5. Before/After 수치: `final err`, `RMS dev`(이상 사각형 선에서 벗어난 정도), `path len`.
 
@@ -131,4 +131,4 @@ real_square.sh                 → 같은 사각형을 RL goal로 (After)
 ## 주의
 
 - `rl/wheel_drift/task` 환경은 **sim 전용**. 실기기에서 관측 가능한 값만 obs로 쓴다.
-- 학습 전에 `steps/`의 02~04로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 아무리 잘 돼도 real에서 효과가 없다.
+- 학습 전에 `calibration/`의 02~04로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 아무리 잘 돼도 real에서 효과가 없다.

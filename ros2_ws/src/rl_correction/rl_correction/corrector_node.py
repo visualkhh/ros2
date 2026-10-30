@@ -25,7 +25,7 @@ from geometry_msgs.msg import Point, Twist
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, Float32MultiArray
 
 T_CHANGE_MAX = 2.0   # [s] same clip as the sim
 CHANGE_EPS = 1e-3    # command counts as changed above this
@@ -90,6 +90,7 @@ class RlCorrector(Node):
         self.create_subscription(Point, GOAL_TOPIC, self.cb_goal, 10)
         self.create_subscription(Empty, STOP_TOPIC, self.cb_goal_stop, 10)
         self.pub = self.create_publisher(Twist, 'cmd_vel_out', 10)
+        self.pub_dbg = self.create_publisher(Float32MultiArray, 'rl_debug', 10)
         self.create_timer(0.05, self.tick_goal)
 
     def _load_model(self):
@@ -176,6 +177,11 @@ class RlCorrector(Node):
         out = Twist()
         out.linear.x, out.angular.z = lin, ang
         self.pub.publish(out)
+        self.pub_dbg.publish(Float32MultiArray(data=[
+            0.0, cmd[0], cmd[1], self.v_enc, self.w_enc, self.w_gyro, 0.0, 0.0,
+            cmd[0], cmd[1], delta[0], delta[1], lin, ang,
+            lin - cmd[0], ang - cmd[1],
+        ]))
 
         self.get_logger().info(
             f'[track] in=({cmd[0]:+.3f},{cmd[1]:+.3f}) '
@@ -241,6 +247,10 @@ class RlCorrector(Node):
         cmd = Twist()
         cmd.linear.x, cmd.angular.z = lin, ang
         self.pub.publish(cmd)
+        self.pub_dbg.publish(Float32MultiArray(data=[
+            1.0, gx, gy, px, py, yaw, dist, herr,
+            v, w, delta[0], delta[1], lin, ang, lin - v, ang - w,
+        ]))
 
         self.get_logger().info(
             f'[goal] g=({gx:+.2f},{gy:+.2f}) p=({px:+.2f},{py:+.2f},{yaw:+.2f}) '

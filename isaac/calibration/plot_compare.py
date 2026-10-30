@@ -1,7 +1,7 @@
 """sim vs real 비교 — 시간파형 + odom 궤적 (같은 명령에서 같은 신호인지 눈으로).
 
-  ./steps/plot_compare.sh /tmp/sim_step.csv /tmp/real_step.csv
-  → steps/artifacts/compare_<tag>.png
+  ./calibration/plot_compare.sh /tmp/sim_step.csv /tmp/real_step.csv
+  → calibration/artifacts/compare_<tag>.png
 
 위에서부터:
   0) odom x-y 궤적: 왼쪽 사각형 → 180° 턴 → 같은 사각형 역주행 (CSV에 odom_x/y가 있으면)

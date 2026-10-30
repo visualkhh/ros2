@@ -3,7 +3,7 @@
 Isaac Lab에서 돌리는 RL task를 **폴더별**로 둔다. 공통 로봇 값·산출물은 `isaac/` 루트에 있다.
 
 ```text
-steps/ 보정 (sim plant를 real에 맞춤)
+calibration/ 보정 (sim plant를 real에 맞춤)
   → rl/ 학습 (Isaac Lab, PPO)
   → ONNX
   → PC의 rl_correction 노드
@@ -193,7 +193,7 @@ odom만으로 관측이 안 되므로 sim plant를 맞추는 게 먼저다.
 
 ### 5.1 준비
 
-- `steps/EXPERIMENT.md`로 floor 보정값을 먼저 만든다.
+- `calibration/EXPERIMENT.md`로 floor 보정값을 먼저 만든다.
 - Isaac 창은 한 번에 하나.
 - 학습은 GPU/CPU에서 headless로 돌리는 것을 권장.
 
@@ -346,14 +346,14 @@ ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
 
 # 같은 사각형을 RL goal로 주행 + CSV
 ./rl/wheel_drift/real_square.sh --side 0.5
-# → steps/artifacts/real_goal_square.csv
+# → calibration/artifacts/real_goal_square.csv
 
 # RL 전(real_floor.csv) / 후(real_goal_square.csv) 궤적 비교
 ./rl/wheel_drift/plot_goal_square.sh --show
-# → steps/artifacts/compare_goal_square.png
+# → calibration/artifacts/compare_goal_square.png
 ```
 
-- Before는 `steps/02_sensor_sync_real.sh`가 만든 `real_floor.csv`.
+- Before는 `calibration/02_sensor_sync_real.sh`가 만든 `real_floor.csv`.
 - After는 `real_square.sh`가 만든 `real_goal_square.csv`.
 - 그래프에 `final err`, `RMS dev`, `path len`이 같이 나온다.
 
@@ -410,7 +410,7 @@ rl/
 | 보상이 안 오름 | `Metrics/goal_dist`, `Metrics/success`, action std |
 | goal이 안 감 | nominal controller, obs delay, wheel clipping |
 | real에서 안 됨 | obs 차원(6/10), `corrector_node` 모드, ONNX 경로 |
-| sim이 real과 다름 | `steps/EXPERIMENT.md`로 floor 보정 먼저 |
+| sim이 real과 다름 | `calibration/EXPERIMENT.md`로 floor 보정 먼저 |
 
 ---
 

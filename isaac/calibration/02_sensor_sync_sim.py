@@ -6,21 +6,21 @@
 
 실행:
   # 공중 (배 밑 지지 박스, 바퀴 공중) — 실제 로봇을 박스 위에 올린 상태와 비교
-  ./steps/02_sensor_sync_sim.sh --viz none --stand
+  ./calibration/02_sensor_sync_sim.sh --viz none --stand
 
   # 눈으로 보기 (박스 위, 창 닫을 때까지 반복)
-  ./steps/02_sensor_sync_sim.sh --stand --watch
+  ./calibration/02_sensor_sync_sim.sh --stand --watch
 
   # 바닥 (기본: 장애물 없는 빈 바닥)
-  ./steps/02_sensor_sync_sim.sh --viz none
+  ./calibration/02_sensor_sync_sim.sh --viz none
 
   # 이전 보정값 무시하고 raw plant로 (새 보정 시작 전 기준)
-  ./steps/02_sensor_sync_sim.sh --viz none --no-calib
+  ./calibration/02_sensor_sync_sim.sh --viz none --no-calib
 
-출력: steps/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
+출력: calibration/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
 CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)
-real: ./steps/02_sensor_sync_real.sh --label real_floor
-비교: ./steps/plot_compare.sh <sim.csv> <real.csv>
+real: ./calibration/02_sensor_sync_real.sh --label real_floor
+비교: ./calibration/plot_compare.sh <sim.csv> <real.csv>
 """
 import argparse
 import csv
@@ -49,7 +49,7 @@ parser.add_argument("--speed", type=float, default=0.15,
                     help="기준 전진 속도 [m/s] (변마다 1.0/0.67/1.33/0.8 배)")
 parser.add_argument("--turn", type=float, default=1.0)
 parser.add_argument("--side", type=float, default=0.5, help="정사각형 한 변 [m]")
-parser.add_argument("--out", default=None, help="기본: steps/artifacts/sim_sensor_[stand|floor].csv")
+parser.add_argument("--out", default=None, help="기본: calibration/artifacts/sim_sensor_[stand|floor].csv")
 parser.add_argument("--watch", action="store_true", help="1회 기록 후 창을 닫을 때까지 같은 장면 반복")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -63,7 +63,7 @@ import torch  # noqa: E402
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
-from rl.wheel_drift.calib_profile import cmd_at, make_profile, total as profile_total  # noqa: E402
+from calib_default_profile import cmd_at, make_profile, total as profile_total  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
 from tasks.common.sim_params import WheelLag, describe as calib_desc  # noqa: E402
 from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
@@ -108,7 +108,7 @@ def main():
     tag = "sim_sensor_stand" if args_cli.stand else "sim_sensor_floor"
     out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
-        out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/artifacts/...)
+        out = str(HERE.parent / out)   # isaac/ 기준 (예: calibration/artifacts/...)
     env = "empty floor (no obstacles)" if args_cli.room <= 0 else f"room {args_cli.room:.1f} m"
     mode = "STAND" if args_cli.stand else "FLOOR"
     if args_cli.no_calib:

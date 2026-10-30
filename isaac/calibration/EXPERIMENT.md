@@ -11,7 +11,7 @@
 - **real이 기준**. sim을 real에 맞춘다.
 - 공중(무부하)은 **진단용**, 최종은 **바닥(floor)**.
 - 한 번에 한 조건만 바꾼다.
-- CSV/PNG/JSON은 `steps/artifacts/` (git 제외). 코드·문서만 커밋.
+- CSV/PNG/JSON은 `calibration/artifacts/` (git 제외). 코드·문서만 커밋.
 - **USD 직접 수정 금지** — 형상/질량은 URDF, 동역학/마찰/지연은 Python.
 
 ---
@@ -36,7 +36,7 @@ cd ~/ros2/tool
 - 로봇이 안 움직이는 상태에서 확인:
 
 ```bash
-./steps/02_sensor_sync_real.sh --check-only
+./calibration/02_sensor_sync_real.sh --check-only
 # [02-real] ROS_DOMAIN_ID=25 · state=MANUAL 이어야 함
 ```
 
@@ -68,7 +68,7 @@ cd ~/ros2/tool
 ## 2. sim 보정값 로딩과 `--no-calib`
 
 `02_sensor_sync_sim`과 `01_random_world_sim`은 시작할 때
-`steps/artifacts/sim_calib_floor.json`을 **자동으로 읽는다.**
+`calibration/artifacts/sim_calib_floor.json`을 **자동으로 읽는다.**
 
 ```text
 [02-sim] calib: ... src=real_floor.csv   ← JSON 읽음
@@ -87,10 +87,10 @@ cd ~/ros2/tool
 
 ```bash
 # raw plant 기준
-./steps/02_sensor_sync_sim.sh --viz none --no-calib
+./calibration/02_sensor_sync_sim.sh --viz none --no-calib
 
 # 랜덤월드도 raw로
-./steps/01_random_world_sim.sh --no-calib
+./calibration/01_random_world_sim.sh --no-calib
 ```
 
 ---
@@ -102,18 +102,18 @@ cd ~/ros2/tool
 
 ```bash
 # real
-./steps/02_sensor_sync_real.sh --label real_stand
-# → steps/artifacts/real_stand.csv
+./calibration/02_sensor_sync_real.sh --label real_stand
+# → calibration/artifacts/real_stand.csv
 
 # sim (박스 높이는 실제 박스에 맞춤; 기본 0.06 m)
-./steps/02_sensor_sync_sim.sh --viz none --stand
-# → steps/artifacts/sim_sensor_stand.csv
+./calibration/02_sensor_sync_sim.sh --viz none --stand
+# → calibration/artifacts/sim_sensor_stand.csv
 
 # 비교 + 창
-./steps/plot_compare.sh \
-  steps/artifacts/sim_sensor_stand.csv \
-  steps/artifacts/real_stand.csv --show
-# → steps/artifacts/compare_stand.png
+./calibration/plot_compare.sh \
+  calibration/artifacts/sim_sensor_stand.csv \
+  calibration/artifacts/real_stand.csv --show
+# → calibration/artifacts/compare_stand.png
 ```
 
 정상:
@@ -131,20 +131,20 @@ cd ~/ros2/tool
 
 ```bash
 # real
-./steps/02_sensor_sync_real.sh --label real_floor
-# → steps/artifacts/real_floor.csv
+./calibration/02_sensor_sync_real.sh --label real_floor
+# → calibration/artifacts/real_floor.csv
 
 # sim — 현재 sim_calib_floor.json 적용
-./steps/02_sensor_sync_sim.sh --viz none
-# → steps/artifacts/sim_sensor_floor.csv
+./calibration/02_sensor_sync_sim.sh --viz none
+# → calibration/artifacts/sim_sensor_floor.csv
 
 # sim raw — 이전 보정 무시
-./steps/02_sensor_sync_sim.sh --viz none --no-calib
+./calibration/02_sensor_sync_sim.sh --viz none --no-calib
 
 # 비교 + 새 보정값 생성
-./steps/plot_compare.sh \
-  steps/artifacts/sim_sensor_floor.csv \
-  steps/artifacts/real_floor.csv --show
+./calibration/plot_compare.sh \
+  calibration/artifacts/sim_sensor_floor.csv \
+  calibration/artifacts/real_floor.csv --show
 # → compare_floor.png
 # → sim_calib_floor.json (다음 실행부터 적용)
 ```
@@ -181,7 +181,7 @@ cd ~/ros2/tool
 ### 5.2 1단계 — raw sim 기준
 
 ```bash
-./steps/02_sensor_sync_sim.sh --viz none --no-calib
+./calibration/02_sensor_sync_sim.sh --viz none --no-calib
 ```
 
 - `src=raw`, `gain=1.000`, `delay=0.00 s`, `tau=0.000 s`.
@@ -190,27 +190,27 @@ cd ~/ros2/tool
 ### 5.3 2단계 — real 측정
 
 ```bash
-./steps/02_sensor_sync_real.sh --check-only
-./steps/02_sensor_sync_real.sh --label real_floor
+./calibration/02_sensor_sync_real.sh --check-only
+./calibration/02_sensor_sync_real.sh --label real_floor
 ```
 
 - 로봇이 사각형을 두 번 그리고 약 54초 뒤 정지.
-- `steps/artifacts/real_floor.csv` 생성.
+- `calibration/artifacts/real_floor.csv` 생성.
 - `--label`을 바꾸면 파일명도 바뀐다.
 
 ### 5.4 3단계 — 비교 + 피팅
 
 ```bash
-./steps/plot_compare.sh \
-  steps/artifacts/sim_sensor_floor.csv \
-  steps/artifacts/real_floor.csv --show
+./calibration/plot_compare.sh \
+  calibration/artifacts/sim_sensor_floor.csv \
+  calibration/artifacts/real_floor.csv --show
 ```
 
 출력:
 
 ```text
-[plot] steps/artifacts/compare_floor.png
-[calib] steps/artifacts/sim_calib_floor.json · runs=8 gain=... delay=...s tau=...s
+[plot] calibration/artifacts/compare_floor.png
+[calib] calibration/artifacts/sim_calib_floor.json · runs=8 gain=... delay=...s tau=...s
 ```
 
 `fit_wheel`이 하는 일:
@@ -270,10 +270,10 @@ cd ~/ros2/tool
 
 ```bash
 # 센서 싱크
-./steps/02_sensor_sync_sim.sh --viz none
+./calibration/02_sensor_sync_sim.sh --viz none
 
 # 랜덤월드
-./steps/01_random_world_sim.sh
+./calibration/01_random_world_sim.sh
 ```
 
 로그 확인:
@@ -291,10 +291,10 @@ cd ~/ros2/tool
 새 JSON으로 sim을 다시 돌리고 같은 real CSV와 비교:
 
 ```bash
-./steps/02_sensor_sync_sim.sh --viz none
-./steps/plot_compare.sh \
-  steps/artifacts/sim_sensor_floor.csv \
-  steps/artifacts/real_floor.csv --show
+./calibration/02_sensor_sync_sim.sh --viz none
+./calibration/plot_compare.sh \
+  calibration/artifacts/sim_sensor_floor.csv \
+  calibration/artifacts/real_floor.csv --show
 ```
 
 볼 것:

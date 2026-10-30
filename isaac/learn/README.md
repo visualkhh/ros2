@@ -1,6 +1,6 @@
 # Isaac 개념 실습 (L1~L7)
 
-> 실기기와 맞추는 **프로젝트**는 [../steps/README.md](../steps/README.md) (S0~S8).
+> 실기기와 맞추는 **프로젝트**는 [../calibration/README.md](../calibration/README.md) (S0~S8).
 
 Pi/실기기 없이 **Isaac 안에서만** 개념을 하나씩 확인한다. 각 레슨은 "명령 1개 → 눈으로 확인 → 콘솔 출력"으로 끝난다.
 

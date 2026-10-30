@@ -104,4 +104,4 @@ w_enc = r·(wr − wl)/sep
 
 - 한 항목이라도 합격 밖이면 **sim 파라미터를 real에 맞춘다** (real을 sim에 맞추지 않음).
 - sim cfg 범위 밖의 real 값이 나오면 cfg 범위를 **실측 근거로** 넓힌다. 근거 없이 넓히지 않는다.
-- 비교는 `steps/plot_compare.py`의 표·파형 수치로 판정. "눈으로 비슷함"은 보조.
+- 비교는 `calibration/plot_compare.py`의 표·파형 수치로 판정. "눈으로 비슷함"은 보조.

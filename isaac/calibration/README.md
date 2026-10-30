@@ -1,4 +1,4 @@
-# steps — RL 전 셋팅 (한 단계씩)
+# calibration — RL 전 셋팅 (한 단계씩)
 
 학습(`rl/wheel_drift/`) 전에 **sim이 real의 대리인**이 되도록 맞추는 단계.
 한 번에 다 하지 않고 01부터 하나씩.
@@ -17,7 +17,7 @@
 이름 규칙: **Isaac에서 도는 건 `_sim`**, **실제 로봇은 `_real`**.
 
 ```
-steps/
+calibration/
 ├── 01_random_world_sim.sh     랜덤 환경 + 로봇 실행 (Isaac)
 ├── 01_random_world_sim.py
 ├── 02_sensor_sync_sim.sh      sim 센서 기록 (--stand / 바닥 / --watch)
@@ -25,7 +25,7 @@ steps/
 ├── 02_sensor_sync_real.sh     real 센서 기록 (ROS/peers 자동)
 ├── 02_sensor_sync_real.py
 ├── plot_compare.sh            sim/real 파형·궤적 비교 실행
-├── (프로파일은 `../rl/wheel_drift/calib_profile.py`)
+├── calib_default_profile.py   기본 사각형/waypoint (sim·real·RL 공용)
 ├── scene.py                   방·로봇 생성 공용
 ├── plot_compare.py            sim/real CSV 파형 비교 도구
 ├── artifacts/             실행 산출물 CSV/PNG (실행 시 생성, git 제외)
@@ -39,13 +39,13 @@ steps/
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./steps/01_random_world_sim.sh
+./calibration/01_random_world_sim.sh
 ```
 
 - 방 크기·장애물이 랜덤. `--seed 7`로 재현, 없으면 매번 새 seed.
 - `W/A/S/D` 주행 · `Shift` 느리게 · `X` 정지 · `R` 현재 방 리셋 · `N` 다음 방 · `C` 보정값 창.
 - 왼쪽 위 **SIM CALIBRATION** 창:
-  - tau/dead steps/gain/deadband/damping/effort/마찰을 **실행 중 수정** (즉시 적용, JSON 저장 안 함)
+  - tau/dead calibration/gain/deadband/damping/effort/마찰을 **실행 중 수정** (즉시 적용, JSON 저장 안 함)
   - **0 set** → 표시된 숫자 전부 0, **reset** → 창을 열 때 읽은 값(JSON/DEFAULTS)으로 복구
   - 맨 아래 `source`가 `real_floor.csv`면 JSON 사용, `defaults`면 기본값 사용
 
@@ -53,16 +53,16 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 ```bash
 # 공중(지지 박스) — 눈으로 보기 (정사각형 프로파일 기록 후 창 닫을 때까지 반복)
-./steps/02_sensor_sync_sim.sh --stand --watch
+./calibration/02_sensor_sync_sim.sh --stand --watch
 
 # 공중 — 기록만 (창 없이)
-./steps/02_sensor_sync_sim.sh --viz none --stand
+./calibration/02_sensor_sync_sim.sh --viz none --stand
 
 # 바닥 — 기록만
-./steps/02_sensor_sync_sim.sh --viz none
+./calibration/02_sensor_sync_sim.sh --viz none
 
 # 이전 보정값 빼고 raw plant로 (새 보정 시작 전 기준)
-./steps/02_sensor_sync_sim.sh --viz none --no-calib
+./calibration/02_sensor_sync_sim.sh --viz none --no-calib
 ```
 
 `--stand --watch`는 로봇이 **배 밑 박스 위**에 올라가 바퀴만 도는 장면을 옆에서 계속 보여줌.
@@ -85,22 +85,22 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   source tool/peers.sh
 
   # 로봇 안 움직이고 상태만 확인
-  ./steps/02_sensor_sync_real.sh --check-only
+  ./calibration/02_sensor_sync_real.sh --check-only
 
-  ./steps/02_sensor_sync_real.sh --label real_stand
-  ./steps/02_sensor_sync_real.sh --label real_floor
+  ./calibration/02_sensor_sync_real.sh --label real_stand
+  ./calibration/02_sensor_sync_real.sh --label real_floor
   ```
   `/state_control`은 TRANSIENT_LOCAL(latched)라 스크립트가 그에 맞춰 구독한다.
 - 비교 (기본은 PNG 저장만):
   ```bash
-  ./steps/plot_compare.sh steps/artifacts/sim_sensor_stand.csv steps/artifacts/real_stand.csv
-  ./steps/plot_compare.sh steps/artifacts/sim_sensor_floor.csv steps/artifacts/real_floor.csv
+  ./calibration/plot_compare.sh calibration/artifacts/sim_sensor_stand.csv calibration/artifacts/real_stand.csv
+  ./calibration/plot_compare.sh calibration/artifacts/sim_sensor_floor.csv calibration/artifacts/real_floor.csv
   ```
 - **창으로 직접 보고 싶을 때만 `--show`**:
   ```bash
-  ./steps/plot_compare.sh steps/artifacts/sim_sensor_stand.csv steps/artifacts/real_stand.csv --show
+  ./calibration/plot_compare.sh calibration/artifacts/sim_sensor_stand.csv calibration/artifacts/real_stand.csv --show
   ```
-  창을 닫으면 터미널로 돌아온다. `--show` 없으면 입력 이름에 따라 `steps/artifacts/compare_stand.png` / `compare_floor.png`로 저장.
+  창을 닫으면 터미널로 돌아온다. `--show` 없으면 입력 이름에 따라 `calibration/artifacts/compare_stand.png` / `compare_floor.png`로 저장.
 - CSV에는 세 층이 같이 들어감:
   - `/joint_states` → `wheel_l_vel`, `wheel_r_vel` (rad/s), `wheel_l_pos`, `wheel_r_pos` (rad) — **firmware 원값**
   - `/odom` → `v_enc`, `w_enc` (m/s, rad/s) — 드라이버가 `r`/`sep`로 계산한 값

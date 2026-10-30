@@ -1,5 +1,5 @@
 #!/bin/bash
-# Isaac Lab venv로 steps/ 스크립트 실행 (cd 없이)
+# Isaac Lab venv로 calibration/ 스크립트 실행 (cd 없이)
 #   ./run.sh 01_random_world_sim.py [스크립트 옵션...]
 # 기본은 창 표시(--viz kit). 창 없이 돌리려면 --viz none 을 직접 넘긴다.
 set -e

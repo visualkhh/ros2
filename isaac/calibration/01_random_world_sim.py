@@ -5,8 +5,8 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/01_random_world_sim.sh
-  ./steps/01_random_world_sim.sh --no-calib   # 이전 보정 JSON 무시 (raw)
+  ./calibration/01_random_world_sim.sh
+  ./calibration/01_random_world_sim.sh --no-calib   # 이전 보정 JSON 무시 (raw)
 
 키:
   W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전
