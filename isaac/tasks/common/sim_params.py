@@ -1,8 +1,8 @@
 """sim-real 보정값 — sim 쪽 파라미터를 real 측정에 맞춘다.
 
 파일 (plot_compare가 real CSV에서 뽑아 저장):
-  calibration/artifacts/sim_calib_stand.json
-  calibration/artifacts/sim_calib_floor.json
+  training/calibration/artifacts/sim_calib_stand.json
+  training/calibration/artifacts/sim_calib_floor.json
 
 사용:
   - 01_random_world_sim      → floor
@@ -22,7 +22,7 @@ from pathlib import Path
 import torch
 
 ISAAC = Path(__file__).resolve().parents[2]
-CALIB_DIR = ISAAC / "calibration" / "artifacts"
+CALIB_DIR = ISAAC / "training" / "calibration" / "artifacts"
 
 DEFAULTS = {
     "wheel_tau_s": 0.05,

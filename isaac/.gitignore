@@ -6,4 +6,5 @@ checkpoints/
 usd/*
 __pycache__/
 /export/
-calibration/artifacts/
+training/calibration/artifacts/
+/training/artifacts/

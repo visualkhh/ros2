@@ -13,20 +13,20 @@
 |---|---|
 | `urdf/beebot/urdf.xacro` | **학습용 로봇 URDF** — ROS용 `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`와 의도적으로 나눈 파일, **내용은 글자까지 같게** (`urdf/check_same.sh`) |
 | `learn/` | **Isaac 개념 실습 L1~L7** — 하드웨어 없이 Stage/Prim/Sensor/Env/학습 ([learn/README.md](learn/README.md)) |
-| `calibration/` | **RL 전 셋팅 01~06** — 랜덤월드·센서/실기기 싱크 ([calibration/README.md](calibration/README.md)) |
-| `calibration/PRE_RL.md` | **RL 전 셋팅** — 랜덤월드·sim/real 싱크·차이값을 URDF/마찰/env cfg 중 어디에 넣는지 |
-| `calibration/EXPERIMENT.md` | **실험 방법** — 02 센서 싱크(공중/바닥) 명령·CSV 분석·합격 기준 |
+| `training/calibration/` | **RL 전 셋팅 01~06** — 랜덤월드·센서/실기기 싱크 ([training/calibration/README.md](training/calibration/README.md)) |
+| `training/calibration/PRE_RL.md` | **RL 전 셋팅** — 랜덤월드·sim/real 싱크·차이값을 URDF/마찰/env cfg 중 어디에 넣는지 |
+| `training/calibration/EXPERIMENT.md` | **실험 방법** — 02 센서 싱크(공중/바닥) 명령·CSV 분석·합격 기준 |
 | `ROS2_TOPICS.md` | **Isaac sim ↔ ROS 2 토픽 계약** — `/isaacros/...`, domain 26 ([ROS2_TOPICS.md](ROS2_TOPICS.md)) |
 | `urdf/beebot/meshes/` | 몸통·바퀴 메시 — 저장소에서 직접 관리 (tb3_bringup/meshes와 같은 파일) |
 | `usd/` | URDF→USD 변환 결과 (`tb3_waffle_pi/tb3_waffle_pi.usda`). 매 실행마다 새로 생성, git 제외 — URDF가 정본 |
 | `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + 학습용 URDF → USD |
 | `tasks/common/onnx_export.py` | actor → ONNX (출력 = 물리 보정량, train·export 공용) |
-| `rl/` | **RL task 모음** — task별 폴더 ([rl/README.md](rl/README.md)) |
-| `rl/wheel_drift/` | **바퀴 드리프트 보정** — track/goal env·train·export·play ([rl/wheel_drift/README.md](rl/wheel_drift/README.md)) |
-| `rl/wheel_drift/smoke.py` | track 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
-| `rl/wheel_drift/smoke_goal.py` | goal 확인: 오차 0일 때 목표 (1,0) m까지 가나 |
+| `training/` | **보정 + RL 학습** — calibration, task별 정책 ([training/README.md](training/README.md)) |
+| `training/rl_correction_wheel_drift/` | **바퀴 드리프트 보정** — track/goal env·train·export·play ([training/rl_correction_wheel_drift/README.md](training/rl_correction_wheel_drift/README.md)) |
+| `training/rl_correction_wheel_drift/smoke.py` | track 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
+| `training/rl_correction_wheel_drift/smoke_goal.py` | goal 확인: 오차 0일 때 목표 (1,0) m까지 가나 |
 | `scripts/load_urdf.py` | URDF만 띄워 보기 |
-| `rl/wheel_drift/train.py · export.py · play.py` | 학습 · ONNX 뽑기 · 구경 |
+| `training/rl_correction_wheel_drift/train.py · export.py · play.py` | 학습 · ONNX 뽑기 · 구경 |
 | `logs/` · `export/` | 산출물 (git 제외) |
 
 ## USD 생성
@@ -46,9 +46,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./rl/wheel_drift/train.sh 300                     # 창 보기: 뒤에 --visualizer kit (기본은 창 없음)
-./rl/wheel_drift/export.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
-./rl/wheel_drift/play.sh export/rl_correct/rl_correct_v2.onnx 4
+./training/rl_correction_wheel_drift/train.sh 300                     # 창 보기: 뒤에 --visualizer kit (기본은 창 없음)
+./training/rl_correction_wheel_drift/export.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./training/rl_correction_wheel_drift/play.sh export/rl_correct/rl_correct_v2.onnx 4
 # 로봇: PC에서 rl-only.launch.py enable:=true model:=... → Before/After (ros2_ws README)
 ```
 

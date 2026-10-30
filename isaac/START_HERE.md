@@ -14,8 +14,10 @@ ROS는 아는데 Isaac이 처음인 사람을 위한 문서. 수식 없음.
 ```
 isaac/
 ├── learn/                    Isaac 개념 실습 L1~L7 (하드웨어 없이)
-├── calibration/                    RL 전 셋팅 01~06 (랜덤월드·센서/실기기)
-├── rl/wheel_drift/           바퀴 드리프트 보정 RL (task·train·export·play)
+├── training/
+│   ├── calibration/              RL 전 셋팅 01~06 (랜덤월드·센서/실기기)
+│   ├── rl_correction_wheel_drift/  바퀴 드리프트 보정 RL (task·train·export·play)
+│   └── artifacts/                보정/학습/실기기 실행 보고서 (git 제외)
 ├── urdf/beebot/urdf.xacro     학습용 로봇 URDF (ROS용과 같은 내용 — urdf/check_same.sh)
 ├── usd/                       URDF→USD 결과 (매 실행 생성, git 제외)
 ├── tasks/common/robot_spec.py  우리 로봇 숫자 한 곳 + 우리 URDF를 Isaac용(USD)으로 변환
@@ -50,10 +52,10 @@ isaac/
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 # 01. 랜덤 환경 + 우리 로봇 (N 다음 방, W/A/S/D 주행)
-./calibration/01_random_world_sim.sh
+./training/calibration/01_random_world_sim.sh
 
 # 02. 센서 싱크 — sim (공중은 --stand, 바닥은 생략)
-./calibration/02_sensor_sync_sim.sh --viz none --stand
+./training/calibration/02_sensor_sync_sim.sh --viz none --stand
 
 # L1. Isaac 개념 — 로봇 해부 (1=prim 트리, 2=joint 상태, 3/4/5=바퀴)
 ./learn/run.sh l01_robot_anatomy.py
@@ -75,23 +77,23 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./convert_usd.sh
 
 # 물리 확인 (오차 0이면 명령대로 가나) — 고친 뒤 먼저
-cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/wheel_drift/smoke.py; cd -
+cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/training/rl_correction_wheel_drift/smoke.py; cd -
 
 # 학습 — 창 보면서: --watch --envs 16
-./rl/wheel_drift/train.sh 300          # track: (v,w) 추종
-./rl/wheel_drift/train_goal.sh 300     # goal: 목표 변위까지 이동
-./rl/wheel_drift/train_goal.sh 300 --watch --envs 16  # goal 창 보기
+./training/rl_correction_wheel_drift/train.sh 300          # track: (v,w) 추종
+./training/rl_correction_wheel_drift/train_goal.sh 300     # goal: 목표 변위까지 이동
+./training/rl_correction_wheel_drift/train_goal.sh 300 --watch --envs 16  # goal 창 보기
 
 # goal 스모크 (목표 (1,0) m)
-cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/wheel_drift/smoke_goal.py; cd -
+cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/training/rl_correction_wheel_drift/smoke_goal.py; cd -
 
 # 체크포인트 → ONNX
-./rl/wheel_drift/export.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
-./rl/wheel_drift/export.sh logs/rl_goal/<날짜_시간>/model_299.pt goal_v1.onnx goal
+./training/rl_correction_wheel_drift/export.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./training/rl_correction_wheel_drift/export.sh logs/rl_goal/<날짜_시간>/model_299.pt goal_v1.onnx goal
 
 # 구경 (ONNX 입력 차원으로 track/goal 자동 판별)
-./rl/wheel_drift/play.sh export/rl_correct/rl_correct_v2.onnx 4
-./rl/wheel_drift/play.sh export/rl_goal/goal_v1.onnx 4
+./training/rl_correction_wheel_drift/play.sh export/rl_correct/rl_correct_v2.onnx 4
+./training/rl_correction_wheel_drift/play.sh export/rl_goal/goal_v1.onnx 4
 ```
 
 ## 6. 로봇(ROS) 연결

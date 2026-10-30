@@ -61,7 +61,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, place_robot, set_camera, settle, spawn_robot  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
-from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
+from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 POLICY_DT = 1 / spec.CONTROL_HZ      # 0.05 s
