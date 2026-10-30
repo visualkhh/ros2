@@ -139,10 +139,14 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 - 콘솔:
   ```
   [l5] envs=16 · spacing=1.5 m · scene.env_origins=(2.25, -2.25, 0.0)
-  [l5] sim 1.0s / wall 1.0s (1.00x) · env0=(+2.25,-2.25,-0.00) · env15=(-2.25,+2.25,+0.00)
+  [l5] sim 1.0s / wall 1.0s (1.01x) · fps 61 · env-steps/s 1936 · env0=(+2.25,-2.25,-0.00) · env15=(-2.25,+2.25,+0.00)
   ```
 - 배우는 것:
   - `{ENV_REGEX_NS}` = env마다 자동으로 `env_0`, `env_1`…로 치환
   - `num_envs` = 로봇 수, `env_spacing` = grid 간격
   - 학습은 이걸 수백~수천으로 늘려서 한 번에 경험을 모음
+- **GUI에서는 로봇이 많을수록 느려 보임** — 병목은 물리가 아니라 RTX 렌더.
+  `sim/wall`이 0.5로 떨어져도 `env-steps/s = n × (sim/wall) / dt`는 늘어남.
+  (headless 16대 실측: `fps 61 · env-steps/s 1936`; 4대는 ~480)
+- 학습은 **headless(렌더 끔)**로 돌려서 이 병목을 없애고 env 수를 수백~수천으로 늘림.
 - `--envs 4`로 작게 시작하고, `16`으로 늘려보기.

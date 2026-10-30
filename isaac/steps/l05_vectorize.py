@@ -116,6 +116,7 @@ def main():
     prev_keys = set()
     sim_t = 0.0
     last_print = 0.0
+    frames = 0
     t0 = time.perf_counter()
     while True:
         frame_start = time.perf_counter()
@@ -155,13 +156,17 @@ def main():
         scene.update(2 * DT)
         sim.render()
         sim_t += 2 * DT
+        frames += 1
 
         if wall - last_print >= 1.0:
             last_print = wall
             pos = robot.data.root_pos_w.torch
             yaw = robot.data.heading_w.torch
             ratio = sim_t / max(wall, 1e-6)
+            fps = frames / max(wall, 1e-6)
+            env_steps_s = n * ratio / DT
             print(f"[l5] sim {sim_t:4.1f}s / wall {wall:4.1f}s ({ratio:.2f}x) · "
+                  f"fps {fps:.0f} · env-steps/s {env_steps_s:.0f} · "
                   f"env0=({pos[0,0]:+.2f},{pos[0,1]:+.2f},{yaw[0]:+.2f}) · "
                   f"env{n-1}=({pos[-1,0]:+.2f},{pos[-1,1]:+.2f},{yaw[-1]:+.2f})")
 
