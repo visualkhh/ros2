@@ -79,12 +79,15 @@ def metrics(rows):
     moving = [r for r in rows if abs(r["lin_raw"]) > 1e-9 or abs(r["ang_raw"]) > 1e-9]
     ev = [r["lin_raw"] - r["v_enc"] for r in moving]
     ew = [r["ang_raw"] - r["w_gyro"] for r in moving]
+    ew_enc = [r["ang_raw"] - r["w_enc"] for r in moving]
     return {
         "rows": len(rows),
         "rms_v": rms(ev),
         "rms_w": rms(ew),
+        "rms_w_enc": rms(ew_enc),
         "bias_v": sum(ev) / len(ev) if ev else float("nan"),
         "bias_w": sum(ew) / len(ew) if ew else float("nan"),
+        "bias_w_enc": sum(ew_enc) / len(ew_enc) if ew_enc else float("nan"),
         "p95_v": percentile([abs(x) for x in ev], 0.95),
         "p95_w": percentile([abs(x) for x in ew], 0.95),
         "t10_v": first_step(rows, "lin_raw", "v_enc", 0.10),
@@ -103,7 +106,8 @@ def main():
         raise SystemExit(__doc__)
     names = ["sim" if len(sys.argv) == 2 else "A", "real" if len(sys.argv) == 2 else "B"]
     data = [metrics(load(p)) for p in sys.argv[1:]]
-    keys = ["rows", "rms_v", "rms_w", "bias_v", "bias_w", "p95_v", "p95_w", "t10_v", "t90_v", "t10_w", "t90_w"]
+    keys = ["rows", "rms_v", "rms_w", "rms_w_enc", "bias_v", "bias_w", "bias_w_enc",
+            "p95_v", "p95_w", "t10_v", "t90_v", "t10_w", "t90_w"]
     print(f"{'metric':12s}" + "".join(f"{n:>12s}" for n in names[:len(data)]) + ("     diff" if len(data) == 2 else ""))
     for k in keys:
         vals = [d[k] for d in data]

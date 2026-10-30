@@ -34,7 +34,10 @@ sys.path.insert(0, str(HERE))
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser(description="S5: sim 계단응답 기록")
-parser.add_argument("--out", default=str(HERE / "artifacts" / "sim_step.csv"))
+parser.add_argument("--out", default=None, help="기본: artifacts/sim_step[_air|_stand].csv")
+parser.add_argument("--airborne", action="store_true", help="root 고정 + 바퀴 공중 (무부하)")
+parser.add_argument("--stand", action="store_true", help="배 밑 지지 박스 위에 올림 (바퀴 공중, 실제 셋업과 동일)")
+parser.add_argument("--stand-height", type=float, default=0.06, help="지지 박스 높이 [m]")
 parser.add_argument("--room", type=float, default=4.0)
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--speed1", type=float, default=0.15)
@@ -50,6 +53,7 @@ simulation_app = app_launcher.app
 
 import torch  # noqa: E402
 
+import isaaclab.sim as sim_utils  # noqa: E402
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
@@ -83,14 +87,35 @@ def main():
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
     set_camera(sim)
     build_world(1 if args_cli.room > 0 else 0, args_cli.room, args_cli.seed)
-    scene, robot, _ = spawn_robot()
+    stand_h = args_cli.stand_height if args_cli.stand else 0.0
+    if args_cli.stand:
+        # 배 밑 지지 박스: 폭 0.15(y) < 바퀴 안쪽(0.136) → 바퀴는 박스에 안 닿음
+        mat = sim_utils.RigidBodyMaterialCfg(static_friction=1.0, dynamic_friction=1.0)
+        cfg = sim_utils.CuboidCfg(
+            size=(0.20, 0.15, stand_h),
+            collision_props=sim_utils.PhysxCollisionPropertiesCfg(),
+            physics_material=mat,
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.45, 0.30, 0.15)),
+        )
+        cfg.func("/World/stand", cfg, translation=(-0.064, 0.0, stand_h / 2.0))
+
+    scene, robot, _ = spawn_robot(
+        airborne=args_cli.airborne,
+        init_z=(stand_h + 0.03) if args_cli.stand else None,
+    )
     sim.reset()
     z = settle(scene, robot, sim)
+    tag = "sim_stand" if args_cli.stand else ("sim_air" if args_cli.airborne else "sim")
+    out = args_cli.out or str(HERE / "artifacts" / f"{tag}_step.csv")
+    if not os.path.isabs(out):
+        out = str(HERE.parent / out)   # isaac/ 기준 (run.sh가 IsaacLab으로 cd하므로)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
-    print(f"[s5] base 높이 {z:.3f} m · sim {TOTAL:.0f} s · {spec.CONTROL_HZ:.0f} Hz 기록")
+    mode = (f" · STAND h={stand_h:.2f} m (바퀴 공중)" if args_cli.stand
+            else (" · AIRBORNE (w_gyro≈0, w_enc=명령)" if args_cli.airborne else ""))
+    print(f"[s5] base 높이 {z:.3f} m · sim {TOTAL:.0f} s · {spec.CONTROL_HZ:.0f} Hz 기록{mode}")
 
     rows = []
     ox, oy, oyaw = 0.0, 0.0, 0.0
@@ -116,7 +141,7 @@ def main():
         oyaw += w_enc * POLICY_DT
         ox += v_enc * math.cos(oyaw) * POLICY_DT
         oy += v_enc * math.sin(oyaw) * POLICY_DT
-        rows.append([round(t, 3), v, w, v, w, ox, oy, oyaw, v_enc, w_enc, w_gyro, "sim"])
+        rows.append([round(t, 3), v, w, v, w, ox, oy, oyaw, v_enc, w_enc, w_gyro, tag])
 
         sim.render()
         if args_cli.realtime:
@@ -124,8 +149,8 @@ def main():
             if rest > 0:
                 time.sleep(rest)
 
-    os.makedirs(os.path.dirname(args_cli.out), exist_ok=True)
-    with open(args_cli.out, "w", newline="") as f:
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", newline="") as f:
         cw = csv.writer(f)
         cw.writerow(["t", "lin_raw", "ang_raw", "lin_out", "ang_out",
                      "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro", "label"])
@@ -138,7 +163,7 @@ def main():
     yaw = robot.data.heading_w.torch[0].item()
     print(f"[s5] rows {len(rows)} · rms_v {rms_v:.4f} m/s · rms_w {rms_w:.4f} rad/s")
     print(f"[s5] true pose x={x:+.2f} y={y:+.2f} yaw={yaw:+.2f} · odom x={ox:+.2f} y={oy:+.2f} yaw={oyaw:+.2f}")
-    print(f"[s5] → {args_cli.out}")
+    print(f"[s5] → {out}")
     sim.stop()
 
 

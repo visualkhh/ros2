@@ -178,13 +178,14 @@ def set_camera(sim, origin=(0.0, 0.0, 0.0)):
                         target=(ox, oy, CAM_LOOK_Z))
 
 
-def robot_articulation_cfg(prim_path: str = "/World/Robot", usd_path: str | None = None):
-    """로봇 ArticulationCfg + USD 경로. L3처럼 센서를 같이 넣는 scene에서 재사용."""
+def robot_articulation_cfg(prim_path: str = "/World/Robot", usd_path: str | None = None,
+                           fix_root: bool = False, init_z: float | None = None):
+    """로봇 ArticulationCfg + USD 경로. fix_root=True면 공중(바퀴만 회전) 테스트용."""
     usd_path = usd_path or robot_usd()
     cfg = ArticulationCfg(
         prim_path=prim_path,
-        spawn=sim_utils.UsdFileCfg(usd_path=usd_path),
-        init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, ROBOT_Z)),
+        spawn=sim_utils.UsdFileCfg(usd_path=usd_path, fix_root_link=True if fix_root else None),
+        init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, ROBOT_Z if init_z is None else init_z)),
         actuators={"wheels": ImplicitActuatorCfg(
             joint_names_expr=[".*wheel.*"], effort_limit=3.0,   # XM430-W210 stall ≈ 3 N·m (RL 환경과 같게)
             velocity_limit=8.0, stiffness=0.0, damping=20.0)},
@@ -213,9 +214,14 @@ def bind_robot_materials(scene, prim_path: str = "/World/Robot"):
             sim_utils.bind_physics_material(path, caster_mat)
 
 
-def spawn_robot():
-    """우리 URDF → USD → /World/Robot. InteractiveScene 1개(복제 없음)."""
-    robot_cfg, usd_path = robot_articulation_cfg()
+def spawn_robot(airborne: bool = False, init_z: float | None = None):
+    """우리 URDF → USD → /World/Robot. airborne=True면 root 고정(z=0.5) + 바퀴 공중.
+
+    init_z를 주면 그 높이에서 스폰 (지지 박스 위에 올릴 때).
+    """
+    robot_cfg, usd_path = robot_articulation_cfg(
+        fix_root=airborne,
+        init_z=init_z if init_z is not None else (0.5 if airborne else ROBOT_Z))
     print(f"[scene] robot USD -> {usd_path}")
 
     @configclass

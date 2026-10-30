@@ -128,8 +128,13 @@ ros2 topic echo --once /imu
 
 ## S5 — 주행 싱크 (시간응답)
 
-같은 계단 명령을 sim/real에 넣고 `(t, v_cmd, v_enc, w_gyro)`를 겹쳐 본다. **둘 다 같은 CSV 포맷**을 쓴다.
+같은 계단 명령을 sim/real에 넣고 `(t, v_cmd, v_enc, w_gyro)`를 겹쳐 본다. **둘 다 같은 CSV 포맷**.
+**공중(지지 박스) → 바닥** 순서로 두 번 잰다.
 
+- 공중: 모터·엔코더·IMU의 스케일/부호/지연 (마찰 없음)
+- 바닥: 마찰·슬립·실제 회전까지 포함한 최종 응답
+
+프로파일 (20 Hz, 9 s):
 ```
 0~1 s  정지 (계단 기준점)
 1~3 s  v=0.15, w=0
@@ -139,35 +144,55 @@ ros2 topic echo --once /imu
 8~9 s  정지
 ```
 
-**sim 기록** (창 없이, 20 Hz, 9 s):
+### S5a — 공중 (배 밑 지지 박스, 바퀴 공중)
+
+실제 로봇을 **작은 박스 위에 올려 바퀴가 바닥에 안 닿게** 한 상태와 같은 sim.
+
 ```bash
-cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./steps/run.sh s05_step_response.py --viz none
-# → steps/artifacts/sim_step.csv
+# sim: root를 박스 위에 올림 (기본 h=0.06 m, 실제 박스 높이에 맞추려면 --stand-height)
+./steps/run.sh s05_step_response.py --viz none --stand --out steps/baselines/sim_step_stand.csv
+
+# real: 로봇을 실제 박스 위에 올린 상태에서
+python3 isaac/steps/real_step_profile.py --output /tmp/real_step_stand.csv
+
+python3 isaac/steps/compare_step.py isaac/steps/baselines/sim_step_stand.csv /tmp/real_step_stand.csv
+python3 isaac/steps/plot_compare.py isaac/steps/baselines/sim_step_stand.csv /tmp/real_step_stand.csv
 ```
 
-**real 기록** (PC에서 실행):
+공중 정상 기준:
+- `v_enc ≈ v_cmd`, `w_enc ≈ w_cmd` (엔코더/오도메트리 스케일)
+- `w_gyro ≈ 0` (몸체는 안 돌아감)
+- 다르면: 바퀴 반지름/간격, 엔코더 부호, IMU 축·부호, 모터 지연
+
+### S5b — 바닥
+
 ```bash
-# 1) Pi: base 띄우고 제어 MANUAL
-#    ./run-cli base start
-#    ./run-cli mode manual
-# 2) PC
-source /opt/ros/lyrical/setup.bash
-export ROS_DOMAIN_ID=25
-source tool/peers.sh
-python3 isaac/steps/real_step_profile.py --output /tmp/real_step.csv
+# sim: 바닥 기준 (현재 URDF)
+./steps/run.sh s05_step_response.py --viz none --out steps/baselines/sim_step.csv
+
+# real: 로봇을 바닥에 내려놓고
+python3 isaac/steps/real_step_profile.py --output /tmp/real_step_floor.csv
+
+python3 isaac/steps/compare_step.py isaac/steps/baselines/sim_step.csv /tmp/real_step_floor.csv
+python3 isaac/steps/plot_compare.py isaac/steps/baselines/sim_step.csv /tmp/real_step_floor.csv
 ```
 
-**비교**:
-```bash
-python3 isaac/steps/compare_step.py isaac/steps/baselines/sim_step.csv /tmp/real_step.csv
-```
+파형에서 볼 것:
+- `v_enc`: 모양·크기가 같은가 (다르면 바퀴 반지름·gain·τ)
+- `w_gyro`: **부호가 같은가** (왼쪽 회전 `w=+1.0`에서 real이 +인가)
+- `w_enc` (점선): 엔코더 기반 회전 — 공중에선 명령과 같아야 함
+- 정지 구간: `w_gyro` bias·잡음
+- 계단 시작: 반응 지연
 
-- 지표: `rms_v` · `rms_w`(자이로) · `bias` · `p95` · `t10/t90`(첫 전진·회전) · 구간별 평균
+### 지표
+
+- `rms_v` · `rms_w`(자이로) · `rms_w_enc`(엔코더) · `bias` · `p95` · `t10/t90` · 구간별 평균
 - 합격(초안): 90% 상승시간 차이 ≤ 0.15 s, 정상상태 `v` 오차 ≤ 0.02 m/s, `w` 오차 ≤ 0.10 rad/s
-- sim baseline(2026-10-30): `rms_v 0.015 m/s · rms_w 0.092 rad/s · true yaw 1.56 vs odom 1.65`
-- `t90_w = nan`이면 "명령의 90%에 못 미침" = 회전 슬립이 큼. real과 비교할 때 이 값이 핵심.
-- real `w_gyro`가 0이면 `/imu`가 없는 것 (펌웨어 `I` 줄 확인).
+- sim baseline(2026-10-30, 현재 URDF):
+  - 바닥 `rms_v 0.014 m/s · rms_w 0.093 rad/s · true yaw 1.56 vs odom 1.65`
+  - 공중 `v_enc 0.150 (cmd 0.15) · w_enc 1.000 (cmd 1.0) · w_gyro ≈ 0`
+- `t90_w = nan`이면 "명령의 90%에 못 미침" = 회전 슬립이 큼.
+- real `w_gyro`가 0이면 `/imu`가 없는 것.
 
 ## S6 — 랜덤 환경 (1차 ✅)
 
