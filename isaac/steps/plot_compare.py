@@ -12,11 +12,20 @@
 import argparse
 import csv
 import math
+import sys
 from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")
+# --show가 있을 때만 GUI 백엔드. 기본은 저장만(Agg).
+_SHOW = "--show" in sys.argv
+if _SHOW:
+    try:
+        matplotlib.use("TkAgg")
+    except Exception:
+        matplotlib.use("Agg")
+else:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 HERE = Path(__file__).resolve().parent
@@ -90,6 +99,7 @@ def main():
     p.add_argument("sim")
     p.add_argument("real")
     p.add_argument("--out", default=str(HERE / "artifacts" / "compare.png"))
+    p.add_argument("--show", action="store_true", help="저장 후 창으로 띄우기")
     args = p.parse_args()
 
     sim, real = load(args.sim), load(args.real)
@@ -152,6 +162,12 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150)
     print(f"[plot] {out}")
+    if _SHOW:
+        if matplotlib.get_backend().lower() == "agg":
+            import subprocess
+            subprocess.run(["xdg-open", str(out)], check=False)
+        else:
+            plt.show()
     print(f"{'metric':12s}{'sim':>10s}{'real':>10s}{'diff':>10s}")
     for k in ("rms_v", "rms_w", "rms_w_enc", "bias_v", "bias_w", "bias_w_enc", "p95_v", "p95_w"):
         b, r = ms[k], mr[k]

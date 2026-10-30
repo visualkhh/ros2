@@ -64,11 +64,16 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   python3 steps/02_sensor_sync_real.py --label real_floor
   ```
   `/state_control`은 TRANSIENT_LOCAL(latched)라 스크립트가 그에 맞춰 구독한다.
-- 비교:
+- 비교 (기본은 PNG 저장만):
   ```bash
   python3 steps/plot_compare.py steps/baselines/sim_sensor_stand.csv steps/artifacts/real_stand.csv
   python3 steps/plot_compare.py steps/baselines/sim_sensor_floor.csv steps/artifacts/real_floor.csv
   ```
+- **창으로 직접 보고 싶을 때만 `--show`**:
+  ```bash
+  python3 steps/plot_compare.py     steps/baselines/sim_sensor_stand.csv steps/artifacts/real_stand.csv --show
+  ```
+  창을 닫으면 터미널로 돌아온다. `--show` 없으면 `steps/artifacts/compare.png`만 저장.
 - 공중: `v_enc≈cmd`, `w_enc≈cmd`, `w_gyro≈0`이 정상.
 - 바닥: `w_gyro` 부호·크기, `v_enc` 추종이 핵심.
 
