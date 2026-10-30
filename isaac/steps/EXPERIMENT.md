@@ -138,7 +138,7 @@ CSV 열:
 |---|---|
 | 바퀴 스케일/부호 (`wl`, `wr`) | `robot.yaml` `left_dir/right_dir` · 펌웨어 ID/방향 · URDF 바퀴 위치 |
 | `v_enc`/`w_enc` 스케일 | `wheel_radius` · `wheel_separation` (real: `robot.yaml`, sim: `robot_spec.py`/URDF) |
-| sim이 바닥에서만 미끄러짐/틀어짐 | sim 마찰(`steps/scene.py`), 액추에이터 damping/effort, 캐스터 마찰 |
+| sim이 바닥에서만 미끄러짐/틀어짐 | `tasks/common/sim_params.py`의 마찰·damping/effort (또는 `sim_calib_floor.json`) |
 | real만 느림 (t90 큼) | real은 그대로. sim env에 `tau`/`delay` 추가 (`rl/wheel_drift/task/rl_correct_env_cfg.py`) |
 | `w_gyro` 부호 반대 | IMU 축/부호 (real: driver/firmware/URDF; sim: `root_ang_vel_b`) |
 

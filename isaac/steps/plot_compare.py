@@ -11,8 +11,10 @@
 """
 import argparse
 import csv
+import json
 import math
 import sys
+import time
 from pathlib import Path
 
 import matplotlib
@@ -29,6 +31,7 @@ else:
 import matplotlib.pyplot as plt
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
 
 
 def load(path: str):
@@ -90,8 +93,40 @@ def metrics(rows):
     }
 
 
+from tasks.common.robot_spec import WHEEL_RADIUS  # noqa: E402
+
+
 def series(rows, key):
     return [r["t"] for r in rows], [r[key] for r in rows]
+
+
+def fit_wheel(real):
+    """real CSV의 전진 계단에서 gain/dead time/tau를 뽑는다 (1차 근사)."""
+    fwd = [r for r in real if 2.5 <= r["t"] < 4.5 and r["lin_raw"] > 0.01]
+    if not fwd:
+        return None
+    cmd_v = sum(r["lin_raw"] for r in fwd) / len(fwd)
+    target = cmd_v / WHEEL_RADIUS
+
+    def cross(frac):
+        for r in real:
+            if r["t"] >= 2.0 and r["wheel_l_vel"] >= frac * target:
+                return r["t"] - 2.0
+        return None
+
+    t10, t90 = cross(0.1), cross(0.9)
+    steady = (sum(r["wheel_l_vel"] for r in fwd) + sum(r["wheel_r_vel"] for r in fwd)) / (2 * len(fwd))
+    gain = steady / target if target else 1.0
+    if t10 is None or t90 is None:
+        return None
+    tau = max(0.01, min(0.3, (t90 - t10) / 2.2))
+    return {
+        "wheel_gain": round(max(0.8, min(1.2, gain)), 4),
+        "wheel_delay_s": round(t10, 3),
+        "wheel_delay_steps": int(round(t10 / 0.05)),
+        "wheel_tau_s": round(tau, 4),
+        "wheel_deadband": 0.0,
+    }
 
 
 def main():
@@ -100,6 +135,8 @@ def main():
     p.add_argument("real")
     p.add_argument("--out", default=None, help="기본: artifacts/compare_<tag>.png")
     p.add_argument("--show", action="store_true", help="저장 후 창으로 띄우기")
+    p.add_argument("--calib-out", default=None,
+                   help="기본: artifacts/sim_calib_<tag>.json (random_world가 읽음)")
     args = p.parse_args()
 
     sim, real = load(args.sim), load(args.real)
@@ -187,6 +224,24 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150)
     print(f"[plot] {out}")
+
+    fit = fit_wheel(real)
+    if fit:
+        calib_path = Path(args.calib_out) if args.calib_out else HERE / "artifacts" / f"sim_calib_{tag}.json"
+        old = {}
+        try:
+            old = json.loads(calib_path.read_text())
+        except Exception:
+            pass
+        old.update(fit)
+        old["condition"] = tag
+        old["source"] = Path(args.real).name
+        old["fitted_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        calib_path.parent.mkdir(parents=True, exist_ok=True)
+        calib_path.write_text(json.dumps(old, indent=2, ensure_ascii=False) + "\n")
+        print(f"[calib] {calib_path} · gain={fit['wheel_gain']} "
+              f"delay={fit['wheel_delay_s']}s tau={fit['wheel_tau_s']}s")
+
     if _SHOW:
         if matplotlib.get_backend().lower() == "agg":
             import subprocess

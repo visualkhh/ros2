@@ -19,9 +19,9 @@
 |---|---|---|
 | 몸통·바퀴 질량, 관성, 무게중심 | **URDF** (정본) → USD 재생성 | `isaac/urdf/beebot/urdf.xacro` · `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro` |
 | 바퀴 반지름·간격, 라이다 높이, 링크 위치 | **URDF** + `robot_spec.py` 값 | 위 URDF · `isaac/tasks/common/robot_spec.py` |
-| 바닥·장애물·바퀴 마찰, 반발 | Isaac Lab **physics material** (Python) | `isaac/steps/scene.py` (`FRICTION_*`) |
-| 모터 τ(1차 지연), 좌우 gain, 데드밴드 | **env cfg** (Python) | `isaac/rl/wheel_drift/task/rl_correct_env_cfg.py` |
-| 명령/관측 지연 (WiFi) | **env cfg** (Python) | 같은 파일 (`cmd_delay_steps`, `obs_delay_steps`) |
+| 바닥·장애물·바퀴 마찰, 반발 | Isaac Lab **physics material** (Python) | `tasks/common/sim_params.py` → `steps/scene.py`가 적용 |
+| 모터 τ(1차 지연), gain, 데드밴드 | **sim_params** (Python) | `tasks/common/sim_params.py` (`WheelLag`) · `steps/artifacts/sim_calib_<condition>.json` |
+| 명령/관측 지연 (WiFi) | **sim_params / env cfg** (Python) | `sim_params.py` (`WHEEL_DELAY_STEPS`) · `rl_correct_env_cfg.py` |
 | 엔코더·자이로 잡음, bias | **env cfg** (Python) | 같은 파일 (`enc_noise`, `gyro_noise`) |
 | IMU 축·부호, 엔코더 스케일 | **real 먼저** (driver/firmware/URDF) → sim에 반영 | `opencr_driver_node.py` · `firmware/opencr/...ino` · URDF |
 | LiDAR 높이/FOV/거리 잡음 | URDF(높이) + sensor cfg(Python) | URDF · `learn/l03_sensors.py` 패턴 |
@@ -53,19 +53,26 @@
 
 ## 보정값 위치 (2026-10-30)
 
-`isaac/tasks/common/sim_params.py` 한 곳:
+`isaac/tasks/common/sim_params.py` 한 곳 + 조건별 JSON:
 
-```python
-WHEEL_TAU = 0.05          # 1차 지연
-WHEEL_DELAY_STEPS = 2     # 20 Hz → 0.1 s dead time
-WHEEL_GAIN = 0.994
-WHEEL_DEADBAND = 0.0
-ACTUATOR_DAMPING = 100.0
-FRICTION_GROUND = (0.8, 0.7)
-FRICTION_WHEEL = (1.0, 1.0)
-FRICTION_CASTER = (0.0, 0.0)
+```
+steps/artifacts/sim_calib_stand.json   ← plot_compare가 real_stand.csv에서 생성
+steps/artifacts/sim_calib_floor.json   ← plot_compare가 real_floor.csv에서 생성
 ```
 
-- `01_random_world`와 `02_sensor_sync`가 이 값을 import해서 **같은 보정 모델**로 움직임.
+- JSON이 있으면 그 값이 기본값을 덮어쓴다. 없으면 `sim_params.py`의 `DEFAULTS`.
+- `plot_compare`가 real 전진 계단에서 **gain / dead time / τ**를 뽑아 JSON으로 저장.
+- `01_random_world` → **floor** JSON, `02_sensor_sync --stand` → **stand** JSON, `02` 바닥 → **floor** JSON.
+- `sim_params.values(condition)` · `actuator(condition)` · `friction(condition)` · `WheelLag(condition=...)`로 읽는다.
+
+현재 값:
+
+```json
+{ "wheel_gain": 0.994, "wheel_delay_steps": 2, "wheel_tau_s": 0.0455 }
+```
+
+마찰/액추에이터 기본값은 `sim_params.py`의 `DEFAULTS`:
+`damping 100`, `ground (0.8, 0.7)`, `wheel (1.0, 1.0)`, `caster (0.0, 0.0)`.
+
 - 공중(stand)은 real과 거의 일치: `v_enc 0.149/0.149 · 바퀴 4.517/4.517`.
 - 바닥(floor)은 sim 슬립·drift가 남음: `v_enc 0.133/0.149 · w_gyro 0.843/0.960` → 다음은 caster/마찰 튜닝.

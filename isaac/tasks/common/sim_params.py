@@ -1,52 +1,83 @@
-"""sim-real 보정값 — sim 쪽 파라미터를 real 측정에 맞춘다 (2026-10-30).
+"""sim-real 보정값 — sim 쪽 파라미터를 real 측정에 맞춘다.
 
-실측 근거:
-- 공중(지지 박스): v_enc 0.150 vs 0.149, 바퀴 4.545 vs 4.518 (gain 0.994)
-- real 계단: t10 0.10 s (dead time), t50 0.15, t90 0.20
-  → dead 0.1 s + 1차 지연 τ≈0.05 s (10→90% ≈ 0.1 s)
-- 바닥: sim 바퀴가 부하에서 4.23/3.90으로 처짐 → 액추에이터 damping을 올려 real(4.52)에 맞춤
+파일 (plot_compare가 real CSV에서 뽑아 저장):
+  steps/artifacts/sim_calib_stand.json
+  steps/artifacts/sim_calib_floor.json
 
-바꾸면 여기만 고친다. world viewer(01) · 센서 싱크(02)가 같이 쓴다.
-RL env는 학습 전에 같은 값을 import한다.
+사용:
+  - 01_random_world      → floor
+  - 02_sensor_sync --stand → stand
+  - 02_sensor_sync (바닥)  → floor
+
+파일이 없으면 아래 기본값 (2026-10-30 실측).
 """
 from __future__ import annotations
 
+import json
 import math
 from collections import deque
+from pathlib import Path
 
 import torch
 
-# --- 모터/명령 모델 ---
-WHEEL_TAU = 0.05          # [s] 1차 지연 (10→90% ≈ 0.11 s)
-WHEEL_DELAY_STEPS = 2     # 20 Hz 기준 0.1 s dead time (WiFi + 20 Hz)
-WHEEL_GAIN = 0.994        # 정상상태 gain (real 4.518 / cmd 4.545)
-WHEEL_DEADBAND = 0.0      # [rad/s] 아직 미측정 — 저속 시험 후 조정
+ISAAC = Path(__file__).resolve().parents[2]
+CALIB_DIR = ISAAC / "steps" / "artifacts"
 
-# --- 액추에이터 (ImplicitActuatorCfg) ---
-ACTUATOR_DAMPING = 100.0  # real 속도제어처럼 부하에서도 속도 유지 (초기값, 바닥 비교로 조정)
-ACTUATOR_EFFORT = 3.0     # XM430-W210 stall ≈ 3 N·m
+DEFAULTS = {
+    "wheel_tau_s": 0.05,
+    "wheel_delay_steps": 2,
+    "wheel_gain": 0.994,
+    "wheel_deadband": 0.0,
+    "actuator_damping": 100.0,
+    "actuator_effort": 3.0,
+    "friction_ground": (0.8, 0.7),
+    "friction_obstacle": (0.7, 0.5),
+    "friction_wheel": (1.0, 1.0),
+    "friction_caster": (0.0, 0.0),
+}
 
-# --- 마찰 (static, dynamic) ---
-FRICTION_GROUND = (0.8, 0.7)
-FRICTION_OBSTACLE = (0.7, 0.5)
-FRICTION_WHEEL = (1.0, 1.0)
-FRICTION_CASTER = (0.0, 0.0)
+
+def calib_path(condition: str) -> Path:
+    return CALIB_DIR / f"sim_calib_{condition}.json"
+
+
+def values(condition: str = "floor") -> dict:
+    d = dict(DEFAULTS)
+    try:
+        d.update(json.loads(calib_path(condition).read_text()))
+    except Exception:
+        pass
+    return d
+
+
+def actuator(condition: str = "floor"):
+    d = values(condition)
+    return float(d["actuator_damping"]), float(d["actuator_effort"])
+
+
+def friction(condition: str = "floor"):
+    d = values(condition)
+    return {
+        "ground": tuple(d["friction_ground"]),
+        "obstacle": tuple(d["friction_obstacle"]),
+        "wheel": tuple(d["friction_wheel"]),
+        "caster": tuple(d["friction_caster"]),
+    }
 
 
 class WheelLag:
-    """명령 v,w → (delay) → 바퀴 rad/s → (gain/deadband) → 1차 지연.
+    """명령 v,w → (delay) → 바퀴 rad/s → (gain/deadband) → 1차 지연."""
 
-    `wheel_fn(v_tensor, w_tensor, r, sep, max_wheel)`은 rl_correct의 wheel_targets.
-    """
-
-    def __init__(self, dt: float = 0.05, tau: float = WHEEL_TAU,
-                 delay_steps: int = WHEEL_DELAY_STEPS, gain: float = WHEEL_GAIN,
-                 deadband: float = WHEEL_DEADBAND):
+    def __init__(self, condition: str = "floor", dt: float = 0.05,
+                 tau: float | None = None, delay_steps: int | None = None,
+                 gain: float | None = None, deadband: float | None = None):
+        d = values(condition)
         self.dt = dt
-        self.tau = tau
-        self.delay_steps = max(0, int(delay_steps))
-        self.gain = gain
-        self.deadband = deadband
+        self.tau = float(d["wheel_tau_s"] if tau is None else tau)
+        self.delay_steps = max(0, int(d["wheel_delay_steps"] if delay_steps is None else delay_steps))
+        self.gain = float(d["wheel_gain"] if gain is None else gain)
+        self.deadband = float(d["wheel_deadband"] if deadband is None else deadband)
+        self.source = d.get("source", "defaults")
         self._buf = deque([(0.0, 0.0)] * (self.delay_steps + 1), maxlen=self.delay_steps + 1)
         self._state: torch.Tensor | None = None
 
@@ -71,7 +102,9 @@ class WheelLag:
         return self._state
 
 
-def describe() -> str:
-    return (f"tau={WHEEL_TAU:.3f}s delay={WHEEL_DELAY_STEPS * 0.05:.2f}s "
-            f"gain={WHEEL_GAIN:.3f} deadband={WHEEL_DEADBAND:.2f} "
-            f"damping={ACTUATOR_DAMPING:.0f}")
+def describe(condition: str = "floor") -> str:
+    d = values(condition)
+    return (f"tau={float(d['wheel_tau_s']):.3f}s "
+            f"delay={int(d['wheel_delay_steps']) * 0.05:.2f}s "
+            f"gain={float(d['wheel_gain']):.3f} deadband={float(d['wheel_deadband']):.2f} "
+            f"damping={float(d['actuator_damping']):.0f} src={d.get('source', 'defaults')}")

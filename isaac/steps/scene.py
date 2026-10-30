@@ -39,11 +39,6 @@ FREE_RADIUS = 0.75      # 로봇 스폰 자리 — 장애물 금지
 CAM_OFF = (1.8, -1.8, 1.55)
 CAM_LOOK_Z = 0.15
 
-# 마찰 (static, dynamic) — tasks/common/sim_params.py 한 곳에서
-FRICTION_GROUND = cal.FRICTION_GROUND
-FRICTION_OBSTACLE = cal.FRICTION_OBSTACLE
-FRICTION_WHEEL = cal.FRICTION_WHEEL
-
 PALETTE = (
     (0.75, 0.15, 0.12), (0.12, 0.55, 0.20), (0.15, 0.30, 0.75),
     (0.75, 0.55, 0.10), (0.45, 0.20, 0.60), (0.20, 0.60, 0.65),
@@ -151,15 +146,18 @@ def _build_room(index: int, origin, size: float, seed: int, obstacle_mat: str) -
     return Room(index=index, origin=origin, seed=seed, obstacles=len(obstacles), size=size)
 
 
-def build_world(count: int = 1, size: float = 4.0, seed: int = 0, size_range=None):
+def build_world(count: int = 1, size: float = 4.0, seed: int = 0, size_range=None,
+                condition: str = "floor"):
     """바닥·조명·방 count개. 반환: [Room]. count=0이면 빈 바닥만.
 
     size_range=(min,max)를 주면 방마다 크기를 랜덤으로 뽑는다 (S6 랜덤 환경).
+    condition="stand"|"floor" — 마찰을 sim_calib_<condition>.json에서 읽는다.
     """
-    obstacle_mat = _material("/World/Materials/obstacle", FRICTION_OBSTACLE)
+    f = cal.friction(condition)
+    obstacle_mat = _material("/World/Materials/obstacle", f["obstacle"])
     spawn_ground_plane("/World/ground", GroundPlaneCfg(
         physics_material=sim_utils.RigidBodyMaterialCfg(
-            static_friction=FRICTION_GROUND[0], dynamic_friction=FRICTION_GROUND[1],
+            static_friction=f["ground"][0], dynamic_friction=f["ground"][1],
             restitution=0.0, friction_combine_mode="average"),
     ))
     light = sim_utils.DistantLightCfg(intensity=3000.0, color=(0.95, 0.95, 0.95))
@@ -180,25 +178,28 @@ def set_camera(sim, origin=(0.0, 0.0, 0.0)):
 
 
 def robot_articulation_cfg(prim_path: str = "/World/Robot", usd_path: str | None = None,
-                           fix_root: bool = False, init_z: float | None = None):
+                           fix_root: bool = False, init_z: float | None = None,
+                           condition: str = "floor"):
     """로봇 ArticulationCfg + USD 경로. fix_root=True면 공중(바퀴만 회전) 테스트용."""
     usd_path = usd_path or robot_usd()
+    damping, effort = cal.actuator(condition)
     cfg = ArticulationCfg(
         prim_path=prim_path,
         spawn=sim_utils.UsdFileCfg(usd_path=usd_path, fix_root_link=True if fix_root else None),
         init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, ROBOT_Z if init_z is None else init_z)),
         actuators={"wheels": ImplicitActuatorCfg(
-            joint_names_expr=[".*wheel.*"], effort_limit=cal.ACTUATOR_EFFORT,
-            velocity_limit=8.0, stiffness=0.0, damping=cal.ACTUATOR_DAMPING)},
+            joint_names_expr=[".*wheel.*"], effort_limit=effort,
+            velocity_limit=8.0, stiffness=0.0, damping=damping)},
     )
     return cfg, usd_path
 
 
-def bind_robot_materials(scene, prim_path: str = "/World/Robot"):
-    """바퀴 마찰 1.0 · 캐스터 0 (RL 환경 _setup_scene과 같은 처리)."""
+def bind_robot_materials(scene, prim_path: str = "/World/Robot", condition: str = "floor"):
+    """바퀴·캐스터 마찰을 sim_calib_<condition>.json에서."""
     from pxr import PhysxSchema, UsdPhysics
-    wheel_mat = _material("/World/Materials/wheel", FRICTION_WHEEL)
-    caster_mat = _material("/World/Materials/caster", cal.FRICTION_CASTER)
+    f = cal.friction(condition)
+    wheel_mat = _material("/World/Materials/wheel", f["wheel"])
+    caster_mat = _material("/World/Materials/caster", f["caster"])
     for prim in scene.stage.Traverse():
         path = str(prim.GetPath())
         if not path.startswith(prim_path):
@@ -215,13 +216,13 @@ def bind_robot_materials(scene, prim_path: str = "/World/Robot"):
             sim_utils.bind_physics_material(path, caster_mat)
 
 
-def spawn_robot(airborne: bool = False, init_z: float | None = None):
+def spawn_robot(airborne: bool = False, init_z: float | None = None, condition: str = "floor"):
     """우리 URDF → USD → /World/Robot. airborne=True면 root 고정(z=0.5) + 바퀴 공중.
 
     init_z를 주면 그 높이에서 스폰 (지지 박스 위에 올릴 때).
     """
     robot_cfg, usd_path = robot_articulation_cfg(
-        fix_root=airborne,
+        fix_root=airborne, condition=condition,
         init_z=init_z if init_z is not None else (0.5 if airborne else ROBOT_Z))
     print(f"[scene] robot USD -> {usd_path}")
 
@@ -233,7 +234,7 @@ def spawn_robot(airborne: bool = False, init_z: float | None = None):
     scene = InteractiveScene(SceneCfg())
     robot = Articulation(robot_cfg)
     scene.articulations["robot"] = robot
-    bind_robot_materials(scene)
+    bind_robot_materials(scene, condition=condition)
     return scene, robot, usd_path
 
 

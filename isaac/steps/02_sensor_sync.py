@@ -78,9 +78,11 @@ def cmd_at(t: float):
 
 def main():
     headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
+    condition = "stand" if args_cli.stand else "floor"
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
     stand_h = args_cli.stand_height if args_cli.stand else 0.0
-    room = build_world(1 if args_cli.room > 0 else 0, args_cli.room, args_cli.seed)
+    room = build_world(1 if args_cli.room > 0 else 0, args_cli.room, args_cli.seed,
+                       condition=condition)
     if args_cli.stand:
         # 박스 위 로봇을 옆에서: 배 밑 박스와 공중 바퀴가 보이게
         sim.set_camera_view(eye=(0.65, -0.65, 0.45), target=(-0.064, 0.0, 0.08))
@@ -95,20 +97,21 @@ def main():
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.45, 0.30, 0.15)),
         )
         box.func("/World/stand", box, translation=(-0.064, 0.0, stand_h / 2.0))
-    scene, robot, _ = spawn_robot(init_z=(stand_h + 0.03) if args_cli.stand else None)
+    scene, robot, _ = spawn_robot(init_z=(stand_h + 0.03) if args_cli.stand else None,
+                                  condition=condition)
     sim.reset()
     z = settle(scene, robot, sim)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
-    wheel_model = WheelLag(dt=POLICY_DT)
+    wheel_model = WheelLag(dt=POLICY_DT, condition=condition)
     tag = "sim_sensor_stand" if args_cli.stand else "sim_sensor_floor"
     out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
         out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/artifacts/...)
     print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
-    print(f"[02-sim] calib: {calib_desc()}")
+    print(f"[02-sim] calib: {calib_desc(condition)}")
 
     rows = []
     ox = oy = oyaw = 0.0

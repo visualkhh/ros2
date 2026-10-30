@@ -99,16 +99,16 @@ def main():
     seed = args_cli.seed if args_cli.seed is not None else random.randrange(1_000_000)
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
     rooms = build_world(args_cli.rooms, args_cli.size_min, seed,
-                        size_range=(args_cli.size_min, args_cli.size_max))
+                        size_range=(args_cli.size_min, args_cli.size_max), condition="floor")
     set_camera(sim, rooms[0].origin if rooms else (0, 0, 0))
-    scene, robot, _ = spawn_robot()
+    scene, robot, _ = spawn_robot(condition="floor")
     sim.reset()
     settle(scene, robot, sim)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
-    wheel_model = WheelLag(dt=POLICY_DT)
+    wheel_model = WheelLag(dt=POLICY_DT, condition="floor")
 
     room_idx = 0
     place_robot(robot, rooms[room_idx].origin if rooms else (0, 0, 0), 0.0, wheel_ids)
@@ -121,7 +121,7 @@ def main():
                   f"{rm.size:.1f} m · 장애물 {rm.obstacles}개")
 
     show_room()
-    print(f"[01] calib: {calib_desc()}")
+    print(f"[01] calib: {calib_desc('floor')}")
     print("[01] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방")
 
     kb = None if headless else Keyboard()
