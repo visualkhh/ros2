@@ -5,9 +5,9 @@
   steps/artifacts/sim_calib_floor.json
 
 사용:
-  - 01_random_world      → floor
-  - 02_sensor_sync --stand → stand
-  - 02_sensor_sync (바닥)  → floor
+  - 01_random_world_sim      → floor
+  - 02_sensor_sync_sim --stand → stand
+  - 02_sensor_sync_sim (바닥)  → floor
 
 파일이 없으면 아래 기본값 (2026-10-30 실측).
 """

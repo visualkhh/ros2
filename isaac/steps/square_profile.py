@@ -6,7 +6,7 @@
 - 첫 사각형: 반시계(`w=+turn`), 끝나면 시작점에서 원래 방향(+x)을 봄.
 - 180도 턴(`w=-turn`) 후 오른쪽으로 90도 틀어 +y부터 역주행.
 - 두 번째 사각형은 첫 사각형의 **같은 네 변을 반대 방향으로** 되짚는다.
-- 같은 시간표를 sim(`02_sensor_sync.py`)과 real(`02_sensor_sync_real.py`)이 함께 쓴다.
+- 같은 시간표를 sim(`02_sensor_sync_sim.py`)과 real(`02_sensor_sync_real.py`)이 함께 쓴다.
 """
 from __future__ import annotations
 

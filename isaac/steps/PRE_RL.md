@@ -3,7 +3,7 @@
 `rl/wheel_drift/` 학습을 돌리기 전에 **sim이 real의 대리인**이 되도록 맞추는 단계.
 `steps/`의 S3~S6이 여기에 해당한다.
 
-- 랜덤 환경: `steps/01_random_world.py`
+- 랜덤 환경: `steps/01_random_world_sim.py`
 - sim↔real 신호 비교: `02~04`에서 다시 만든다 (현재 `plot_compare.py`만 유지)
 - 가설/실측 표: `steps/S3_hypotheses.md`
 
@@ -45,8 +45,8 @@
 
 ## 현재 상태 (2026-10-30)
 
-- 01 랜덤 환경 완료 (`01_random_world.py`)
-- 02 센서 싱크 스크립트 준비 (`02_sensor_sync.sh` sim / `02_sensor_sync_real.sh` real); 둘 다 직접 실행
+- 01 랜덤 환경 완료 (`01_random_world_sim.py`)
+- 02 센서 싱크 스크립트 준비 (`02_sensor_sync_sim.sh` sim / `02_sensor_sync_real.sh` real); 둘 다 직접 실행
 - 이전 측정값(참고): 공중 `v_enc 0.150 / w_enc 1.000 / w_gyro≈0`, 바닥 `rms_v 0.014 / rms_w 0.093`
 - 02~04 스크립트를 다시 만든 뒤 real 공중/바닥을 측정한다. 그 값으로 env cfg의 τ/gain/deadband/지연을 맞춘다.
 
@@ -62,7 +62,7 @@ steps/artifacts/sim_calib_floor.json   ← plot_compare가 real_floor.csv에서 
 
 - JSON이 있으면 그 값이 기본값을 덮어쓴다. 없으면 `sim_params.py`의 `DEFAULTS`.
 - `plot_compare`가 real 전진 계단에서 **gain / dead time / τ**를 뽑아 JSON으로 저장.
-- `01_random_world` → **floor** JSON, `02_sensor_sync --stand` → **stand** JSON, `02` 바닥 → **floor** JSON.
+- `01_random_world_sim` → **floor** JSON, `02_sensor_sync_sim --stand` → **stand** JSON, `02` 바닥 → **floor** JSON.
 - `sim_params.values(condition)` · `actuator(condition)` · `friction(condition)` · `WheelLag(condition=...)`로 읽는다.
 
 현재 값:

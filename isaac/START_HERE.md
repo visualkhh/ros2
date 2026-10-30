@@ -50,10 +50,10 @@ isaac/
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 # 01. 랜덤 환경 + 우리 로봇 (N 다음 방, W/A/S/D 주행)
-./steps/01_random_world.sh
+./steps/01_random_world_sim.sh
 
 # 02. 센서 싱크 — sim (공중은 --stand, 바닥은 생략)
-./steps/02_sensor_sync.sh --viz none --stand
+./steps/02_sensor_sync_sim.sh --viz none --stand
 
 # L1. Isaac 개념 — 로봇 해부 (1=prim 트리, 2=joint 상태, 3/4/5=바퀴)
 ./learn/run.sh l01_robot_anatomy.py

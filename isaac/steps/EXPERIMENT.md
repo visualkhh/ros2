@@ -60,7 +60,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 # → steps/artifacts/real_stand.csv
 
 # sim (박스 높이는 실제 박스에 맞춤; 기본 0.06 m)
-./steps/02_sensor_sync.sh --viz none --stand
+./steps/02_sensor_sync_sim.sh --viz none --stand
 # → steps/artifacts/sim_sensor_stand.csv
 
 # 비교 + 창
@@ -73,7 +73,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 눈으로 보고 싶을 때만:
 
 ```bash
-./steps/02_sensor_sync.sh --stand --watch
+./steps/02_sensor_sync_sim.sh --stand --watch
 ```
 
 정상:
@@ -92,7 +92,7 @@ sim도 기본이 **장애물 없는 빈 바닥**이라 주변 사물/벽 충돌 
 # → steps/artifacts/real_floor.csv
 
 # sim
-./steps/02_sensor_sync.sh --viz none
+./steps/02_sensor_sync_sim.sh --viz none
 # → steps/artifacts/sim_sensor_floor.csv
 
 ./steps/plot_compare.sh \
@@ -155,7 +155,7 @@ CSV 열:
 | `w_gyro` 부호 반대 | IMU 축/부호 (real: driver/firmware/URDF; sim: `root_ang_vel_b`) |
 
 sim 보정값은 `isaac/tasks/common/sim_params.py` 한 곳 (τ·delay·gain·deadband·액추에이터·마찰).
-`01_random_world`와 `02_sensor_sync`가 같은 값을 쓴다.
+`01_random_world_sim`와 `02_sensor_sync_sim`가 같은 값을 쓴다.
 
 **USD 직접 수정 금지** — `robot_usd()`가 URDF에서 매번 다시 만든다. 형상/질량은 URDF를 고치고 `./convert_usd.sh`.
 

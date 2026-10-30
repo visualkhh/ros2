@@ -6,13 +6,13 @@
 
 실행:
   # 공중 (배 밑 지지 박스, 바퀴 공중) — 실제 로봇을 박스 위에 올린 상태와 비교
-  ./steps/02_sensor_sync.sh --viz none --stand
+  ./steps/02_sensor_sync_sim.sh --viz none --stand
 
   # 눈으로 보기 (박스 위, 창 닫을 때까지 반복)
-  ./steps/02_sensor_sync.sh --stand --watch
+  ./steps/02_sensor_sync_sim.sh --stand --watch
 
   # 바닥 (기본: 장애물 없는 빈 바닥)
-  ./steps/02_sensor_sync.sh --viz none
+  ./steps/02_sensor_sync_sim.sh --viz none
 
 출력: steps/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
 CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)

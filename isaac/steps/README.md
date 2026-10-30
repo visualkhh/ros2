@@ -5,8 +5,8 @@
 
 | # | 파일/단계 | 내용 | 상태 |
 |---|---|---|---|
-| 01 | `01_random_world.py` | 랜덤 방(3.5~6 m) + 장애물 + 우리 로봇, `N` 다음 방 | ✅ |
-| 02 | `02_sensor_sync.sh` (sim) + `02_sensor_sync_real.sh` (real) | IMU/odom/raw wheel 신호를 같은 명령에서 비교 | 둘 다 직접 실행 |
+| 01 | `01_random_world_sim.py` | 랜덤 방(3.5~6 m) + 장애물 + 우리 로봇, `N` 다음 방 | ✅ |
+| 02 | `02_sensor_sync_sim.sh` (sim) + `02_sensor_sync_real.sh` (real) | IMU/odom/raw wheel 신호를 같은 명령에서 비교 | 둘 다 직접 실행 |
 | 03 | `03_step_stand.py` | 공중(배 밑 지지 박스) 계단응답 sim/real | ☐ |
 | 04 | `04_step_floor.py` | 바닥 계단응답 sim/real | ☐ |
 | 05 | 차이 반영 | URDF / 마찰 / env cfg에 실측값 넣기 | ☐ |
@@ -14,18 +14,20 @@
 
 ## 지금 있는 파일
 
+이름 규칙: **Isaac에서 도는 건 `_sim`**, **실제 로봇은 `_real`**.
+
 ```
 steps/
-├── 01_random_world.sh     랜덤 환경 + 로봇 실행
-├── 01_random_world.py
-├── 02_sensor_sync.sh      sim 센서 기록 실행 (--stand / 바닥 / --watch)
-├── 02_sensor_sync.py
-├── 02_sensor_sync_real.sh real 센서 기록 실행 (ROS/peers 자동)
+├── 01_random_world_sim.sh     랜덤 환경 + 로봇 실행 (Isaac)
+├── 01_random_world_sim.py
+├── 02_sensor_sync_sim.sh      sim 센서 기록 (--stand / 바닥 / --watch)
+├── 02_sensor_sync_sim.py
+├── 02_sensor_sync_real.sh     real 센서 기록 (ROS/peers 자동)
 ├── 02_sensor_sync_real.py
-├── square_profile.py      정사각형 주행 시간표 (sim/real 공용)
-├── plot_compare.sh        sim/real 파형·궤적 비교 실행
-├── scene.py               방·로봇 생성 공용
-├── plot_compare.py        sim/real CSV 파형 비교 도구
+├── square_profile.py          정사각형 주행 시간표 (sim/real 공용)
+├── plot_compare.sh            sim/real 파형·궤적 비교 실행
+├── scene.py                   방·로봇 생성 공용
+├── plot_compare.py            sim/real CSV 파형 비교 도구
 ├── artifacts/             실행 산출물 CSV/PNG (실행 시 생성, git 제외)
 ├── PRE_RL.md              차이값을 URDF/마찰/env cfg 중 어디에 넣는지
 ├── S3_hypotheses.md       가설·실측 표
@@ -37,7 +39,7 @@ steps/
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./steps/01_random_world.sh
+./steps/01_random_world_sim.sh
 ```
 
 - 방 크기·장애물이 랜덤. `--seed 7`로 재현, 없으면 매번 새 seed.
@@ -51,13 +53,13 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 ```bash
 # 공중(지지 박스) — 눈으로 보기 (정사각형 프로파일 기록 후 창 닫을 때까지 반복)
-./steps/02_sensor_sync.sh --stand --watch
+./steps/02_sensor_sync_sim.sh --stand --watch
 
 # 공중 — 기록만 (창 없이)
-./steps/02_sensor_sync.sh --viz none --stand
+./steps/02_sensor_sync_sim.sh --viz none --stand
 
 # 바닥 — 기록만
-./steps/02_sensor_sync.sh --viz none
+./steps/02_sensor_sync_sim.sh --viz none
 ```
 
 `--stand --watch`는 로봇이 **배 밑 박스 위**에 올라가 바퀴만 도는 장면을 옆에서 계속 보여줌.

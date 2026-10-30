@@ -3,7 +3,7 @@
 로봇에 sim과 같은 정사각형 프로파일을 보내고 `/odom`·`/imu`를 CSV로 기록한다.
 2초 정지 → 왼쪽 사각형(반시계) → 180° 턴 → 같은 사각형을 오른쪽(시계)으로 역주행
 → 2초 정지. 각 변: 0.5 m 전진 → 0.25 s 정지 → 제자리 90도 회전 → 0.25 s 정지.
-sim 쪽 `02_sensor_sync.py`와 같은 `square_profile.py`를 쓴다.
+sim 쪽 `02_sensor_sync_sim.py`와 같은 `square_profile.py`를 쓴다.
 
 사전:
   Pi: base + cmd_manager, 제어 MANUAL
