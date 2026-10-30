@@ -61,7 +61,9 @@ steps/artifacts/sim_calib_floor.json   ← plot_compare가 real_floor.csv에서 
 ```
 
 - JSON이 있으면 그 값이 기본값을 덮어쓴다. 없으면 `sim_params.py`의 `DEFAULTS`.
-- `plot_compare`가 real 전진 계단에서 **gain / dead time / τ**를 뽑아 JSON으로 저장.
+- `plot_compare`가 real의 **모든 전진 구간(변마다 속도 다름)** 에서
+  **gain / dead time / τ**를 뽑아 JSON으로 저장. 속도별 값은 `speed_fit`에 같이 남는다.
+  대표값은 중앙값.
 - `01_random_world_sim` → **floor** JSON, `02_sensor_sync_sim --stand` → **stand** JSON, `02` 바닥 → **floor** JSON.
 - `sim_params.values(condition)` · `actuator(condition)` · `friction(condition)` · `WheelLag(condition=...)`로 읽는다.
 

@@ -10,6 +10,9 @@
   3) 직진 오차 (cmd − enc)
   4) 회전 오차 (cmd − gyro)
   5) raw 바퀴 속도
+
+calib: 모든 전진 구간(변마다 속도 다름)에서 gain/t10/tau를 뽑아 중앙값을 쓰고,
+       속도별 값은 JSON `speed_fit`에 같이 저장한다.
 """
 import argparse
 import csv
@@ -116,47 +119,81 @@ def path(rows):
 
 
 def fit_wheel(real):
-    """real CSV의 첫 전진 구간에서 gain/dead time/tau를 뽑는다 (1차 근사)."""
-    start = None
-    for i in range(1, len(real)):
+    """real CS의 모든 전진 구간에서 gain/dead time/tau를 뽑는다 (속도별 진단 포함).
+
+    정사각형 프로파일은 변마다 속도가 다르므로, 각 전진 run의 정상상태 gain과
+    계단 응답(t10/t90)을 구한 뒤 중앙값을 대표값으로 쓴다.
+    """
+    runs = []
+    i = 1
+    while i < len(real):
         if real[i]["lin_raw"] > 0.01 and real[i - 1]["lin_raw"] <= 0.01:
             start = i
-            break
-    if start is None:
-        return None
-    end = next((j for j in range(start + 1, len(real))
-                if real[j]["lin_raw"] <= 0.01), len(real))
-    run = real[start:end]
-    if len(run) < 5:
+            j = i + 1
+            while j < len(real) and real[j]["lin_raw"] > 0.01:
+                j += 1
+            runs.append((start, j))
+            i = j
+        else:
+            i += 1
+
+    samples = []
+    for start, end in runs:
+        run = real[start:end]
+        if len(run) < 5:
+            continue
+        steady_rows = run[len(run) // 2:]
+        cmd_v = sum(r["lin_raw"] for r in steady_rows) / len(steady_rows)
+        target = cmd_v / WHEEL_RADIUS
+        if target <= 0:
+            continue
+        t_step = real[start]["t"]
+
+        def wheel_avg(r):
+            return 0.5 * (r["wheel_l_vel"] + r["wheel_r_vel"])
+
+        def cross(frac):
+            for r in real[start:end]:
+                if wheel_avg(r) >= frac * target:
+                    return r["t"] - t_step
+            return None
+
+        t10, t90 = cross(0.1), cross(0.9)
+        if t10 is None or t90 is None:
+            continue
+        steady_l = sum(r["wheel_l_vel"] for r in steady_rows) / len(steady_rows)
+        steady_r = sum(r["wheel_r_vel"] for r in steady_rows) / len(steady_rows)
+        steady = 0.5 * (steady_l + steady_r)
+        tau = max(0.01, min(0.3, (t90 - t10) / 2.2))
+        samples.append({
+            "cmd_v": round(cmd_v, 4),
+            "wheel_ss": round(steady, 4),
+            "wheel_l": round(steady_l, 4),
+            "wheel_r": round(steady_r, 4),
+            "gain": round(steady / target, 4),
+            "gain_l": round(steady_l / target, 4),
+            "gain_r": round(steady_r / target, 4),
+            "t10": round(t10, 3),
+            "tau": round(tau, 4),
+        })
+
+    if not samples:
         return None
 
-    # 계단 과도구간을 뺀 뒤반부로 정상상태 gain 계산
-    steady_rows = run[len(run) // 2:]
-    cmd_v = sum(r["lin_raw"] for r in steady_rows) / len(steady_rows)
-    target = cmd_v / WHEEL_RADIUS
-    if target <= 0:
-        return None
-    t_step = real[start]["t"]
+    def median(vals):
+        vals = sorted(vals)
+        return vals[len(vals) // 2]
 
-    def cross(frac):
-        for r in real[start:]:
-            if r["wheel_l_vel"] >= frac * target:
-                return r["t"] - t_step
-        return None
-
-    t10, t90 = cross(0.1), cross(0.9)
-    steady = (sum(r["wheel_l_vel"] for r in steady_rows)
-              + sum(r["wheel_r_vel"] for r in steady_rows)) / (2 * len(steady_rows))
-    gain = steady / target
-    if t10 is None or t90 is None:
-        return None
-    tau = max(0.01, min(0.3, (t90 - t10) / 2.2))
+    gain = median([s["gain"] for s in samples])
+    delay = median([s["t10"] for s in samples])
+    tau = median([s["tau"] for s in samples])
     return {
         "wheel_gain": round(max(0.8, min(1.2, gain)), 4),
-        "wheel_delay_s": round(t10, 3),
-        "wheel_delay_steps": int(round(t10 / 0.05)),
+        "wheel_delay_s": round(delay, 3),
+        "wheel_delay_steps": int(round(delay / 0.05)),
         "wheel_tau_s": round(tau, 4),
         "wheel_deadband": 0.0,
+        "speed_fit": sorted(samples, key=lambda s: s["cmd_v"]),
     }
 
 
@@ -297,8 +334,9 @@ def main():
         old["fitted_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         calib_path.parent.mkdir(parents=True, exist_ok=True)
         calib_path.write_text(json.dumps(old, indent=2, ensure_ascii=False) + "\n")
-        print(f"[calib] {calib_path} · gain={fit['wheel_gain']} "
-              f"delay={fit['wheel_delay_s']}s tau={fit['wheel_tau_s']}s")
+        print(f"[calib] {calib_path} · runs={len(fit.get('speed_fit', []))} "
+              f"gain={fit['wheel_gain']} delay={fit['wheel_delay_s']}s "
+              f"tau={fit['wheel_tau_s']}s")
 
     if _SHOW:
         if matplotlib.get_backend().lower() == "agg":

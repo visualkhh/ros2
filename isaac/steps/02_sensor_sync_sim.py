@@ -39,7 +39,8 @@ parser.add_argument("--stand-height", type=float, default=0.06, help="지지 박
 parser.add_argument("--room", type=float, default=0.0,
                     help="방 크기 [m] (0=빈 바닥, 장애물 없음). 센서 싱크는 0 권장")
 parser.add_argument("--seed", type=int, default=0)
-parser.add_argument("--speed", type=float, default=0.15)
+parser.add_argument("--speed", type=float, default=0.15,
+                    help="기준 전진 속도 [m/s] (변마다 1.0/0.67/1.33/0.8 배)")
 parser.add_argument("--turn", type=float, default=1.0)
 parser.add_argument("--side", type=float, default=0.5, help="정사각형 한 변 [m]")
 parser.add_argument("--out", default=None, help="기본: steps/artifacts/sim_sensor_[stand|floor].csv")
@@ -105,8 +106,10 @@ def main():
     env = "empty floor (no obstacles)" if args_cli.room <= 0 else f"room {args_cli.room:.1f} m"
     print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'} · {env}")
     print(f"[02-sim] calib: {calib_desc(condition)}")
+    move_speeds = [s[2] for s in segs if s[4] == "move_left"]
+    speeds_txt = " / ".join(f"{v:.2f}" for v in move_speeds)
     print(f"[02-sim] profile: side={args_cli.side:.2f} m · {total:.1f}s · "
-          f"left square → 180° turn → reverse")
+          f"speeds {speeds_txt} m/s · left square → 180° turn → reverse")
 
     rows = []
     ox = oy = oyaw = 0.0
@@ -151,11 +154,15 @@ def main():
         return next(s for s in segs if s[4] == label)
 
     for name in ("left", "right"):
-        move, turn = first(f"move_{name}"), first(f"turn_{name}")
-        vf, wf, gf, lf, rf = average(move[0], move[1], skip=0.5)
+        moves = [s for s in segs if s[4] == f"move_{name}"]
+        for i, move in enumerate(moves, 1):
+            vf, wf, gf, lf, rf = average(move[0], move[1], skip=0.5)
+            gain = vf / move[2] if move[2] else 0.0
+            print(f"[02-sim] {name.upper():5s} move{i} cmd={move[2]:.3f} "
+                  f"v_enc={vf:+.3f} gain={gain:.3f} w_enc={wf:+.3f} "
+                  f"w_gyro={gf:+.3f} | 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
+        turn = first(f"turn_{name}")
         vt, wt, gt, lt, rt = average(turn[0], turn[1], skip=0.3)
-        print(f"[02-sim] {name.upper():5s} move  v_enc={vf:+.3f} w_enc={wf:+.3f} "
-              f"w_gyro={gf:+.3f} | 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
         print(f"[02-sim] {name.upper():5s} turn  v_enc={vt:+.3f} w_enc={wt:+.3f} "
               f"w_gyro={gt:+.3f} | 바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")
     print(f"[02-sim] → {out}")
