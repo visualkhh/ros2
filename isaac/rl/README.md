@@ -273,19 +273,71 @@ PC
 ```
 
 - Pi에는 ONNX가 없다. PC에서만 추론.
-- 실행:
+- `corrector_node.py`는 ONNX 입력 차원으로 모드를 자동 판별한다:
+  - `6` → `track`: `/cmd_vel_rl_in`을 보정
+  - `10` → `goal`: `/rl_goal` 목표를 받아 nominal controller + 보정
+- Pi는 `cmd_manager`가 `/cmd_vel_rl_out`을 받아 드라이버로 보낸다.
+
+### 6.1 Pi — RL 경로로 전환
 
 ```bash
-ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>
+ssh pak@pak.local
+cd ~/ros2/tool
+./run-cli base start          # 이미 떠 있으면 생략
+./run-cli control manual
+./run-cli route rl            # 또는 ./run-cli rl on
+./run-cli status              # RL on 확인
 ```
 
-- **현재 `corrector_node.py`는 obs 6 (track) 기준**이다.
-- goal ONNX(obs 10)를 real에 올리려면 goal용 obs를 계산하는 모드/노드가 필요하다:
-  - 목표 `(gx, gy)` 입력
-  - `/odom` pose 적분 (`px, py, yaw`)
-  - `/imu` `w_gyro`
-  - 직전 action
-- goal real 배포는 아직 미구현.
+### 6.2 PC — corrector 빌드/실행
+
+```bash
+cd /home/pank/workspaces/visualkhh/source/ros2/ros2_ws
+colcon build --packages-select rl_correction
+source install/setup.bash
+
+source /opt/ros/lyrical/setup.bash
+export ROS_DOMAIN_ID=25
+source /home/pank/workspaces/visualkhh/source/ros2/tool/peers.sh
+
+ros2 launch tb3_bringup rl-only.launch.py \
+  enable:=true \
+  mode:=goal \
+  model:=/home/pank/workspaces/visualkhh/source/ros2/isaac/logs/rl_goal_friction/<날짜_시간>/rl_goal_friction.onnx
+```
+
+`mode:=goal`은 생략해도 ONNX가 10차원이면 자동으로 goal 모드가 된다.
+
+### 6.3 goal 보내기 / 정지
+
+목표는 **현재 자세 기준 변위** `(gx, gy)` m 이다.
+
+```bash
+# 앞으로 1 m
+ros2 topic pub --once /rl_goal geometry_msgs/msg/Point "{x: 1.0, y: 0.0}"
+
+# 왼쪽으로 0.5 m, 앞으로 0.5 m
+ros2 topic pub --once /rl_goal geometry_msgs/msg/Point "{x: 0.5, y: 0.5}"
+
+# 즉시 정지
+ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
+```
+
+- `/rl_goal`을 받은 순간의 `/odom` pose가 시작점이 된다.
+- `dist < 0.05 m`면 자동 정지.
+- `enable:=false`면 goal 모드에서도 정지.
+
+### 6.4 goal 노드가 하는 일
+
+1. `/rl_goal` 수신 → `(x0, y0, yaw0)` 저장
+2. `/odom` pose → 시작점 기준 `(px, py, yaw)`
+3. nominal controller → `(v, w)`
+4. obs 10 → ONNX → `[Δv, Δw]`
+5. `(v+Δv, w+Δw)` clip → `/cmd_vel_rl_out`
+6. 20 Hz로 publish, 도착하면 0 publish
+
+real 배포 전에 **30 iteration밖에 안 된 모델**이면 성능이 낮을 수 있으니,
+먼저 `train_goal_friction.sh 300`으로 충분히 학습하는 것을 권장.
 
 ---
 
