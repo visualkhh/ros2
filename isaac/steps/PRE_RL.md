@@ -46,5 +46,6 @@
 ## 현재 상태 (2026-10-30)
 
 - 01 랜덤 환경 완료 (`01_random_world.py`)
+- 02 센서 싱크 sim 기준 생성 (`02_sensor_sync.py` → `baselines/`); real 측정 대기
 - 이전 측정값(참고): 공중 `v_enc 0.150 / w_enc 1.000 / w_gyro≈0`, 바닥 `rms_v 0.014 / rms_w 0.093`
 - 02~04 스크립트를 다시 만든 뒤 real 공중/바닥을 측정한다. 그 값으로 env cfg의 τ/gain/deadband/지연을 맞춘다.

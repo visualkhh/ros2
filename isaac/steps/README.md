@@ -6,7 +6,7 @@
 | # | 파일/단계 | 내용 | 상태 |
 |---|---|---|---|
 | 01 | `01_random_world.py` | 랜덤 방(3.5~6 m) + 장애물 + 우리 로봇, `N` 다음 방 | ✅ |
-| 02 | `02_sensor_sync.py` | IMU/odom 신호를 real과 같은 명령에서 비교 | ☐ |
+| 02 | `02_sensor_sync.py` + `02_sensor_sync_real.py` | IMU/odom 신호를 real과 같은 명령에서 비교 | sim ✅ · real 대기 |
 | 03 | `03_step_stand.py` | 공중(배 밑 지지 박스) 계단응답 sim/real | ☐ |
 | 04 | `04_step_floor.py` | 바닥 계단응답 sim/real | ☐ |
 | 05 | 차이 반영 | URDF / 마찰 / env cfg에 실측값 넣기 | ☐ |
@@ -16,9 +16,12 @@
 
 ```
 steps/
-├── 01_random_world.py     랜덤 환경 + 로봇 (지금 실행할 것)
-├── scene.py               방·로봇 생성 공용 (01이 사용)
-├── plot_compare.py        sim/real CSV 파형 비교 도구 (02 이후 사용)
+├── 01_random_world.py     랜덤 환경 + 로봇
+├── 02_sensor_sync.py      sim 센서 기록 (--stand / 바닥)
+├── 02_sensor_sync_real.py real 센서 기록 (PC, rclpy)
+├── scene.py               방·로봇 생성 공용
+├── plot_compare.py        sim/real CSV 파형 비교 도구
+├── baselines/             sim 기준 CSV (sensor_stand / sensor_floor)
 ├── PRE_RL.md              차이값을 URDF/마찰/env cfg 중 어디에 넣는지
 ├── S3_hypotheses.md       가설·실측 표
 ├── run.sh                 실행 래퍼 (--viz kit 자동)
@@ -35,12 +38,32 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 - 방 크기·장애물이 랜덤. `--seed 7`로 재현, 없으면 매번 새 seed.
 - `W/A/S/D` 주행 · `Shift` 느리게 · `X` 정지 · `R` 현재 방 리셋 · `N` 다음 방.
 
-## 02 이후
+## 02 — 센서 싱크 (sim 기준 생성됨)
 
-삭제하고 다시 만든다. 순서:
-1. `02_sensor_sync.py` — `/odom`·`/imu`를 sim과 같은 명령에서 기록/비교
-2. `03_step_stand.py` — 로봇을 **배 밑 지지 박스** 위에 올린 상태 (바퀴 공중)
-3. `04_step_floor.py` — 바닥에 내려놓은 상태
-4. `plot_compare.py`로 파형 겹쳐 보기
-5. 차이를 `PRE_RL.md` 표에 따라 URDF / `scene.py` 마찰 / `rl/wheel_drift/task/rl_correct_env_cfg.py`에 반영
-6. `rl/wheel_drift/train.sh`로 학습
+```bash
+# 공중(지지 박스): 실제 로봇을 박스 위에 올린 상태와 비교
+./steps/run.sh 02_sensor_sync.py --viz none --stand
+# 바닥
+./steps/run.sh 02_sensor_sync.py --viz none
+```
+
+- sim 결과: `baselines/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
+- real 기록 (PC):
+  ```bash
+  python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_stand.csv --label real_stand
+  python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_floor.csv --label real_floor
+  ```
+- 비교:
+  ```bash
+  python3 steps/plot_compare.py steps/baselines/sim_sensor_stand.csv /tmp/real_sensor_stand.csv
+  python3 steps/plot_compare.py steps/baselines/sim_sensor_floor.csv /tmp/real_sensor_floor.csv
+  ```
+- 공중: `v_enc≈cmd`, `w_enc≈cmd`, `w_gyro≈0`이 정상.
+- 바닥: `w_gyro` 부호·크기, `v_enc` 추종이 핵심.
+
+## 03 이후
+
+1. `03_step_stand.py` — 지지 박스 위 미세 계단응답
+2. `04_step_floor.py` — 바닥 계단응답
+3. 차이를 `PRE_RL.md` 표에 따라 URDF / `scene.py` 마찰 / `rl/wheel_drift/task/rl_correct_env_cfg.py`에 반영
+4. `rl/wheel_drift/train.sh`로 학습
