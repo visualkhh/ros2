@@ -49,6 +49,7 @@ rl/wheel_drift/
 - **보상은 sim의 true 변위**로 계산하지만, **obs에는 true pose를 넣지 않는다** (sim-to-real).
 - nominal controller: 목표 방향으로 `(v, w)`를 만들고, 정책은 `[Δv, Δw]`만 보정.
 - `--friction`: env마다 ground slab/material을 따로 만들어 static/dynamic friction을 랜덤화.
+  그 위에 **파랑=미끄럼 / 주황=끈적** 국소 패치를 뿌림 (기본 4개, `--patch-count`).
   기본은 ground plane 하나에 `sim_params` floor 마찰값.
 
 ## 실행

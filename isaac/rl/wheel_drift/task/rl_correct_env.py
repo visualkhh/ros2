@@ -72,10 +72,22 @@ class RlCorrectEnv(DirectRLEnv):
     def _setup_ground(self):
         c = self.cfg
         if getattr(c, "randomize_friction", False):
-            # env마다 ground slab을 따로 만들어 마찰을 다르게 준다.
+            # env마다 ground slab을 따로 만들고, 그 위에 국소 마찰 패치를 뿌린다.
             spacing = self.scene.cfg.env_spacing
             size = max(1.0, spacing - 0.1)
             pos = cloner.grid_transforms(self.scene.num_envs, spacing, device=self.device)[0]
+
+            slip_mat = sim_utils.RigidBodyMaterialCfg(
+                static_friction=c.slippery_friction[0], dynamic_friction=c.slippery_friction[1],
+                restitution=0.0, friction_combine_mode="average",
+            )
+            slip_mat.func("/World/Materials/friction_slippery", slip_mat)
+            stick_mat = sim_utils.RigidBodyMaterialCfg(
+                static_friction=c.sticky_friction[0], dynamic_friction=c.sticky_friction[1],
+                restitution=0.0, friction_combine_mode="average",
+            )
+            stick_mat.func("/World/Materials/friction_sticky", stick_mat)
+
             for i, (x, y, _z) in enumerate(pos.detach().cpu().tolist()):
                 static = random.uniform(*c.ground_static_range)
                 dynamic = random.uniform(*c.ground_dynamic_range)
@@ -90,6 +102,29 @@ class RlCorrectEnv(DirectRLEnv):
                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.45, 0.45, 0.45)),
                 )
                 cfg.func(f"/World/grounds/ground_{i}", cfg, translation=(x, y, -0.05))
+
+                # 파랑 = 미끄럼, 주황 = 끈적. 얇은 판이라 바퀴가 그대로 지나간다.
+                for j in range(int(c.friction_patch_count)):
+                    angle = (2.0 * math.pi * j / max(1, int(c.friction_patch_count))
+                             + random.uniform(-0.35, 0.35))
+                    radius = random.uniform(*c.friction_patch_radius)
+                    pw = random.uniform(*c.friction_patch_size)
+                    pd = random.uniform(*c.friction_patch_size)
+                    sticky = random.random() < 0.5
+                    mat_path = ("/World/Materials/friction_sticky" if sticky
+                                else "/World/Materials/friction_slippery")
+                    color = (1.0, 0.45, 0.10) if sticky else (0.20, 0.50, 1.0)
+                    patch = sim_utils.CuboidCfg(
+                        size=(pw, pd, 0.01),
+                        collision_props=sim_utils.PhysxCollisionPropertiesCfg(),
+                        visual_material=sim_utils.PreviewSurfaceCfg(
+                            diffuse_color=color, roughness=0.8),
+                    )
+                    path = f"/World/patches/patch_{i}_{j}"
+                    patch.func(path, patch,
+                               translation=(x + radius * math.cos(angle),
+                                            y + radius * math.sin(angle), -0.004))
+                    sim_utils.bind_physics_material(f"{path}/geometry/mesh", mat_path)
         else:
             g = c.ground_friction
             mat = sim_utils.RigidBodyMaterialCfg(

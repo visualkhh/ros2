@@ -130,12 +130,20 @@ reward = 1.0 · progress
 | 초기 yaw | `-π ~ +π` |
 | 목표 | 반경 0.4~1.2 m, 랜덤 방향 |
 | ground friction | 기본: `sim_params` floor 값 · `--friction`: env별 static 0.50~0.90 / dynamic 0.40~0.80 |
+| local friction patch | `--friction`이면 env마다 4개, **파랑=미끄럼 / 주황=끈적**, `--patch-count`로 개수 변경 |
 | wheel / caster friction | `sim_params` floor 값 |
 
 ### 2.6 PPO
 
 `--friction`을 켜면 env마다 ground slab을 따로 만들고 static/dynamic friction을 다르게 준다.
-(학습 시작 시 env별로 고정. wheel/caster는 `sim_params` floor 값을 씀.)
+그 위에 **국소 마찰 패치**를 뿌린다:
+
+- **파랑** = 미끄러운 구간 (static 0.20 / dynamic 0.15)
+- **주황** = 끈적한 구간 (static 1.10 / dynamic 0.90)
+- 기본 env당 4개, `--patch-count 0`이면 패치 없이 base friction만.
+- 패치는 얇은 판이라 로봇이 지나가면서 국소적으로 마찰이 바뀐다.
+- 학습 시작 시 env별로 고정. wheel/caster는 `sim_params` floor 값을 씀.
+
 기본 학습은 ground plane 하나에 floor 보정 마찰값을 쓴다.
 
 `agents/rsl_rl_ppo_cfg.py`:

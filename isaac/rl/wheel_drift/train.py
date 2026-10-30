@@ -27,6 +27,8 @@ parser.add_argument("--max-iterations", type=int, default=None)
 parser.add_argument("--envs", type=int, default=512, help="학습 환경 수 (창 볼 때는 16~32 권장)")
 parser.add_argument("--friction", action="store_true",
                     help="env별 ground friction randomization 켜기")
+parser.add_argument("--patch-count", type=int, default=4,
+                    help="env 안 국소 마찰 패치 수 (0이면 base friction만)")
 parser.add_argument("--exp-name", default=None, help="로그/ONNX 이름 (기본: rl_goal/rl_correct)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
@@ -52,6 +54,7 @@ env_cfg = TaskCfg()
 env_cfg.scene.num_envs = args.envs
 if args.friction:
     env_cfg.randomize_friction = True
+    env_cfg.friction_patch_count = args.patch_count
 
 
 def main():

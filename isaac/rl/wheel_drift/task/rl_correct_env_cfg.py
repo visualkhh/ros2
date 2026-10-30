@@ -63,6 +63,12 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     randomize_friction = False
     ground_static_range = (0.50, 0.90)
     ground_dynamic_range = (0.40, 0.80)
+    # env 안의 국소 마찰 패치 (파랑=미끄럼, 주황=끈적)
+    friction_patch_count = 4
+    friction_patch_radius = (0.55, 0.90)
+    friction_patch_size = (0.35, 0.55)
+    slippery_friction = (0.20, 0.15)
+    sticky_friction = (1.10, 0.90)
 
     # 명령: hold_range 초마다 바뀜 (텔레오퍼 키 · 부드러운 곡선 · 정지)
     hold_range = (0.5, 2.0)
