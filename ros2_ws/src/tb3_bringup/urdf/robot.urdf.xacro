@@ -91,6 +91,12 @@
     </joint>
     <link name="caster_back_${side}_link">
       <collision><geometry><sphere radius="0.004763"/></geometry></collision>
+      <!-- 센서(IMU/RayCaster) rigid body view가 zero-mass 링크에서 깨지지 않게 작은 관성 추가.
+           실제 캐스터 볼+마운트 ~5 g, 구 관성 2/5·m·r² ≈ 9e-8 -->
+      <inertial>
+        <mass value="0.005"/>
+        <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+      </inertial>
     </link>
   </xacro:macro>
   <xacro:caster side="left" y="0.064"/>

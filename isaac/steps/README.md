@@ -1,5 +1,8 @@
 # Isaac 단계별 실험 노트
 
+> Isaac **개념**부터 하나씩: [LEARN.md](LEARN.md) (L1 Stage/Prim/Joint → L7 학습·export).
+> 이 문서는 그 위의 **실험 단계** S0~S8.
+
 `train`부터 바로 돌리지 않는다. 단계마다 **명령 1개 → 눈으로 확인 → 통과 기준 → 기록**.
 한 단계가 통과해야 다음으로 넘어간다. 막히면 그 단계의 로그·스크린샷을 `steps/artifacts/`에 남긴다.
 

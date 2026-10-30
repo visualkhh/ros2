@@ -173,9 +173,44 @@ def set_camera(sim, origin=(0.0, 0.0, 0.0)):
                         target=(ox, oy, CAM_LOOK_Z))
 
 
+def robot_articulation_cfg(prim_path: str = "/World/Robot", usd_path: str | None = None):
+    """로봇 ArticulationCfg + USD 경로. L3처럼 센서를 같이 넣는 scene에서 재사용."""
+    usd_path = usd_path or robot_usd()
+    cfg = ArticulationCfg(
+        prim_path=prim_path,
+        spawn=sim_utils.UsdFileCfg(usd_path=usd_path),
+        init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, ROBOT_Z)),
+        actuators={"wheels": ImplicitActuatorCfg(
+            joint_names_expr=[".*wheel.*"], effort_limit=3.0,   # XM430-W210 stall ≈ 3 N·m (RL 환경과 같게)
+            velocity_limit=8.0, stiffness=0.0, damping=20.0)},
+    )
+    return cfg, usd_path
+
+
+def bind_robot_materials(scene, prim_path: str = "/World/Robot"):
+    """바퀴 마찰 1.0 · 캐스터 0 (RL 환경 _setup_scene과 같은 처리)."""
+    from pxr import PhysxSchema, UsdPhysics
+    wheel_mat = _material("/World/Materials/wheel", FRICTION_WHEEL)
+    caster_mat = _material("/World/Materials/caster", (0.0, 0.0))
+    for prim in scene.stage.Traverse():
+        path = str(prim.GetPath())
+        if not path.startswith(prim_path):
+            continue
+        # URDF importer는 generic PhysicsRigidBodyAPI만 넣는다. PhysX 센서(IMU/RayCaster)의
+        # rigid body view가 PhysxRigidBodyAPI를 요구하므로 붙여준다.
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI) and not prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
+            PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
+        if not prim.HasAPI(UsdPhysics.CollisionAPI):
+            continue
+        if "wheel" in path:
+            sim_utils.bind_physics_material(path, wheel_mat)
+        elif "caster" in path:
+            sim_utils.bind_physics_material(path, caster_mat)
+
+
 def spawn_robot():
     """우리 URDF → USD → /World/Robot. InteractiveScene 1개(복제 없음)."""
-    usd_path = robot_usd()
+    robot_cfg, usd_path = robot_articulation_cfg()
     print(f"[scene] robot USD -> {usd_path}")
 
     @configclass
@@ -183,30 +218,10 @@ def spawn_robot():
         num_envs = 1
         env_spacing = 2.0
 
-    robot_cfg = ArticulationCfg(
-        prim_path="/World/Robot",
-        spawn=sim_utils.UsdFileCfg(usd_path=usd_path),
-        init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, ROBOT_Z)),
-        actuators={"wheels": ImplicitActuatorCfg(
-            joint_names_expr=[".*wheel.*"], effort_limit=3.0,   # XM430-W210 stall ≈ 3 N·m (RL 환경과 같게)
-            velocity_limit=8.0, stiffness=0.0, damping=20.0)},
-    )
     scene = InteractiveScene(SceneCfg())
     robot = Articulation(robot_cfg)
     scene.articulations["robot"] = robot
-
-    # 바퀴 마찰 1.0 · 캐스터 0 (RL 환경 _setup_scene과 같은 처리)
-    from pxr import UsdPhysics
-    wheel_mat = _material("/World/Materials/wheel", FRICTION_WHEEL)
-    caster_mat = _material("/World/Materials/caster", (0.0, 0.0))
-    for prim in scene.stage.Traverse():
-        path = str(prim.GetPath())
-        if not path.startswith("/World/Robot") or not prim.HasAPI(UsdPhysics.CollisionAPI):
-            continue
-        if "wheel" in path:
-            sim_utils.bind_physics_material(path, wheel_mat)
-        elif "caster" in path:
-            sim_utils.bind_physics_material(path, caster_mat)
+    bind_robot_materials(scene)
     return scene, robot, usd_path
 
 

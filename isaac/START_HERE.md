@@ -13,8 +13,7 @@ ROS는 아는데 Isaac이 처음인 사람을 위한 문서. 수식 없음.
 
 ```
 isaac/
-├── steps/                    단계별 실험 (S0~S8, 눈으로 확인하며 하나씩) ← 먼저
-├── learn/                    Isaac 개념 실습 (L1~L7: Stage·Joint·Sensor·Env·학습)
+├── steps/                    실험 S0~S8 + 개념 L1~L7 (LEARN.md) ← 먼저
 ├── tasks/rl_correct/         연습장 (빈 바닥, 명령대로 움직이게 보정)
 ├── urdf/beebot/urdf.xacro     학습용 로봇 URDF (ROS용과 같은 내용 — urdf/check_same.sh)
 ├── usd/                       URDF→USD 결과 (매 실행 생성, git 제외)
@@ -61,11 +60,14 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 #   단계 전체·통과 기준: steps/README.md
 
 # L1. Isaac 개념 — 로봇 해부 (1=prim 트리, 2=joint 상태, 3/4/5=바퀴)
-./steps/run.sh ../learn/l01_robot_anatomy.py
-#   개념 목록: learn/README.md
+./steps/run.sh l01_robot_anatomy.py
+#   개념 목록: steps/LEARN.md
 
 # L2. 물리 시간 — 1/2/4/8로 steps/frame 바꾸기 (sim time / wall time)
-./steps/run.sh ../learn/l02_physics_time.py
+./steps/run.sh l02_physics_time.py
+
+# L3. 센서 — IMU + 360° LiDAR (벽에 빨간 hit 점, 2=상세)
+./steps/run.sh l03_sensors.py
 
 # URDF 고친 뒤 USD만 다시 생성
 ./convert_usd.sh
