@@ -114,8 +114,14 @@ def main():
     _, cmd_w_r = series(real, "ang_raw")
     _, w_r = series(real, "w_gyro")
     _, we_r = series(real, "w_enc")
+    has_wheels = "wheel_l_vel" in sim[0] and "wheel_l_vel" in real[0]
+    if has_wheels:
+        _, wl_s = series(sim, "wheel_l_vel")
+        _, wr_s = series(sim, "wheel_r_vel")
+        _, wl_r = series(real, "wheel_l_vel")
+        _, wr_r = series(real, "wheel_r_vel")
 
-    fig, ax = plt.subplots(4, 1, figsize=(11, 10), sharex=True)
+    fig, ax = plt.subplots(5 if has_wheels else 4, 1, figsize=(11, 12 if has_wheels else 10), sharex=True)
     for a in ax:
         a.grid(True, alpha=0.3)
     for a in ax[:3]:
@@ -153,8 +159,18 @@ def main():
     ax[3].plot(t_r, ew_r, color="tab:orange", label=f"real err (bias {mr['bias_w']:+.3f})")
     ax[3].axhline(0, color="k", lw=0.6)
     ax[3].set_ylabel("w_cmd − w_gyro")
-    ax[3].set_xlabel("time [s]")
     ax[3].legend(loc="lower right", fontsize=8)
+    if has_wheels:
+        ax[4].plot(t_s, wl_s, color="tab:blue", label="sim wheel L")
+        ax[4].plot(t_s, wr_s, color="tab:cyan", label="sim wheel R")
+        ax[4].plot(t_r, wl_r, color="tab:orange", ls="--", label="real wheel L")
+        ax[4].plot(t_r, wr_r, color="tab:red", ls="--", label="real wheel R")
+        ax[4].axhline(0, color="k", lw=0.6)
+        ax[4].set_ylabel("wheel vel [rad/s]")
+        ax[4].set_xlabel("time [s]")
+        ax[4].legend(loc="lower right", fontsize=7, ncol=2)
+    else:
+        ax[3].set_xlabel("time [s]")
 
     fig.suptitle(f"sim vs real — {Path(args.real).name}", fontsize=12)
     fig.tight_layout()

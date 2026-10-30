@@ -27,7 +27,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, JointState
 from std_msgs.msg import String
 
 TOTAL = 9.0
@@ -55,6 +55,9 @@ class SensorSync(Node):
         self.odom = None
         self.imu_w = 0.0
         self.imu_seen = False
+        self.wheel_l_vel = self.wheel_r_vel = 0.0
+        self.wheel_l_pos = self.wheel_r_pos = 0.0
+        self.joint_seen = False
         self.out = (0.0, 0.0)
         self.pub = self.create_publisher(Twist, "/cmd_manual_vel", 10)
         # /state_control은 TRANSIENT_LOCAL (latched) — 기본 volatile이면 현재 상태를 못 받음
@@ -66,6 +69,7 @@ class SensorSync(Node):
         self.create_subscription(String, "/state_control", lambda m: setattr(self, "state", m.data), state_qos)
         self.create_subscription(Odometry, "/odom", self.on_odom, 10)
         self.create_subscription(Imu, "/imu", self.on_imu, 10)
+        self.create_subscription(JointState, "/joint_states", self.on_joint, 10)
         self.create_subscription(Twist, "/cmd_vel_base", self.on_out, 10)
 
     def on_odom(self, m):
@@ -74,6 +78,14 @@ class SensorSync(Node):
     def on_imu(self, m):
         self.imu_w = m.angular_velocity.z
         self.imu_seen = True
+
+    def on_joint(self, m):
+        self.joint_seen = True
+        for name, pos, vel in zip(m.name, m.position, m.velocity):
+            if name == "wheel_left_joint":
+                self.wheel_l_pos, self.wheel_l_vel = pos, vel
+            elif name == "wheel_right_joint":
+                self.wheel_r_pos, self.wheel_r_vel = pos, vel
 
     def on_out(self, m):
         self.out = (m.linear.x, m.angular.z)
@@ -125,7 +137,10 @@ def main(args):
             rows.append([round(t, 3), v, w, node.out[0], node.out[1],
                          p.position.x, p.position.y, yaw_of(p.orientation),
                          o.twist.twist.linear.x, o.twist.twist.angular.z,
-                         node.imu_w, args.label])
+                         node.imu_w,
+                         node.wheel_l_vel, node.wheel_r_vel,
+                         node.wheel_l_pos, node.wheel_r_pos,
+                         args.label])
 
         for _ in range(3):
             node.send(0.0, 0.0)
@@ -134,7 +149,8 @@ def main(args):
         with open(out, "w", newline="") as f:
             cw = csv.writer(f)
             cw.writerow(["t", "lin_raw", "ang_raw", "lin_out", "ang_out",
-                         "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro", "label"])
+                         "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro",
+                         "wheel_l_vel", "wheel_r_vel", "wheel_l_pos", "wheel_r_pos", "label"])
             cw.writerows(rows)
 
         def seg(a, b):
@@ -144,10 +160,20 @@ def main(args):
                     sum(r[10] for r in part) / len(part))
         vf, wf, gf = seg(2.5, 4.5)
         vt, wt, gt = seg(5.5, 7.5)
-        print(f"[02-real] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f}")
-        print(f"[02-real] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f}")
+        def seg_wheel(a, b):
+            part = [r for r in rows if a <= r[0] < b]
+            return (sum(r[11] for r in part) / len(part),
+                    sum(r[12] for r in part) / len(part))
+        lf, rf = seg_wheel(2.5, 4.5)
+        lt, rt = seg_wheel(5.5, 7.5)
+        print(f"[02-real] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f} "
+              f"| 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
+        print(f"[02-real] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f} "
+              f"| 바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")
         if not node.imu_seen:
             print("[02-real] 경고: /imu 없음 — w_gyro가 0")
+        if not node.joint_seen:
+            print("[02-real] 경고: /joint_states 없음 — 바퀴 raw가 0")
         print(f"[02-real] → {out}")
         return 0
     except KeyboardInterrupt:

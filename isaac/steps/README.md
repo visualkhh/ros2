@@ -81,8 +81,13 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   python3 steps/plot_compare.py     steps/baselines/sim_sensor_stand.csv steps/artifacts/real_stand.csv --show
   ```
   창을 닫으면 터미널로 돌아온다. `--show` 없으면 `steps/artifacts/compare.png`만 저장.
-- 공중: `v_enc≈cmd`, `w_enc≈cmd`, `w_gyro≈0`이 정상.
-- 바닥: `w_gyro` 부호·크기, `v_enc` 추종이 핵심.
+- CSV에는 세 층이 같이 들어감:
+  - `/joint_states` → `wheel_l_vel`, `wheel_r_vel` (rad/s), `wheel_l_pos`, `wheel_r_pos` (rad) — **firmware 원값**
+  - `/odom` → `v_enc`, `w_enc` (m/s, rad/s) — 드라이버가 `r`/`sep`로 계산한 값
+  - `/imu` → `w_gyro` (rad/s)
+- 공중: `v_enc≈cmd`, `w_enc≈cmd`, `w_gyro≈0`이 정상. raw 바퀴는 `wl≈wr≈cmd/r`.
+- 바닥: `w_gyro` 부호·크기, `v_enc` 추종, raw 바퀴의 좌우 차이가 핵심.
+- `plot_compare.py`의 맨 아래 subplot이 **raw 바퀴 속도**(실선 sim, 점선 real).
 
 ## 03 이후
 

@@ -17,6 +17,7 @@
   ./steps/run.sh 02_sensor_sync.py --viz none
 
 출력: steps/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
+CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)
 비교 기준(커밋): steps/baselines/... (갱신할 때만 --out으로 지정)
 real: python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_stand.csv
 비교: python3 steps/plot_compare.py <sim.csv> <real.csv>
@@ -104,7 +105,7 @@ def main():
     tag = "sim_sensor_stand" if args_cli.stand else "sim_sensor_floor"
     out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
-        out = str(HERE / out)
+        out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/baselines/...)
     print(f"[02] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
 
     rows = []
@@ -121,19 +122,22 @@ def main():
         scene.update(POLICY_DT)
 
         jv = robot.data.joint_vel.torch[0, wheel_ids].tolist()
+        jp = robot.data.joint_pos.torch[0, wheel_ids].tolist()
         v_enc = spec.WHEEL_RADIUS * (jv[0] + jv[1]) / 2.0
         w_enc = spec.WHEEL_RADIUS * (jv[1] - jv[0]) / spec.WHEEL_SEP
         w_gyro = robot.data.root_ang_vel_b.torch[0, 2].item()
         oyaw += w_enc * POLICY_DT
         ox += v_enc * math.cos(oyaw) * POLICY_DT
         oy += v_enc * math.sin(oyaw) * POLICY_DT
-        rows.append([round(t, 3), v, w, v, w, ox, oy, oyaw, v_enc, w_enc, w_gyro, tag])
+        rows.append([round(t, 3), v, w, v, w, ox, oy, oyaw, v_enc, w_enc, w_gyro,
+                     jv[0], jv[1], jp[0], jp[1], tag])
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", newline="") as f:
         cw = csv.writer(f)
         cw.writerow(["t", "lin_raw", "ang_raw", "lin_out", "ang_out",
-                     "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro", "label"])
+                     "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro",
+                     "wheel_l_vel", "wheel_r_vel", "wheel_l_pos", "wheel_r_pos", "label"])
         cw.writerows(rows)
 
     # 구간 평균
@@ -144,8 +148,16 @@ def main():
                 sum(r[10] for r in part) / len(part))
     vf, wf, gf = seg(2.5, 4.5)
     vt, wt, gt = seg(5.5, 7.5)
-    print(f"[02] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f}")
-    print(f"[02] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f}")
+    def seg_wheel(a, b):
+        part = [r for r in rows if a <= r[0] < b]
+        return (sum(r[11] for r in part) / len(part),
+                sum(r[12] for r in part) / len(part))
+    lf, rf = seg_wheel(2.5, 4.5)
+    lt, rt = seg_wheel(5.5, 7.5)
+    print(f"[02] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f} "
+          f"| 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
+    print(f"[02] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f} "
+          f"| 바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")
     print(f"[02] → {out}")
 
     if args_cli.watch and not headless:
