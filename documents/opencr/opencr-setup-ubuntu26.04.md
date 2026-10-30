@@ -20,6 +20,8 @@ cd ~/ros2/firmware/opencr
 ./test-firmware       # S 줄 5개 읽기 (아무것도 안 보냄)
 ```
 
+> 2026-10-30: `I` 줄 포함 펌웨어 업로드 완료. `/imu` 20 Hz 확인 (정지 시 `gz≈0`, `az≈9.98`).
+
 `./setup_compile_upload.sh` = setup + compile + upload 한 번에.
 
 ## 2. arm64(Pi)에서 달라지는 점 — `setup.sh`가 처리

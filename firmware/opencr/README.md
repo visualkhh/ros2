@@ -5,6 +5,7 @@ TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, 
 
 - 소스: `tb3_wheels/tb3_wheels.ino` (Arduino 스케치, 폴더명=파일명 유지 필수)
 - 의존: OpenCR 보드 패키지 + DynamixelSDK (보드 설치는 [OpenCR 문서](../../documents/opencr/opencr-setup-ubuntu26.04.md))
+- **현재(2026-10-30)**: `pak`에 업로드 완료. `/imu` 20 Hz 확인 (정지 `gz≈0`, `az≈9.98`). `S` 직후 `I` 줄이 오는 구조 그대로.
 
 ## 프로토콜 (USB CDC, `/dev/opencr`, 115200)
 
