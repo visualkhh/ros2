@@ -5,12 +5,12 @@
 
 open-loop 명령 (`make_profile`)
   2초 정지 → 왼쪽 사각형(반시계) → 180도 턴 → 같은 사각형 역주행
-  → 삼각형(한 변 `side`) → 2초 정지.
+  → 사각형 안쪽 삼각형 → 2초 정지.
   각 변: `side` m 전진 → 0.25초 정지 → 회전 → 0.25초 정지.
   사각형 변은 속도를 다르게 해서 속도별 gain/지연/τ를 본다.
 
 goal waypoint (`make_waypoints`)
-  같은 사각형 8 waypoint + 삼각형 3 waypoint를 시작 자세 기준 절대 좌표로 보낸다.
+  같은 사각형 8 waypoint + 사각형 안쪽 삼각형 4 waypoint(A,B,C,A)를 절대 좌표로 보낸다.
   RL goal 노드는 `goal_mode=absolute`로 이 sequence를 받는다.
 """
 from __future__ import annotations
@@ -22,6 +22,8 @@ END_HOLD = 2.0
 MOVE_SETTLE = 0.25
 TURN_SETTLE = 0.25
 DEFAULT_SIDE = 0.5
+TRI_INSET = 0.3       # 사각형 안쪽 여백 비율
+TRI_SIDE_RATIO = 0.4  # 사각형 한 변 대비 삼각형 한 변
 SQRT3_2 = math.sqrt(3.0) / 2.0
 SIDE_SPEED_RATIOS = (1.0, 2.0 / 3.0, 4.0 / 3.0, 0.8)
 MAX_SIDE_SPEED = 0.24
@@ -83,9 +85,39 @@ def make_profile(speed: float = 0.15, turn: float = 1.0,
             segs.append((t, t + TURN_SETTLE, 0.0, 0.0, "corner"))
             t += TURN_SETTLE
 
-    # 4) 삼각형: 역주행 사각형이 끝난 뒤(-x를 보는 상태)에서 왼쪽 120도씩
+    # 4) 사각형 안쪽 삼각형: 역주행 후 (-x) → +x로 돌아 안쪽 A로 진입
+    entry = TRI_INSET * side
+    tri_side = TRI_SIDE_RATIO * side
     tri_turn = (2.0 * math.pi / 3.0) / turn
-    tri_move = side / speed
+    half_pi_turn = turn_t
+    entry_move = entry / speed
+    tri_move = tri_side / speed
+
+    # 180° 회전해서 +x
+    segs.append((t, t + 2.0 * turn_t, 0.0, -turn, "align_triangle"))
+    t += 2.0 * turn_t
+    segs.append((t, t + TURN_SETTLE, 0.0, 0.0, "corner"))
+    t += TURN_SETTLE
+    # (0,0) → (entry,0)
+    segs.append((t, t + entry_move, speed, 0.0, "move_triangle_entry"))
+    t += entry_move
+    segs.append((t, t + MOVE_SETTLE, 0.0, 0.0, "corner"))
+    t += MOVE_SETTLE
+    # (entry,0) → A=(entry,entry)
+    segs.append((t, t + half_pi_turn, 0.0, +turn, "turn_triangle_entry"))
+    t += half_pi_turn
+    segs.append((t, t + TURN_SETTLE, 0.0, 0.0, "corner"))
+    t += TURN_SETTLE
+    segs.append((t, t + entry_move, speed, 0.0, "move_triangle_entry"))
+    t += entry_move
+    segs.append((t, t + MOVE_SETTLE, 0.0, 0.0, "corner"))
+    t += MOVE_SETTLE
+    # A에서 +x를 보게 정렬
+    segs.append((t, t + half_pi_turn, 0.0, -turn, "turn_triangle_entry"))
+    t += half_pi_turn
+    segs.append((t, t + TURN_SETTLE, 0.0, 0.0, "corner"))
+    t += TURN_SETTLE
+    # A → B → C → A
     for i in range(3):
         segs.append((t, t + tri_move, speed, 0.0, "move_triangle"))
         t += tri_move
@@ -116,10 +148,14 @@ def cmd_at(t: float, segs):
 def make_waypoints(side: float = DEFAULT_SIDE):
     """RL goal용 절대 waypoint (시작 자세 기준).
 
-    왼쪽 사각형 4변 → 같은 사각형을 반대 방향으로 4변 → 삼각형 3변.
+    왼쪽 사각형 4변 → 같은 사각형 역주행 4변 → 사각형 안쪽 삼각형 3변.
     """
     s = float(side)
-    tri = [(-s, 0.0), (-0.5 * s, -SQRT3_2 * s), (0.0, 0.0)]
+    a = TRI_INSET * s
+    b = a + TRI_SIDE_RATIO * s
+    c = a + 0.5 * TRI_SIDE_RATIO * s
+    d = a + SQRT3_2 * TRI_SIDE_RATIO * s
+    tri = [(a, a), (b, a), (c, d), (a, a)]
     return [(s, 0.0), (s, s), (0.0, s), (0.0, 0.0),
             (0.0, s), (s, s), (s, 0.0), (0.0, 0.0)] + tri
 
@@ -131,9 +167,14 @@ def square_path(side: float = DEFAULT_SIDE):
 
 
 def profile_path(side: float = DEFAULT_SIDE):
-    """open-loop profile 전체 외곽선: 왼쪽 사각형 → 역주행 → 삼각형."""
+    """open-loop profile 전체 외곽선: 사각형 → 역주행 → 안쪽 삼각형."""
     s = float(side)
+    a = TRI_INSET * s
+    b = a + TRI_SIDE_RATIO * s
+    c = a + 0.5 * TRI_SIDE_RATIO * s
+    d = a + SQRT3_2 * TRI_SIDE_RATIO * s
     sq = [(0.0, 0.0), (s, 0.0), (s, s), (0.0, s), (0.0, 0.0)]
     rev = [(0.0, s), (s, s), (s, 0.0), (0.0, 0.0)]
-    tri = [(-s, 0.0), (-0.5 * s, -SQRT3_2 * s), (0.0, 0.0)]
-    return sq + rev + tri
+    entry = [(a, 0.0), (a, a)]
+    tri = [(a, a), (b, a), (c, d), (a, a)]
+    return sq + rev + entry + tri

@@ -67,7 +67,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 - `--profile`은 **파일 경로** 또는 그 디렉토리. 기본은
   `training/calibration/calib_default_profile.py`.
 - 이 profile은 **사각형 → 180° 턴 → 같은 사각형 역주행 → 삼각형**을 한다.
-- sim과 real을 동시에 돌리고 약 70초 걸린다.
+- sim과 real을 동시에 돌리고 약 73초 걸린다.
 - 결과:
   - `training/calibration/artifacts/sim_sensor_floor.csv`
   - `training/calibration/artifacts/real_floor.csv`
@@ -111,7 +111,7 @@ ssh pak@pak.local 'cd ~/ros2/tool && ./run-cli route rl'
 ./training/rl_correction_wheel_drift/real_square.sh --side 0.5
 ```
 
-- `calib_default_profile.make_waypoints()`의 **사각형 8 + 삼각형 3 waypoint**를 보낸다.
+- `calib_default_profile.make_waypoints()`의 **사각형 8 + 안쪽 삼각형 4 waypoint**를 보낸다.
 - 결과: `training/calibration/artifacts/real_goal_square.csv`
 - 비교 그래프:
 
