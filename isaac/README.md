@@ -14,6 +14,7 @@
 | `urdf/beebot/urdf.xacro` | **학습용 로봇 URDF** — ROS용 `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`와 의도적으로 나눈 파일, **내용은 글자까지 같게** (`urdf/check_same.sh`) |
 | `steps/` | **단계별 실험 노트** — S1 창에 로봇 띄우기부터 S8 검증까지, 눈으로 확인하며 한 단계씩 ([steps/README.md](steps/README.md)) |
 | `learn/` | **Isaac 개념 실습** — L1 로봇 해부(Stage/Prim/Joint)부터 L7 학습·export까지 ([learn/README.md](learn/README.md)) |
+| `ROS2_TOPICS.md` | **Isaac sim ↔ ROS 2 토픽 계약** — `/isaacros/...`, domain 26 ([ROS2_TOPICS.md](ROS2_TOPICS.md)) |
 | `urdf/beebot/meshes/` | 몸통·바퀴 메시 — 저장소에서 직접 관리 (tb3_bringup/meshes와 같은 파일) |
 | `usd/` | URDF→USD 변환 결과 (`tb3_waffle_pi/tb3_waffle_pi.usda`). 매 실행마다 새로 생성, git 제외 — URDF가 정본 |
 | `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + 학습용 URDF → USD |

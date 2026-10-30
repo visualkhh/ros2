@@ -25,4 +25,4 @@ Isaac Lab (우리 URDF) → 학습 → rl_correct_v2.onnx → PC rl-only (correc
 - 실행: PC `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>` (PC에 onnxruntime) → `./run-cli route rl`
 - 계측: `rl_eval/eval_recorder` → `/tmp/before.csv` vs `/tmp/after.csv` → `rl_eval/compare_csv.py`
 
-관련: [ros2_ws README](../../ros2_ws/README.md) · [Lyrical 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [Isaac 단계별 실험 노트](../../isaac/steps/README.md)
+관련: [ros2_ws README](../../ros2_ws/README.md) · [Lyrical 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [Isaac 단계별 실험 노트](../../isaac/steps/README.md) · [Isaac sim ROS 2 토픽 계약](../../isaac/ROS2_TOPICS.md)

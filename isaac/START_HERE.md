@@ -82,6 +82,7 @@ cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/v
 - 결과물은 ONNX 하나: `[1,6]` → `[1,2]` (물리 보정량 m/s, rad/s).
 - PC에서 `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>` → `./run-cli route rl` (PC에 `onnxruntime` 필요).
 - 로봇 `/imu` 20 Hz 동작 확인 (2026-10-30) — OpenCR `I` 줄. 정지 시 gz≈0, az≈9.98.
+- **Isaac sim 토픽 계약**: `/isaacros/...`, `ROS_DOMAIN_ID=26` — [ROS2_TOPICS.md](ROS2_TOPICS.md). real(25)과 분리.
 - Before/After: `rl_eval/eval_recorder` CSV 두 개 → `rl_eval/compare_csv.py`.
 
 ## 7. 자주 묻는 것
