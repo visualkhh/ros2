@@ -10,6 +10,9 @@ from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils import configclass
 
 from tasks.common import robot_spec as spec
+from tasks.common import sim_params as cal
+
+_FLOOR_FRICTION = cal.friction("floor")
 
 
 @configclass
@@ -52,6 +55,14 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨, 강건성용)
     enc_noise = 0.005
     gyro_noise = 0.01
+
+    # 바닥/바퀴 마찰 — 기본은 steps floor 보정값, `--friction`이면 env별 랜덤
+    ground_friction = _FLOOR_FRICTION["ground"]
+    wheel_friction = _FLOOR_FRICTION["wheel"]
+    caster_friction = _FLOOR_FRICTION["caster"]
+    randomize_friction = False
+    ground_static_range = (0.50, 0.90)
+    ground_dynamic_range = (0.40, 0.80)
 
     # 명령: hold_range 초마다 바뀜 (텔레오퍼 키 · 부드러운 곡선 · 정지)
     hold_range = (0.5, 2.0)

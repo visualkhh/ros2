@@ -26,7 +26,7 @@ rl/wheel_drift/
 ├── smoke.py                   track 물리 스모크
 ├── smoke_goal.py              goal 스모크 (목표 (1,0) m까지)
 ├── train.py · export.py · play.py
-├── train.sh · train_goal.sh · export.sh · play.sh
+├── train.sh · train_goal.sh · train_goal_friction.sh · export.sh · play.sh
 └── README.md
 ```
 
@@ -42,12 +42,14 @@ rl/wheel_drift/
 | 목표 | 시작 자세 기준 `(gx, gy)`, 반경 `0.4~1.2 m` 랜덤 |
 | 보상 | `(d_prev−d)/‖g‖ − 0.5·max(0, lateral−0.05)/‖g‖ − action/smooth penalty` |
 | 종료 | `d < 0.05 m` 성공, 또는 12초 timeout |
-| 랜덤화 | 목표 방향·거리, 초기 yaw, 모터 τ·좌우 gain·데드밴드·WiFi 지연 |
+| 랜덤화 | 목표 방향·거리, 초기 yaw, 모터 τ·좌우 gain·데드밴드·WiFi 지연, `--friction`이면 env별 ground friction |
 
 - `px, py, yaw`는 `/odom`을 흉내낸 적분값 (시작점 0).
 - `v_enc, w_enc`는 `/odom` twist, `w_gyro`는 `/imu` z.
 - **보상은 sim의 true 변위**로 계산하지만, **obs에는 true pose를 넣지 않는다** (sim-to-real).
 - nominal controller: 목표 방향으로 `(v, w)`를 만들고, 정책은 `[Δv, Δw]`만 보정.
+- `--friction`: env마다 ground slab/material을 따로 만들어 static/dynamic friction을 랜덤화.
+  기본은 ground plane 하나에 `sim_params` floor 마찰값.
 
 ## 실행
 
@@ -60,6 +62,11 @@ tensorboard --logdir logs/rl_goal
 
 # goal 학습을 창으로 보면서 (512 env는 무거우니 16~32개만)
 ./rl/wheel_drift/train_goal.sh 300 --watch --envs 16
+
+# goal + env별 바닥 마찰 randomization
+./rl/wheel_drift/train_goal_friction.sh 300
+./rl/wheel_drift/train_goal_friction.sh 300 --watch --envs 16
+tensorboard --logdir logs/rl_goal_friction
 
 # 학습 끝나면 자동 export: logs/rl_goal/<날짜_시간>/rl_goal.onnx
 ./rl/wheel_drift/play.sh logs/rl_goal/<날짜_시간>/rl_goal.onnx 4

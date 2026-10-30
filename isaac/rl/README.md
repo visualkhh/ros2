@@ -129,8 +129,14 @@ reward = 1.0 · progress
 | encoder / gyro 잡음 | 0.005 / 0.01 |
 | 초기 yaw | `-π ~ +π` |
 | 목표 | 반경 0.4~1.2 m, 랜덤 방향 |
+| ground friction | 기본: `sim_params` floor 값 · `--friction`: env별 static 0.50~0.90 / dynamic 0.40~0.80 |
+| wheel / caster friction | `sim_params` floor 값 |
 
 ### 2.6 PPO
+
+`--friction`을 켜면 env마다 ground slab을 따로 만들고 static/dynamic friction을 다르게 준다.
+(학습 시작 시 env별로 고정. wheel/caster는 `sim_params` floor 값을 씀.)
+기본 학습은 ground plane 하나에 floor 보정 마찰값을 쓴다.
 
 `agents/rsl_rl_ppo_cfg.py`:
 
@@ -159,9 +165,9 @@ reward = 1.0 · progress
 현재 코드 기준:
 
 - `steps`의 `sim_calib_floor.json`은 **`01_random_world_sim` · `02_sensor_sync_sim`** 이 읽는다.
-- RL task(`goal_env`, `rl_correct_env`)는 **아직 `sim_params`/JSON을 직접 읽지 않는다.**
-  자체 randomization 범위(`tau_range`, `gain_range`, ...)를 쓴다.
-- 즉 “steps 보정값을 RL 학습의 중심값으로 넣는 작업”은 아직 별도 TODO다.
+- RL task(`goal_env`, `rl_correct_env`)는 `sim_params`에서 **바닥/바퀴/캐스터 마찰**을 읽어 장면에 적용한다.
+- 다만 wheel `tau/gain/deadband`와 actuator damping/effort는 아직 RL cfg의 자체 randomization 범위를 쓴다.
+- 즉 “steps 보정값을 RL 학습의 **중심값**으로 넣는 작업”은 tau/gain 쪽에 아직 남아 있다.
 
 권장 방향:
 
@@ -194,11 +200,16 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 # 창 보면서 (512 envs는 무거움 → 16~32 권장)
 ./rl/wheel_drift/train_goal.sh 300 --watch --envs 16
 
+# 바닥 마찰 randomization 켜기 (env별 ground friction)
+./rl/wheel_drift/train_goal_friction.sh 300
+./rl/wheel_drift/train_goal_friction.sh 300 --watch --envs 16
+
 # 로그
 tensorboard --logdir logs/rl_goal
+tensorboard --logdir logs/rl_goal_friction
 ```
 
-- 로그: `logs/rl_goal/<날짜_시간>/`
+- 로그: `logs/rl_goal/<날짜_시간>/` · friction은 `logs/rl_goal_friction/<날짜_시간>/`
 - 학습 끝나면 자동 export: `logs/rl_goal/<날짜_시간>/rl_goal.onnx`
 - 중간 체크포인트: `model_<iter>.pt` (`save_interval=50`)
 
@@ -283,7 +294,7 @@ rl/
 │   ├── agents/rsl_rl_ppo_cfg.py
 │   ├── train.py · export.py · play.py
 │   ├── smoke.py · smoke_goal.py
-│   ├── train.sh · train_goal.sh · export.sh · play.sh
+│   ├── train.sh · train_goal.sh · train_goal_friction.sh · export.sh · play.sh
 │   └── README.md
 └── README.md
 ```

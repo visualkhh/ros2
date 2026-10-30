@@ -3,7 +3,7 @@
 Usage (Lab env):
   cd /home/pank/pa-course/IsaacLab-6.1
   ./isaaclab.sh -p .../rl/wheel_drift/train.py [--task track|goal] [--max-iterations N]
-      [--watch] [--envs N]
+      [--watch] [--envs N] [--friction]
 Watch: `--watch` = `--visualizer kit` (창 보기). 512 env는 느리니 `--watch --envs 16` 권장.
 Logs: isaac/logs/rl_correct/ (track) 또는 isaac/logs/rl_goal/ (goal).
 """
@@ -25,6 +25,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--task", choices=("track", "goal"), default="track")
 parser.add_argument("--max-iterations", type=int, default=None)
 parser.add_argument("--envs", type=int, default=512, help="학습 환경 수 (창 볼 때는 16~32 권장)")
+parser.add_argument("--friction", action="store_true",
+                    help="env별 ground friction randomization 켜기")
+parser.add_argument("--exp-name", default=None, help="로그/ONNX 이름 (기본: rl_goal/rl_correct)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 app_launcher = AppLauncher(args)
@@ -44,8 +47,11 @@ else:
     from rl.wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg as TaskCfg  # noqa: E402
     exp_name = "rl_correct"
 
+exp_name = args.exp_name or exp_name
 env_cfg = TaskCfg()
 env_cfg.scene.num_envs = args.envs
+if args.friction:
+    env_cfg.randomize_friction = True
 
 
 def main():

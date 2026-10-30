@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import math
+import random
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -68,17 +69,63 @@ class RlCorrectEnv(DirectRLEnv):
         self._rows = torch.arange(n, device=dev)
 
     # ------------------------------------------------------------------ scene
-    def _setup_scene(self):
-        self.robot = Articulation(self.cfg.robot_cfg)
-        spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
-        # 볼 캐스터 = 마찰 0 (복제 전 env_0에만 붙이면 같이 복제됨)
-        caster_mat = sim_utils.RigidBodyMaterialCfg(static_friction=0.0, dynamic_friction=0.0, friction_combine_mode="min")
-        caster_mat.func("/World/Materials/caster", caster_mat)
+    def _setup_ground(self):
+        c = self.cfg
+        if getattr(c, "randomize_friction", False):
+            # env마다 ground slab을 따로 만들어 마찰을 다르게 준다.
+            spacing = self.scene.cfg.env_spacing
+            size = max(1.0, spacing - 0.1)
+            pos = cloner.grid_transforms(self.scene.num_envs, spacing, device=self.device)[0]
+            for i, (x, y, _z) in enumerate(pos.detach().cpu().tolist()):
+                static = random.uniform(*c.ground_static_range)
+                dynamic = random.uniform(*c.ground_dynamic_range)
+                mat = sim_utils.RigidBodyMaterialCfg(
+                    static_friction=static, dynamic_friction=dynamic,
+                    restitution=0.0, friction_combine_mode="average",
+                )
+                cfg = sim_utils.CuboidCfg(
+                    size=(size, size, 0.1),
+                    collision_props=sim_utils.PhysxCollisionPropertiesCfg(),
+                    physics_material=mat,
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.45, 0.45, 0.45)),
+                )
+                cfg.func(f"/World/grounds/ground_{i}", cfg, translation=(x, y, -0.05))
+        else:
+            g = c.ground_friction
+            mat = sim_utils.RigidBodyMaterialCfg(
+                static_friction=g[0], dynamic_friction=g[1],
+                restitution=0.0, friction_combine_mode="average",
+            )
+            spawn_ground_plane(prim_path="/World/ground",
+                               cfg=GroundPlaneCfg(physics_material=mat))
+
+    def _bind_robot_materials(self):
         from pxr import UsdPhysics
+
+        c = self.cfg
+        wheel_mat = sim_utils.RigidBodyMaterialCfg(
+            static_friction=c.wheel_friction[0], dynamic_friction=c.wheel_friction[1],
+            restitution=0.0, friction_combine_mode="average",
+        )
+        wheel_mat.func("/World/Materials/wheel", wheel_mat)
+        caster_mat = sim_utils.RigidBodyMaterialCfg(
+            static_friction=c.caster_friction[0], dynamic_friction=c.caster_friction[1],
+            restitution=0.0, friction_combine_mode="min",
+        )
+        caster_mat.func("/World/Materials/caster", caster_mat)
         for prim in self.scene.stage.Traverse():
             path = str(prim.GetPath())
-            if path.startswith("/World/envs/env_0/Robot") and "caster" in path and prim.HasAPI(UsdPhysics.CollisionAPI):
+            if not path.startswith("/World/envs/env_0/Robot") or not prim.HasAPI(UsdPhysics.CollisionAPI):
+                continue
+            if "wheel" in path:
+                sim_utils.bind_physics_material(path, "/World/Materials/wheel")
+            elif "caster" in path:
                 sim_utils.bind_physics_material(path, "/World/Materials/caster")
+
+    def _setup_scene(self):
+        self.robot = Articulation(self.cfg.robot_cfg)
+        self._setup_ground()
+        self._bind_robot_materials()
         src, dest = "/World/envs/env_0", "/World/envs/env_{}"
         pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
         plan = cloner.clone_plan_from_env_0(src, dest, self.scene.num_envs, self.device, pos, ("/World/ground",))
