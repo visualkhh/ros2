@@ -126,6 +126,16 @@ real_square.sh                 → 같은 사각형+삼각형을 RL goal로 (Aft
    ```
 5. Before/After 수치: `final err`, `RMS dev`(이상 사각형+삼각형 선에서 벗어난 정도), `path len`.
 
+**track — 보정 때와 같은 `(v,w)` 명령 재생**은 `training/verify_track.sh`:
+
+```bash
+./training/verify_track.sh \
+  --profile training/rl_correction_wheel_drift/calib_profile.py --show
+```
+
+- `02_sensor_sync_real.sh`로 같은 `(v,w)` 명령을 보내고
+- `compare_track_rl.png` / report를 만든다.
+
 합격(초안): 목표 도달 오차 감소, 회전 RMS 20% 이상 감소, 직진 RMS 악화 없음.
 
 ## 주의

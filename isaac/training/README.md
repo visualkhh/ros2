@@ -68,7 +68,8 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   로그·CSV·PNG·JSON 보고서를 복사한다.
 - `train.sh`는 task 디렉토리의 `train.py`를 실행하고
   `training/artifacts/train_*/`에 실행 로그와 최종 ONNX 사본을 남긴다.
-- `real_rl.sh`는 Pi가 `route rl`인 상태에서 PC corrector를 띄운다.
+- `real_rl.sh`는 Pi가 `route rl`인 상태에서 PC corrector를 띄우고,
+  `training/artifacts/real_rl_<시각>/launch.log`에 실행 로그를 남긴다.
 
 ## 0.2 실행 순서 (보정 → 학습 → real_rl → 같은 경로 재생)
 
@@ -166,9 +167,23 @@ ssh pak@pak.local 'cd ~/ros2/tool && ./run-cli route rl'
 - After = `real_goal_square.csv` (RL goal)
 - x-y 경로, 목표 거리, **적용된 보정 Δv/Δw**, nominal vs out을 같이 본다.
 
-> 주의: goal 정책은 `(v,w)` 명령을 직접 재생하는 게 아니라 **waypoint를 따라간다**.
-> 보정 때와 **완전히 같은 `(v,w)` 명령**을 RL로 재생하려면 `track` 정책을 학습해서
-> `training/calibration/02_sensor_sync_real.sh`를 RL 경로에서 다시 돌려야 한다.
+### 5-T) track — 같은 `(v,w)` 명령으로 검증
+
+track 노드가 `real_rl ... track`으로 떠 있고 Pi가 `route rl`이면:
+
+```bash
+./training/verify_track.sh   --profile training/rl_correction_wheel_drift/calib_profile.py   --show
+```
+
+이 한 번으로:
+
+- `02_sensor_sync_real.sh`로 보정 때와 **같은 `(v,w)` 명령** 재생
+- `training/artifacts/real_track_rl.csv`
+- `training/artifacts/compare_track_rl.png`
+- `training/artifacts/verify_track_<시각>/` 보고서
+
+> goal은 **waypoint**, track은 **`(v,w)` 명령** 재생임.
+> “보정 때와 완전히 같은 명령”이 목적이면 **track + verify_track.sh**를 쓴다.
 
 ### 6) 끝나면 안전하게 복귀
 
@@ -528,8 +543,7 @@ ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
 5. `(v+Δv, w+Δw)` clip → `/cmd_vel_rl_out`
 6. 20 Hz로 publish, 도착하면 0 publish
 
-real 배포 전에 **30 iteration밖에 안 된 모델**이면 성능이 낮을 수 있으니,
-먼저 `train_goal_friction.sh 300`으로 충분히 학습하는 것을 권장.
+real 배포 전에 **300 iteration 이상** 충분히 학습하는 것을 권장.
 
 ---
 
