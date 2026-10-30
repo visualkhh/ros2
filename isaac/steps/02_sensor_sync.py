@@ -1,8 +1,8 @@
 """02 — 센서 싱크 (sim): 같은 명령에서 v_enc · w_enc · w_gyro 기록.
 
 프로파일 (20 Hz, 기본 약 47 s):
-  2 s 정지 → 왼쪽 사각형(반시계) → 0.5 s 정지 → 오른쪽 사각형(시계) → 2 s 정지
-  각 변: 0.5 m 전진 → 0.25 s 정지 → 제자리 90도 회전 → 0.25 s 정지
+  2 s 정지 → 왼쪽 사각형(반시계) → 180° 턴 → 같은 사각형을 오른쪽(시계)으로 역주행
+  → 2 s 정지. 각 변: 0.5 m 전진 → 0.25 s 정지 → 제자리 90도 회전 → 0.25 s 정지
 
 실행:
   # 공중 (배 밑 지지 박스, 바퀴 공중) — 실제 로봇을 박스 위에 올린 상태와 비교
@@ -104,7 +104,7 @@ def main():
     print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
     print(f"[02-sim] calib: {calib_desc(condition)}")
     print(f"[02-sim] profile: side={args_cli.side:.2f} m · {total:.1f}s · "
-          f"left/right square")
+          f"left square → 180° turn → reverse")
 
     rows = []
     ox = oy = oyaw = 0.0

@@ -4,7 +4,7 @@
   → steps/artifacts/compare_<tag>.png
 
 위에서부터:
-  0) odom x-y 궤적: 왼쪽 사각형 → 오른쪽 사각형 (CSV에 odom_x/y가 있으면)
+  0) odom x-y 궤적: 왼쪽 사각형 → 180° 턴 → 같은 사각형 역주행 (CSV에 odom_x/y가 있으면)
   1) 직진: 명령 lin_raw vs v_enc (sim/real)
   2) 회전: 명령 ang_raw vs w_gyro (sim/real)  ← 부호가 반대면 IMU 축/부호 문제
   3) 직진 오차 (cmd − enc)
@@ -103,10 +103,16 @@ def series(rows, key):
 
 
 def path(rows):
-    """odom x-y를 시작점 기준으로 평행이동."""
+    """odom x-y를 시작 위치·초기 yaw 기준으로 정렬 (둘 다 +x에서 출발하게)."""
     x0, y0 = rows[0]["odom_x"], rows[0]["odom_y"]
-    return ([r["odom_x"] - x0 for r in rows],
-            [r["odom_y"] - y0 for r in rows])
+    yaw0 = rows[0].get("odom_yaw", 0.0)
+    c, s = math.cos(-yaw0), math.sin(-yaw0)
+    xs, ys = [], []
+    for r in rows:
+        dx, dy = r["odom_x"] - x0, r["odom_y"] - y0
+        xs.append(dx * c - dy * s)
+        ys.append(dx * s + dy * c)
+    return xs, ys
 
 
 def fit_wheel(real):
@@ -222,7 +228,7 @@ def main():
         ax_path.set_aspect("equal", adjustable="datalim")
         ax_path.set_xlabel("x [m]")
         ax_path.set_ylabel("y [m]")
-        ax_path.set_title("odom trajectory — left square → right square",
+        ax_path.set_title("odom trajectory — left square → 180° turn → reverse",
                           fontsize=10, pad=3)
         ax_path.legend(loc="best", fontsize=8)
         ax_path.grid(True, alpha=0.3)

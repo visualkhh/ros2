@@ -63,9 +63,10 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 `--stand --watch`는 로봇이 **배 밑 박스 위**에 올라가 바퀴만 도는 장면을 옆에서 계속 보여줌.
 박스 높이가 실제와 다르면 `--stand-height 0.04`처럼 지정.
 
-- 프로파일: **한 변 0.5 m 정사각형을 왼쪽(반시계) → 오른쪽(시계) 2번**. `--side 0.4`로 변 길이 변경.
+- 프로파일: **한 변 0.5 m 정사각형을 왼쪽(반시계)으로 1바퀴 → 180° 턴 → 같은 사각형을 오른쪽(시계)으로 역주행**. `--side 0.4`로 변 길이 변경.
 - 각 변은 `전진 → 0.25 s 정지 → 90° 제자리 회전 → 0.25 s 정지`.
-- `plot_compare` 맨 위에 **odom x-y 궤적**이 같이 나와서 사각형이 얼마나 틀어지는지 바로 보임.
+- `plot_compare` 맨 위에 **odom x-y 궤적**이 같이 나와서 사각형이 얼마나 틀어지는지 바로 보임. 두 번째 사각형은 첫 번째 선과 겹쳐야 정상.
+- real odom은 시작 위치와 초기 yaw를 0으로 맞춰서 sim과 같은 방향으로 겹쳐 그림.
 
 - sim 실행 결과: `artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
 - real 실행 결과: `artifacts/<label>.csv`

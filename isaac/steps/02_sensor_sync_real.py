@@ -1,8 +1,8 @@
 """02 — 센서 싱크 (real, PC에서 실행).
 
 로봇에 sim과 같은 정사각형 프로파일을 보내고 `/odom`·`/imu`를 CSV로 기록한다.
-2초 정지 → 왼쪽 사각형(반시계) → 0.5초 정지 → 오른쪽 사각형(시계) → 2초 정지.
-각 변: 0.5 m 전진 → 0.25 s 정지 → 제자리 90도 회전 → 0.25 s 정지.
+2초 정지 → 왼쪽 사각형(반시계) → 180° 턴 → 같은 사각형을 오른쪽(시계)으로 역주행
+→ 2초 정지. 각 변: 0.5 m 전진 → 0.25 s 정지 → 제자리 90도 회전 → 0.25 s 정지.
 sim 쪽 `02_sensor_sync.py`와 같은 `square_profile.py`를 쓴다.
 
 사전:
@@ -119,7 +119,7 @@ def main(args):
         out = args.output or str(HERE / "artifacts" / f"{args.label}.csv")
         os.makedirs(os.path.dirname(out), exist_ok=True)
         print(f"[02-real] 시작 · {total:.0f}s · {rate:.0f}Hz · side={args.side:.2f}m "
-              f"· {args.label} → {out}")
+              f"· left square → 180° turn → reverse · {args.label} → {out}")
         for k in range(n):
             t = k / rate
             v, w = cmd_at(t, segs)
