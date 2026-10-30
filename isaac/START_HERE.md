@@ -13,7 +13,7 @@ ROS는 아는데 Isaac이 처음인 사람을 위한 문서. 수식 없음.
 
 ```
 isaac/
-├── steps/                    단계별 실험 (S0~S7, 눈으로 확인하며 하나씩) ← 먼저
+├── steps/                    단계별 실험 (S0~S8, 눈으로 확인하며 하나씩) ← 먼저
 ├── tasks/rl_correct/         연습장 (빈 바닥, 명령대로 움직이게 보정)
 ├── urdf/beebot/urdf.xacro     학습용 로봇 URDF (ROS용과 같은 내용 — urdf/check_same.sh)
 ├── tasks/common/robot_spec.py  우리 로봇 숫자 한 곳 + 우리 URDF를 Isaac용(USD)으로 변환
@@ -52,7 +52,11 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 # S1. 로봇 + 방을 창에 띄워 눈으로 확인 (먼저 이걸로)
 ./steps/run.sh s01_robot_in_world.py
-#   통과: [s1] base 높이: 0.010 m · 링크 6개. 단계 전체: steps/README.md
+#   통과: [s1] base 높이: 0.010 m · 링크 6개
+
+# S2. 키보드로 직접 몰기 (W/A/S/D · Shift · X정지 · R리셋)
+./steps/run.sh s02_drive_robot.py
+#   단계 전체·통과 기준: steps/README.md
 
 # 물리 확인 (오차 0이면 명령대로 가나) — 고친 뒤 먼저
 cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/scripts/smoke_rl_correct.py; cd -
