@@ -56,25 +56,37 @@ STOP_KEYS = ("X",)
 
 
 class Keyboard:
-    """누르고 있는 키 집합. Kit 이벤트를 구독한다 (창에 포커스가 있어야 함)."""
+    """지금 눌린 키 집합 — 이벤트 구독 대신 상태를 직접 조회한다.
+
+    Kit 버전에 따라 KeyboardEvent.input이 enum이 아니라 str로 오는 경우가 있어
+    (2026-10-30 실측: `'str' object has no attribute 'name'`), 이벤트를 해석하지 않고
+    `get_keyboard_button_flags`로 현재 눌림 상태(bit 3 = down)를 읽는다.
+    키를 놓친 채 포커스가 빠져도 stuck 키가 없다.
+    """
+
+    DOWN = 1 << 3  # carb/input/InputTypes.h: kButtonFlagStateDown
+    MAP = {
+        "W": carb.input.KeyboardInput.W, "A": carb.input.KeyboardInput.A,
+        "S": carb.input.KeyboardInput.S, "D": carb.input.KeyboardInput.D,
+        "UP": carb.input.KeyboardInput.UP, "DOWN": carb.input.KeyboardInput.DOWN,
+        "LEFT": carb.input.KeyboardInput.LEFT, "RIGHT": carb.input.KeyboardInput.RIGHT,
+        "LEFT_SHIFT": carb.input.KeyboardInput.LEFT_SHIFT,
+        "RIGHT_SHIFT": carb.input.KeyboardInput.RIGHT_SHIFT,
+        "X": carb.input.KeyboardInput.X, "R": carb.input.KeyboardInput.R,
+    }
 
     def __init__(self):
-        self.pressed: set[str] = set()
         self._appwindow = omni.appwindow.get_default_app_window()
         self._input = carb.input.acquire_input_interface()
         self._keyboard = self._appwindow.get_keyboard()
-        self._sub = self._input.subscribe_to_keyboard_events(self._keyboard, self._on_event)
 
-    def _on_event(self, event, *args, **kwargs):
-        name = event.input.name
-        if event.type == carb.input.KeyboardEventType.KEY_PRESS:
-            self.pressed.add(name)
-        elif event.type == carb.input.KeyboardEventType.KEY_RELEASE:
-            self.pressed.discard(name)
-        return True
+    @property
+    def pressed(self) -> set[str]:
+        flags = self._input.get_keyboard_button_flags
+        return {name for name, key in self.MAP.items() if flags(self._keyboard, key) & self.DOWN}
 
     def close(self):
-        self._input.unsubscribe_to_keyboard_events(self._keyboard, self._sub)
+        pass
 
 
 def held(pressed, keys) -> bool:
@@ -95,7 +107,7 @@ def main():
     print(f"[s2] base 높이: {z:.3f} m")
     print("[s2] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋")
 
-    kb = Keyboard()
+    kb = None if args_cli.demo else Keyboard()
     joint_zero = torch.zeros((1, 2), device=device)
     root_zero = torch.zeros((1, 6), device=device)
     reset_latch = False
@@ -173,7 +185,8 @@ def main():
     elapsed = time.perf_counter() - t0
     print(f"[s2] 끝 위치 x={x:+.2f} m y={y:+.2f} m yaw={yaw:+.2f} rad")
     print(f"[s2] sim {sim_t:.1f} s / {frames} frames / 벽시계 {elapsed:.1f} s ({sim_t / max(elapsed, 1e-6):.2f}×)")
-    kb.close()
+    if kb is not None:
+        kb.close()
     sim.stop()
 
 
