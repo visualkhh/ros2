@@ -12,6 +12,7 @@
 | 경로 | 내용 |
 |---|---|
 | `urdf/beebot/urdf.xacro` | **학습용 로봇 URDF** — ROS용 `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`와 의도적으로 나눈 파일, **내용은 글자까지 같게** (`urdf/check_same.sh`) |
+| `steps/` | **단계별 실험 노트** — S1 창에 로봇 띄우기부터 S7 검증까지, 눈으로 확인하며 한 단계씩 ([steps/README.md](steps/README.md)) |
 | `urdf/beebot/meshes/` | 몸통·바퀴 메시 — 저장소에서 직접 관리 (tb3_bringup/meshes와 같은 파일) |
 | `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + 학습용 URDF → USD |
 | `tasks/common/onnx_export.py` | actor → ONNX (출력 = 물리 보정량, train·export 공용) |
