@@ -8,7 +8,7 @@ Pi/실기기 없이 **Isaac 안에서만** 개념을 하나씩 확인한다. 각
 | L2 | Physics · dt · substep | steps/frame을 1/2/4/8로 바꿀 때 `sim time / wall time`, 로봇이 빨라 보이는 이유 | ✅ |
 | L3 | Sensor (IMU · LiDAR) | 벽에 찍히는 라이다 hit 점, 자이로/가속도 값 | ✅ |
 | L4 | Env API (obs/action/reward/reset) | 한 스텝마다 obs 6개·action 2개·reward 출력 | ✅ |
-| L5 | Vectorization (clone) | 로봇 64대가 한 화면에서 동시에 움직임 | 예정 |
+| L5 | Vectorization (clone) | 로봇 4/16대가 한 화면에서 동시에 움직임 | ✅ |
 | L6 | Domain randomization | env마다 마찰·모터 gain이 달라 다른 궤적 | 예정 |
 | L7 | Train → export → play | TensorBoard, checkpoint, ONNX | 예정 |
 
@@ -123,3 +123,26 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   - **reward** = 진짜 몸체 속도와 명령의 차이 + 보정 크기/출렁임 벌점
   - **done/reset** = 10초 에피소드
   - 지금 sim은 보정 없이도 잘 가서 reward 개선이 작음. L6(랜덤화)에서 모터 오차를 넣으면 action 효과가 커짐.
+
+
+## L5 — Vectorization (병렬 환경) ✅
+
+```bash
+./steps/run.sh l05_vectorize.py --envs 16
+```
+
+- `InteractiveScene(num_envs=16)` → `/World/envs/env_0` ~ `env_15`에 같은 로봇이 자동 복제
+- `scene.env_origins` = 각 env의 grid 위치
+- `sim.step()` **한 번**이 16대를 동시에 진행
+- 키:
+  - `1` 전진 · `2` 좌회전 · `3` 우회전 · `0` 정지 · `R` 전체 reset
+- 콘솔:
+  ```
+  [l5] envs=16 · spacing=1.5 m · scene.env_origins=(2.25, -2.25, 0.0)
+  [l5] sim 1.0s / wall 1.0s (1.00x) · env0=(+2.25,-2.25,-0.00) · env15=(-2.25,+2.25,+0.00)
+  ```
+- 배우는 것:
+  - `{ENV_REGEX_NS}` = env마다 자동으로 `env_0`, `env_1`…로 치환
+  - `num_envs` = 로봇 수, `env_spacing` = grid 간격
+  - 학습은 이걸 수백~수천으로 늘려서 한 번에 경험을 모음
+- `--envs 4`로 작게 시작하고, `16`으로 늘려보기.

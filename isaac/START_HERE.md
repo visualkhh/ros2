@@ -72,6 +72,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 # L4. Env API — obs/action/reward/done/reset (1=보정없음, 2/4=보정)
 ./steps/run.sh l04_env_api.py
 
+# L5. 병렬 환경 — 16대가 한 번에 (1=전진, 2/3=회전)
+./steps/run.sh l05_vectorize.py --envs 16
+
 # URDF 고친 뒤 USD만 다시 생성
 ./convert_usd.sh
 
