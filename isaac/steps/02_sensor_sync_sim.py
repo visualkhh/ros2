@@ -14,6 +14,9 @@
   # 바닥 (기본: 장애물 없는 빈 바닥)
   ./steps/02_sensor_sync_sim.sh --viz none
 
+  # 이전 보정값 무시하고 raw plant로 (새 보정 시작 전 기준)
+  ./steps/02_sensor_sync_sim.sh --viz none --no-calib
+
 출력: steps/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
 CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)
 real: ./steps/02_sensor_sync_real.sh --label real_floor
@@ -36,6 +39,8 @@ from isaaclab.app import AppLauncher  # noqa: E402
 parser = argparse.ArgumentParser(description="02: sim 센서 싱크")
 parser.add_argument("--stand", action="store_true", help="배 밑 지지 박스 위 (바퀴 공중)")
 parser.add_argument("--stand-height", type=float, default=0.06, help="지지 박스 높이 [m]")
+parser.add_argument("--no-calib", action="store_true",
+                    help="이전 보정 JSON 무시: gain=1, delay=0, tau=0 (raw 기준)")
 parser.add_argument("--room", type=float, default=0.0,
                     help="방 크기 [m] (0=빈 바닥, 장애물 없음). 센서 싱크는 0 권장")
 parser.add_argument("--seed", type=int, default=0)
@@ -69,7 +74,7 @@ SUBSTEPS = round(POLICY_DT / DT)
 
 def main():
     headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
-    condition = "stand" if args_cli.stand else "floor"
+    condition = "raw" if args_cli.no_calib else ("stand" if args_cli.stand else "floor")
     segs = make_profile(args_cli.speed, args_cli.turn, args_cli.side)
     total = profile_total(segs)
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
@@ -104,7 +109,10 @@ def main():
     if not os.path.isabs(out):
         out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/artifacts/...)
     env = "empty floor (no obstacles)" if args_cli.room <= 0 else f"room {args_cli.room:.1f} m"
-    print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'} · {env}")
+    mode = "STAND" if args_cli.stand else "FLOOR"
+    if args_cli.no_calib:
+        mode += " · RAW"
+    print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {mode} · {env}")
     print(f"[02-sim] calib: {calib_desc(condition)}")
     move_speeds = [s[2] for s in segs if s[4] == "move_left"]
     speeds_txt = " / ".join(f"{v:.2f}" for v in move_speeds)

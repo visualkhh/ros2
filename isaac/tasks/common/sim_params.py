@@ -10,6 +10,7 @@
   - 02_sensor_sync_sim (바닥)  → floor
 
 파일이 없으면 아래 기본값 (2026-10-30 실측).
+`condition="raw"`는 보정 없는 기준 (gain=1, delay=0, tau=0) — `--no-calib`용.
 """
 from __future__ import annotations
 
@@ -36,12 +37,24 @@ DEFAULTS = {
     "friction_caster": (0.0, 0.0),
 }
 
+# 보정 없는 기준 — 이전 JSON/DEFAULTS를 무시하고 plant만 그대로 본다.
+RAW = {
+    **DEFAULTS,
+    "wheel_tau_s": 0.0,
+    "wheel_delay_steps": 0,
+    "wheel_gain": 1.0,
+    "wheel_deadband": 0.0,
+    "source": "raw",
+}
+
 
 def calib_path(condition: str) -> Path:
     return CALIB_DIR / f"sim_calib_{condition}.json"
 
 
 def values(condition: str = "floor") -> dict:
+    if condition == "raw":
+        return dict(RAW)
     d = dict(DEFAULTS)
     try:
         d.update(json.loads(calib_path(condition).read_text()))

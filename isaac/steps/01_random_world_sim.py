@@ -6,6 +6,7 @@
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   ./steps/01_random_world_sim.sh
+  ./steps/01_random_world_sim.sh --no-calib   # 이전 보정 JSON 무시 (raw)
 
 키:
   W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전
@@ -33,6 +34,8 @@ parser.add_argument("--size-max", type=float, default=6.0, help="방 최대 한 
 parser.add_argument("--speed", type=float, default=0.15, help="전진 속도 [m/s]")
 parser.add_argument("--turn", type=float, default=1.0, help="회전 속도 [rad/s]")
 parser.add_argument("--seconds", type=float, default=0.0, help="0 = 창을 닫을 때까지")
+parser.add_argument("--no-calib", action="store_true",
+                    help="이전 보정 JSON 무시: gain=1, delay=0, tau=0 (raw 기준)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -281,18 +284,19 @@ class CalibHUD:
 def main():
     headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
     seed = args_cli.seed if args_cli.seed is not None else random.randrange(1_000_000)
+    condition = "raw" if args_cli.no_calib else "floor"
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
     rooms = build_world(args_cli.rooms, args_cli.size_min, seed,
-                        size_range=(args_cli.size_min, args_cli.size_max), condition="floor")
+                        size_range=(args_cli.size_min, args_cli.size_max), condition=condition)
     set_camera(sim, rooms[0].origin if rooms else (0, 0, 0))
-    scene, robot, _ = spawn_robot(condition="floor")
+    scene, robot, _ = spawn_robot(condition=condition)
     sim.reset()
     settle(scene, robot, sim)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
-    wheel_model = WheelLag(dt=POLICY_DT, condition="floor")
+    wheel_model = WheelLag(dt=POLICY_DT, condition=condition)
 
     room_idx = 0
     place_robot(robot, rooms[room_idx].origin if rooms else (0, 0, 0), 0.0, wheel_ids)
@@ -305,14 +309,14 @@ def main():
                   f"{rm.size:.1f} m · 장애물 {rm.obstacles}개")
 
     show_room()
-    print(f"[01] calib: {calib_desc('floor')}")
+    print(f"[01] calib: {calib_desc(condition)}")
     print("[01] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방 · C 보정값")
 
     kb = None if headless else Keyboard()
     hud = None
     if kb is not None:
         try:
-            hud = CalibHUD("floor", wheel_model, robot, wheel_ids, scene.stage, dev)
+            hud = CalibHUD(condition, wheel_model, robot, wheel_ids, scene.stage, dev)
         except Exception as exc:
             print(f"[01] calib HUD 없이 진행: {exc}")
     target = (0.0, 0.0)

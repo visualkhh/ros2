@@ -93,15 +93,21 @@ sim도 기본이 **장애물 없는 빈 바닥**이라 주변 사물/벽 충돌 
 ./steps/02_sensor_sync_real.sh --label real_floor
 # → steps/artifacts/real_floor.csv
 
-# sim
+# sim (이전 sim_calib_floor.json을 읽음)
 ./steps/02_sensor_sync_sim.sh --viz none
 # → steps/artifacts/sim_sensor_floor.csv
+
+# sim raw (이전 보정 무시: gain=1, delay=0, tau=0)
+./steps/02_sensor_sync_sim.sh --viz none --no-calib
 
 ./steps/plot_compare.sh \
   steps/artifacts/sim_sensor_floor.csv \
   steps/artifacts/real_floor.csv --show
 # → steps/artifacts/compare_floor.png
 ```
+
+`--no-calib`는 이전 `sim_calib_floor.json`과 `sim_params.py`의 `DEFAULTS`를 모두 무시하고
+`gain=1 · delay=0 · tau=0`으로 돌린다. 새 보정을 시작하기 전 **raw 기준** 확인용.
 
 정상:
 - `w_gyro`가 **왼쪽 회전에서 +**, 오른쪽에서 −

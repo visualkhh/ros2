@@ -60,6 +60,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 # 바닥 — 기록만
 ./steps/02_sensor_sync_sim.sh --viz none
+
+# 이전 보정값 빼고 raw plant로 (새 보정 시작 전 기준)
+./steps/02_sensor_sync_sim.sh --viz none --no-calib
 ```
 
 `--stand --watch`는 로봇이 **배 밑 박스 위**에 올라가 바퀴만 도는 장면을 옆에서 계속 보여줌.
