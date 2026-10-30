@@ -31,6 +31,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 # 3) PC에서 RL corrector 노드 실행 (ONNX 파일)
 ./training/real_rl.sh \
   logs/rl_goal_friction/<날짜_시간>/rl_goal_friction.onnx goal
+
+# 4) track 검증 (같은 v,w 재생 + 비교)
+./training/verify_track.sh --show
 ```
 
 - `calibrate.sh --profile PATH`: `.py` 파일 또는 그 디렉토리.
@@ -509,22 +512,19 @@ goal은 waypoint 방식이라서 `02_sensor_sync_real.sh`의 `(v,w)` 명령을 �
 # 3) Pi
 ssh pak@pak.local 'cd ~/ros2/tool && ./run-cli base start && ./run-cli control manual && ./run-cli route rl'
 
-# 4) 보정 때와 같은 (v,w) 명령을 그대로 재생
-./training/calibration/02_sensor_sync_real.sh --label real_track_rl
-# → training/artifacts/real_track_rl.csv
-
-# 5) Before(real_floor.csv) / After(real_track_rl.csv) 비교
-./training/calibration/plot_compare.sh \
-  training/artifacts/real_floor.csv \
-  training/artifacts/real_track_rl.csv \
-  --out training/artifacts/compare_track_rl.png \
-  --calib-out /tmp/sim_calib_track_rl.json \
+# 4+5) 검증 한 번에: 같은 (v,w) 재생 + before/after 비교
+./training/verify_track.sh \
+  --profile training/rl_correction_wheel_drift/calib_profile.py \
   --show
+# → training/artifacts/real_track_rl.csv
+# → training/artifacts/compare_track_rl.png
+# → training/artifacts/verify_track_<시각>/ (로그·CSV·PNG 보고서)
 ```
 
-- 4번은 `calib_default_profile.make_profile()`의 `(v,w)` 명령을 그대로 보낸다.
+- `verify_track.sh`가 내부에서 `02_sensor_sync_real.sh`와 `plot_compare.sh`를 순서대로 실행함.
+- `02`는 `calib_default_profile.make_profile()`의 `(v,w)` 명령을 그대로 보낸다.
 - `Pi cmd_manager → /cmd_vel_rl_in → PC track corrector → /cmd_vel_rl_out → Pi`.
-- 5번에서 `--calib-out`을 `/tmp`로 준 이유: 비교용 RL 주행으로 실제 보정 JSON을 덮어쓰지 않기 위해서.
+- 비교용 `--calib-out`은 report 폴더로 보내서 실제 보정 JSON을 덮어쓰지 않음.
 
 정리:
 
