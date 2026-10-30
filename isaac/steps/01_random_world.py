@@ -9,7 +9,7 @@
 
 키:
   W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전
-  Shift 느리게 · X 정지 · R 현재 방 리셋 · N 다음 랜덤 방
+  Shift 느리게 · X 정지 · R 현재 방 리셋 · N 다음 랜덤 방 · C 보정값 창
 """
 import argparse
 import random
@@ -53,7 +53,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, place_robot, set_camera, settle, spawn_robot  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
-from tasks.common.sim_params import WheelLag, describe as calib_desc  # noqa: E402
+from tasks.common.sim_params import WheelLag, describe as calib_desc, values as calib_values  # noqa: E402
 from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -79,7 +79,7 @@ class Keyboard:
             "LEFT_SHIFT": carb.input.KeyboardInput.LEFT_SHIFT,
             "RIGHT_SHIFT": carb.input.KeyboardInput.RIGHT_SHIFT,
             "X": carb.input.KeyboardInput.X, "R": carb.input.KeyboardInput.R,
-            "N": carb.input.KeyboardInput.N,
+            "N": carb.input.KeyboardInput.N, "C": carb.input.KeyboardInput.C,
         }
         self._input = carb.input.acquire_input_interface()
         self._keyboard = omni.appwindow.get_default_app_window().get_keyboard()
@@ -92,6 +92,37 @@ class Keyboard:
 
 def held(pressed, keys) -> bool:
     return any(k in pressed for k in keys)
+
+
+def make_calib_hud(condition: str = "floor"):
+    """뷰포트 위에 지금 적용된 sim 보정값을 띄운다 (GUI 전용)."""
+    import omni.ui as ui
+
+    d = calib_values(condition)
+    steps = int(d["wheel_delay_steps"])
+    rows = [
+        ("condition", condition),
+        ("tau", f"{float(d['wheel_tau_s']):.4f} s"),
+        ("dead time", f"{steps * 0.05:.2f} s ({steps} step)"),
+        ("gain", f"{float(d['wheel_gain']):.4f}"),
+        ("deadband", f"{float(d['wheel_deadband']):.2f} rad/s"),
+        ("damping", f"{float(d['actuator_damping']):.0f}"),
+        ("effort", f"{float(d['actuator_effort']):.2f} N·m"),
+        ("wheel fric", "/".join(f"{v:.2f}" for v in d["friction_wheel"])),
+        ("caster fric", "/".join(f"{v:.2f}" for v in d["friction_caster"])),
+        ("source", str(d.get("source", "defaults"))),
+    ]
+
+    win = ui.Window("SIM CALIBRATION", width=360, height=300)
+    win.position_x, win.position_y = 18, 48
+    with win.frame:
+        with ui.VStack(spacing=3):
+            for key, val in rows:
+                with ui.HStack(height=21):
+                    ui.Label(key, width=105,
+                             style={"font_size": 13, "color": 0xFF9FB4C7})
+                    ui.Label(val, style={"font_size": 13, "color": 0xFFF0F0F0})
+    return win
 
 
 def main():
@@ -122,12 +153,18 @@ def main():
 
     show_room()
     print(f"[01] calib: {calib_desc('floor')}")
-    print("[01] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방")
+    print("[01] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방 · C 보정값")
 
     kb = None if headless else Keyboard()
+    hud = None
+    if kb is not None:
+        try:
+            hud = make_calib_hud("floor")
+        except Exception as exc:
+            print(f"[01] calib HUD 없이 진행: {exc}")
     target = (0.0, 0.0)
     prev_keys = set()
-    reset_latch = next_latch = False
+    reset_latch = next_latch = hud_latch = False
     next_cmd = 0.0
     sim_t = 0.0
     t0 = time.perf_counter()
@@ -149,6 +186,9 @@ def main():
                     v, w = v * 0.4, w * 0.4
                 if "X" in p:
                     v, w = 0.0, 0.0
+                if "C" in p and not hud_latch and hud is not None:
+                    hud.visible = not hud.visible
+                hud_latch = "C" in p
                 if "R" in p and not reset_latch:
                     place_robot(robot, rooms[room_idx].origin if rooms else (0, 0, 0), 0.0, wheel_ids)
                     wheel_model.reset()

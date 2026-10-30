@@ -40,7 +40,8 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ```
 
 - 방 크기·장애물이 랜덤. `--seed 7`로 재현, 없으면 매번 새 seed.
-- `W/A/S/D` 주행 · `Shift` 느리게 · `X` 정지 · `R` 현재 방 리셋 · `N` 다음 방.
+- `W/A/S/D` 주행 · `Shift` 느리게 · `X` 정지 · `R` 현재 방 리셋 · `N` 다음 방 · `C` 보정값 창.
+- 왼쪽 위 **SIM CALIBRATION** 창에 지금 적용된 floor 보정값(tau/dead time/gain/마찰/damping/JSON source)이 뜬다.
 
 ## 02 — 센서 싱크 (sim 기준 생성됨)
 
