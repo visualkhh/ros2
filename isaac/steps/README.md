@@ -21,7 +21,8 @@ steps/
 ├── 02_sensor_sync_real.py real 센서 기록 (PC, rclpy)
 ├── scene.py               방·로봇 생성 공용
 ├── plot_compare.py        sim/real CSV 파형 비교 도구
-├── baselines/             sim 기준 CSV (sensor_stand / sensor_floor)
+├── artifacts/             실행 산출물 CSV/PNG (git 제외)
+├── baselines/             sim 비교 기준 CSV (커밋)
 ├── PRE_RL.md              차이값을 URDF/마찰/env cfg 중 어디에 넣는지
 ├── S3_hypotheses.md       가설·실측 표
 ├── run.sh                 실행 래퍼 (--viz kit 자동)
@@ -47,7 +48,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./steps/run.sh 02_sensor_sync.py --viz none
 ```
 
-- sim 결과: `baselines/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
+- sim 실행 결과 기본: `artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
+- 비교 기준(커밋): `baselines/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
+  (기준을 갱신할 때만 `./steps/run.sh 02_sensor_sync.py --viz none --stand --out steps/baselines/sim_sensor_stand.csv`)
 - real 기록 (PC):
   ```bash
   source /opt/ros/lyrical/setup.bash
@@ -57,14 +60,14 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   # 로봇 안 움직이고 상태만 확인
   python3 steps/02_sensor_sync_real.py --check-only
 
-  python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_stand.csv --label real_stand
-  python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_floor.csv --label real_floor
+  python3 steps/02_sensor_sync_real.py --label real_stand
+  python3 steps/02_sensor_sync_real.py --label real_floor
   ```
   `/state_control`은 TRANSIENT_LOCAL(latched)라 스크립트가 그에 맞춰 구독한다.
 - 비교:
   ```bash
-  python3 steps/plot_compare.py steps/baselines/sim_sensor_stand.csv /tmp/real_sensor_stand.csv
-  python3 steps/plot_compare.py steps/baselines/sim_sensor_floor.csv /tmp/real_sensor_floor.csv
+  python3 steps/plot_compare.py steps/baselines/sim_sensor_stand.csv steps/artifacts/real_stand.csv
+  python3 steps/plot_compare.py steps/baselines/sim_sensor_floor.csv steps/artifacts/real_floor.csv
   ```
 - 공중: `v_enc≈cmd`, `w_enc≈cmd`, `w_gyro≈0`이 정상.
 - 바닥: `w_gyro` 부호·크기, `v_enc` 추종이 핵심.

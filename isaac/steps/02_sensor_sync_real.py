@@ -11,14 +11,16 @@ sim 쪽 `02_sensor_sync.py`와 같은 열/프로파일.
       source tool/peers.sh
 
 실행:
-  python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_stand.csv --label real_stand
-  # 바닥이면 --output /tmp/real_sensor_floor.csv --label real_floor
+  python3 steps/02_sensor_sync_real.py --label real_stand
+  # 바닥이면 --label real_floor
+출력 기본: steps/artifacts/<label>.csv
 """
 import argparse
 import csv
 import math
 import os
 import time
+from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
@@ -29,6 +31,7 @@ from sensor_msgs.msg import Imu
 from std_msgs.msg import String
 
 TOTAL = 9.0
+HERE = Path(__file__).resolve().parent
 
 
 def yaw_of(q):
@@ -106,7 +109,9 @@ def main(args):
         rate = args.rate
         n = int(round(TOTAL * rate))
         t0 = time.monotonic()
-        print(f"[02-real] 시작 · {TOTAL:.0f}s · {rate:.0f}Hz · {args.label} → {args.output}")
+        out = args.output or str(HERE / "artifacts" / f"{args.label}.csv")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        print(f"[02-real] 시작 · {TOTAL:.0f}s · {rate:.0f}Hz · {args.label} → {out}")
         for k in range(n):
             t = k / rate
             v, w = cmd_at(t, args.speed, args.turn)
@@ -126,7 +131,7 @@ def main(args):
             node.send(0.0, 0.0)
             rclpy.spin_once(node, timeout_sec=0.05)
 
-        with open(args.output, "w", newline="") as f:
+        with open(out, "w", newline="") as f:
             cw = csv.writer(f)
             cw.writerow(["t", "lin_raw", "ang_raw", "lin_out", "ang_out",
                          "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro", "label"])
@@ -143,7 +148,7 @@ def main(args):
         print(f"[02-real] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f}")
         if not node.imu_seen:
             print("[02-real] 경고: /imu 없음 — w_gyro가 0")
-        print(f"[02-real] → {args.output}")
+        print(f"[02-real] → {out}")
         return 0
     except KeyboardInterrupt:
         for _ in range(3):
@@ -158,7 +163,7 @@ def main(args):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="02: real 센서 싱크")
-    p.add_argument("--output", default="/tmp/real_sensor.csv")
+    p.add_argument("--output", default=None, help="기본: steps/artifacts/<label>.csv")
     p.add_argument("--label", default="real")
     p.add_argument("--speed", type=float, default=0.15)
     p.add_argument("--turn", type=float, default=1.0)

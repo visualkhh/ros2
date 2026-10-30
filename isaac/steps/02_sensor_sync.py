@@ -13,7 +13,8 @@
   # 바닥
   ./steps/run.sh 02_sensor_sync.py --viz none
 
-출력: steps/baselines/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
+출력: steps/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
+비교 기준(커밋): steps/baselines/... (갱신할 때만 --out으로 지정)
 real: python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_stand.csv
 비교: python3 steps/plot_compare.py <sim.csv> <real.csv>
 """
@@ -37,7 +38,7 @@ parser.add_argument("--room", type=float, default=4.0)
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--speed", type=float, default=0.15)
 parser.add_argument("--turn", type=float, default=1.0)
-parser.add_argument("--out", default=None, help="기본: steps/baselines/sim_sensor_[stand|floor].csv")
+parser.add_argument("--out", default=None, help="기본: steps/artifacts/sim_sensor_[stand|floor].csv")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -91,7 +92,7 @@ def main():
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
     tag = "sim_sensor_stand" if args_cli.stand else "sim_sensor_floor"
-    out = args_cli.out or str(HERE / "baselines" / f"{tag}.csv")
+    out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
         out = str(HERE / out)
     print(f"[02] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
