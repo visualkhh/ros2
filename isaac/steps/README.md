@@ -41,7 +41,10 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 - 방 크기·장애물이 랜덤. `--seed 7`로 재현, 없으면 매번 새 seed.
 - `W/A/S/D` 주행 · `Shift` 느리게 · `X` 정지 · `R` 현재 방 리셋 · `N` 다음 방 · `C` 보정값 창.
-- 왼쪽 위 **SIM CALIBRATION** 창에 지금 적용된 floor 보정값(tau/dead time/gain/마찰/damping/JSON source)이 뜬다.
+- 왼쪽 위 **SIM CALIBRATION** 창:
+  - tau/dead steps/gain/deadband/damping/effort/마찰을 **실행 중 수정** (즉시 적용, JSON 저장 안 함)
+  - **0 set** → 표시된 숫자 전부 0, **reset** → 창을 열 때 읽은 값(JSON/DEFAULTS)으로 복구
+  - 맨 아래 `source`가 `real_floor.csv`면 JSON 사용, `defaults`면 기본값 사용
 
 ## 02 — 센서 싱크 (sim 기준 생성됨)
 

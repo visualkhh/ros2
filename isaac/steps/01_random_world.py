@@ -10,6 +10,7 @@
 키:
   W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전
   Shift 느리게 · X 정지 · R 현재 방 리셋 · N 다음 랜덤 방 · C 보정값 창
+  보정값 창: 숫자 수정 즉시 적용 · 0 set(전부 0) · reset(시작값 복구)
 """
 import argparse
 import random
@@ -94,35 +95,187 @@ def held(pressed, keys) -> bool:
     return any(k in pressed for k in keys)
 
 
-def make_calib_hud(condition: str = "floor"):
-    """뷰포트 위에 지금 적용된 sim 보정값을 띄운다 (GUI 전용)."""
-    import omni.ui as ui
+class CalibHUD:
+    """실행 중 sim 보정값을 보고 고치는 창 (GUI 전용).
 
-    d = calib_values(condition)
-    steps = int(d["wheel_delay_steps"])
-    rows = [
-        ("condition", condition),
-        ("tau", f"{float(d['wheel_tau_s']):.4f} s"),
-        ("dead time", f"{steps * 0.05:.2f} s ({steps} step)"),
-        ("gain", f"{float(d['wheel_gain']):.4f}"),
-        ("deadband", f"{float(d['wheel_deadband']):.2f} rad/s"),
-        ("damping", f"{float(d['actuator_damping']):.0f}"),
-        ("effort", f"{float(d['actuator_effort']):.2f} N·m"),
-        ("wheel fric", "/".join(f"{v:.2f}" for v in d["friction_wheel"])),
-        ("caster fric", "/".join(f"{v:.2f}" for v in d["friction_caster"])),
-        ("source", str(d.get("source", "defaults"))),
-    ]
+    - 숫자 필드는 수정 즉시 sim에 반영된다 (JSON에는 저장하지 않음).
+    - `0 set` → 표시된 숫자 전부 0.
+    - `reset` → 이 창을 열 때 읽은 값(JSON 또는 DEFAULTS)으로 복구.
+    """
 
-    win = ui.Window("SIM CALIBRATION", width=360, height=300)
-    win.position_x, win.position_y = 18, 48
-    with win.frame:
-        with ui.VStack(spacing=3):
-            for key, val in rows:
-                with ui.HStack(height=21):
-                    ui.Label(key, width=105,
-                             style={"font_size": 13, "color": 0xFF9FB4C7})
-                    ui.Label(val, style={"font_size": 13, "color": 0xFFF0F0F0})
-    return win
+    LABEL_STYLE = {"font_size": 13, "color": 0xFF9FB4C7}
+    VALUE_STYLE = {"font_size": 13, "color": 0xFFF0F0F0}
+    HEAD_STYLE = {"font_size": 12, "color": 0xFFF0C040}
+
+    def __init__(self, condition, wheel_model, robot, wheel_ids, stage, device):
+        import omni.ui as ui
+
+        self.ui = ui
+        self.wheel_model = wheel_model
+        self.robot = robot
+        self.wheel_ids = wheel_ids
+        self.stage = stage
+        self.device = device
+        self._syncing = False
+        self.models = {}
+        self.kinds = {}
+
+        d = calib_values(condition)
+        self.start = {
+            "tau": float(wheel_model.tau),
+            "delay_steps": int(wheel_model.delay_steps),
+            "gain": float(wheel_model.gain),
+            "deadband": float(wheel_model.deadband),
+            "damping": float(d["actuator_damping"]),
+            "effort": float(d["actuator_effort"]),
+            "ground_s": float(d["friction_ground"][0]),
+            "ground_d": float(d["friction_ground"][1]),
+            "wheel_s": float(d["friction_wheel"][0]),
+            "wheel_d": float(d["friction_wheel"][1]),
+            "caster_s": float(d["friction_caster"][0]),
+            "caster_d": float(d["friction_caster"][1]),
+            "obstacle_s": float(d["friction_obstacle"][0]),
+            "obstacle_d": float(d["friction_obstacle"][1]),
+        }
+        self.fric_paths = {
+            "ground": "/World/ground/physicsMaterial",
+            "wheel": "/World/Materials/wheel",
+            "caster": "/World/Materials/caster",
+            "obstacle": "/World/Materials/obstacle",
+        }
+
+        self.window = ui.Window("SIM CALIBRATION", width=450, height=540)
+        try:
+            self.window.position_x, self.window.position_y = 18, 48
+        except Exception:
+            pass
+        with self.window.frame:
+            with ui.VStack(spacing=4):
+                self._heading("WHEEL MODEL")
+                self._row("tau [s]", "tau", "float")
+                self._row("dead steps", "delay_steps", "int")
+                self._row("gain", "gain", "float")
+                self._row("deadband [rad/s]", "deadband", "float")
+
+                self._heading("ACTUATOR")
+                self._row("damping", "damping", "float")
+                self._row("effort [N.m]", "effort", "float")
+
+                self._heading("FRICTION (static / dynamic)")
+                self._pair("ground", "ground_s", "ground_d")
+                self._pair("wheel", "wheel_s", "wheel_d")
+                self._pair("caster", "caster_s", "caster_d")
+                self._pair("obstacle", "obstacle_s", "obstacle_d")
+
+                with ui.HStack(spacing=6, height=30):
+                    ui.Button("0 set", clicked_fn=self.zero, width=110)
+                    ui.Button("reset", clicked_fn=self.reset, width=110)
+
+                self.status = ui.Label(f"source: {d.get('source', 'defaults')}",
+                                       height=20, style=self.LABEL_STYLE)
+
+    def _heading(self, text):
+        self.ui.Label(text, height=20, style=self.HEAD_STYLE)
+
+    def _row(self, label, key, kind):
+        ui = self.ui
+        with ui.HStack(height=22):
+            ui.Label(label, width=145, style=self.LABEL_STYLE)
+            if kind == "int":
+                model = ui.SimpleIntModel(int(self.start[key]))
+                ui.IntField(model, width=120)
+            else:
+                model = ui.SimpleFloatModel(float(self.start[key]))
+                ui.FloatField(model, width=120)
+            model.add_value_changed_fn(lambda _m: self.apply())
+        self.models[key] = model
+        self.kinds[key] = kind
+
+    def _pair(self, label, key_s, key_d):
+        ui = self.ui
+        with ui.HStack(height=22):
+            ui.Label(label, width=145, style=self.LABEL_STYLE)
+            for key in (key_s, key_d):
+                model = ui.SimpleFloatModel(float(self.start[key]))
+                ui.FloatField(model, width=65)
+                model.add_value_changed_fn(lambda _m: self.apply())
+                self.models[key] = model
+                self.kinds[key] = "float"
+            ui.Label("static / dynamic", width=120, style=self.LABEL_STYLE)
+
+    def _num(self, key):
+        if self.kinds[key] == "int":
+            return float(self.models[key].get_value_as_int())
+        return float(self.models[key].get_value_as_float())
+
+    def _set_all(self, values):
+        self._syncing = True
+        try:
+            for key, model in self.models.items():
+                val = float(values.get(key, 0.0))
+                model.set_value(int(round(val)) if self.kinds[key] == "int" else val)
+        finally:
+            self._syncing = False
+
+    def _set_friction(self, path, static, dynamic):
+        from pxr import Sdf, UsdPhysics
+
+        prim = self.stage.GetPrimAtPath(path)
+        if not prim or not prim.IsValid():
+            return False
+        if not prim.HasAPI(UsdPhysics.MaterialAPI):
+            UsdPhysics.MaterialAPI.Apply(prim)
+        for name, value in (("physics:staticFriction", static),
+                            ("physics:dynamicFriction", dynamic)):
+            attr = prim.GetAttribute(name)
+            if not attr:
+                attr = prim.CreateAttribute(name, Sdf.ValueTypeNames.Float)
+            attr.Set(float(value))
+        return True
+
+    def apply(self):
+        if self._syncing:
+            return
+        w = self.wheel_model
+        w.tau = max(0.0, self._num("tau"))
+        w.set_delay_steps(int(round(self._num("delay_steps"))))
+        w.gain = self._num("gain")
+        w.deadband = self._num("deadband")
+
+        n = len(self.wheel_ids)
+        damping = max(0.0, self._num("damping"))
+        effort = max(0.0, self._num("effort"))
+        try:
+            self.robot.write_joint_damping_to_sim_index(
+                damping=torch.full((1, n), damping, device=self.device),
+                joint_ids=self.wheel_ids)
+            self.robot.write_joint_effort_limit_to_sim_index(
+                limits=torch.full((1, n), effort, device=self.device),
+                joint_ids=self.wheel_ids)
+        except Exception as exc:
+            self.status.text = f"actuator write failed: {exc}"
+            return
+
+        missing = [name for name, path in self.fric_paths.items()
+                   if not self._set_friction(path, self._num(f"{name}_s"),
+                                             self._num(f"{name}_d"))]
+        if missing:
+            self.status.text = f"live · friction missing: {', '.join(missing)}"
+        else:
+            self.status.text = "live edit (not saved)"
+
+    def zero(self):
+        self._set_all({key: 0.0 for key in self.start})
+        self.apply()
+        self.status.text = "0 set (not saved)"
+
+    def reset(self):
+        self._set_all(self.start)
+        self.apply()
+        self.status.text = "reset to loaded values"
+
+    def toggle(self):
+        self.window.visible = not self.window.visible
 
 
 def main():
@@ -159,7 +312,7 @@ def main():
     hud = None
     if kb is not None:
         try:
-            hud = make_calib_hud("floor")
+            hud = CalibHUD("floor", wheel_model, robot, wheel_ids, scene.stage, dev)
         except Exception as exc:
             print(f"[01] calib HUD 없이 진행: {exc}")
     target = (0.0, 0.0)
@@ -187,7 +340,7 @@ def main():
                 if "X" in p:
                     v, w = 0.0, 0.0
                 if "C" in p and not hud_latch and hud is not None:
-                    hud.visible = not hud.visible
+                    hud.toggle()
                 hud_latch = "C" in p
                 if "R" in p and not reset_latch:
                     place_robot(robot, rooms[room_idx].origin if rooms else (0, 0, 0), 0.0, wheel_ids)
