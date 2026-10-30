@@ -260,8 +260,8 @@ local_costmap:
         lethal_override_cost: 200
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.30
+        cost_scaling_factor: 10.0   # 최소 인플레이션: 장애물 바로 옆만 진하고 금방 0 (3.0은 0.3 m 띠 전체가 진함)
+        inflation_radius: 0.26      # 최소 = footprint 가장 먼 모서리 0.251 m + 1 cm (더 작으면 모서리 충돌을 못 봄)
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: true
@@ -342,8 +342,8 @@ global_costmap:
         map_subscribe_transient_local: true
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.3
+        cost_scaling_factor: 10.0   # 최소 인플레이션: 장애물 바로 옆만 진하고 금방 0 (3.0은 0.3 m 띠 전체가 진함)
+        inflation_radius: 0.26      # 최소 = footprint 가장 먼 모서리 0.251 m + 1 cm (더 작으면 모서리 충돌을 못 봄)
       always_send_full_costmap: true
       introspection_mode: "disabled"
 
