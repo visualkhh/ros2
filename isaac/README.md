@@ -22,8 +22,9 @@
 | `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + 학습용 URDF → USD |
 | `tasks/common/onnx_export.py` | actor → ONNX (출력 = 물리 보정량, train·export 공용) |
 | `rl/` | **RL task 모음** — task별 폴더 ([rl/README.md](rl/README.md)) |
-| `rl/wheel_drift/` | **바퀴 드리프트 보정** — env·train·export·play ([rl/wheel_drift/README.md](rl/wheel_drift/README.md)) |
-| `rl/wheel_drift/smoke.py` | 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
+| `rl/wheel_drift/` | **바퀴 드리프트 보정** — track/goal env·train·export·play ([rl/wheel_drift/README.md](rl/wheel_drift/README.md)) |
+| `rl/wheel_drift/smoke.py` | track 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
+| `rl/wheel_drift/smoke_goal.py` | goal 확인: 오차 0일 때 목표 (1,0) m까지 가나 |
 | `scripts/load_urdf.py` | URDF만 띄워 보기 |
 | `rl/wheel_drift/train.py · export.py · play.py` | 학습 · ONNX 뽑기 · 구경 |
 | `logs/` · `export/` | 산출물 (git 제외) |

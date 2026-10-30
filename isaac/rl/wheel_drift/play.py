@@ -15,6 +15,8 @@ from isaaclab.app import AppLauncher  # noqa: E402
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", required=True)
 parser.add_argument("--envs", type=int, default=4)
+parser.add_argument("--task", choices=("track", "goal"), default=None,
+                    help="기본: ONNX 입력 차원으로 자동 (6=track, 10=goal)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 app_launcher = AppLauncher(args)
@@ -25,16 +27,22 @@ import torch  # noqa: E402
 
 
 def main():
-    from rl.wheel_drift.task.rl_correct_env import RlCorrectEnv  # noqa: E402
-    from rl.wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
-
-    env_cfg = RlCorrectEnvCfg()
-    env_cfg.scene.num_envs = args.envs
-    env = RlCorrectEnv(env_cfg)
-
     sess = ort.InferenceSession(args.model, providers=["CPUExecutionProvider"])
     in_name = sess.get_inputs()[0].name
-    print(f"[play] {args.model} (obs_dim={sess.get_inputs()[0].shape[1]})")
+    obs_dim = int(sess.get_inputs()[0].shape[1])
+
+    task = args.task or ("goal" if obs_dim == 10 else "track")
+    if task == "goal":
+        from rl.wheel_drift.task.goal_env import RlGoalEnv as TaskEnv  # noqa: E402
+        from rl.wheel_drift.task.goal_env_cfg import GoalEnvCfg as TaskCfg  # noqa: E402
+    else:
+        from rl.wheel_drift.task.rl_correct_env import RlCorrectEnv as TaskEnv  # noqa: E402
+        from rl.wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg as TaskCfg  # noqa: E402
+
+    env_cfg = TaskCfg()
+    env_cfg.scene.num_envs = args.envs
+    env = TaskEnv(env_cfg)
+    print(f"[play] {args.model} · task={task} · obs_dim={obs_dim}")
 
     obs, _ = env.reset()
     while True:

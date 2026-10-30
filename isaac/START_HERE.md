@@ -78,18 +78,24 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/wheel_drift/smoke.py; cd -
 
 # 학습 — 창 보면서: 뒤에 --visualizer kit
-./rl/wheel_drift/train.sh 300
+./rl/wheel_drift/train.sh 300          # track: (v,w) 추종
+./rl/wheel_drift/train_goal.sh 300     # goal: 목표 변위까지 이동
+
+# goal 스모크 (목표 (1,0) m)
+cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/wheel_drift/smoke_goal.py; cd -
 
 # 체크포인트 → ONNX
 ./rl/wheel_drift/export.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./rl/wheel_drift/export.sh logs/rl_goal/<날짜_시간>/model_299.pt goal_v1.onnx goal
 
-# 구경
+# 구경 (ONNX 입력 차원으로 track/goal 자동 판별)
 ./rl/wheel_drift/play.sh export/rl_correct/rl_correct_v2.onnx 4
+./rl/wheel_drift/play.sh export/rl_goal/goal_v1.onnx 4
 ```
 
 ## 6. 로봇(ROS) 연결
 
-- 결과물은 ONNX 하나: `[1,6]` → `[1,2]` (물리 보정량 m/s, rad/s).
+- 결과물은 ONNX 하나: track `[1,6]`, goal `[1,10]` → `[1,2]` (물리 보정량 m/s, rad/s).
 - PC에서 `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>` → `./run-cli route rl` (PC에 `onnxruntime` 필요).
 - 로봇 `/imu` 20 Hz 동작 확인 (2026-10-30) — OpenCR `I` 줄. 정지 시 gz≈0, az≈9.98.
 - **Isaac sim 토픽 계약**: `/isaacros/...`, `ROS_DOMAIN_ID=26` — [ROS2_TOPICS.md](ROS2_TOPICS.md). real(25)과 분리.

@@ -2,8 +2,9 @@
 
 Usage (Lab env):
   cd /home/pank/pa-course/IsaacLab-6.1
-  ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/train.py [--max-iterations N] [--visualizer kit]
-Watch: add --visualizer kit (default is no window). Logs: isaac/logs/rl_correct/.
+  ./isaaclab.sh -p .../rl/wheel_drift/train.py [--task track|goal] [--max-iterations N] [--visualizer kit]
+Watch: add --visualizer kit (default is no window).
+Logs: isaac/logs/rl_correct/ (track) 또는 isaac/logs/rl_goal/ (goal).
 """
 import argparse
 import os
@@ -14,6 +15,7 @@ sys.path.insert(0, "/home/pank/workspaces/visualkhh/source/ros2/isaac")
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--task", choices=("track", "goal"), default="track")
 parser.add_argument("--max-iterations", type=int, default=None)
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
@@ -25,12 +27,17 @@ from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
 from rl.wheel_drift.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
 
-from rl.wheel_drift.task.rl_correct_env import RlCorrectEnv  # noqa: E402
-from rl.wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
+if args.task == "goal":
+    from rl.wheel_drift.task.goal_env import RlGoalEnv as TaskEnv  # noqa: E402
+    from rl.wheel_drift.task.goal_env_cfg import GoalEnvCfg as TaskCfg  # noqa: E402
+    exp_name = "rl_goal"
+else:
+    from rl.wheel_drift.task.rl_correct_env import RlCorrectEnv as TaskEnv  # noqa: E402
+    from rl.wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg as TaskCfg  # noqa: E402
+    exp_name = "rl_correct"
 
-env_cfg = RlCorrectEnvCfg()
+env_cfg = TaskCfg()
 env_cfg.scene.num_envs = 512
-exp_name = "rl_correct"
 
 
 def main():
@@ -46,7 +53,7 @@ def main():
     if args.max_iterations:
         agent_cfg.max_iterations = args.max_iterations
 
-    env = RslRlVecEnvWrapper(RlCorrectEnv(env_cfg))
+    env = RslRlVecEnvWrapper(TaskEnv(env_cfg))
     import importlib.metadata as _md
     from isaaclab_rl.rsl_rl.utils import handle_deprecated_rsl_rl_cfg  # noqa: E402
 
