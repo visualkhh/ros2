@@ -97,11 +97,11 @@ w_enc = r·(wr − wl)/sep
 2. 바퀴 반지름·간격 (줄자/10바퀴)
 3. 직진 5 m · 제자리 5회전 (줄자·자이로)
 4. 정지 30 s · 정속 30 s 로그 (잡음·bias)
-5. 계단응답 10회 (`steps/s05_step_response.py` sim ↔ `steps/real_step_profile.py` real)
+5. 계단응답 10회 (03/04 스크립트 — 재작성 예정)
 6. WiFi 명령·관측 지연 (타임스탬프)
 
 ## 판정 규칙
 
 - 한 항목이라도 합격 밖이면 **sim 파라미터를 real에 맞춘다** (real을 sim에 맞추지 않음).
 - sim cfg 범위 밖의 real 값이 나오면 cfg 범위를 **실측 근거로** 넓힌다. 근거 없이 넓히지 않는다.
-- S5 비교는 `steps/compare_step.py`의 표 수치로 판정. "눈으로 비슷함"은 보조.
+- 비교는 `steps/plot_compare.py`의 표·파형 수치로 판정. "눈으로 비슷함"은 보조.

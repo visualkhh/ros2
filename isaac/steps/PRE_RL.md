@@ -3,8 +3,8 @@
 `rl/wheel_drift/` 학습을 돌리기 전에 **sim이 real의 대리인**이 되도록 맞추는 단계.
 `steps/`의 S3~S6이 여기에 해당한다.
 
-- 랜덤 환경: `steps/s06_random_world.py`
-- sim↔real 신호 비교: `steps/s05_step_response.py` · `real_step_profile.py` · `compare_step.py` · `plot_compare.py`
+- 랜덤 환경: `steps/01_random_world.py`
+- sim↔real 신호 비교: `02~04`에서 다시 만든다 (현재 `plot_compare.py`만 유지)
 - 가설/실측 표: `steps/S3_hypotheses.md`
 
 ## 제일 중요한 원칙
@@ -29,12 +29,12 @@
 ## 순서
 
 1. **S3 가설 표** — 무엇을 잴지 정한다 (`S3_hypotheses.md`).
-2. **S5a 공중(지지 박스)** — 모터·엔코더·IMU 스케일/부호/지연.
+2. **03 공중(지지 박스)** — 모터·엔코더·IMU 스케일/부호/지연.
    - `v_enc ≈ cmd`, `w_enc ≈ cmd`, `w_gyro ≈ 0`이면 통과.
-3. **S5b 바닥** — 마찰·슬립 포함 실제 응답.
+3. **04 바닥** — 마찰·슬립 포함 실제 응답.
    - `w_gyro` 부호·크기, `v_enc` 추종.
 4. 차이를 위 표에 따라 **URDF / scene material / env cfg**에 반영.
-5. S5를 다시 돌려 파형이 겹치는지 확인.
+5. 03/04를 다시 돌려 파형이 겹치는지 확인.
 6. 그다음 `rl/wheel_drift/train.sh`로 학습.
 
 ## USD를 고쳐야 하는 경우
@@ -45,7 +45,6 @@
 
 ## 현재 상태 (2026-10-30)
 
-- S6 랜덤 환경 1차 완료 (`s06_random_world.py`)
-- S5 공중 sim 기준: `v_enc 0.150 / w_enc 1.000 / w_gyro≈0`
-- S5 바닥 sim 기준: `rms_v 0.014 / rms_w 0.093`
-- real 공중/바닥 측정 대기 — 이 값이 들어와야 env cfg의 τ/gain/deadband/지연을 맞춘다.
+- 01 랜덤 환경 완료 (`01_random_world.py`)
+- 이전 측정값(참고): 공중 `v_enc 0.150 / w_enc 1.000 / w_gyro≈0`, 바닥 `rms_v 0.014 / rms_w 0.093`
+- 02~04 스크립트를 다시 만든 뒤 real 공중/바닥을 측정한다. 그 값으로 env cfg의 τ/gain/deadband/지연을 맞춘다.

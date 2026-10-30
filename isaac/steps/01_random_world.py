@@ -1,11 +1,11 @@
-"""S6 — 랜덤 환경에서 우리 로봇 띄우기.
+"""01 — 랜덤 환경에서 우리 로봇 띄우기.
 
 방 크기(3.5~6.0 m)와 장애물(3~6개) 배치가 방마다 랜덤.
 방 8개를 미리 만들어 두고 N으로 로봇만 순간이동한다 (프림 삭제/재생성 없음).
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/run.sh s06_random_world.py
+  ./steps/run.sh 01_random_world.py
 
 키:
   W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전
@@ -115,11 +115,11 @@ def main():
     def show_room():
         if rooms:
             rm = rooms[room_idx]
-            print(f"[s6] seed {seed} · 방 {room_idx + 1}/{len(rooms)} · "
+            print(f"[01] seed {seed} · 방 {room_idx + 1}/{len(rooms)} · "
                   f"{rm.size:.1f} m · 장애물 {rm.obstacles}개")
 
     show_room()
-    print("[s6] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방")
+    print("[01] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방")
 
     kb = None if headless else Keyboard()
     target = (0.0, 0.0)

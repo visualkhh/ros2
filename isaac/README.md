@@ -13,7 +13,7 @@
 |---|---|
 | `urdf/beebot/urdf.xacro` | **학습용 로봇 URDF** — ROS용 `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`와 의도적으로 나눈 파일, **내용은 글자까지 같게** (`urdf/check_same.sh`) |
 | `learn/` | **Isaac 개념 실습 L1~L7** — 하드웨어 없이 Stage/Prim/Sensor/Env/학습 ([learn/README.md](learn/README.md)) |
-| `steps/` | **프로젝트 단계 S0~S8** — URDF·센서·실기기와 하나씩 맞추는 작업 ([steps/README.md](steps/README.md)) |
+| `steps/` | **RL 전 셋팅 01~06** — 랜덤월드·센서/실기기 싱크 ([steps/README.md](steps/README.md)) |
 | `steps/PRE_RL.md` | **RL 전 셋팅** — 랜덤월드·sim/real 싱크·차이값을 URDF/마찰/env cfg 중 어디에 넣는지 |
 | `ROS2_TOPICS.md` | **Isaac sim ↔ ROS 2 토픽 계약** — `/isaacros/...`, domain 26 ([ROS2_TOPICS.md](ROS2_TOPICS.md)) |
 | `urdf/beebot/meshes/` | 몸통·바퀴 메시 — 저장소에서 직접 관리 (tb3_bringup/meshes와 같은 파일) |

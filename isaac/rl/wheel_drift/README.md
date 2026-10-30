@@ -3,7 +3,7 @@
 목적: **같은 경로를 RL 끄고(Before) / 켜고(After) 달려서 로봇이 명령대로 움직이는 정도를 수치로** 보인다.
 설계·평가 기준은 [../../../documents/isaac/task-spec.md](../../../documents/isaac/task-spec.md).
 
-- `steps/` = 환경·센서·실기기 싱크 (S0~S8)
+- `steps/` = RL 전 셋팅 01~06 (환경·센서·실기기 싱크)
 - `rl/wheel_drift/` = 그 위에서 도는 **바퀴 보정 정책** (환경 · 학습 · export · play)
 
 ## 구조
@@ -50,7 +50,7 @@ tensorboard --logdir logs/rl_correct
 
 ## 실기기 검증 (Before / After)
 
-1. **먼저 센서/액추에이터 싱크** — [`steps/PRE_RL.md`](../../steps/PRE_RL.md) · S5 (공중 지지 박스 → 바닥)
+1. **먼저 센서/액추에이터 싱크** — [`steps/PRE_RL.md`](../../steps/PRE_RL.md) · 02~04 (공중 지지 박스 → 바닥)
 2. PC: `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>`
 3. Pi: `./run-cli route rl`
 4. 같은 스크립트 주행으로 `rl_eval/eval_recorder` before/after CSV
@@ -61,4 +61,4 @@ tensorboard --logdir logs/rl_correct
 ## 주의
 
 - `rl/wheel_drift/task` 환경은 **sim 전용**. 실기기에서 관측 가능한 값만 obs로 쓴다.
-- 학습 전에 `steps/`의 S5로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 아무리 잘 돼도 real에서 효과가 없다.
+- 학습 전에 `steps/`의 02~04로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 아무리 잘 돼도 real에서 효과가 없다.

@@ -14,7 +14,7 @@ ROS는 아는데 Isaac이 처음인 사람을 위한 문서. 수식 없음.
 ```
 isaac/
 ├── learn/                    Isaac 개념 실습 L1~L7 (하드웨어 없이)
-├── steps/                    프로젝트 S0~S8 (실기기와 맞추기)
+├── steps/                    RL 전 셋팅 01~06 (랜덤월드·센서/실기기)
 ├── rl/wheel_drift/           바퀴 드리프트 보정 RL (task·train·export·play)
 ├── urdf/beebot/urdf.xacro     학습용 로봇 URDF (ROS용과 같은 내용 — urdf/check_same.sh)
 ├── usd/                       URDF→USD 결과 (매 실행 생성, git 제외)
@@ -49,16 +49,8 @@ isaac/
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
-# S1. 로봇 + 방을 창에 띄워 눈으로 확인 (먼저 이걸로)
-./steps/run.sh s01_robot_in_world.py
-#   통과: [s1] base 높이: 0.010 m · 링크 6개
-
-# S2. 키보드로 직접 몰기 (W/A/S/D · Shift · X정지 · R리셋 · N 다음 방)
-./steps/run.sh s02_drive_robot.py
-#   단계 전체·통과 기준: steps/README.md
-
-# S6. 랜덤 환경 — 방 크기·장애물 랜덤 + 우리 로봇 (N 다음 방)
-./steps/run.sh s06_random_world.py
+# 01. 랜덤 환경 + 우리 로봇 (N 다음 방, W/A/S/D 주행)
+./steps/run.sh 01_random_world.py
 
 # L1. Isaac 개념 — 로봇 해부 (1=prim 트리, 2=joint 상태, 3/4/5=바퀴)
 ./learn/run.sh l01_robot_anatomy.py
