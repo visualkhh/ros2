@@ -28,6 +28,7 @@ from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane 
 from isaaclab.utils import configclass  # noqa: E402
 from isaaclab.utils.math import quat_from_euler_xyz  # noqa: E402
 
+from tasks.common import sim_params as cal  # noqa: E402
 from tasks.common.robot_spec import robot_usd  # noqa: E402
 
 WALL_H = 1.1
@@ -38,10 +39,10 @@ FREE_RADIUS = 0.75      # 로봇 스폰 자리 — 장애물 금지
 CAM_OFF = (1.8, -1.8, 1.55)
 CAM_LOOK_Z = 0.15
 
-# 마찰 (static, dynamic). 실제 Waffle Pi 바퀴는 고무, 바닥은 연구실 장판 기준의 출발값.
-FRICTION_GROUND = (0.8, 0.7)
-FRICTION_OBSTACLE = (0.7, 0.5)
-FRICTION_WHEEL = (1.0, 1.0)
+# 마찰 (static, dynamic) — tasks/common/sim_params.py 한 곳에서
+FRICTION_GROUND = cal.FRICTION_GROUND
+FRICTION_OBSTACLE = cal.FRICTION_OBSTACLE
+FRICTION_WHEEL = cal.FRICTION_WHEEL
 
 PALETTE = (
     (0.75, 0.15, 0.12), (0.12, 0.55, 0.20), (0.15, 0.30, 0.75),
@@ -187,8 +188,8 @@ def robot_articulation_cfg(prim_path: str = "/World/Robot", usd_path: str | None
         spawn=sim_utils.UsdFileCfg(usd_path=usd_path, fix_root_link=True if fix_root else None),
         init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, ROBOT_Z if init_z is None else init_z)),
         actuators={"wheels": ImplicitActuatorCfg(
-            joint_names_expr=[".*wheel.*"], effort_limit=3.0,   # XM430-W210 stall ≈ 3 N·m (RL 환경과 같게)
-            velocity_limit=8.0, stiffness=0.0, damping=20.0)},
+            joint_names_expr=[".*wheel.*"], effort_limit=cal.ACTUATOR_EFFORT,
+            velocity_limit=8.0, stiffness=0.0, damping=cal.ACTUATOR_DAMPING)},
     )
     return cfg, usd_path
 
@@ -197,7 +198,7 @@ def bind_robot_materials(scene, prim_path: str = "/World/Robot"):
     """바퀴 마찰 1.0 · 캐스터 0 (RL 환경 _setup_scene과 같은 처리)."""
     from pxr import PhysxSchema, UsdPhysics
     wheel_mat = _material("/World/Materials/wheel", FRICTION_WHEEL)
-    caster_mat = _material("/World/Materials/caster", (0.0, 0.0))
+    caster_mat = _material("/World/Materials/caster", cal.FRICTION_CASTER)
     for prim in scene.stage.Traverse():
         path = str(prim.GetPath())
         if not path.startswith(prim_path):

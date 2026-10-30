@@ -57,6 +57,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
+from tasks.common.sim_params import WheelLag, describe as calib_desc  # noqa: E402
 from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -101,11 +102,13 @@ def main():
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
+    wheel_model = WheelLag(dt=POLICY_DT)
     tag = "sim_sensor_stand" if args_cli.stand else "sim_sensor_floor"
     out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
         out = str(HERE.parent / out)   # isaac/ 기준 (예: steps/artifacts/...)
     print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {'STAND' if args_cli.stand else 'FLOOR'}")
+    print(f"[02-sim] calib: {calib_desc()}")
 
     rows = []
     ox = oy = oyaw = 0.0
@@ -113,7 +116,7 @@ def main():
     for k in range(n):
         t = k * POLICY_DT
         v, w = cmd_at(t)
-        wheels = wheel_targets(torch.tensor([v], device=dev), torch.tensor([w], device=dev), r, sep, spec.MAX_WHEEL)
+        wheels = wheel_model.step(v, w, wheel_targets, r, sep, spec.MAX_WHEEL, dev)
         robot.set_joint_velocity_target(wheels, joint_ids=wheel_ids)
         scene.write_data_to_sim()
         for _ in range(SUBSTEPS):

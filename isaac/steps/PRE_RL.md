@@ -49,3 +49,23 @@
 - 02 센서 싱크 스크립트 준비 (`02_sensor_sync.sh` sim / `02_sensor_sync_real.sh` real); 둘 다 직접 실행
 - 이전 측정값(참고): 공중 `v_enc 0.150 / w_enc 1.000 / w_gyro≈0`, 바닥 `rms_v 0.014 / rms_w 0.093`
 - 02~04 스크립트를 다시 만든 뒤 real 공중/바닥을 측정한다. 그 값으로 env cfg의 τ/gain/deadband/지연을 맞춘다.
+
+
+## 보정값 위치 (2026-10-30)
+
+`isaac/tasks/common/sim_params.py` 한 곳:
+
+```python
+WHEEL_TAU = 0.05          # 1차 지연
+WHEEL_DELAY_STEPS = 2     # 20 Hz → 0.1 s dead time
+WHEEL_GAIN = 0.994
+WHEEL_DEADBAND = 0.0
+ACTUATOR_DAMPING = 100.0
+FRICTION_GROUND = (0.8, 0.7)
+FRICTION_WHEEL = (1.0, 1.0)
+FRICTION_CASTER = (0.0, 0.0)
+```
+
+- `01_random_world`와 `02_sensor_sync`가 이 값을 import해서 **같은 보정 모델**로 움직임.
+- 공중(stand)은 real과 거의 일치: `v_enc 0.149/0.149 · 바퀴 4.517/4.517`.
+- 바닥(floor)은 sim 슬립·drift가 남음: `v_enc 0.133/0.149 · w_gyro 0.843/0.960` → 다음은 caster/마찰 튜닝.

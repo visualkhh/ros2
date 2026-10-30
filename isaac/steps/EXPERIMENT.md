@@ -142,6 +142,9 @@ CSV 열:
 | real만 느림 (t90 큼) | real은 그대로. sim env에 `tau`/`delay` 추가 (`rl/wheel_drift/task/rl_correct_env_cfg.py`) |
 | `w_gyro` 부호 반대 | IMU 축/부호 (real: driver/firmware/URDF; sim: `root_ang_vel_b`) |
 
+sim 보정값은 `isaac/tasks/common/sim_params.py` 한 곳 (τ·delay·gain·deadband·액추에이터·마찰).
+`01_random_world`와 `02_sensor_sync`가 같은 값을 쓴다.
+
 **USD 직접 수정 금지** — `robot_usd()`가 URDF에서 매번 다시 만든다. 형상/질량은 URDF를 고치고 `./convert_usd.sh`.
 
 ## 7. 기록 양식

@@ -53,6 +53,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, place_robot, set_camera, settle, spawn_robot  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
+from tasks.common.sim_params import WheelLag, describe as calib_desc  # noqa: E402
 from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -107,6 +108,7 @@ def main():
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
+    wheel_model = WheelLag(dt=POLICY_DT)
 
     room_idx = 0
     place_robot(robot, rooms[room_idx].origin if rooms else (0, 0, 0), 0.0, wheel_ids)
@@ -119,6 +121,7 @@ def main():
                   f"{rm.size:.1f} m · 장애물 {rm.obstacles}개")
 
     show_room()
+    print(f"[01] calib: {calib_desc()}")
     print("[01] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방")
 
     kb = None if headless else Keyboard()
@@ -148,20 +151,21 @@ def main():
                     v, w = 0.0, 0.0
                 if "R" in p and not reset_latch:
                     place_robot(robot, rooms[room_idx].origin if rooms else (0, 0, 0), 0.0, wheel_ids)
+                    wheel_model.reset()
                     v, w = 0.0, 0.0
                 reset_latch = "R" in p
                 if "N" in p and not next_latch and rooms:
                     room_idx = (room_idx + 1) % len(rooms)
                     place_robot(robot, rooms[room_idx].origin, 0.0, wheel_ids)
                     set_camera(sim, rooms[room_idx].origin)
+                    wheel_model.reset()
                     show_room()
                     v, w = 0.0, 0.0
                 next_latch = "N" in p
                 target = (max(-spec.MAX_LIN, min(spec.MAX_LIN, v)),
                           max(-spec.MAX_ANG, min(spec.MAX_ANG, w)))
-            wheels = wheel_targets(torch.tensor([target[0]], device=dev),
-                                   torch.tensor([target[1]], device=dev),
-                                   r, sep, spec.MAX_WHEEL)
+            wheels = wheel_model.step(target[0], target[1], wheel_targets, r, sep,
+                                      spec.MAX_WHEEL, dev)
             robot.set_joint_velocity_target(wheels, joint_ids=wheel_ids)
             scene.write_data_to_sim()
             scene.update(POLICY_DT)
