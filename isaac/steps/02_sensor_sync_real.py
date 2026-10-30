@@ -22,6 +22,7 @@ import time
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
@@ -53,7 +54,13 @@ class SensorSync(Node):
         self.imu_seen = False
         self.out = (0.0, 0.0)
         self.pub = self.create_publisher(Twist, "/cmd_manual_vel", 10)
-        self.create_subscription(String, "/state_control", lambda m: setattr(self, "state", m.data), 10)
+        # /state_control은 TRANSIENT_LOCAL (latched) — 기본 volatile이면 현재 상태를 못 받음
+        state_qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.create_subscription(String, "/state_control", lambda m: setattr(self, "state", m.data), state_qos)
         self.create_subscription(Odometry, "/odom", self.on_odom, 10)
         self.create_subscription(Imu, "/imu", self.on_imu, 10)
         self.create_subscription(Twist, "/cmd_vel_base", self.on_out, 10)
@@ -83,6 +90,8 @@ def main(args):
         while node.state is None and time.monotonic() < end:
             rclpy.spin_once(node, timeout_sec=0.1)
         print(f"[02-real] ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '(unset)')} · state={node.state}")
+        if args.check_only:
+            return 0
         if node.state != "MANUAL":
             print("[02-real] 거부: MANUAL 아님 — Pi에서 ./run-cli mode manual 먼저")
             return 2
@@ -154,4 +163,5 @@ if __name__ == "__main__":
     p.add_argument("--speed", type=float, default=0.15)
     p.add_argument("--turn", type=float, default=1.0)
     p.add_argument("--rate", type=float, default=20.0)
+    p.add_argument("--check-only", action="store_true", help="상태만 확인하고 종료 (로봇 안 움직임)")
     raise SystemExit(main(p.parse_args()))

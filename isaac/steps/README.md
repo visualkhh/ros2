@@ -50,9 +50,17 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 - sim 결과: `baselines/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
 - real 기록 (PC):
   ```bash
+  source /opt/ros/lyrical/setup.bash
+  export ROS_DOMAIN_ID=25
+  source tool/peers.sh
+
+  # 로봇 안 움직이고 상태만 확인
+  python3 steps/02_sensor_sync_real.py --check-only
+
   python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_stand.csv --label real_stand
   python3 steps/02_sensor_sync_real.py --output /tmp/real_sensor_floor.csv --label real_floor
   ```
+  `/state_control`은 TRANSIENT_LOCAL(latched)라 스크립트가 그에 맞춰 구독한다.
 - 비교:
   ```bash
   python3 steps/plot_compare.py steps/baselines/sim_sensor_stand.csv /tmp/real_sensor_stand.csv
