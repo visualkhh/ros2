@@ -87,6 +87,8 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 ## S3 — 가설 고정 (코드 아님, 문서)
 
+전체 표: **[S3_hypotheses.md](S3_hypotheses.md)** — H1~H6, sim 값, real 측정법, 합격 기준, TODO.
+
 학습을 돌리기 전에 "무엇이 같아야 sim을 믿는가"를 못 박는다. 각 가설은 **실기기에서 잴 수 있는 것**이어야 한다.
 
 | # | 가설 | sim 쪽 | real 쪽 측정 | 어디서 |
@@ -123,18 +125,46 @@ ros2 topic echo --once /imu
 
 ## S5 — 주행 싱크 (시간응답)
 
-같은 계단 명령을 sim/real에 넣고 `(t, v_cmd, v_enc, w_gyro)`를 겹쳐 본다.
+같은 계단 명령을 sim/real에 넣고 `(t, v_cmd, v_enc, w_gyro)`를 겹쳐 본다. **둘 다 같은 CSV 포맷**을 쓴다.
 
 ```
-0.00~2.00 s  v=0.15, w=0
-2.00~4.00 s  v=0.25, w=0
-4.00~5.00 s  v=0,    w=0
-5.00~7.00 s  v=0,    w=+1.0
-7.00~8.00 s  v=0,    w=0
+0~1 s  정지 (계단 기준점)
+1~3 s  v=0.15, w=0
+3~5 s  v=0.25, w=0
+5~6 s  정지
+6~8 s  v=0, w=+1.0
+8~9 s  정지
 ```
 
+**sim 기록** (창 없이, 20 Hz, 9 s):
+```bash
+cd /home/pank/workspaces/visualkhh/source/ros2/isaac
+./steps/run.sh s05_step_response.py --viz none
+# → steps/artifacts/sim_step.csv
+```
+
+**real 기록** (PC에서 실행):
+```bash
+# 1) Pi: base 띄우고 제어 MANUAL
+#    ./run-cli base start
+#    ./run-cli mode manual
+# 2) PC
+source /opt/ros/lyrical/setup.bash
+export ROS_DOMAIN_ID=25
+source tool/peers.sh
+python3 isaac/steps/real_step_profile.py --output /tmp/real_step.csv
+```
+
+**비교**:
+```bash
+python3 isaac/steps/compare_step.py isaac/steps/baselines/sim_step.csv /tmp/real_step.csv
+```
+
+- 지표: `rms_v` · `rms_w`(자이로) · `bias` · `p95` · `t10/t90`(첫 전진·회전) · 구간별 평균
 - 합격(초안): 90% 상승시간 차이 ≤ 0.15 s, 정상상태 `v` 오차 ≤ 0.02 m/s, `w` 오차 ≤ 0.10 rad/s
-- 도구: `rl_eval/eval_recorder` CSV + `compare_csv.py` (real), sim은 `steps/s05_step_response.py` (다음에 만든다)
+- sim baseline(2026-10-30): `rms_v 0.015 m/s · rms_w 0.092 rad/s · true yaw 1.56 vs odom 1.65`
+- `t90_w = nan`이면 "명령의 90%에 못 미침" = 회전 슬립이 큼. real과 비교할 때 이 값이 핵심.
+- real `w_gyro`가 0이면 `/imu`가 없는 것 (펌웨어 `I` 줄 확인).
 
 ## S6 — 랜덤 환경
 
