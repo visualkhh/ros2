@@ -31,8 +31,9 @@ sys.path.insert(0, str(ISAAC))
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser(description="L2: 물리 시간")
-parser.add_argument("--room", type=float, default=4.0)
+parser.add_argument("--room", type=float, default=0.0, help="0 = 벽 없이 (계속 달리기 좋음)")
 parser.add_argument("--seconds", type=float, default=0.0, help="0 = 창을 닫을 때까지")
+parser.add_argument("--steps", type=int, default=2, choices=[1, 2, 4, 8], help="시작 steps/frame (헤드리스 테스트용)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -40,6 +41,13 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import carb  # noqa: E402
+
+try:
+    import carb.input  # noqa: F401
+    HAS_INPUT = True
+except Exception:
+    HAS_INPUT = False
+
 import omni  # noqa: E402
 import torch  # noqa: E402
 
@@ -56,9 +64,9 @@ SPEED = 0.12            # [m/s] 일정
 
 class Keyboard:
     DOWN = 1 << 3
-    MAP = {f"{d}": getattr(carb.input.KeyboardInput, f"KEY_{d}") for d in "01248"}
 
     def __init__(self):
+        self.MAP = {f"{d}": getattr(carb.input.KeyboardInput, f"KEY_{d}") for d in "01248"}
         self._input = carb.input.acquire_input_interface()
         self._keyboard = omni.appwindow.get_default_app_window().get_keyboard()
 
@@ -82,14 +90,18 @@ def main():
     print("[l2] 같은 명령 0.12 m/s · 물리 dt=1/120 s · 명령 20 Hz")
     print("[l2] 1/2/4/8 = 한 프레임당 물리 스텝 수 · 0 = 정지")
 
-    kb = Keyboard()
-    steps_per_frame = 2
+    vis = getattr(args_cli, "visualizer", None)
+    headless = getattr(args_cli, "headless", False) or not vis or "kit" not in vis
+    kb = Keyboard() if (HAS_INPUT and not headless) else None
+    steps_per_frame = args_cli.steps
     moving = True
     sim_t = 0.0
     next_cmd = 0.0
     prev_keys = set()
     t0 = time.perf_counter()
     last_print = 0.0
+    last_sim = 0.0
+    last_wall = 0.0
     while True:
         frame_start = time.perf_counter()
         wall = frame_start - t0
@@ -98,14 +110,14 @@ def main():
         if args_cli.seconds == 0 and not simulation_app.is_running():
             break
 
-        keys = kb.pressed
+        keys = kb.pressed if kb else set()
         new = keys - prev_keys
         prev_keys = keys
         if "0" in new:
             moving = False
             print("[l2] 정지")
         for k in ("1", "2", "4", "8"):
-            if k in new:
+            if k in new and int(k) != steps_per_frame:
                 steps_per_frame = int(k)
                 moving = True
                 print(f"[l2] steps/frame = {steps_per_frame}")
@@ -125,11 +137,13 @@ def main():
         sim_t += steps_per_frame * DT
 
         if wall - last_print >= 1.0:
-            last_print = wall
             x = robot.data.root_pos_w.torch[0, 0].item()
-            ratio = sim_t / max(wall, 1e-6)
-            print(f"[l2] steps/frame={steps_per_frame} · sim {sim_t:.2f}s / wall {wall:.2f}s "
-                  f"({ratio:.2f}x) · x={x:+.2f} m")
+            d_sim, d_wall = sim_t - last_sim, wall - last_wall
+            inst = d_sim / max(d_wall, 1e-6)
+            cum = sim_t / max(wall, 1e-6)
+            last_print, last_sim, last_wall = wall, sim_t, wall
+            print(f"[l2] steps/frame={steps_per_frame} · inst {inst:.2f}x · cum {cum:.2f}x · "
+                  f"sim {sim_t:.2f}s / wall {wall:.2f}s · x={x:+.2f} m")
 
         rest = 1 / 60 - (time.perf_counter() - frame_start)
         if rest > 0:
