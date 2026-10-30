@@ -10,6 +10,9 @@
   # 공중 (배 밑 지지 박스, 바퀴 공중) — 실제 로봇을 박스 위에 올린 상태와 비교
   ./steps/run.sh 02_sensor_sync.py --viz none --stand
 
+  # 눈으로 보기 (박스 위, 창 닫을 때까지 반복)
+  ./steps/run.sh 02_sensor_sync.py --stand --watch
+
   # 바닥
   ./steps/run.sh 02_sensor_sync.py --viz none
 
@@ -23,6 +26,7 @@ import csv
 import math
 import os
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -39,6 +43,7 @@ parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--speed", type=float, default=0.15)
 parser.add_argument("--turn", type=float, default=1.0)
 parser.add_argument("--out", default=None, help="기본: steps/artifacts/sim_sensor_[stand|floor].csv")
+parser.add_argument("--watch", action="store_true", help="9초 기록 후 창을 닫을 때까지 같은 장면 반복")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -71,10 +76,15 @@ def cmd_at(t: float):
 
 
 def main():
+    headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
     stand_h = args_cli.stand_height if args_cli.stand else 0.0
     room = build_world(1 if args_cli.room > 0 else 0, args_cli.room, args_cli.seed)
-    set_camera(sim, room[0].origin if room else (0, 0, 0))
+    if args_cli.stand:
+        # 박스 위 로봇을 옆에서: 배 밑 박스와 공중 바퀴가 보이게
+        sim.set_camera_view(eye=(0.65, -0.65, 0.45), target=(-0.064, 0.0, 0.08))
+    else:
+        set_camera(sim, room[0].origin if room else (0, 0, 0))
     if args_cli.stand:
         mat = sim_utils.RigidBodyMaterialCfg(static_friction=1.0, dynamic_friction=1.0)
         box = sim_utils.CuboidCfg(
@@ -137,6 +147,26 @@ def main():
     print(f"[02] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f}")
     print(f"[02] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f}")
     print(f"[02] → {out}")
+
+    if args_cli.watch and not headless:
+        print("[02] WATCH — 창을 닫을 때까지 반복 (정지→전진→좌회전→정지)")
+        sim_t = 0.0
+        next_cmd = 0.0
+        while simulation_app.is_running():
+            if sim_t >= next_cmd:
+                next_cmd += POLICY_DT
+                v, w = cmd_at(sim_t % TOTAL)
+                wheels = wheel_targets(torch.tensor([v], device=dev),
+                                       torch.tensor([w], device=dev), r, sep, spec.MAX_WHEEL)
+                robot.set_joint_velocity_target(wheels, joint_ids=wheel_ids)
+                scene.write_data_to_sim()
+                scene.update(POLICY_DT)
+            for _ in range(SUBSTEPS):
+                sim.step(render=False)
+            scene.update(POLICY_DT)
+            sim.render()
+            sim_t += POLICY_DT
+            time.sleep(POLICY_DT)
     sim.stop()
 
 

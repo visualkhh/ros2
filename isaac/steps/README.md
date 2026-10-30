@@ -42,11 +42,18 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ## 02 — 센서 싱크 (sim 기준 생성됨)
 
 ```bash
-# 공중(지지 박스): 실제 로봇을 박스 위에 올린 상태와 비교
+# 공중(지지 박스) — 눈으로 보기 (9초 기록 후 창 닫을 때까지 반복)
+./steps/run.sh 02_sensor_sync.py --stand --watch
+
+# 공중 — 기록만 (창 없이)
 ./steps/run.sh 02_sensor_sync.py --viz none --stand
-# 바닥
+
+# 바닥 — 기록만
 ./steps/run.sh 02_sensor_sync.py --viz none
 ```
+
+`--stand --watch`는 로봇이 **배 밑 박스 위**에 올라가 바퀴만 도는 장면을 옆에서 계속 보여줌.
+박스 높이가 실제와 다르면 `--stand-height 0.04`처럼 지정.
 
 - sim 실행 결과 기본: `artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
 - 비교 기준(커밋): `baselines/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
