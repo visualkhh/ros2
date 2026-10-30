@@ -69,6 +69,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 # L3. 센서 — IMU + 360° LiDAR (벽에 빨간 hit 점, 2=상세)
 ./steps/run.sh l03_sensors.py
 
+# L4. Env API — obs/action/reward/done/reset (1=보정없음, 2/4=보정)
+./steps/run.sh l04_env_api.py
+
 # URDF 고친 뒤 USD만 다시 생성
 ./convert_usd.sh
 

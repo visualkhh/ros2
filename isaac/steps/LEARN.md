@@ -7,7 +7,7 @@ Pi/실기기 없이 **Isaac 안에서만** 개념을 하나씩 확인한다. 각
 | L1 | USD Stage · Prim · Articulation · Joint | 로봇이 prim 트리이고, 바퀴 joint를 직접 돌리면 몸체가 움직임 | ✅ |
 | L2 | Physics · dt · substep | steps/frame을 1/2/4/8로 바꿀 때 `sim time / wall time`, 로봇이 빨라 보이는 이유 | ✅ |
 | L3 | Sensor (IMU · LiDAR) | 벽에 찍히는 라이다 hit 점, 자이로/가속도 값 | ✅ |
-| L4 | Env API (obs/action/reward/reset) | 한 스텝마다 obs 6개·action 2개·reward 출력 | 예정 |
+| L4 | Env API (obs/action/reward/reset) | 한 스텝마다 obs 6개·action 2개·reward 출력 | ✅ |
 | L5 | Vectorization (clone) | 로봇 64대가 한 화면에서 동시에 움직임 | 예정 |
 | L6 | Domain randomization | env마다 마찰·모터 gain이 달라 다른 궤적 | 예정 |
 | L7 | Train → export → play | TensorBoard, checkpoint, ONNX | 예정 |
@@ -89,3 +89,37 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   - 센서는 **prim 경로**에 붙는다. USD 트리에서 실제 경로를 확인해야 함:
     `/World/Robot` 아래 `Geometry/base_footprint/base_link` (우리가 처음에 `/World/Robot/base_link`로 잘못 붙여서 `sim.reset()`에서 죽었음).
 - `--no-imu` / `--no-lidar`로 센서를 하나씩 끌 수 있음 (문제 분리용).
+
+
+## L4 — Env API (obs · action · reward · done · reset) ✅
+
+```bash
+./steps/run.sh l04_env_api.py
+```
+
+- 한 스텝(20 Hz)의 흐름:
+  ```
+  obs = [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]   (6개)
+  action = [dV, dW]  →  corrected = cmd + action × (0.10 m/s, 0.60 rad/s)
+  → 바퀴 rad/s → 물리 6스텝(120 Hz) → reward
+  ```
+- 키:
+  - `1`/`0` action `[0,0]` (보정 없음)
+  - `2` `[+0.2,0]` (앞으로 +0.02 m/s)
+  - `3` `[-0.2,0]`
+  - `4` `[0,+0.2]` (왼쪽 +0.12 rad/s)
+  - `5` `[0,-0.2]`
+  - `R` reset
+- 10초마다 `done=True` → 자동 reset.
+- 콘솔 예:
+  ```
+  [l4] step  20 t= 1.0s
+       obs  [+0.12 +0.00 +0.12 -0.04 -0.03 +1.00]
+       act  [+0.20,+0.00]  rew -0.022  done False
+  ```
+- 배우는 것:
+  - **obs** = 정책이 보는 것 (실제 로봇에서도 볼 수 있는 값만)
+  - **action** = 보정량. 원래 명령을 직접 바꾸는 게 아니라 `cmd + action`으로 더함
+  - **reward** = 진짜 몸체 속도와 명령의 차이 + 보정 크기/출렁임 벌점
+  - **done/reset** = 10초 에피소드
+  - 지금 sim은 보정 없이도 잘 가서 reward 개선이 작음. L6(랜덤화)에서 모터 오차를 넣으면 action 효과가 커짐.
