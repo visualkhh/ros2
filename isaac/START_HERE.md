@@ -77,9 +77,10 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 # 물리 확인 (오차 0이면 명령대로 가나) — 고친 뒤 먼저
 cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/wheel_drift/smoke.py; cd -
 
-# 학습 — 창 보면서: 뒤에 --visualizer kit
+# 학습 — 창 보면서: --watch --envs 16
 ./rl/wheel_drift/train.sh 300          # track: (v,w) 추종
 ./rl/wheel_drift/train_goal.sh 300     # goal: 목표 변위까지 이동
+./rl/wheel_drift/train_goal.sh 300 --watch --envs 16  # goal 창 보기
 
 # goal 스모크 (목표 (1,0) m)
 cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/wheel_drift/smoke_goal.py; cd -

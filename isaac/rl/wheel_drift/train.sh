@@ -1,6 +1,7 @@
 #!/bin/bash
 # rl_correct 본학습 (런: isaac/logs/rl_correct/<날짜_시간>/)
-#   ./rl/wheel_drift/train.sh [max_iterations] [--visualizer kit]
+#   ./rl/wheel_drift/train.sh [max_iterations] [--watch] [--envs 16]
+#   --watch = 창 보기 (--visualizer kit). 512 env는 느리니 16~32 권장.
 # 보기: TensorBoard -> isaac/logs/rl_correct/<날짜_시간>/
 set -e
 ITERS=300

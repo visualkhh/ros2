@@ -58,6 +58,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./rl/wheel_drift/train_goal.sh 300
 tensorboard --logdir logs/rl_goal
 
+# goal 학습을 창으로 보면서 (512 env는 무거우니 16~32개만)
+./rl/wheel_drift/train_goal.sh 300 --watch --envs 16
+
 # 학습 끝나면 자동 export: logs/rl_goal/<날짜_시간>/rl_goal.onnx
 ./rl/wheel_drift/play.sh logs/rl_goal/<날짜_시간>/rl_goal.onnx 4
 

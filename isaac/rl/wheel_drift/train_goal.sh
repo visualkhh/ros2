@@ -1,6 +1,7 @@
 #!/bin/bash
 # goal 환경 본학습 (목표 변위까지 이동)
-#   ./rl/wheel_drift/train_goal.sh [max_iterations] [--visualizer kit]
+#   ./rl/wheel_drift/train_goal.sh [max_iterations] [--watch] [--envs 16]
+#   --watch = 창 보기 (--visualizer kit). 512 env는 느리니 16~32 권장.
 # 로그: isaac/logs/rl_goal/<날짜_시간>/
 set -e
 ITERS=300

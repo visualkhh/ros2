@@ -2,8 +2,9 @@
 
 Usage (Lab env):
   cd /home/pank/pa-course/IsaacLab-6.1
-  ./isaaclab.sh -p .../rl/wheel_drift/train.py [--task track|goal] [--max-iterations N] [--visualizer kit]
-Watch: add --visualizer kit (default is no window).
+  ./isaaclab.sh -p .../rl/wheel_drift/train.py [--task track|goal] [--max-iterations N]
+      [--watch] [--envs N]
+Watch: `--watch` = `--visualizer kit` (창 보기). 512 env는 느리니 `--watch --envs 16` 권장.
 Logs: isaac/logs/rl_correct/ (track) 또는 isaac/logs/rl_goal/ (goal).
 """
 import argparse
@@ -12,11 +13,18 @@ import sys
 
 sys.path.insert(0, "/home/pank/workspaces/visualkhh/source/ros2/isaac")
 
+# 학습 스크립트의 --watch를 Isaac Lab의 --visualizer kit으로 바꾼다.
+if "--watch" in sys.argv:
+    sys.argv.remove("--watch")
+    if "--visualizer" not in sys.argv and "--viz" not in sys.argv:
+        sys.argv += ["--visualizer", "kit"]
+
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", choices=("track", "goal"), default="track")
 parser.add_argument("--max-iterations", type=int, default=None)
+parser.add_argument("--envs", type=int, default=512, help="학습 환경 수 (창 볼 때는 16~32 권장)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 app_launcher = AppLauncher(args)
@@ -37,7 +45,7 @@ else:
     exp_name = "rl_correct"
 
 env_cfg = TaskCfg()
-env_cfg.scene.num_envs = 512
+env_cfg.scene.num_envs = args.envs
 
 
 def main():
