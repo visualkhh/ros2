@@ -24,8 +24,8 @@ steps/
 ├── 02_sensor_sync_sim.py
 ├── 02_sensor_sync_real.sh     real 센서 기록 (ROS/peers 자동)
 ├── 02_sensor_sync_real.py
-├── square_profile.py          정사각형 주행 시간표 (sim/real 공용)
 ├── plot_compare.sh            sim/real 파형·궤적 비교 실행
+├── (프로파일은 `../rl/wheel_drift/calib_profile.py`)
 ├── scene.py                   방·로봇 생성 공용
 ├── plot_compare.py            sim/real CSV 파형 비교 도구
 ├── artifacts/             실행 산출물 CSV/PNG (실행 시 생성, git 제외)

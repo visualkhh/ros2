@@ -3,7 +3,7 @@
 로봇에 sim과 같은 정사각형 프로파일을 보내고 `/odom`·`/imu`를 CSV로 기록한다.
 2초 정지 → 왼쪽 사각형(반시계) → 180° 턴 → 같은 사각형을 오른쪽(시계)으로 역주행
 → 2초 정지. 각 변: 0.5 m 전진 → 0.25 s 정지 → 제자리 90도 회전 → 0.25 s 정지.
-sim 쪽 `02_sensor_sync_sim.py`와 같은 `square_profile.py`를 쓴다.
+sim 쪽 `02_sensor_sync_sim.py`와 같은 `rl/wheel_drift/calib_profile.py`를 쓴다.
 
 사전:
   Pi: base + cmd_manager, 제어 MANUAL
@@ -21,6 +21,7 @@ import argparse
 import csv
 import math
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -32,10 +33,11 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu, JointState
 from std_msgs.msg import String
 
-from square_profile import cmd_at, make_profile, total as profile_total
-
 HERE = Path(__file__).resolve().parent
+ISAAC = HERE.parent
+sys.path.insert(0, str(ISAAC))
 
+from rl.wheel_drift.calib_profile import cmd_at, make_profile, total as profile_total  # noqa: E402
 
 def yaw_of(q):
     return math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))

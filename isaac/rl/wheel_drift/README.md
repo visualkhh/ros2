@@ -23,10 +23,14 @@ rl/wheel_drift/
 │   ├── goal_env_cfg.py        goal 환경 (obs 10 · action 2)
 │   └── goal_env.py
 ├── agents/rsl_rl_ppo_cfg.py   PPO 설정
+├── calib_profile.py           보정/검증용 사각형 시간표 + goal waypoint (steps와 공용)
 ├── smoke.py                   track 물리 스모크
 ├── smoke_goal.py              goal 스모크 (목표 (1,0) m까지)
 ├── train.py · export.py · play.py
 ├── train.sh · train_goal.sh · train_goal_friction.sh · export.sh · play.sh
+├── real_launch.sh             PC에서 goal/track corrector 실행 (ONNX 경로)
+├── real_square.py/.sh         같은 사각형을 RL goal로 주행 + CSV
+├── plot_goal_square.py/.sh    RL 전/후 사각형 궤적 비교 PNG
 └── README.md
 ```
 
@@ -89,11 +93,38 @@ tensorboard --logdir logs/rl_goal_friction
 
 ## 실기기 검증 (Before / After)
 
-1. **먼저 센서/액추에이터 싱크** — [`steps/PRE_RL.md`](../../steps/PRE_RL.md) · 02~04
-2. PC: `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>`
-3. Pi: `./run-cli route rl`
-4. 같은 목표 주행으로 `rl_eval/eval_recorder` before/after CSV
-5. `python3 ros2_ws/src/rl_eval/compare_csv.py /tmp/before.csv /tmp/after.csv`
+보정 때 쓴 사각형 명령은 `calib_profile.py` 하나에 있다.
+`steps`의 02도 이 파일을 import하고, 학습 후 `real_square.py`도 같은 waypoint를 쓴다.
+
+```text
+steps/02_sensor_sync_real.sh   → open-loop 사각형 (Before)
+real_square.sh                 → 같은 사각형을 RL goal로 (After)
+```
+
+1. **Pi**: base + MANUAL + RL 경로
+   ```bash
+   ssh pak@pak.local
+   cd ~/ros2/tool
+   ./run-cli base start
+   ./run-cli control manual
+   ./run-cli route rl
+   ```
+2. **PC**: goal corrector 실행 (ONNX 파일 경로)
+   ```bash
+   ./rl/wheel_drift/real_launch.sh \
+     logs/rl_goal_friction/<날짜_시간>/rl_goal_friction.onnx goal
+   ```
+3. **PC**: 같은 사각형을 RL로 주행 + CSV
+   ```bash
+   ./rl/wheel_drift/real_square.sh --side 0.5
+   # → steps/artifacts/real_goal_square.csv
+   ```
+4. **비교 그래프**
+   ```bash
+   ./rl/wheel_drift/plot_goal_square.sh --show
+   # → steps/artifacts/compare_goal_square.png
+   ```
+5. Before/After 수치: `final err`, `RMS dev`(이상 사각형 선에서 벗어난 정도), `path len`.
 
 합격(초안): 목표 도달 오차 감소, 회전 RMS 20% 이상 감소, 직진 RMS 악화 없음.
 

@@ -8,8 +8,9 @@
 
   goal (obs 10)
     [gx, gy, px, py, yaw, v_enc, w_enc, w_gyro, prev_dv, prev_dw]
-    /rl_goal (Point, 시작 자세 기준 목표)을 받으면
-    nominal controller + ONNX 보정 -> /cmd_vel_out
+    /rl_goal (Point)을 받으면 nominal controller + ONNX 보정 -> /cmd_vel_out
+    goal_mode=relative: goal마다 현재 자세가 시작점
+    goal_mode=absolute: stop 전까지 첫 goal의 시작 자세를 고정 (waypoint 경로)
 
 공통:
   /odom twist·pose, /imu angular z 사용. zero 명령은 zero 출력.
@@ -56,6 +57,7 @@ class RlCorrector(Node):
         self.declare_parameter('enable', False)
         self.declare_parameter('model_path', '')
         self.declare_parameter('mode', 'auto')  # auto | track | goal
+        self.declare_parameter('goal_mode', 'relative')  # relative | absolute
         self.declare_parameter('max_lin', 0.26)
         self.declare_parameter('max_ang', 1.82)
         # goal mode (학습 cfg와 같은 기본값)
@@ -65,7 +67,9 @@ class RlCorrector(Node):
         self.declare_parameter('turn_thresh', 0.5)
         self.declare_parameter('action_scale_lin', 0.10)
         self.declare_parameter('action_scale_ang', 0.60)
+        self.declare_parameter('log_period', 1.0)  # [s] 0이면 매 스텝
 
+        self.log_period = max(0.0, float(self.get_parameter('log_period').value))
         self.session = None
         self.in_name = None
         self.obs_dim = 0
@@ -108,7 +112,11 @@ class RlCorrector(Node):
             if self.mode == 'track' and self.obs_dim != 6:
                 self.get_logger().warning(f'track mode인데 obs_dim={self.obs_dim} (6이어야 함)')
             self.get_logger().info(
-                f'ONNX loaded: {path} (obs_dim={self.obs_dim}, mode={self.mode})')
+                f'ONNX loaded: {path} (obs_dim={self.obs_dim}, mode={self.mode}, '
+                f'action_scale=({self.get_parameter("action_scale_lin").value:.3f}, '
+                f'{self.get_parameter("action_scale_ang").value:.3f}), '
+                f'goal_mode={self.get_parameter("goal_mode").value}, '
+                f'log_period={self.log_period:.2f}s)')
         except Exception as e:  # keep node alive as passthrough
             self.get_logger().warning(f'ONNX load failed ({e}): passthrough')
 
@@ -129,14 +137,18 @@ class RlCorrector(Node):
             self.get_logger().warning('/rl_goal 무시: /odom 아직 없음')
             return
         self.goal = (float(msg.x), float(msg.y))
-        self.start_pose = self.odom_pose
+        # absolute: stop 전까지 첫 goal의 시작 자세를 고정 (waypoint 경로용)
+        if self.get_parameter('goal_mode').value != 'absolute' or self.start_pose is None:
+            self.start_pose = self.odom_pose
         self.goal_active = True
         self.prev_action = (0.0, 0.0)
         self.get_logger().info(
-            f'goal 시작: g=({self.goal[0]:+.2f}, {self.goal[1]:+.2f}) m')
+            f'goal 시작: g=({self.goal[0]:+.2f}, {self.goal[1]:+.2f}) m '
+            f'frame={self.get_parameter("goal_mode").value}')
 
     def cb_goal_stop(self, _msg: Empty):
         self.goal_active = False
+        self.start_pose = None
         self.pub.publish(Twist())
         self.get_logger().info('goal stop')
 
@@ -164,6 +176,14 @@ class RlCorrector(Node):
         out = Twist()
         out.linear.x, out.angular.z = lin, ang
         self.pub.publish(out)
+
+        self.get_logger().info(
+            f'[track] in=({cmd[0]:+.3f},{cmd[1]:+.3f}) '
+            f'odom=({self.v_enc:+.3f},{self.w_enc:+.3f}) gyro={self.w_gyro:+.3f} '
+            f'model=({delta[0]:+.3f},{delta[1]:+.3f}) '
+            f'out=({lin:+.3f},{ang:+.3f}) '
+            f'applied=({lin - cmd[0]:+.3f},{ang - cmd[1]:+.3f})',
+            throttle_duration_sec=self.log_period)
 
     # ------------------------------------------------------------------ goal
     def _rel_pose(self):
@@ -221,6 +241,15 @@ class RlCorrector(Node):
         cmd = Twist()
         cmd.linear.x, cmd.angular.z = lin, ang
         self.pub.publish(cmd)
+
+        self.get_logger().info(
+            f'[goal] g=({gx:+.2f},{gy:+.2f}) p=({px:+.2f},{py:+.2f},{yaw:+.2f}) '
+            f'dist={dist:.3f} herr={herr:+.2f} '
+            f'nominal=({v:+.3f},{w:+.3f}) '
+            f'model=({delta[0]:+.3f},{delta[1]:+.3f}) '
+            f'out=({lin:+.3f},{ang:+.3f}) '
+            f'applied=({lin - v:+.3f},{ang - w:+.3f})',
+            throttle_duration_sec=self.log_period)
 
         if dist < self.get_parameter('goal_tol').value:
             self.goal_active = False

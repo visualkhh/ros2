@@ -308,6 +308,15 @@ ros2 launch tb3_bringup rl-only.launch.py \
 
 `mode:=goal`은 생략해도 ONNX가 10차원이면 자동으로 goal 모드가 된다.
 
+또는 래퍼:
+
+```bash
+./rl/wheel_drift/real_launch.sh \
+  logs/rl_goal_friction/<날짜_시간>/rl_goal_friction.onnx goal
+```
+
+이 래퍼는 `goal_mode=absolute`로 띄워서 **waypoint 사각형**을 그대로 재생할 수 있게 한다.
+
 ### 6.3 goal 보내기 / 정지
 
 목표는 **현재 자세 기준 변위** `(gx, gy)` m 이다.
@@ -326,6 +335,27 @@ ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
 - `/rl_goal`을 받은 순간의 `/odom` pose가 시작점이 된다.
 - `dist < 0.05 m`면 자동 정지.
 - `enable:=false`면 goal 모드에서도 정지.
+
+### 6.4 보정 때 쓴 사각형을 RL로 재생
+
+`calib_profile.py`의 `make_waypoints()`가 02 보정과 같은 사각형을 만든다.
+
+```bash
+# real_launch.sh는 goal_mode=absolute로 띄운다
+./rl/wheel_drift/real_launch.sh <model.onnx> goal
+
+# 같은 사각형을 RL goal로 주행 + CSV
+./rl/wheel_drift/real_square.sh --side 0.5
+# → steps/artifacts/real_goal_square.csv
+
+# RL 전(real_floor.csv) / 후(real_goal_square.csv) 궤적 비교
+./rl/wheel_drift/plot_goal_square.sh --show
+# → steps/artifacts/compare_goal_square.png
+```
+
+- Before는 `steps/02_sensor_sync_real.sh`가 만든 `real_floor.csv`.
+- After는 `real_square.sh`가 만든 `real_goal_square.csv`.
+- 그래프에 `final err`, `RMS dev`, `path len`이 같이 나온다.
 
 ### 6.4 goal 노드가 하는 일
 

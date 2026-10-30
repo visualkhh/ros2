@@ -33,6 +33,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ISAAC = HERE.parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(ISAAC))
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
@@ -62,7 +63,7 @@ import torch  # noqa: E402
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
-from square_profile import cmd_at, make_profile, total as profile_total  # noqa: E402
+from rl.wheel_drift.calib_profile import cmd_at, make_profile, total as profile_total  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
 from tasks.common.sim_params import WheelLag, describe as calib_desc  # noqa: E402
 from rl.wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402

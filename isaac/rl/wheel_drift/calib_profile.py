@@ -1,14 +1,16 @@
-"""02 센서 싱크용 정사각형 주행 프로파일 (sim/real 공용).
+"""wheel_drift 보정/검증용 정사각형 프로파일 (sim/real/RL 공용).
 
-2초 정지 → 왼쪽 사각형(반시계) → 180도 턴 → 같은 사각형을 오른쪽(시계)으로 역주행
-→ 2초 정지. 각 변: `side` m 전진 → 0.25초 정지 → 제자리 90도 회전 → 0.25초 정지.
+`steps`의 02 센서 싱크가 이 모듈을 import해서 같은 명령을 sim/real에 보낸다.
+학습 후 `real_square.py`는 여기의 waypoint를 그대로 RL goal 노드에 보낸다.
 
-- 각 변의 전진 속도를 다르게 해서 속도별 gain/지연/τ를 볼 수 있게 한다.
-  기본 `--speed 0.15` 기준 `(0.15, 0.10, 0.20, 0.12)` m/s.
-- 첫 사각형: 반시계(`w=+turn`), 끝나면 시작점에서 원래 방향(+x)을 봄.
-- 180도 턴(`w=-turn`) 후 오른쪽으로 90도 틀어 +y부터 역주행.
-- 두 번째 사각형은 첫 사각형의 **같은 네 변을 반대 방향으로** 되짚는다.
-- 같은 시간표를 sim(`02_sensor_sync_sim.py`)과 real(`02_sensor_sync_real.py`)이 함께 쓴다.
+open-loop 명령 (`make_profile`)
+  2초 정지 → 왼쪽 사각형(반시계) → 180도 턴 → 같은 사각형을 오른쪽(시계)으로 역주행
+  → 2초 정지. 각 변: `side` m 전진 → 0.25초 정지 → 90° 회전 → 0.25초 정지.
+  변마다 속도를 다르게 해서 속도별 gain/지연/τ를 본다.
+
+goal waypoint (`make_waypoints`)
+  같은 사각형의 네 모서리를 시작 자세 기준 절대 좌표로 보낸다.
+  RL goal 노드는 `goal_mode=absolute`로 이 sequence를 받는다.
 """
 from __future__ import annotations
 
@@ -93,3 +95,19 @@ def cmd_at(t: float, segs):
         if t < t1:
             return v, w
     return 0.0, 0.0
+
+
+def make_waypoints(side: float = DEFAULT_SIDE):
+    """RL goal용 절대 waypoint (시작 자세 기준).
+
+    왼쪽 사각형 4변 → 같은 사각형을 반대 방향으로 4변.
+    """
+    s = float(side)
+    return [(s, 0.0), (s, s), (0.0, s), (0.0, 0.0),
+            (0.0, s), (s, s), (s, 0.0), (0.0, 0.0)]
+
+
+def square_path(side: float = DEFAULT_SIDE):
+    """이상적인 사각형 외곽선 (plot용)."""
+    s = float(side)
+    return [(0.0, 0.0), (s, 0.0), (s, s), (0.0, s), (0.0, 0.0)]

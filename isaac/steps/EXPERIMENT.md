@@ -60,7 +60,7 @@ cd ~/ros2/tool
 - **변마다 속도를 다르게** 해서 속도별 gain / dead time / tau를 볼 수 있게 함.
 - `--speed`는 기준값. 실제 변 속도는 `1.0 / 0.67 / 1.33 / 0.8` 배.
 - 두 번째 사각형은 첫 사각형의 **같은 선을 반대로** 지나므로, 궤적이 겹쳐 보이면 정상.
-- `square_profile.py`를 sim/real이 **똑같이 import**해서 같은 시간표를 씀.
+- `rl/wheel_drift/calib_profile.py`를 sim/real/RL이 **똑같이 import**해서 같은 시간표를 씀.
 - `plot_compare` 맨 위에 **odom x-y 궤적**이 나와서 사각형이 얼마나 틀어지는지 바로 보임.
 
 ---
