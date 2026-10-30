@@ -5,7 +5,7 @@ Pi/실기기 없이 **Isaac 안에서만** 개념을 하나씩 확인한다. 각
 | # | 개념 | 눈으로 보는 것 | 상태 |
 |---|---|---|---|
 | L1 | USD Stage · Prim · Articulation · Joint | 로봇이 prim 트리이고, 바퀴 joint를 직접 돌리면 몸체가 움직임 | ✅ |
-| L2 | Physics · dt · decimation | 같은 명령을 60/120/240 Hz로 돌릴 때 응답 차이 | 예정 |
+| L2 | Physics · dt · substep | steps/frame을 1/2/4/8로 바꿀 때 `sim time / wall time`, 로봇이 빨라 보이는 이유 | ✅ |
 | L3 | Sensor (IMU · LiDAR) | 라이다 광선/점, 자이로 값 | 예정 |
 | L4 | Env API (obs/action/reward/reset) | 한 스텝마다 obs 6개·action 2개·reward 출력 | 예정 |
 | L5 | Vectorization (clone) | 로봇 64대가 한 화면에서 동시에 움직임 | 예정 |
@@ -33,4 +33,27 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   - **Joint velocity target** = 우리가 실제 드라이버에 보내는 바퀴 rad/s와 같은 개념
   - `sim.step()` = 물리 시간을 `dt`만큼 진행
 
-다음 레슨(L2)은 "같은 명령인데 sim dt를 바꾸면 왜 응답이 달라지나"를 숫자로 본다.
+## L2 — 물리 시간 (dt · substep) ✅
+
+```bash
+./steps/run.sh ../learn/l02_physics_time.py
+```
+
+- 로봇은 항상 같은 명령 `0.12 m/s`. 바뀌는 건 **한 화면(frame)마다 물리를 몇 번 돌리느냐**.
+- 키:
+  - `1` 한 프레임에 1스텝 → 천천히 보임
+  - `2` 기본
+  - `4` 빠르게
+  - `8` 아주 빠르게
+  - `0` 정지
+- 콘솔:
+  ```
+  [l2] steps/frame=2 · sim 1.38s / wall 3.07s (0.45x) · x=+0.15 m
+  ```
+  `sim time / wall time` = 시뮬이 벽시계보다 몇 배 빠른가.
+- 이 PC 실측: `2 → 0.45x`, `4 → 0.9x`, `8 → 1.8x`. 렌더(RTX)가 한 프레임에 ~35 ms 걸려서, 2스텝(16.7 ms)만으론 벽시계를 못 따라감.
+- 배우는 것:
+  - `dt = 1/120 s`는 **물리 한 스텝**의 시간. 화면 프레임과 별개.
+  - `steps/frame`을 늘리면 같은 벽시계 동안 sim이 더 많이 흐름 → 로봇이 빨라 보임.
+  - RL 학습은 **렌더를 끄고(headless)** 이 비율을 수십~수백 배로 올려서 돌림.
+  - 실제 로봇과 비교할 땐 `sim time ≈ wall time`이 되게 맞춰야 함 (S2 주행 스크립트가 그렇게 함).

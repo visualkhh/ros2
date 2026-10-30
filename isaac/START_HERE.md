@@ -64,6 +64,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./steps/run.sh ../learn/l01_robot_anatomy.py
 #   개념 목록: learn/README.md
 
+# L2. 물리 시간 — 1/2/4/8로 steps/frame 바꾸기 (sim time / wall time)
+./steps/run.sh ../learn/l02_physics_time.py
+
 # URDF 고친 뒤 USD만 다시 생성
 ./convert_usd.sh
 
