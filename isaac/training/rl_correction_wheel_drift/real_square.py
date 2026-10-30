@@ -4,7 +4,7 @@
 Pi는 `./run-cli route rl` 상태여야 한다.
 
   ./training/rl_correction_wheel_drift/real_square.sh
-  → training/calibration/artifacts/real_goal_square.csv
+  → training/artifacts/real_goal_square.csv
 """
 import argparse
 import csv
@@ -26,7 +26,7 @@ sys.path.insert(0, str(ISAAC))
 
 from training.rl_correction_wheel_drift.calib_profile import DEFAULT_SIDE, make_waypoints  # noqa: E402
 
-DEFAULT_OUT = ISAAC / "training" / "calibration" / "artifacts" / "real_goal_square.csv"
+DEFAULT_OUT = ISAAC / "training" / "artifacts" / "real_goal_square.csv"
 
 
 def wrap(a: float) -> float:

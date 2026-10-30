@@ -1,7 +1,7 @@
 """sim vs real 비교 — 시간파형 + odom 궤적 (같은 명령에서 같은 신호인지 눈으로).
 
   ./training/calibration/plot_compare.sh /tmp/sim_step.csv /tmp/real_step.csv
-  → training/calibration/artifacts/compare_<tag>.png
+  → training/artifacts/compare_<tag>.png
 
 위에서부터:
   0) odom x-y 궤적: 왼쪽 사각형 → 180° 턴 → 같은 사각형 역주행 (CSV에 odom_x/y가 있으면)
@@ -316,14 +316,15 @@ def main():
 
     fig.suptitle(f"sim vs real — {tag} ({Path(args.real).name})", fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.985) if ax_path is not None else None)
-    out = Path(args.out) if args.out else HERE / "artifacts" / f"compare_{tag}.png"
+    out = Path(args.out) if args.out else ISAAC / "training" / "artifacts" / f"compare_{tag}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150)
     print(f"[plot] {out}")
 
     fit = fit_wheel(real)
     if fit:
-        calib_path = Path(args.calib_out) if args.calib_out else HERE / "artifacts" / f"sim_calib_{tag}.json"
+        calib_path = (Path(args.calib_out) if args.calib_out else
+                      ISAAC / "training" / "artifacts" / f"sim_calib_{tag}.json")
         old = {}
         try:
             old = json.loads(calib_path.read_text())

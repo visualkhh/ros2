@@ -20,7 +20,7 @@
 | 몸통·바퀴 질량, 관성, 무게중심 | **URDF** (정본) → USD 재생성 | `isaac/urdf/beebot/urdf.xacro` · `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro` |
 | 바퀴 반지름·간격, 라이다 높이, 링크 위치 | **URDF** + `robot_spec.py` 값 | 위 URDF · `isaac/tasks/common/robot_spec.py` |
 | 바닥·장애물·바퀴 마찰, 반발 | Isaac Lab **physics material** (Python) | `tasks/common/sim_params.py` → `training/calibration/scene.py`가 적용 |
-| 모터 τ(1차 지연), gain, 데드밴드 | **sim_params** (Python) | `tasks/common/sim_params.py` (`WheelLag`) · `training/calibration/artifacts/sim_calib_<condition>.json` |
+| 모터 τ(1차 지연), gain, 데드밴드 | **sim_params** (Python) | `tasks/common/sim_params.py` (`WheelLag`) · `training/artifacts/sim_calib_<condition>.json` |
 | 명령/관측 지연 (WiFi) | **sim_params / env cfg** (Python) | `sim_params.py` (`WHEEL_DELAY_STEPS`) · `rl_correct_env_cfg.py` |
 | 엔코더·자이로 잡음, bias | **env cfg** (Python) | 같은 파일 (`enc_noise`, `gyro_noise`) |
 | IMU 축·부호, 엔코더 스케일 | **real 먼저** (driver/firmware/URDF) → sim에 반영 | `opencr_driver_node.py` · `firmware/opencr/...ino` · URDF |
@@ -56,8 +56,8 @@
 `isaac/tasks/common/sim_params.py` 한 곳 + 조건별 JSON:
 
 ```
-training/calibration/artifacts/sim_calib_stand.json   ← plot_compare가 real_stand.csv에서 생성
-training/calibration/artifacts/sim_calib_floor.json   ← plot_compare가 real_floor.csv에서 생성
+training/artifacts/sim_calib_stand.json   ← plot_compare가 real_stand.csv에서 생성
+training/artifacts/sim_calib_floor.json   ← plot_compare가 real_floor.csv에서 생성
 ```
 
 - JSON이 있으면 그 값이 기본값을 덮어쓴다. 없으면 `sim_params.py`의 `DEFAULTS`.

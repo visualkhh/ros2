@@ -17,7 +17,7 @@
   # 이전 보정값 무시하고 raw plant로 (새 보정 시작 전 기준)
   ./training/calibration/02_sensor_sync_sim.sh --viz none --no-calib
 
-출력: training/calibration/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
+출력: training/artifacts/sim_sensor_stand.csv 또는 sim_sensor_floor.csv
 CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)
 real: ./training/calibration/02_sensor_sync_real.sh --label real_floor
 비교: ./training/calibration/plot_compare.sh <sim.csv> <real.csv>
@@ -52,7 +52,7 @@ parser.add_argument("--turn", type=float, default=1.0)
 parser.add_argument("--side", type=float, default=0.5, help="정사각형 한 변 [m]")
 parser.add_argument("--profile", default=None,
                     help="보정 profile .py 경로 (기본: calib_default_profile.py)")
-parser.add_argument("--out", default=None, help="기본: training/calibration/artifacts/sim_sensor_[stand|floor].csv")
+parser.add_argument("--out", default=None, help="기본: training/artifacts/sim_sensor_[stand|floor].csv")
 parser.add_argument("--watch", action="store_true", help="1회 기록 후 창을 닫을 때까지 같은 장면 반복")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -110,9 +110,9 @@ def main():
     sep = torch.tensor([spec.WHEEL_SEP], device=dev)
     wheel_model = WheelLag(dt=POLICY_DT, condition=condition)
     tag = "sim_sensor_stand" if args_cli.stand else "sim_sensor_floor"
-    out = args_cli.out or str(HERE / "artifacts" / f"{tag}.csv")
+    out = args_cli.out or str(TRAINING / "artifacts" / f"{tag}.csv")
     if not os.path.isabs(out):
-        out = str(ISAAC / out)   # isaac/ 기준 (예: training/calibration/artifacts/...)
+        out = str(ISAAC / out)   # isaac/ 기준 (예: training/artifacts/...)
     env = "empty floor (no obstacles)" if args_cli.room <= 0 else f"room {args_cli.room:.1f} m"
     mode = "STAND" if args_cli.stand else "FLOOR"
     if args_cli.no_calib:

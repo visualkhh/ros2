@@ -15,7 +15,32 @@ training/calibration/ 보정 (sim plant를 real에 맞춤)
 - RL 추론은 **PC**에서 한다.
 - 학습은 sim에서 하고, real에서는 ONNX만 실행한다.
 
-## 0. training/ 실행 스크립트
+## 0. 전체 흐름
+
+```text
+[1] training/calibrate.sh
+    sim + real에 같은 사각형+삼각형 명령
+    → training/artifacts/{sim_sensor_floor,real_floor}.csv
+    → training/artifacts/sim_calib_floor.json
+
+[2-A] goal 정책                         [2-B] track 정책
+    train --task goal                       train --task track
+    → rl_goal.onnx                          → rl_correct.onnx
+         │                                       │
+    real_rl ... goal                        real_rl ... track
+         │                                       │
+    real_square.sh                          verify_track.sh
+    (waypoint 재생)                          (같은 (v,w) 재생 + 비교)
+         │                                       │
+    plot_goal_square.sh                     compare_track_rl.png
+```
+
+- **goal** = 목표점 `(gx, gy)`를 따라감. 보정 때와 같은 **경로**를 waypoint로 재생.
+- **track** = `(v,w)` 명령을 직접 보정. 보정 때와 **완전히 같은 명령**을 재생.
+- 모든 결과는 `training/artifacts/`에 쌓인다.
+- `training/artifacts/`는 git 제외.
+
+## 0.1 training/ 실행 스크립트
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
@@ -45,7 +70,12 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   `training/artifacts/train_*/`에 실행 로그와 최종 ONNX 사본을 남긴다.
 - `real_rl.sh`는 Pi가 `route rl`인 상태에서 PC corrector를 띄운다.
 
-## 0.1 실행 순서 (보정 → 학습 → real_rl → 같은 경로 재생)
+## 0.2 실행 순서 (보정 → 학습 → real_rl → 같은 경로 재생)
+
+| 목적 | 학습 | PC 노드 | 재생/검증 | 그래프 |
+|---|---|---|---|---|
+| 같은 **경로** (waypoint) | `--task goal` | `real_rl ... goal` | `real_square.sh` | `plot_goal_square.sh` |
+| 같은 **(v,w) 명령** | `--task track` | `real_rl ... track` | `verify_track.sh` | `compare_track_rl.png` |
 
 ### 1) Pi 준비 (보정 중에는 RL 끔)
 
@@ -80,10 +110,13 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ### 3) 학습
 
 ```bash
-# goal 정책 (권장: friction randomization)
+# goal 정책 (waypoint 재생용)
 ./training/train.sh rl_correction_wheel_drift 300 --task goal --friction
 
-# 창 보면서
+# track 정책 (보정 때와 같은 (v,w) 명령 재생용)
+./training/train.sh rl_correction_wheel_drift 300 --task track --friction
+
+# 창 보면서 (goal/track 공통)
 ./training/train.sh rl_correction_wheel_drift 300 \
   --task goal --friction --watch --envs 16
 ```
@@ -94,9 +127,13 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ### 4) PC RL 노드 + Pi RL 경로
 
 ```bash
-# PC
+# PC — goal
 ./training/real_rl.sh \
   logs/rl_goal_friction/<시각>/rl_goal_friction.onnx goal
+
+# PC — track (같은 (v,w) 재생용)
+./training/real_rl.sh \
+  training/artifacts/train_rl_correction_wheel_drift_<시각>/rl_correct.onnx track
 ```
 
 노드가 뜨면 Pi에서:

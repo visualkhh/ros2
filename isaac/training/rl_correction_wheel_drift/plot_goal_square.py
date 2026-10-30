@@ -1,7 +1,7 @@
 """RL 전/후 사각형+삼각형 궤적 + 시간축 보정값 비교.
 
   ./training/rl_correction_wheel_drift/plot_goal_square.sh --show
-  → training/calibration/artifacts/compare_goal_square.png
+  → training/artifacts/compare_goal_square.png
 
 패널:
   1) x-y 궤적 (Before: open-loop / After: RL goal)
@@ -25,7 +25,7 @@ sys.path.insert(0, str(ISAAC))
 
 from training.rl_correction_wheel_drift.calib_profile import DEFAULT_SIDE, profile_path  # noqa: E402
 
-ART = ISAAC / "training" / "calibration" / "artifacts"
+ART = ISAAC / "training" / "artifacts"
 
 
 def load(path):

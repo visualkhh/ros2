@@ -25,6 +25,12 @@ TASK_DIR=${TASK_DIR:-rl_correction_wheel_drift}
 }
 [[ -f "$TASK_DIR/train.py" ]] || { echo "train.py 없음: $TASK_DIR" >&2; exit 2; }
 
+# 두 번째 위치 인자가 숫자면 --max-iterations로 변환 (기존 train_goal.sh와 같은 사용법)
+TRAIN_ARGS=()
+if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
+  TRAIN_ARGS+=(--max-iterations "$1"); shift
+fi
+
 NAME=$(basename "$TASK_DIR")
 STAMP=$(date +%Y%m%d_%H%M%S)
 RUN="$HERE/artifacts/train_${NAME}_${STAMP}"
@@ -32,14 +38,14 @@ mkdir -p "$RUN"
 {
   echo "date: $(date -Is)"
   echo "task_dir: $TASK_DIR"
-  echo "command: train.py $*"
+  echo "command: train.py ${TRAIN_ARGS[*]} $*"
 } > "$RUN/command.txt"
 
 echo "[train] task: $TASK_DIR"
 echo "[train] report: $RUN"
 cd /home/pank/pa-course/IsaacLab-6.1
 set -o pipefail
-./isaaclab.sh -p "$TASK_DIR/train.py" "$@" 2>&1 | tee "$RUN/train.log"
+./isaaclab.sh -p "$TASK_DIR/train.py" "${TRAIN_ARGS[@]}" "$@" 2>&1 | tee "$RUN/train.log"
 
 ONNX=$(grep -oE '/[^ ]+\.onnx' "$RUN/train.log" | tail -1 || true)
 if [[ -n "${ONNX:-}" && -f "$ONNX" ]]; then

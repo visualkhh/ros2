@@ -11,7 +11,7 @@
 - **real이 기준**. sim을 real에 맞춘다.
 - 공중(무부하)은 **진단용**, 최종은 **바닥(floor)**.
 - 한 번에 한 조건만 바꾼다.
-- CSV/PNG/JSON은 `training/calibration/artifacts/` (git 제외). 코드·문서만 커밋.
+- CSV/PNG/JSON은 `training/artifacts/` (git 제외). 코드·문서만 커밋.
 - **USD 직접 수정 금지** — 형상/질량은 URDF, 동역학/마찰/지연은 Python.
 
 ---
@@ -71,7 +71,7 @@ cd ~/ros2/tool
 ## 2. sim 보정값 로딩과 `--no-calib`
 
 `02_sensor_sync_sim`과 `01_random_world_sim`은 시작할 때
-`training/calibration/artifacts/sim_calib_floor.json`을 **자동으로 읽는다.**
+`training/artifacts/sim_calib_floor.json`을 **자동으로 읽는다.**
 
 ```text
 [02-sim] calib: ... src=real_floor.csv   ← JSON 읽음
@@ -106,17 +106,17 @@ cd ~/ros2/tool
 ```bash
 # real
 ./training/calibration/02_sensor_sync_real.sh --label real_stand
-# → training/calibration/artifacts/real_stand.csv
+# → training/artifacts/real_stand.csv
 
 # sim (박스 높이는 실제 박스에 맞춤; 기본 0.06 m)
 ./training/calibration/02_sensor_sync_sim.sh --viz none --stand
-# → training/calibration/artifacts/sim_sensor_stand.csv
+# → training/artifacts/sim_sensor_stand.csv
 
 # 비교 + 창
 ./training/calibration/plot_compare.sh \
-  training/calibration/artifacts/sim_sensor_stand.csv \
-  training/calibration/artifacts/real_stand.csv --show
-# → training/calibration/artifacts/compare_stand.png
+  training/artifacts/sim_sensor_stand.csv \
+  training/artifacts/real_stand.csv --show
+# → training/artifacts/compare_stand.png
 ```
 
 정상:
@@ -135,19 +135,19 @@ cd ~/ros2/tool
 ```bash
 # real
 ./training/calibration/02_sensor_sync_real.sh --label real_floor
-# → training/calibration/artifacts/real_floor.csv
+# → training/artifacts/real_floor.csv
 
 # sim — 현재 sim_calib_floor.json 적용
 ./training/calibration/02_sensor_sync_sim.sh --viz none
-# → training/calibration/artifacts/sim_sensor_floor.csv
+# → training/artifacts/sim_sensor_floor.csv
 
 # sim raw — 이전 보정 무시
 ./training/calibration/02_sensor_sync_sim.sh --viz none --no-calib
 
 # 비교 + 새 보정값 생성
 ./training/calibration/plot_compare.sh \
-  training/calibration/artifacts/sim_sensor_floor.csv \
-  training/calibration/artifacts/real_floor.csv --show
+  training/artifacts/sim_sensor_floor.csv \
+  training/artifacts/real_floor.csv --show
 # → compare_floor.png
 # → sim_calib_floor.json (다음 실행부터 적용)
 ```
@@ -198,22 +198,22 @@ cd ~/ros2/tool
 ```
 
 - 로봇이 사각형을 두 번 그리고 **사각형 안쪽 삼각형**까지 그린 뒤 약 73초 뒤 정지.
-- `training/calibration/artifacts/real_floor.csv` 생성.
+- `training/artifacts/real_floor.csv` 생성.
 - `--label`을 바꾸면 파일명도 바뀐다.
 
 ### 5.4 3단계 — 비교 + 피팅
 
 ```bash
 ./training/calibration/plot_compare.sh \
-  training/calibration/artifacts/sim_sensor_floor.csv \
-  training/calibration/artifacts/real_floor.csv --show
+  training/artifacts/sim_sensor_floor.csv \
+  training/artifacts/real_floor.csv --show
 ```
 
 출력:
 
 ```text
-[plot] training/calibration/artifacts/compare_floor.png
-[calib] training/calibration/artifacts/sim_calib_floor.json · runs=8 gain=... delay=...s tau=...s
+[plot] training/artifacts/compare_floor.png
+[calib] training/artifacts/sim_calib_floor.json · runs=8 gain=... delay=...s tau=...s
 ```
 
 `fit_wheel`이 하는 일:
@@ -296,8 +296,8 @@ cd ~/ros2/tool
 ```bash
 ./training/calibration/02_sensor_sync_sim.sh --viz none
 ./training/calibration/plot_compare.sh \
-  training/calibration/artifacts/sim_sensor_floor.csv \
-  training/calibration/artifacts/real_floor.csv --show
+  training/artifacts/sim_sensor_floor.csv \
+  training/artifacts/real_floor.csv --show
 ```
 
 볼 것:

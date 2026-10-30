@@ -15,7 +15,7 @@ sim 쪽 `02_sensor_sync_sim.py`와 같은 `calib_default_profile.py`를 쓴다.
 실행:
   ./training/calibration/02_sensor_sync_real.sh --label real_stand
   # 바닥이면 --label real_floor
-출력 기본: training/calibration/artifacts/<label>.csv
+출력 기본: training/artifacts/<label>.csv
 """
 import argparse
 import csv
@@ -121,7 +121,7 @@ def main(args):
         rate = args.rate
         n = int(round(total * rate))
         t0 = time.monotonic()
-        out = args.output or str(HERE / "artifacts" / f"{args.label}.csv")
+        out = args.output or str(TRAINING / "artifacts" / f"{args.label}.csv")
         os.makedirs(os.path.dirname(out), exist_ok=True)
         move_speeds = [s[2] for s in segs if s[4] == "move_left"]
         speeds_txt = " / ".join(f"{v:.2f}" for v in move_speeds)
@@ -198,7 +198,7 @@ def main(args):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="02: real 센서 싱크")
-    p.add_argument("--output", default=None, help="기본: training/calibration/artifacts/<label>.csv")
+    p.add_argument("--output", default=None, help="기본: training/artifacts/<label>.csv")
     p.add_argument("--label", default="real")
     p.add_argument("--speed", type=float, default=0.15,
                    help="기준 전진 속도 [m/s] (변마다 1.0/0.67/1.33/0.8 배)")

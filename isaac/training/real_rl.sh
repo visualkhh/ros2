@@ -22,4 +22,17 @@ TASK=${3:-rl_correction_wheel_drift}
 [[ "$MODEL" = /* ]] || MODEL="$ISAAC/$MODEL"
 [[ -f "$MODEL" ]] || { echo "ONNX 없음: $MODEL" >&2; exit 2; }
 
-exec "$TASK/real_launch.sh" "$MODEL" "$MODE"
+STAMP=$(date +%Y%m%d_%H%M%S)
+RUN="$HERE/artifacts/real_rl_${STAMP}"
+mkdir -p "$RUN"
+{
+  echo "date: $(date -Is)"
+  echo "model: $MODEL"
+  echo "mode: $MODE"
+  echo "task: $TASK"
+} > "$RUN/command.txt"
+
+echo "[real_rl] model: $MODEL"
+echo "[real_rl] report: $RUN"
+set -o pipefail
+"$TASK/real_launch.sh" "$MODEL" "$MODE" 2>&1 | tee "$RUN/launch.log"

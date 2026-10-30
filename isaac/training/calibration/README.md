@@ -34,7 +34,7 @@ calibration/
 ├── calib_default_profile.py   기본 사각형+삼각형/waypoint (sim·real·RL 공용)
 ├── scene.py                   방·로봇 생성 공용
 ├── plot_compare.py            sim/real CSV 파형 비교 도구
-├── artifacts/             실행 산출물 CSV/PNG (실행 시 생성, git 제외)
+├── (산출물은 `../artifacts/` — calibration/RL/real 공용, git 제외)
 ├── PRE_RL.md              차이값을 URDF/마찰/env cfg 중 어디에 넣는지
 ├── S3_hypotheses.md       가설·실측 표
 ├── run.sh                 실행 래퍼 (--viz kit 자동)
@@ -81,8 +81,8 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 - `plot_compare` 맨 위에 **odom x-y 궤적**이 나와서 사각형+삼각형이 얼마나 틀어지는지 바로 보임.
 - real odom은 시작 위치와 초기 yaw를 0으로 맞춰서 sim과 같은 방향으로 겹쳐 그림.
 
-- sim 실행 결과: `artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
-- real 실행 결과: `artifacts/<label>.csv`
+- sim 실행 결과: `training/artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
+- real 실행 결과: `training/artifacts/<label>.csv`
 - **비교 전에 sim을 먼저 실행**해서 sim CSV를 만들어야 함. 미리 만든 baseline은 없음.
 - real 기록 (PC):
   ```bash
@@ -99,14 +99,14 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   `/state_control`은 TRANSIENT_LOCAL(latched)라 스크립트가 그에 맞춰 구독한다.
 - 비교 (기본은 PNG 저장만):
   ```bash
-  ./training/calibration/plot_compare.sh training/calibration/artifacts/sim_sensor_stand.csv training/calibration/artifacts/real_stand.csv
-  ./training/calibration/plot_compare.sh training/calibration/artifacts/sim_sensor_floor.csv training/calibration/artifacts/real_floor.csv
+  ./training/calibration/plot_compare.sh training/artifacts/sim_sensor_stand.csv training/artifacts/real_stand.csv
+  ./training/calibration/plot_compare.sh training/artifacts/sim_sensor_floor.csv training/artifacts/real_floor.csv
   ```
 - **창으로 직접 보고 싶을 때만 `--show`**:
   ```bash
-  ./training/calibration/plot_compare.sh training/calibration/artifacts/sim_sensor_stand.csv training/calibration/artifacts/real_stand.csv --show
+  ./training/calibration/plot_compare.sh training/artifacts/sim_sensor_stand.csv training/artifacts/real_stand.csv --show
   ```
-  창을 닫으면 터미널로 돌아온다. `--show` 없으면 입력 이름에 따라 `training/calibration/artifacts/compare_stand.png` / `compare_floor.png`로 저장.
+  창을 닫으면 터미널로 돌아온다. `--show` 없으면 입력 이름에 따라 `training/artifacts/compare_stand.png` / `compare_floor.png`로 저장.
 - CSV에는 세 층이 같이 들어감:
   - `/joint_states` → `wheel_l_vel`, `wheel_r_vel` (rad/s), `wheel_l_pos`, `wheel_r_pos` (rad) — **firmware 원값**
   - `/odom` → `v_enc`, `w_enc` (m/s, rad/s) — 드라이버가 `r`/`sep`로 계산한 값

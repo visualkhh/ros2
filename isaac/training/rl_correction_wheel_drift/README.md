@@ -117,12 +117,12 @@ real_square.sh                 → 같은 사각형+삼각형을 RL goal로 (Aft
 3. **PC**: 같은 사각형+삼각형을 RL로 주행 + CSV
    ```bash
    ./training/rl_correction_wheel_drift/real_square.sh --side 0.5
-   # → training/calibration/artifacts/real_goal_square.csv
+   # → training/artifacts/real_goal_square.csv
    ```
 4. **비교 그래프**
    ```bash
    ./training/rl_correction_wheel_drift/plot_goal_square.sh --show
-   # → training/calibration/artifacts/compare_goal_square.png
+   # → training/artifacts/compare_goal_square.png
    ```
 5. Before/After 수치: `final err`, `RMS dev`(이상 사각형+삼각형 선에서 벗어난 정도), `path len`.
 

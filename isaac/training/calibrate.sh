@@ -18,7 +18,7 @@
 # 사전:
 #   - Pi: base + MANUAL
 #   - PC: ROS/peers (02_sensor_sync_real.sh가 자동 source)
-#   - training/calibration/artifacts에 sim/real CSV가 생성됨
+#   - training/artifacts에 sim/real CSV가 생성됨
 #   - training/artifacts/<run>/에 로그·CSV·PNG·JSON 복사본이 쌓임
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -102,8 +102,8 @@ if [[ $REAL_RC -ne 0 || $SIM_RC -ne 0 ]]; then
   exit 1
 fi
 
-SIM_CSV="$CALIB/artifacts/sim_sensor_${TAG}.csv"
-REAL_CSV="$CALIB/artifacts/real_${LABEL}.csv"
+SIM_CSV="$HERE/artifacts/sim_sensor_${TAG}.csv"
+REAL_CSV="$HERE/artifacts/real_${LABEL}.csv"
 [[ -f "$SIM_CSV" && -f "$REAL_CSV" ]] || { echo "CSV 없음" >&2; exit 1; }
 
 PLOT_ARGS=()
@@ -112,6 +112,6 @@ PLOT_ARGS=()
 
 cp "$SIM_CSV" "$RUN/"
 cp "$REAL_CSV" "$RUN/"
-cp "$CALIB/artifacts/compare_${TAG}.png" "$RUN/" 2>/dev/null || true
-cp "$CALIB/artifacts/sim_calib_${TAG}.json" "$RUN/" 2>/dev/null || true
+cp "$HERE/artifacts/compare_${TAG}.png" "$RUN/" 2>/dev/null || true
+cp "$HERE/artifacts/sim_calib_${TAG}.json" "$RUN/" 2>/dev/null || true
 echo "[calibrate] report → $RUN"
