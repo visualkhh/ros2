@@ -50,7 +50,7 @@ tensorboard --logdir logs/rl_correct
 
 ## 실기기 검증 (Before / After)
 
-1. **먼저 센서/액추에이터 싱크** — `../../steps/README.md` S5 (공중 지지 박스 → 바닥)
+1. **먼저 센서/액추에이터 싱크** — [`steps/PRE_RL.md`](../../steps/PRE_RL.md) · S5 (공중 지지 박스 → 바닥)
 2. PC: `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>`
 3. Pi: `./run-cli route rl`
 4. 같은 스크립트 주행으로 `rl_eval/eval_recorder` before/after CSV
