@@ -10,7 +10,7 @@ RL 환경의 한 스텝(20 Hz)이 이렇게 흐른다:
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/run.sh l04_env_api.py
+  ./learn/run.sh l04_env_api.py
 
 키:
   1  action [0, 0]      (보정 없음)

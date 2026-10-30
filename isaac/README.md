@@ -12,7 +12,8 @@
 | 경로 | 내용 |
 |---|---|
 | `urdf/beebot/urdf.xacro` | **학습용 로봇 URDF** — ROS용 `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`와 의도적으로 나눈 파일, **내용은 글자까지 같게** (`urdf/check_same.sh`) |
-| `steps/` | **단계별 실험 노트** — S1 창에 로봇 띄우기부터 S8 검증까지 ([steps/README.md](steps/README.md)) + **개념 실습 L1~L7** ([steps/LEARN.md](steps/LEARN.md)) |
+| `learn/` | **Isaac 개념 실습 L1~L7** — 하드웨어 없이 Stage/Prim/Sensor/Env/학습 ([learn/README.md](learn/README.md)) |
+| `steps/` | **프로젝트 단계 S0~S8** — URDF·센서·실기기와 하나씩 맞추는 작업 ([steps/README.md](steps/README.md)) |
 | `ROS2_TOPICS.md` | **Isaac sim ↔ ROS 2 토픽 계약** — `/isaacros/...`, domain 26 ([ROS2_TOPICS.md](ROS2_TOPICS.md)) |
 | `urdf/beebot/meshes/` | 몸통·바퀴 메시 — 저장소에서 직접 관리 (tb3_bringup/meshes와 같은 파일) |
 | `usd/` | URDF→USD 변환 결과 (`tb3_waffle_pi/tb3_waffle_pi.usda`). 매 실행마다 새로 생성, git 제외 — URDF가 정본 |

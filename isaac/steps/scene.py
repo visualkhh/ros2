@@ -55,6 +55,7 @@ class Room:
     origin: tuple[float, float, float]
     seed: int
     obstacles: int
+    size: float
 
 
 def _material(path: str, friction, restitution: float = 0.0):
@@ -146,11 +147,14 @@ def _build_room(index: int, origin, size: float, seed: int, obstacle_mat: str) -
         else:
             rad, h = dims
             _cylinder(f"{tag}/obstacle_{j}", rad, h, (ox + x, oy + y, h / 2), color, material=obstacle_mat)
-    return Room(index=index, origin=origin, seed=seed, obstacles=len(obstacles))
+    return Room(index=index, origin=origin, seed=seed, obstacles=len(obstacles), size=size)
 
 
-def build_world(count: int = 1, size: float = 4.0, seed: int = 0):
-    """바닥·조명·방 count개. 반환: [Room]. count=0이면 빈 바닥만."""
+def build_world(count: int = 1, size: float = 4.0, seed: int = 0, size_range=None):
+    """바닥·조명·방 count개. 반환: [Room]. count=0이면 빈 바닥만.
+
+    size_range=(min,max)를 주면 방마다 크기를 랜덤으로 뽑는다 (S6 랜덤 환경).
+    """
     obstacle_mat = _material("/World/Materials/obstacle", FRICTION_OBSTACLE)
     spawn_ground_plane("/World/ground", GroundPlaneCfg(
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -162,8 +166,9 @@ def build_world(count: int = 1, size: float = 4.0, seed: int = 0):
 
     rooms = []
     for i in range(count):
+        room_size = size if size_range is None else random.Random(seed + i * 7919).uniform(*size_range)
         origin = (i * ROOM_SPACING, 0.0, 0.0)
-        rooms.append(_build_room(i, origin, size, seed + i * 1000, obstacle_mat))
+        rooms.append(_build_room(i, origin, room_size, seed + i * 1000, obstacle_mat))
     return rooms
 
 

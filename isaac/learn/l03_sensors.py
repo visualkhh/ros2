@@ -6,7 +6,7 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/run.sh l03_sensors.py
+  ./learn/run.sh l03_sensors.py
 
 키:
   3/4/5/0  L1과 같음 (왼쪽/오른쪽/양쪽/정지)

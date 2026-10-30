@@ -6,7 +6,7 @@ Isaac Lab은 `{ENV_REGEX_NS}/Robot`으로 로봇을 만들면
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/run.sh l05_vectorize.py --envs 16
+  ./learn/run.sh l05_vectorize.py --envs 16
 
 키:
   1  전진 (v=0.12, w=0)

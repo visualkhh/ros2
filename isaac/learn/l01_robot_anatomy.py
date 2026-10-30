@@ -2,7 +2,7 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/run.sh l01_robot_anatomy.py
+  ./learn/run.sh l01_robot_anatomy.py
 
 키:
   1  /World/Robot 아래 USD prim 트리 (경로·타입·물리 API) 출력

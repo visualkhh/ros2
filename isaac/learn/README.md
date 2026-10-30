@@ -1,5 +1,7 @@
 # Isaac 개념 실습 (L1~L7)
 
+> 실기기와 맞추는 **프로젝트**는 [../steps/README.md](../steps/README.md) (S0~S8).
+
 Pi/실기기 없이 **Isaac 안에서만** 개념을 하나씩 확인한다. 각 레슨은 "명령 1개 → 눈으로 확인 → 콘솔 출력"으로 끝난다.
 
 | # | 개념 | 눈으로 보는 것 | 상태 |
@@ -16,7 +18,7 @@ Pi/실기기 없이 **Isaac 안에서만** 개념을 하나씩 확인한다. 각
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./steps/run.sh l01_robot_anatomy.py
+./learn/run.sh l01_robot_anatomy.py
 ```
 
 - 시작하면 `/World/Robot` 아래 **prim 트리**(경로·타입·적용된 물리 API)와 joint/link 목록을 출력
@@ -36,7 +38,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ## L2 — 물리 시간 (dt · substep) ✅
 
 ```bash
-./steps/run.sh l02_physics_time.py
+./learn/run.sh l02_physics_time.py
 ```
 
 - 로봇은 항상 같은 명령 `0.12 m/s`. 바뀌는 건 **한 화면(frame)마다 물리를 몇 번 돌리느냐**.
@@ -64,7 +66,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ## L3 — 센서 (IMU · LiDAR) ✅
 
 ```bash
-./steps/run.sh l03_sensors.py
+./learn/run.sh l03_sensors.py
 ```
 
 - 로봇에 실제 위치로 센서를 붙임:
@@ -94,7 +96,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ## L4 — Env API (obs · action · reward · done · reset) ✅
 
 ```bash
-./steps/run.sh l04_env_api.py
+./learn/run.sh l04_env_api.py
 ```
 
 - 한 스텝(20 Hz)의 흐름:
@@ -128,7 +130,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ## L5 — Vectorization (병렬 환경) ✅
 
 ```bash
-./steps/run.sh l05_vectorize.py --envs 16
+./learn/run.sh l05_vectorize.py --envs 16
 ```
 
 - `InteractiveScene(num_envs=16)` → `/World/envs/env_0` ~ `env_15`에 같은 로봇이 자동 복제

@@ -5,7 +5,7 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./steps/run.sh l02_physics_time.py
+  ./learn/run.sh l02_physics_time.py
 
 키:
   1  한 프레임에 물리 1스텝  (느리게 보임)
