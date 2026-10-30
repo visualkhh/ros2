@@ -66,12 +66,12 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 - `--profile`은 **파일 경로** 또는 그 디렉토리. 기본은
   `training/calibration/calib_default_profile.py`.
-- 이 profile은 **사각형 → 180° 턴 → 같은 사각형 역주행 → 삼각형**을 한다.
+- 이 profile은 **사각형 → 180° 턴 → 같은 사각형 역주행 → 사각형 안쪽 삼각형**을 한다.
 - sim과 real을 동시에 돌리고 약 73초 걸린다.
 - 결과:
-  - `training/calibration/artifacts/sim_sensor_floor.csv`
-  - `training/calibration/artifacts/real_floor.csv`
-  - `training/calibration/artifacts/sim_calib_floor.json`
+  - `training/artifacts/sim_sensor_floor.csv`
+  - `training/artifacts/real_floor.csv`
+  - `training/artifacts/sim_calib_floor.json`
   - `training/artifacts/calibrate_<시각>_<label>/` (로그·CSV·PNG·JSON 보고서)
 
 ### 3) 학습
@@ -112,12 +112,12 @@ ssh pak@pak.local 'cd ~/ros2/tool && ./run-cli route rl'
 ```
 
 - `calib_default_profile.make_waypoints()`의 **사각형 8 + 안쪽 삼각형 4 waypoint**를 보낸다.
-- 결과: `training/calibration/artifacts/real_goal_square.csv`
+- 결과: `training/artifacts/real_goal_square.csv`
 - 비교 그래프:
 
 ```bash
 ./training/rl_correction_wheel_drift/plot_goal_square.sh --show
-# → training/calibration/artifacts/compare_goal_square.png
+# → training/artifacts/compare_goal_square.png
 ```
 
 그래프에서:
@@ -468,11 +468,11 @@ ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
 
 # 같은 사각형+삼각형을 RL goal로 주행 + CSV
 ./training/rl_correction_wheel_drift/real_square.sh --side 0.5
-# → training/calibration/artifacts/real_goal_square.csv
+# → training/artifacts/real_goal_square.csv
 
 # RL 전(real_floor.csv) / 후(real_goal_square.csv) 궤적 비교
 ./training/rl_correction_wheel_drift/plot_goal_square.sh --show
-# → training/calibration/artifacts/compare_goal_square.png
+# → training/artifacts/compare_goal_square.png
 ```
 
 - Before는 `training/calibration/02_sensor_sync_real.sh`가 만든 `real_floor.csv`.
@@ -490,6 +490,48 @@ ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
 
 real 배포 전에 **30 iteration밖에 안 된 모델**이면 성능이 낮을 수 있으니,
 먼저 `train_goal_friction.sh 300`으로 충분히 학습하는 것을 권장.
+
+---
+
+### 6.5 track — 보정 때와 **완전히 같은 `(v,w)` 명령** 재생
+
+goal은 waypoint 방식이라서 `02_sensor_sync_real.sh`의 `(v,w)` 명령을 직접 쓰지 않는다.
+정확히 같은 명령을 RL로 재생하려면 **track 정책**을 쓴다.
+
+```bash
+# 1) track 학습
+./training/train.sh rl_correction_wheel_drift 300 --task track --friction
+
+# 2) PC corrector (track)
+./training/real_rl.sh \
+  training/artifacts/train_rl_correction_wheel_drift_<시각>/rl_correct.onnx track
+
+# 3) Pi
+ssh pak@pak.local 'cd ~/ros2/tool && ./run-cli base start && ./run-cli control manual && ./run-cli route rl'
+
+# 4) 보정 때와 같은 (v,w) 명령을 그대로 재생
+./training/calibration/02_sensor_sync_real.sh --label real_track_rl
+# → training/artifacts/real_track_rl.csv
+
+# 5) Before(real_floor.csv) / After(real_track_rl.csv) 비교
+./training/calibration/plot_compare.sh \
+  training/artifacts/real_floor.csv \
+  training/artifacts/real_track_rl.csv \
+  --out training/artifacts/compare_track_rl.png \
+  --calib-out /tmp/sim_calib_track_rl.json \
+  --show
+```
+
+- 4번은 `calib_default_profile.make_profile()`의 `(v,w)` 명령을 그대로 보낸다.
+- `Pi cmd_manager → /cmd_vel_rl_in → PC track corrector → /cmd_vel_rl_out → Pi`.
+- 5번에서 `--calib-out`을 `/tmp`로 준 이유: 비교용 RL 주행으로 실제 보정 JSON을 덮어쓰지 않기 위해서.
+
+정리:
+
+```text
+goal  → real_square.sh (waypoint)
+track → 02_sensor_sync_real.sh (똑같은 v,w 명령)
+```
 
 ---
 
