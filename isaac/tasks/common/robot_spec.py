@@ -19,8 +19,11 @@ CONTROL_HZ = 20.0      # cmd_manager mux 주기 = 정책 주기
 DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tool/cli/op/bus.py DIAG_RADIUS)
 
 
-def robot_usd(out_dir: str = "/tmp/tb3_usd") -> str:
-    """xacro → URDF → USD (Isaac 앱이 켜진 뒤 호출). 매번 새로 변환 — URDF를 고치면 바로 반영."""
+def robot_usd(out_dir: str = os.path.join(WS, "isaac", "usd")) -> str:
+    """xacro → URDF → USD (Isaac 앱이 켜진 뒤 호출). 매번 새로 변환 — URDF를 고치면 바로 반영.
+
+    결과는 isaac/usd/ 아래 (git 제외 — URDF가 정본, USDA는 파생물).
+    """
     import xacro
     from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
 

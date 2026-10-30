@@ -17,6 +17,7 @@ isaac/
 ├── learn/                    Isaac 개념 실습 (L1~L7: Stage·Joint·Sensor·Env·학습)
 ├── tasks/rl_correct/         연습장 (빈 바닥, 명령대로 움직이게 보정)
 ├── urdf/beebot/urdf.xacro     학습용 로봇 URDF (ROS용과 같은 내용 — urdf/check_same.sh)
+├── usd/                       URDF→USD 결과 (매 실행 생성, git 제외)
 ├── tasks/common/robot_spec.py  우리 로봇 숫자 한 곳 + 우리 URDF를 Isaac용(USD)으로 변환
 ├── scripts/train.py          학습 시작 버튼
 ├── scripts/play.py           학습된 애 구경하기
