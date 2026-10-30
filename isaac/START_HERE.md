@@ -54,7 +54,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./steps/run.sh s01_robot_in_world.py
 #   통과: [s1] base 높이: 0.010 m · 링크 6개
 
-# S2. 키보드로 직접 몰기 (W/A/S/D · Shift · X정지 · R리셋)
+# S2. 키보드로 직접 몰기 (W/A/S/D · Shift · X정지 · R리셋 · N 다음 방)
 ./steps/run.sh s02_drive_robot.py
 #   단계 전체·통과 기준: steps/README.md
 

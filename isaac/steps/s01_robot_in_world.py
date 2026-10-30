@@ -20,6 +20,7 @@ from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser(description="S1: 우리 로봇 + 방을 창에 띄운다")
 parser.add_argument("--room", type=float, default=4.0, help="방 한 변 길이 [m] (0 = 벽 없이)")
+parser.add_argument("--seed", type=int, default=0, help="장애물 배치 시드")
 parser.add_argument("--seconds", type=float, default=0.0, help="0 = 창을 닫을 때까지")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -29,13 +30,13 @@ simulation_app = app_launcher.app
 
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
-from scene import build_room, set_camera, settle, spawn_robot  # noqa: E402
+from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
 
 
 def main():
     sim = SimulationContext(SimulationCfg(dt=1 / 120, device=args_cli.device))
     set_camera(sim)
-    build_room(args_cli.room)
+    rooms = build_world(1 if args_cli.room > 0 else 0, args_cli.room, args_cli.seed)
     scene, robot, usd_path = spawn_robot()
     sim.reset()
     z = settle(scene, robot, sim)
@@ -43,6 +44,8 @@ def main():
     print("[s1] joints:", ", ".join(robot.joint_names))
     print("[s1] links :", ", ".join(robot.body_names))
     print(f"[s1] base 높이: {z:.3f} m (기대 ≈ 0.01 — 0.00이면 넘어짐/스폰 실패)")
+    if rooms:
+        print(f"[s1] 방 1개 · 장애물 {rooms[0].obstacles}개 · seed {args_cli.seed}")
     print("[s1] 창 조작: 오른쪽 드래그 = 회전, 가운데 = 이동, 휠 = 줌, F = 선택 물체로 확대")
 
     # 정착 후엔 물리를 멈추고 화면만 갱신 — 마우스로 카메라 조작 가능

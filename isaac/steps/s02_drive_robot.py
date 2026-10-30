@@ -8,6 +8,7 @@
   W / ↑  전진        S / ↓  후진
   A / ←  좌회전(+)   D / →  우회전(−)
   Shift  느리게(40%)   X  정지   R  처음 위치로
+  N  다음 랜덤 방 (방마다 장애물 배치가 다름, --seed로 재현)
   (창을 닫으면 종료)
 
 바퀴 명령은 실제 드라이버와 같은 식(tasks.rl_correct.rl_correct_env.wheel_targets:
@@ -25,6 +26,8 @@ from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser(description="S2: 키보드로 우리 로봇 몰기")
 parser.add_argument("--room", type=float, default=4.0, help="방 한 변 길이 [m] (0 = 벽 없이)")
+parser.add_argument("--rooms", type=int, default=6, help="랜덤 방 개수 (N 키로 이동)")
+parser.add_argument("--seed", type=int, default=0, help="장애물 배치 시드 (같으면 재현)")
 parser.add_argument("--speed", type=float, default=0.15, help="전진 속도 [m/s] (최대 0.26)")
 parser.add_argument("--turn", type=float, default=1.0, help="회전 속도 [rad/s] (최대 1.82)")
 parser.add_argument("--seconds", type=float, default=0.0, help="0 = 창을 닫을 때까지")
@@ -41,7 +44,8 @@ import torch  # noqa: E402
 
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
-from scene import build_room, set_camera, settle, spawn_robot  # noqa: E402
+from scene import (FRICTION_GROUND, FRICTION_OBSTACLE, FRICTION_WHEEL,
+                   build_world, place_robot, set_camera, settle, spawn_robot)  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
 from tasks.rl_correct.rl_correct_env import wheel_targets  # noqa: E402
 
@@ -73,6 +77,7 @@ class Keyboard:
         "LEFT_SHIFT": carb.input.KeyboardInput.LEFT_SHIFT,
         "RIGHT_SHIFT": carb.input.KeyboardInput.RIGHT_SHIFT,
         "X": carb.input.KeyboardInput.X, "R": carb.input.KeyboardInput.R,
+        "N": carb.input.KeyboardInput.N,
     }
 
     def __init__(self):
@@ -96,7 +101,7 @@ def held(pressed, keys) -> bool:
 def main():
     sim = SimulationContext(SimulationCfg(dt=1 / 120, device=args_cli.device))
     set_camera(sim)
-    build_room(args_cli.room)
+    rooms = build_world(args_cli.rooms if args_cli.room > 0 else 0, args_cli.room, args_cli.seed)
     scene, robot, _ = spawn_robot()
     sim.reset()
     z = settle(scene, robot, sim)
@@ -105,12 +110,16 @@ def main():
     r = torch.tensor([spec.WHEEL_RADIUS], device=device)
     sep = torch.tensor([spec.WHEEL_SEP], device=device)
     print(f"[s2] base 높이: {z:.3f} m")
-    print("[s2] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋")
+    print("[s2] W/↑ 전진 · S/↓ 후진 · A/← 좌회전 · D/→ 우회전 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방")
+    if rooms:
+        r0 = rooms[0]
+        print(f"[s2] 방 1/{len(rooms)} · seed {r0.seed} · 장애물 {r0.obstacles}개")
+    print(f"[s2] 마찰: 바닥 {FRICTION_GROUND} · 장애물 {FRICTION_OBSTACLE} · 바퀴 {FRICTION_WHEEL} (static, dynamic)")
 
     kb = None if args_cli.demo else Keyboard()
-    joint_zero = torch.zeros((1, 2), device=device)
-    root_zero = torch.zeros((1, 6), device=device)
     reset_latch = False
+    next_latch = False
+    room_idx = 0
     t0 = time.perf_counter()
     sim_t = 0.0                 # 시뮬 시간
     sim_dt = 1 / 120
@@ -144,12 +153,18 @@ def main():
                 if held(p, STOP_KEYS):
                     v, w = 0.0, 0.0
                 if "R" in p and not reset_latch:      # 리셋은 누를 때 한 번만
-                    root = robot.data.default_root_state.torch.clone()
-                    robot.write_root_pose_to_sim(root[:, :7])
-                    robot.write_root_velocity_to_sim(root_zero)
-                    robot.write_joint_state_to_sim(joint_zero, joint_zero, wheel_ids)
+                    origin = rooms[room_idx].origin if rooms else (0.0, 0.0, 0.0)
+                    place_robot(robot, origin, 0.0, wheel_ids)
                     v, w = 0.0, 0.0
                 reset_latch = "R" in p
+                if "N" in p and not next_latch and rooms:   # 다음 랜덤 방
+                    room_idx = (room_idx + 1) % len(rooms)
+                    room = rooms[room_idx]
+                    place_robot(robot, room.origin, 0.0, wheel_ids)
+                    set_camera(sim, room.origin)
+                    print(f"[s2] 방 {room_idx + 1}/{len(rooms)} · seed {room.seed} · 장애물 {room.obstacles}개")
+                    v, w = 0.0, 0.0
+                next_latch = "N" in p
             v = max(-spec.MAX_LIN, min(spec.MAX_LIN, v))
             w = max(-spec.MAX_ANG, min(spec.MAX_ANG, w))
             wheels = wheel_targets(torch.tensor([v], device=device), torch.tensor([w], device=device),
