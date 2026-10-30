@@ -22,7 +22,8 @@ steps/
 ├── 02_sensor_sync.py
 ├── 02_sensor_sync_real.sh real 센서 기록 실행 (ROS/peers 자동)
 ├── 02_sensor_sync_real.py
-├── plot_compare.sh        sim/real 파형 비교 실행
+├── square_profile.py      정사각형 주행 시간표 (sim/real 공용)
+├── plot_compare.sh        sim/real 파형·궤적 비교 실행
 ├── scene.py               방·로봇 생성 공용
 ├── plot_compare.py        sim/real CSV 파형 비교 도구
 ├── artifacts/             실행 산출물 CSV/PNG (실행 시 생성, git 제외)
@@ -49,7 +50,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ## 02 — 센서 싱크 (sim 기준 생성됨)
 
 ```bash
-# 공중(지지 박스) — 눈으로 보기 (9초 기록 후 창 닫을 때까지 반복)
+# 공중(지지 박스) — 눈으로 보기 (정사각형 프로파일 기록 후 창 닫을 때까지 반복)
 ./steps/02_sensor_sync.sh --stand --watch
 
 # 공중 — 기록만 (창 없이)
@@ -61,6 +62,10 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 `--stand --watch`는 로봇이 **배 밑 박스 위**에 올라가 바퀴만 도는 장면을 옆에서 계속 보여줌.
 박스 높이가 실제와 다르면 `--stand-height 0.04`처럼 지정.
+
+- 프로파일: **한 변 0.5 m 정사각형을 왼쪽(반시계) → 오른쪽(시계) 2번**. `--side 0.4`로 변 길이 변경.
+- 각 변은 `전진 → 0.25 s 정지 → 90° 제자리 회전 → 0.25 s 정지`.
+- `plot_compare` 맨 위에 **odom x-y 궤적**이 같이 나와서 사각형이 얼마나 틀어지는지 바로 보임.
 
 - sim 실행 결과: `artifacts/sim_sensor_stand.csv` · `sim_sensor_floor.csv`
 - real 실행 결과: `artifacts/<label>.csv`

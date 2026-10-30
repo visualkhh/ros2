@@ -1,13 +1,15 @@
-"""sim vs real 시간파형 비교 (같은 명령에서 같은 신호인지 눈으로).
+"""sim vs real 비교 — 시간파형 + odom 궤적 (같은 명령에서 같은 신호인지 눈으로).
 
   ./steps/plot_compare.sh /tmp/sim_step.csv /tmp/real_step.csv
   → steps/artifacts/compare_<tag>.png
 
 위에서부터:
+  0) odom x-y 궤적: 왼쪽 사각형 → 오른쪽 사각형 (CSV에 odom_x/y가 있으면)
   1) 직진: 명령 lin_raw vs v_enc (sim/real)
   2) 회전: 명령 ang_raw vs w_gyro (sim/real)  ← 부호가 반대면 IMU 축/부호 문제
   3) 직진 오차 (cmd − enc)
   4) 회전 오차 (cmd − gyro)
+  5) raw 바퀴 속도
 """
 import argparse
 import csv
@@ -100,23 +102,46 @@ def series(rows, key):
     return [r["t"] for r in rows], [r[key] for r in rows]
 
 
+def path(rows):
+    """odom x-y를 시작점 기준으로 평행이동."""
+    x0, y0 = rows[0]["odom_x"], rows[0]["odom_y"]
+    return ([r["odom_x"] - x0 for r in rows],
+            [r["odom_y"] - y0 for r in rows])
+
+
 def fit_wheel(real):
-    """real CSV의 전진 계단에서 gain/dead time/tau를 뽑는다 (1차 근사)."""
-    fwd = [r for r in real if 2.5 <= r["t"] < 4.5 and r["lin_raw"] > 0.01]
-    if not fwd:
+    """real CSV의 첫 전진 구간에서 gain/dead time/tau를 뽑는다 (1차 근사)."""
+    start = None
+    for i in range(1, len(real)):
+        if real[i]["lin_raw"] > 0.01 and real[i - 1]["lin_raw"] <= 0.01:
+            start = i
+            break
+    if start is None:
         return None
-    cmd_v = sum(r["lin_raw"] for r in fwd) / len(fwd)
+    end = next((j for j in range(start + 1, len(real))
+                if real[j]["lin_raw"] <= 0.01), len(real))
+    run = real[start:end]
+    if len(run) < 5:
+        return None
+
+    # 계단 과도구간을 뺀 뒤반부로 정상상태 gain 계산
+    steady_rows = run[len(run) // 2:]
+    cmd_v = sum(r["lin_raw"] for r in steady_rows) / len(steady_rows)
     target = cmd_v / WHEEL_RADIUS
+    if target <= 0:
+        return None
+    t_step = real[start]["t"]
 
     def cross(frac):
-        for r in real:
-            if r["t"] >= 2.0 and r["wheel_l_vel"] >= frac * target:
-                return r["t"] - 2.0
+        for r in real[start:]:
+            if r["wheel_l_vel"] >= frac * target:
+                return r["t"] - t_step
         return None
 
     t10, t90 = cross(0.1), cross(0.9)
-    steady = (sum(r["wheel_l_vel"] for r in fwd) + sum(r["wheel_r_vel"] for r in fwd)) / (2 * len(fwd))
-    gain = steady / target if target else 1.0
+    steady = (sum(r["wheel_l_vel"] for r in steady_rows)
+              + sum(r["wheel_r_vel"] for r in steady_rows)) / (2 * len(steady_rows))
+    gain = steady / target
     if t10 is None or t90 is None:
         return None
     tau = max(0.01, min(0.3, (t90 - t10) / 2.2))
@@ -167,13 +192,40 @@ def main():
         _, wl_r = series(real, "wheel_l_vel")
         _, wr_r = series(real, "wheel_r_vel")
 
-    fig, ax = plt.subplots(5 if has_wheels else 4, 1, figsize=(11, 12 if has_wheels else 10), sharex=True)
+    has_path = all(k in sim[0] and k in real[0] for k in ("odom_x", "odom_y"))
+    n_time = 5 if has_wheels else 4
+    ax_path = None
+    if has_path:
+        fig = plt.figure(figsize=(11, 14.5))
+        gs = fig.add_gridspec(n_time + 1, 1, height_ratios=[1.7] + [1] * n_time)
+        ax_path = fig.add_subplot(gs[0])
+        ax = [fig.add_subplot(gs[i + 1]) for i in range(n_time)]
+        for a in ax[1:]:
+            a.sharex(ax[0])
+    else:
+        fig, axs = plt.subplots(n_time, 1, figsize=(11, 12 if has_wheels else 10),
+                                sharex=True)
+        ax = list(axs)
     for a in ax:
         a.grid(True, alpha=0.3)
-    for a in ax[:3]:
-        a.axvspan(1.0, 3.0, color="tab:green", alpha=0.06)
-        a.axvspan(3.0, 5.0, color="tab:green", alpha=0.10)
-        a.axvspan(6.0, 8.0, color="tab:orange", alpha=0.08)
+
+    if ax_path is not None:
+        sx, sy = path(sim)
+        rx, ry = path(real)
+        ax_path.plot(sx, sy, color="tab:blue", lw=1.6, label="sim odom")
+        ax_path.plot(rx, ry, color="tab:orange", lw=1.6, label="real odom")
+        ax_path.plot(sx[0], sy[0], "ko", ms=5, label="start")
+        ax_path.plot(sx[-1], sy[-1], "b^", ms=6, label="sim end")
+        ax_path.plot(rx[-1], ry[-1], "r.", ms=8, label="real end")
+        ax_path.axhline(0, color="k", lw=0.5, alpha=0.3)
+        ax_path.axvline(0, color="k", lw=0.5, alpha=0.3)
+        ax_path.set_aspect("equal", adjustable="datalim")
+        ax_path.set_xlabel("x [m]")
+        ax_path.set_ylabel("y [m]")
+        ax_path.set_title("odom trajectory — left square → right square",
+                          fontsize=10, pad=3)
+        ax_path.legend(loc="best", fontsize=8)
+        ax_path.grid(True, alpha=0.3)
 
     ax[0].plot(t_s, cmd_v_s, "k--", lw=1.2, label="cmd (lin_raw)")
     ax[0].plot(t_s, v_s, color="tab:blue", label=f"sim v_enc (rms {ms['rms_v']:.3f})")
@@ -219,7 +271,7 @@ def main():
         ax[3].set_xlabel("time [s]")
 
     fig.suptitle(f"sim vs real — {tag} ({Path(args.real).name})", fontsize=12)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.985) if ax_path is not None else None)
     out = Path(args.out) if args.out else HERE / "artifacts" / f"compare_{tag}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150)

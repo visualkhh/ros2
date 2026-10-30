@@ -1,7 +1,9 @@
 """02 — 센서 싱크 (real, PC에서 실행).
 
-로봇에 같은 9초 프로파일을 보내고 `/odom`·`/imu`를 CSV로 기록한다.
-sim 쪽 `02_sensor_sync.py`와 같은 열/프로파일.
+로봇에 sim과 같은 정사각형 프로파일을 보내고 `/odom`·`/imu`를 CSV로 기록한다.
+2초 정지 → 왼쪽 사각형(반시계) → 0.5초 정지 → 오른쪽 사각형(시계) → 2초 정지.
+각 변: 0.5 m 전진 → 0.25 s 정지 → 제자리 90도 회전 → 0.25 s 정지.
+sim 쪽 `02_sensor_sync.py`와 같은 `square_profile.py`를 쓴다.
 
 사전:
   Pi: base + cmd_manager, 제어 MANUAL
@@ -30,22 +32,13 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu, JointState
 from std_msgs.msg import String
 
-TOTAL = 9.0
+from square_profile import cmd_at, make_profile, total as profile_total
+
 HERE = Path(__file__).resolve().parent
 
 
 def yaw_of(q):
     return math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-
-
-def cmd_at(t, speed, turn):
-    if t < 2.0:
-        return 0.0, 0.0
-    if t < 5.0:
-        return speed, 0.0
-    if t < 8.0:
-        return 0.0, turn
-    return 0.0, 0.0
 
 
 class SensorSync(Node):
@@ -98,6 +91,8 @@ class SensorSync(Node):
 
 
 def main(args):
+    segs = make_profile(args.speed, args.turn, args.side)
+    total = profile_total(segs)
     rclpy.init()
     node = SensorSync()
     try:
@@ -119,14 +114,15 @@ def main(args):
 
         rows = []
         rate = args.rate
-        n = int(round(TOTAL * rate))
+        n = int(round(total * rate))
         t0 = time.monotonic()
         out = args.output or str(HERE / "artifacts" / f"{args.label}.csv")
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        print(f"[02-real] 시작 · {TOTAL:.0f}s · {rate:.0f}Hz · {args.label} → {out}")
+        print(f"[02-real] 시작 · {total:.0f}s · {rate:.0f}Hz · side={args.side:.2f}m "
+              f"· {args.label} → {out}")
         for k in range(n):
             t = k / rate
-            v, w = cmd_at(t, args.speed, args.turn)
+            v, w = cmd_at(t, segs)
             node.send(v, w)
             next_t = t0 + (k + 1) / rate
             while time.monotonic() < next_t:
@@ -153,23 +149,23 @@ def main(args):
                          "wheel_l_vel", "wheel_r_vel", "wheel_l_pos", "wheel_r_pos", "label"])
             cw.writerows(rows)
 
-        def seg(a, b):
-            part = [r for r in rows if a <= r[0] < b]
-            return (sum(r[8] for r in part) / len(part),
-                    sum(r[9] for r in part) / len(part),
-                    sum(r[10] for r in part) / len(part))
-        vf, wf, gf = seg(2.5, 4.5)
-        vt, wt, gt = seg(5.5, 7.5)
-        def seg_wheel(a, b):
-            part = [r for r in rows if a <= r[0] < b]
-            return (sum(r[11] for r in part) / len(part),
-                    sum(r[12] for r in part) / len(part))
-        lf, rf = seg_wheel(2.5, 4.5)
-        lt, rt = seg_wheel(5.5, 7.5)
-        print(f"[02-real] 직진구간  v_enc={vf:+.3f} w_enc={wf:+.3f} w_gyro={gf:+.3f} "
-              f"| 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
-        print(f"[02-real] 회전구간  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f} "
-              f"| 바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")
+        def average(t0, t1, skip=0.0):
+            part = [r for r in rows if t0 + skip <= r[0] < t1]
+            if not part:
+                part = [r for r in rows if t0 <= r[0] < t1]
+            return tuple(sum(r[i] for r in part) / len(part) for i in (8, 9, 10, 11, 12))
+
+        def first(label):
+            return next(s for s in segs if s[4] == label)
+
+        for name in ("left", "right"):
+            move, turn = first(f"move_{name}"), first(f"turn_{name}")
+            vf, wf, gf, lf, rf = average(move[0], move[1], skip=0.5)
+            vt, wt, gt, lt, rt = average(turn[0], turn[1], skip=0.3)
+            print(f"[02-real] {name.upper():5s} move  v_enc={vf:+.3f} w_enc={wf:+.3f} "
+                  f"w_gyro={gf:+.3f} | 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
+            print(f"[02-real] {name.upper():5s} turn  v_enc={vt:+.3f} w_enc={wt:+.3f} "
+                  f"w_gyro={gt:+.3f} | 바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")
         if not node.imu_seen:
             print("[02-real] 경고: /imu 없음 — w_gyro가 0")
         if not node.joint_seen:
@@ -193,6 +189,7 @@ if __name__ == "__main__":
     p.add_argument("--label", default="real")
     p.add_argument("--speed", type=float, default=0.15)
     p.add_argument("--turn", type=float, default=1.0)
+    p.add_argument("--side", type=float, default=0.5, help="정사각형 한 변 [m]")
     p.add_argument("--rate", type=float, default=20.0)
     p.add_argument("--check-only", action="store_true", help="상태만 확인하고 종료 (로봇 안 움직임)")
     raise SystemExit(main(p.parse_args()))
