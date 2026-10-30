@@ -24,7 +24,7 @@ from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
 from tasks.common import robot_spec as spec
 
 if TYPE_CHECKING:
-    from tasks.rl_correct.rl_correct_env_cfg import RlCorrectEnvCfg
+    from rl.task.rl_correct_env_cfg import RlCorrectEnvCfg
 
 # 텔레오퍼 키 → (전후, 회전) 방향 (tool/cli/op/bus.py TELEOP_MOVES와 같음)
 TELEOP_MOVES = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1, 1))

@@ -2,7 +2,7 @@
 
 Usage (Lab env):
   cd /home/pank/pa-course/IsaacLab-6.1
-  ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/scripts/train.py [--max-iterations N] [--visualizer kit]
+  ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/train.py [--max-iterations N] [--visualizer kit]
 Watch: add --visualizer kit (default is no window). Logs: isaac/logs/rl_correct/.
 """
 import argparse
@@ -23,10 +23,10 @@ app_launcher = AppLauncher(args)
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
 from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
-from tasks.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
+from rl.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
 
-from tasks.rl_correct.rl_correct_env import RlCorrectEnv  # noqa: E402
-from tasks.rl_correct.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
+from rl.task.rl_correct_env import RlCorrectEnv  # noqa: E402
+from rl.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
 
 env_cfg = RlCorrectEnvCfg()
 env_cfg.scene.num_envs = 512

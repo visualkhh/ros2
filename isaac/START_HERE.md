@@ -15,13 +15,10 @@ ROS는 아는데 Isaac이 처음인 사람을 위한 문서. 수식 없음.
 isaac/
 ├── learn/                    Isaac 개념 실습 L1~L7 (하드웨어 없이)
 ├── steps/                    프로젝트 S0~S8 (실기기와 맞추기)
-├── tasks/rl_correct/         연습장 (빈 바닥, 명령대로 움직이게 보정)
+├── rl/                       바퀴 드리프트 보정 RL (task·train·export·play)
 ├── urdf/beebot/urdf.xacro     학습용 로봇 URDF (ROS용과 같은 내용 — urdf/check_same.sh)
 ├── usd/                       URDF→USD 결과 (매 실행 생성, git 제외)
 ├── tasks/common/robot_spec.py  우리 로봇 숫자 한 곳 + 우리 URDF를 Isaac용(USD)으로 변환
-├── scripts/train.py          학습 시작 버튼
-├── scripts/play.py           학습된 애 구경하기
-├── scripts/export.py         학습 결과 ONNX로 뽑기
 ├── logs/<task>/<날짜>/       학습 기록 (체크포인트 .pt)
 └── export/<task>/            로봇에 쓸 모델 (.onnx)
 ```
@@ -83,16 +80,16 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 ./convert_usd.sh
 
 # 물리 확인 (오차 0이면 명령대로 가나) — 고친 뒤 먼저
-cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/scripts/smoke_rl_correct.py; cd -
+cd /home/pank/pa-course/IsaacLab-6.1 && ./isaaclab.sh -p /home/pank/workspaces/visualkhh/source/ros2/isaac/rl/smoke.py; cd -
 
 # 학습 — 창 보면서: 뒤에 --visualizer kit
-./train_rl_correct.sh 300
+./rl/train.sh 300
 
 # 체크포인트 → ONNX
-./export_rl.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./rl/export.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
 
 # 구경
-./play_rl_correct.sh export/rl_correct/rl_correct_v2.onnx 4
+./rl/play.sh export/rl_correct/rl_correct_v2.onnx 4
 ```
 
 ## 6. 로봇(ROS) 연결

@@ -19,10 +19,11 @@
 | `usd/` | URDF→USD 변환 결과 (`tb3_waffle_pi/tb3_waffle_pi.usda`). 매 실행마다 새로 생성, git 제외 — URDF가 정본 |
 | `tasks/common/robot_spec.py` | 우리 로봇 값 한 곳 (바퀴 0.033/0.287 · 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 20 Hz) + 학습용 URDF → USD |
 | `tasks/common/onnx_export.py` | actor → ONNX (출력 = 물리 보정량, train·export 공용) |
-| `tasks/rl_correct/` | v2 환경: 모터 지연·좌우 비대칭·데드밴드 · WiFi 지연 · 계단식 명령 · 엔코더+자이로 관측 |
-| `scripts/smoke_rl_correct.py` | 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
+| `rl/` | **바퀴 드리프트 보정 RL** — env·train·export·play ([rl/README.md](rl/README.md)) |
+| `rl/task/` | v2 환경: 모터 지연·좌우 비대칭·데드밴드 · WiFi 지연 · 계단식 명령 · 엔코더+자이로 관측 |
+| `rl/smoke.py` | 물리 확인: 오차 0일 때 명령대로 가나 (직진 0.20 · 회전 1.0 · 사선) |
 | `scripts/load_urdf.py` | URDF만 띄워 보기 |
-| `scripts/train.py · export.py · play.py` | 학습 · ONNX 뽑기 · 구경 |
+| `rl/train.py · export.py · play.py` | 학습 · ONNX 뽑기 · 구경 |
 | `logs/` · `export/` | 산출물 (git 제외) |
 
 ## USD 생성
@@ -42,9 +43,9 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./train_rl_correct.sh 300                     # 창 보기: 뒤에 --visualizer kit (기본은 창 없음)
-./export_rl.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
-./play_rl_correct.sh export/rl_correct/rl_correct_v2.onnx 4
+./rl/train.sh 300                     # 창 보기: 뒤에 --visualizer kit (기본은 창 없음)
+./rl/export.sh logs/rl_correct/<날짜_시간>/model_299.pt rl_correct_v2.onnx
+./rl/play.sh export/rl_correct/rl_correct_v2.onnx 4
 # 로봇: PC에서 rl-only.launch.py enable:=true model:=... → Before/After (ros2_ws README)
 ```
 

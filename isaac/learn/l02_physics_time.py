@@ -55,7 +55,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
 from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
 from tasks.common import robot_spec as spec  # noqa: E402
-from tasks.rl_correct.rl_correct_env import wheel_targets  # noqa: E402
+from rl.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0          # 물리 1스텝 = 8.33 ms
 CMD_DT = 1 / 20.0       # 명령은 20 Hz (cmd_manager와 같게)

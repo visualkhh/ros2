@@ -211,7 +211,7 @@ python3 isaac/steps/plot_compare.py isaac/steps/baselines/sim_step.csv /tmp/real
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-./train_rl_correct.sh 300 --viz kit     # 창 보면서 (느림) / 빼면 창 없이
+./rl/train.sh 300 --viz kit     # 창 보면서 (느림) / 빼면 창 없이
 tensorboard --logdir logs/rl_correct
 ```
 
@@ -219,7 +219,7 @@ tensorboard --logdir logs/rl_correct
 
 ## S8 — 검증 (sim → real)
 
-1. ONNX: `./export_rl.sh logs/rl_correct/<날짜>/model_299.pt rl_correct_v2.onnx`
+1. ONNX: `./rl/export.sh logs/rl_correct/<날짜>/model_299.pt rl_correct_v2.onnx`
 2. sim: S6 랜덤 시드에서 before(보정 0)/after(ONNX) 비교
 3. real: `rl-only.launch.py enable:=true model:=...` → `./run-cli route rl` → `eval_recorder` before/after → `compare_csv.py`
 4. 합격: 회전 RMS −20% 이상, 직진 RMS 악화 없음 (task-spec §4)
