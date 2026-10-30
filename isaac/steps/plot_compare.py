@@ -1,7 +1,7 @@
 """sim vs real 시간파형 비교 (같은 명령에서 같은 신호인지 눈으로).
 
   ./steps/plot_compare.sh /tmp/sim_step.csv /tmp/real_step.csv
-  → steps/artifacts/compare.png
+  → steps/artifacts/compare_<tag>.png
 
 위에서부터:
   1) 직진: 명령 lin_raw vs v_enc (sim/real)
@@ -98,12 +98,21 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("sim")
     p.add_argument("real")
-    p.add_argument("--out", default=str(HERE / "artifacts" / "compare.png"))
+    p.add_argument("--out", default=None, help="기본: artifacts/compare_<tag>.png")
     p.add_argument("--show", action="store_true", help="저장 후 창으로 띄우기")
     args = p.parse_args()
 
     sim, real = load(args.sim), load(args.real)
     ms, mr = metrics(sim), metrics(real)
+
+    def tag_of(path: str) -> str:
+        stem = Path(path).stem
+        for prefix in ("sim_sensor_", "real_sensor_", "sim_", "real_"):
+            if stem.startswith(prefix):
+                return stem[len(prefix):] or "run"
+        return stem or "run"
+
+    tag = tag_of(args.sim) if tag_of(args.sim) != "run" else tag_of(args.real)
     t_s, cmd_v_s = series(sim, "lin_raw")
     _, v_s = series(sim, "v_enc")
     t_r, cmd_v_r = series(real, "lin_raw")
@@ -172,9 +181,9 @@ def main():
     else:
         ax[3].set_xlabel("time [s]")
 
-    fig.suptitle(f"sim vs real — {Path(args.real).name}", fontsize=12)
+    fig.suptitle(f"sim vs real — {tag} ({Path(args.real).name})", fontsize=12)
     fig.tight_layout()
-    out = Path(args.out)
+    out = Path(args.out) if args.out else HERE / "artifacts" / f"compare_{tag}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150)
     print(f"[plot] {out}")

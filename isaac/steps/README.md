@@ -83,7 +83,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   ```bash
   ./steps/plot_compare.sh steps/artifacts/sim_sensor_stand.csv steps/artifacts/real_stand.csv --show
   ```
-  창을 닫으면 터미널로 돌아온다. `--show` 없으면 `steps/artifacts/compare.png`만 저장.
+  창을 닫으면 터미널로 돌아온다. `--show` 없으면 입력 이름에 따라 `steps/artifacts/compare_stand.png` / `compare_floor.png`로 저장.
 - CSV에는 세 층이 같이 들어감:
   - `/joint_states` → `wheel_l_vel`, `wheel_r_vel` (rad/s), `wheel_l_pos`, `wheel_r_pos` (rad) — **firmware 원값**
   - `/odom` → `v_enc`, `w_enc` (m/s, rad/s) — 드라이버가 `r`/`sep`로 계산한 값
