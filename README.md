@@ -7,7 +7,7 @@ Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyrical 로봇의 bringup · 운영 도�
 | [documents/](documents/) | 문서 목차 (Pi 세팅 · ROS 설치 · OpenCR · Isaac · 시행착오) | [documents/README.md](documents/README.md) |
 | [ros2_ws/](ros2_ws/) | ROS 2 워크스페이스 (bringup · RL 보정 · 외부 소스 `deps.repos`) | [ros2_ws/README.md](ros2_ws/README.md) · [ARCH.md](ros2_ws/ARCH.md) |
 | [tool/](tool/) | 운영 CLI `run-cli` · RViz `run-rviz` (베이스·SLAM·Nav·텔레오퍼·지도) | [tool/README.md](tool/README.md) · [MAP_NAV.md](tool/MAP_NAV.md) |
-| [isaac/](isaac/) | Isaac Lab RL 이동 보정 학습 · ONNX | [isaac/START_HERE.md](isaac/START_HERE.md) |
+| [isaac/](isaac/) | Isaac Lab RL 이동 보정 — sim 보정 · 학습 · ONNX | [isaac/README.md](isaac/README.md) |
 | [firmware/](firmware/) | OpenCR 펌웨어 `tb3_wheels` (프로토콜 · 업로드) | [firmware/opencr/README.md](firmware/opencr/README.md) |
 | [setup/](setup/) | Pi 빌드 스크립트 (`build.sh`) | [setup/pi/README.md](setup/pi/README.md) |
 

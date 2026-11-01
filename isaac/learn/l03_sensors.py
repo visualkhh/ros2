@@ -6,7 +6,7 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./learn/run.sh l03_sensors.py
+  ./run-learn.sh l03_sensors.py
 
 키:
   3/4/5/0  L1과 같음 (왼쪽/오른쪽/양쪽/정지)
@@ -58,8 +58,8 @@ from isaaclab.sensors.ray_caster import MultiMeshRayCasterCfg, patterns  # noqa:
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
-from scene import bind_robot_materials, build_world, robot_articulation_cfg, set_camera, settle  # noqa: E402
-from tasks.common import robot_spec as spec  # noqa: E402
+from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from urdf import robot_spec as spec  # noqa: E402
 from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -118,9 +118,10 @@ def print_state(robot, imu, lidar, sim_t):
 def main():
     headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
-    set_camera(sim)
-    build_world(1 if args_cli.room > 0 else 0, args_cli.room, 0)
-    robot_cfg, usd_path = robot_articulation_cfg(prim_path="{ENV_REGEX_NS}/Robot")
+    world = DefaultScene()
+    world.set_camera(sim)
+    world.build(1 if args_cli.room > 0 else 0, args_cli.room, 0)
+    robot_cfg, usd_path = world.articulation_cfg(prim_path="{ENV_REGEX_NS}/Robot")
     print(f"[l3] robot USD -> {usd_path}", flush=True)
 
     lidar_targets = [
@@ -161,11 +162,11 @@ def main():
     robot = scene["robot"]
     imu = scene.sensors.get("imu")
     lidar = scene.sensors.get("lidar")
-    bind_robot_materials(scene, prim_path="/World/envs/env_0/Robot")
+    world.bind_robot_materials(scene, prim_path="/World/envs/env_0/Robot")
     print("[l3] scene + sensors created", flush=True)
     sim.reset()
     print("[l3] sim.reset done", flush=True)
-    settle(scene, robot, sim)
+    world.settle(sim, scene=scene, robot=robot)
     print("[l3] settle done", flush=True)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device

@@ -2,7 +2,7 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./learn/run.sh l01_robot_anatomy.py
+  ./run-learn.sh l01_robot_anatomy.py
 
 키:
   1  /World/Robot 아래 USD prim 트리 (경로·타입·물리 API) 출력
@@ -40,7 +40,7 @@ from pxr import UsdPhysics  # noqa: E402
 
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
-from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
+from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
 
 DT = 1 / 120.0
 FRAME_DT = 1 / 60.0
@@ -94,11 +94,12 @@ def print_state(robot, sim_t):
 
 def main():
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
-    set_camera(sim)
-    build_world(1 if args_cli.room > 0 else 0, args_cli.room, 0)
-    scene, robot, _ = spawn_robot()
+    world = DefaultScene()
+    world.set_camera(sim)
+    world.build(1 if args_cli.room > 0 else 0, args_cli.room, 0)
+    scene, robot, _ = world.spawn()
     sim.reset()
-    z = settle(scene, robot, sim)
+    z = world.settle(sim)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
     print(f"[l1] base 높이 {z:.3f} m · Articulation: joint {len(robot.joint_names)}개 · link {len(robot.body_names)}개")

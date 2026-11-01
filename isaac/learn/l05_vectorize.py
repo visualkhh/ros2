@@ -6,7 +6,7 @@ Isaac Lab은 `{ENV_REGEX_NS}/Robot`으로 로봇을 만들면
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./learn/run.sh l05_vectorize.py --envs 16
+  ./run-learn.sh l05_vectorize.py --envs 16
 
 키:
   1  전진 (v=0.12, w=0)
@@ -55,8 +55,8 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg  # noqa: E402
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
-from scene import bind_robot_materials, build_world, robot_articulation_cfg, settle  # noqa: E402
-from tasks.common import robot_spec as spec  # noqa: E402
+from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from urdf import robot_spec as spec  # noqa: E402
 from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -85,8 +85,9 @@ def main():
     half = side * args_cli.spacing / 2.0
     sim.set_camera_view(eye=(half * 1.9, -half * 1.9, half * 1.6), target=(0.0, 0.0, 0.0))
 
-    build_world(0, 0.0, 0)
-    robot_cfg, usd_path = robot_articulation_cfg(prim_path="{ENV_REGEX_NS}/Robot")
+    world = DefaultScene()
+    world.build(0, 0.0, 0)
+    robot_cfg, usd_path = world.articulation_cfg(prim_path="{ENV_REGEX_NS}/Robot")
     print(f"[l5] robot USD -> {usd_path}", flush=True)
 
     @configclass
@@ -97,10 +98,10 @@ def main():
 
     scene = InteractiveScene(SceneCfg())
     robot = scene["robot"]
-    bind_robot_materials(scene, prim_path="/World/envs")
+    world.bind_robot_materials(scene, prim_path="/World/envs")
     sim.reset()
     scene.reset()
-    settle(scene, robot, sim)
+    world.settle(sim, scene=scene, robot=robot)
 
     n = scene.num_envs
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)

@@ -1,0 +1,5 @@
+# isaac real-side 공용 (sim/학습은 isaaclab.sh venv, 여기 아님)
+# rclpy/geometry_msgs/nav_msgs/sensor_msgs는 /opt/ros/lyrical에서 옴 (pip 금지)
+# .venv는 --system-site-packages로 만들어 ROS를 그대로 본다 → setup_venv.sh 참고
+matplotlib>=3.8
+numpy>=1.24

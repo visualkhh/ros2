@@ -10,7 +10,7 @@ RL 환경의 한 스텝(20 Hz)이 이렇게 흐른다:
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./learn/run.sh l04_env_api.py
+  ./run-learn.sh l04_env_api.py
 
 키:
   1  action [0, 0]      (보정 없음)
@@ -59,8 +59,8 @@ import torch  # noqa: E402
 
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
-from scene import build_world, place_robot, set_camera, settle, spawn_robot  # noqa: E402
-from tasks.common import robot_spec as spec  # noqa: E402
+from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from urdf import robot_spec as spec  # noqa: E402
 from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -96,8 +96,10 @@ class Keyboard:
 class ToyEnv:
     """우리 로봇 + rl_correct와 같은 obs/action/reward를 가진 최소 환경."""
 
-    def __init__(self, scene, robot, sim, wheel_ids):
-        self.scene, self.robot, self.sim = scene, robot, sim
+    def __init__(self, world, sim, wheel_ids):
+        self.world = world
+        self.scene, self.robot = world.scene, world.robot
+        self.sim = sim
         self.wheel_ids = wheel_ids
         self.dev = robot.device
         self.r = torch.tensor([spec.WHEEL_RADIUS], device=self.dev)
@@ -123,7 +125,7 @@ class ToyEnv:
         return [self.cmd[0], self.cmd[1], v_enc, w_enc, w_gyro, min(self.t_change, 2.0)]
 
     def reset(self):
-        place_robot(self.robot, (0.0, 0.0, 0.0), 0.0, self.wheel_ids)
+        self.world.place((0.0, 0.0, 0.0), 0.0, self.wheel_ids)
         self.scene.update(DT)
         self.t = 0.0
         self.t_change = 0.0
@@ -167,14 +169,15 @@ class ToyEnv:
 def main():
     headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
-    set_camera(sim)
-    build_world(1 if args_cli.room > 0 else 0, args_cli.room, 0)
-    scene, robot, _ = spawn_robot()
+    world = DefaultScene()
+    world.set_camera(sim)
+    world.build(1 if args_cli.room > 0 else 0, args_cli.room, 0)
+    scene, robot, _ = world.spawn()
     sim.reset()
-    settle(scene, robot, sim)
+    world.settle(sim)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
 
-    env = ToyEnv(scene, robot, sim, wheel_ids)
+    env = ToyEnv(world, sim, wheel_ids)
     kb = Keyboard() if (HAS_INPUT and not headless) else None
     obs = env.reset()
     action = torch.tensor(args_cli.action, device=robot.device)

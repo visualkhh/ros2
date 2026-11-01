@@ -1,144 +1,61 @@
-# wheel_drift — 바퀴 드리프트 보정 RL
+# wheel_drift — 바퀴 드리프트 보정 RL (학습만)
 
-목적: **같은 명령을 RL 끄고(Before) / 켜고(After) 줬을 때 목표에 더 정확히 가는지** 수치로 보인다.
+목적: `(v, w)` 명령을 넣었을 때 모터 지연·좌우 gain 차이·데드밴드로 생기는 드리프트를
+정책이 `[Δv, Δw]`로 보정하도록 **sim에서 학습**한다. 여기는 학습만 한다 (검증·실기기는 밖에서).
 설계·평가 기준은 [../../../documents/isaac/task-spec.md](../../../documents/isaac/task-spec.md).
-
-- `training/calibration/` = RL 전 셋팅 01~06 (환경·센서·실기기 싱크)
-- `training/rl_correction_wheel_drift/` = 그 위에서 도는 **바퀴 보정 정책** (환경 · 학습 · export · play)
-
-## 두 가지 task
-
-| task | 명령 | 보상 | 파일 |
-|---|---|---|---|
-| `track` (기본) | `(v, w)` 속도 | 명령 속도와 실제 속도 차이 | `rl_correct_env*` · `train.sh` |
-| `goal` | 목표 변위 `(gx, gy)` | 목표까지 진행 − 옆으로 샌 거리 | `goal_env*` · `train_goal.sh` |
 
 ## 구조
 
 ```
 training/rl_correction_wheel_drift/
 ├── task/
-│   ├── rl_correct_env_cfg.py  track 환경 (obs 6 · action 2)
-│   ├── rl_correct_env.py
-│   ├── goal_env_cfg.py        goal 환경 (obs 10 · action 2)
-│   └── goal_env.py
-├── agents/rsl_rl_ppo_cfg.py   PPO 설정
-├── calib_profile.py           기본은 training/calibration/calib_default_profile.py 재사용
-├── smoke.py                   track 물리 스모크
-├── smoke_goal.py              goal 스모크 (목표 (1,0) m까지)
-├── train.py · export.py · play.py
-├── train.sh · train_goal.sh · train_goal_friction.sh · export.sh · play.sh
-├── real_launch.sh             PC에서 goal/track corrector 실행 (ONNX 경로)
-├── real_square.py/.sh         같은 사각형+삼각형을 RL goal로 주행 + CSV
-├── plot_goal_square.py/.sh    RL 전/후 사각형+삼각형 궤적/보정 비교 PNG
+│   ├── TaskScene.py            ground+마찰 패치+바퀴/캐스터 바인딩
+│   ├── rl_correct_env_cfg.py   환경 설정 (obs 6 · action 2 · 랜덤 범위)
+│   └── rl_correct_env.py       환경 (장면은 TaskScene에 위임)
+├── agents/rsl_rl_ppo_cfg.py    PPO 설정
+├── FitPanel.py                 --watch 때 보정값/랜덤 범위/마찰 보기 창 (읽기만)
+├── train.py                    WheelDriftTrain(../Train.py 상속) — 학습 → 끝나면 ONNX export
 └── README.md
 ```
 
-공용: `../../tasks/common/robot_spec.py` · `../../tasks/common/onnx_export.py`
+공용: `../../urdf/robot_spec.py` · `../onnx/onnx_export.py` · `../../calibration/` (`--fit`)
 
-## goal 정책
+## 환경
 
 | 항목 | 값 |
 |---|---|
-| obs (10) | `[gx, gy, px, py, yaw, v_enc, w_enc, w_gyro, prev_dv, prev_dw]` |
-| action (2) | `[Δv, Δw]` — nominal controller 출력에 더하는 보정 |
+| obs (6) | `[v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]` |
+| action (2) | `[Δv, Δw]` — 명령에 더하는 보정 (`action_scale` = 0.10 m/s, 0.60 rad/s) |
 | 주기 | 20 Hz (= cmd_manager) |
-| 목표 | 시작 자세 기준 `(gx, gy)`, 반경 `0.4~1.2 m` 랜덤 |
-| 보상 | `(d_prev−d)/‖g‖ − 0.5·max(0, lateral−0.05)/‖g‖ − action/smooth penalty` |
-| 종료 | `d < 0.05 m` 성공, 또는 12초 timeout |
-| 랜덤화 | 목표 방향·거리, 초기 yaw, 모터 τ·좌우 gain·데드밴드·WiFi 지연, `--friction`이면 env별 ground friction |
+| 명령 | 0.5~2 s마다 바뀜: 텔레오퍼 키 · 부드러운 곡선 · 정지 |
+| 보상 | `−(|v_cmd−v| + 0.5·|w_cmd−w|) − action/smooth penalty` (sim true 속도 기준) |
+| 랜덤화 (에피소드마다) | 바퀴별 τ·gain, 데드밴드, 명령/관측 지연, 바퀴 반지름·간격 기준 오차, 초기 yaw |
+| 마찰 (기본 켜짐) | env별 바닥 마찰 + 파랑=미끄럼 / 주황=끈적 네모 패치 (기본 4개, `--patch-count`). 배치는 시작 시 1회. 끄려면 `--no-friction` |
+| `--uneven` | env별 낮은 턱 (1~3 cm) |
+| `--latency` | rl-only Before CSV → RL 경로 왕복을 명령 지연에 더하고 관측 지연 중심으로 |
+| `--fit` | `real/fit.json,sim/fit.json` → 차이를 τ·gain·지연(·데드밴드) 랜덤 범위의 **중심**으로 (폭 유지) |
 
-- `px, py, yaw`는 `/odom`을 흉내낸 적분값 (시작점 0).
-- `v_enc, w_enc`는 `/odom` twist, `w_gyro`는 `/imu` z.
-- **보상은 sim의 true 변위**로 계산하지만, **obs에는 true pose를 넣지 않는다** (sim-to-real).
-- nominal controller: 목표 방향으로 `(v, w)`를 만들고, 정책은 `[Δv, Δw]`만 보정.
-- `--friction`: env마다 ground slab/material을 따로 만들어 static/dynamic friction을 랜덤화.
-  그 위에 **파랑=미끄럼 / 주황=끈적** 국소 패치를 뿌림 (기본 4개, `--patch-count`).
-  기본은 ground plane 하나에 `sim_params` floor 마찰값.
+- obs에는 실기기에서 보이는 값만 넣는다 (true 속도는 보상에만).
 
 ## 실행
 
 ```bash
-cd /home/pank/workspaces/visualkhh/source/ros2/isaac
+cd isaac   # Lab env
 
-# goal 학습 (창 없이)
-./training/rl_correction_wheel_drift/train_goal.sh 300
-tensorboard --logdir logs/rl_goal
+# 기본: headless, 마찰 패치 켜짐
+./isaaclab.sh -p -m training rl_correction_wheel_drift --iterations 300 \
+  --fit artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
+# 창으로 보기 (512 env는 무거우니 16~32개만) — TRAINING FIT 창에 fit·범위·마찰이 같이 뜸
+./isaaclab.sh -p -m training rl_correction_wheel_drift --watch --envs 16 \
+  --fit artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
 
-# goal 학습을 창으로 보면서 (512 env는 무거우니 16~32개만)
-./training/rl_correction_wheel_drift/train_goal.sh 300 --watch --envs 16
-
-# goal + env별 바닥 마찰 randomization
-./training/rl_correction_wheel_drift/train_goal_friction.sh 300
-./training/rl_correction_wheel_drift/train_goal_friction.sh 300 --watch --envs 16
-tensorboard --logdir logs/rl_goal_friction
-
-# 학습 끝나면 자동 export: logs/rl_goal/<날짜_시간>/rl_goal.onnx
-./training/rl_correction_wheel_drift/play.sh logs/rl_goal/<날짜_시간>/rl_goal.onnx 4
-
-# checkpoint에서 직접 export
-./training/rl_correction_wheel_drift/export.sh logs/rl_goal/<날짜_시간>/model_299.pt goal_v1.onnx goal
+tensorboard --logdir artifacts/training
 ```
 
-- `play.py`는 ONNX 입력 차원으로 task를 자동 판별함 (6=track, 10=goal).
-- 기존 track 학습은 그대로:
-
-```bash
-./training/rl_correction_wheel_drift/train.sh 300
-./training/rl_correction_wheel_drift/play.sh export/rl_correct/rl_correct_v2.onnx 4
-```
-
-- 로그: `logs/rl_goal/<날짜_시간>/` · `logs/rl_correct/<날짜_시간>/`
-- ONNX: `export/rl_goal/<이름>.onnx` · `export/rl_correct/<이름>.onnx`
-
-## 실기기 검증 (Before / After)
-
-보정 때 쓴 사각형+삼각형 명령은 `calib_profile.py` 하나에 있다.
-`steps`의 02도 이 파일을 import하고, 학습 후 `real_square.py`도 같은 waypoint를 쓴다.
-
-```text
-calibration/02_sensor_sync_real.sh   → open-loop 사각형+삼각형 (Before)
-real_square.sh                 → 같은 사각형+삼각형을 RL goal로 (After)
-```
-
-1. **Pi**: base + MANUAL + RL 경로
-   ```bash
-   ssh pak@pak.local
-   cd ~/ros2/tool
-   ./run-cli base start
-   ./run-cli control manual
-   ./run-cli route rl
-   ```
-2. **PC**: goal corrector 실행 (ONNX 파일 경로)
-   ```bash
-   ./training/rl_correction_wheel_drift/real_launch.sh \
-     logs/rl_goal_friction/<날짜_시간>/rl_goal_friction.onnx goal
-   ```
-3. **PC**: 같은 사각형+삼각형을 RL로 주행 + CSV
-   ```bash
-   ./training/rl_correction_wheel_drift/real_square.sh --side 0.5
-   # → training/artifacts/real_goal_square.csv
-   ```
-4. **비교 그래프**
-   ```bash
-   ./training/rl_correction_wheel_drift/plot_goal_square.sh --show
-   # → training/artifacts/compare_goal_square.png
-   ```
-5. Before/After 수치: `final err`, `RMS dev`(이상 사각형+삼각형 선에서 벗어난 정도), `path len`.
-
-**track — 보정 때와 같은 `(v,w)` 명령 재생**은 `training/verify_track.sh`:
-
-```bash
-./training/verify_track.sh \
-  --profile training/rl_correction_wheel_drift/calib_profile.py --show
-```
-
-- `02_sensor_sync_real.sh`로 같은 `(v,w)` 명령을 보내고
-- `compare_track_rl.png` / report를 만든다.
-
-합격(초안): 목표 도달 오차 감소, 회전 RMS 20% 이상 감소, 직진 RMS 악화 없음.
+- `--watch` 창에서 **P** 키 → 결과 폴더에 `screen_shot_<시각>.png`
+- 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint, `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교), (`--fit`/`--latency`면) `base-fit.json`
 
 ## 주의
 
-- `training/rl_correction_wheel_drift/task` 환경은 **sim 전용**. 실기기에서 관측 가능한 값만 obs로 쓴다.
-- 학습 전에 `training/calibration/`의 02~04로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 아무리 잘 돼도 real에서 효과가 없다.
+- 학습 전에 `calibration/`으로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 잘 돼도 real에서 효과가 없다.
+- `--fit`에는 `real/fit.json,sim/fit.json`(차이)을 넣는다. sim fit은 raw · 지금 `ActuatorParam`과 같은 damping으로 잰 것 (아니면 거부). 1개면 real 값 그대로.

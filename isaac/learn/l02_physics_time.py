@@ -5,7 +5,7 @@
 
 실행:
   cd /home/pank/workspaces/visualkhh/source/ros2/isaac
-  ./learn/run.sh l02_physics_time.py
+  ./run-learn.sh l02_physics_time.py
 
 키:
   1  한 프레임에 물리 1스텝  (느리게 보임)
@@ -53,8 +53,8 @@ import torch  # noqa: E402
 
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
-from scene import build_world, set_camera, settle, spawn_robot  # noqa: E402
-from tasks.common import robot_spec as spec  # noqa: E402
+from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from urdf import robot_spec as spec  # noqa: E402
 from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0          # 물리 1스텝 = 8.33 ms
@@ -78,11 +78,12 @@ class Keyboard:
 
 def main():
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
-    set_camera(sim)
-    build_world(1 if args_cli.room > 0 else 0, args_cli.room, 0)
-    scene, robot, _ = spawn_robot()
+    world = DefaultScene()
+    world.set_camera(sim)
+    world.build(1 if args_cli.room > 0 else 0, args_cli.room, 0)
+    scene, robot, _ = world.spawn()
     sim.reset()
-    settle(scene, robot, sim)
+    world.settle(sim)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)

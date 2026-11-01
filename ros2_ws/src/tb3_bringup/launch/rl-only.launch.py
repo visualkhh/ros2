@@ -29,5 +29,6 @@ def generate_launch_description():
              output='screen'),
         Node(package='rl_eval', executable='eval_recorder', name='eval_recorder',
              remappings=[('cmd_vel_raw', 'cmd_vel_rl_in'), ('cmd_vel', 'cmd_vel_rl_out')],
-             parameters=[{'output': arg('output'), 'label': arg('label')}]),
+             parameters=[{'output': arg('output'), 'label': arg('label'),
+                          'rl_enable': arg('enable'), 'rl_model': arg('model')}]),
     ])

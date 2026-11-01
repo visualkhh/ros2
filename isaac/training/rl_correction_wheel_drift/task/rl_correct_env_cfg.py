@@ -9,10 +9,12 @@ from isaaclab.sim import SimulationCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils import configclass
 
-from tasks.common import robot_spec as spec
-from tasks.common import sim_params as cal
+from urdf import robot_spec as spec
+from calibration.parameter.ActuatorParam import ActuatorParam
+from calibration.parameter.FrictionParam import FrictionParam
 
-_FLOOR_FRICTION = cal.friction("floor")
+_FLOOR_FRICTION = FrictionParam()   # 기본값 (숨은 sim_calib_*.json은 안 읽는다)
+_ACT = ActuatorParam()               # calibration sim과 같은 바퀴 모터 (fit 차이를 그대로 쓰려면 같아야 함)
 
 
 @configclass
@@ -32,10 +34,10 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
         actuators={
             "wheels": ImplicitActuatorCfg(
                 joint_names_expr=["wheel_left_joint", "wheel_right_joint"],
-                effort_limit=3.0,                      # XM430-W210 stall ~3 N·m
-                velocity_limit=spec.MAX_WHEEL + 1.0,   # 포화는 환경이 비례 축소로 직접 (드라이버와 같게)
+                effort_limit=_ACT.effort,
+                velocity_limit=_ACT.velocity_limit,    # 포화는 환경이 비례 축소로 직접 (드라이버와 같게)
                 stiffness=0.0,
-                damping=20.0,                          # 속도 서보 (Dynamixel 속도 모드처럼 정상상태 오차 ≈ 0) — 지연은 환경의 1차 지연 모델이 담당
+                damping=_ACT.damping,                  # 속도 서보 — 값은 calibration/parameter/ActuatorParam.py 한 곳
             ),
         },
     )
@@ -48,21 +50,28 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     # 에피소드마다 무작위 (실제에서 엔코더·자이로로 보이는 오차만)
     tau_range = (0.05, 0.25)       # [s] 바퀴별 1차 지연
     gain_range = (0.90, 1.10)      # 바퀴별 이득 (좌우 비대칭)
+    gain_center = (1.0, 1.0)       # 좌/우 gain 중심 — gain_range 샘플에 곱함 (`--fit`이면 real fit)
     deadband_range = (0.0, 0.3)    # [rad/s] 이보다 작은 바퀴 명령은 안 돎
-    cmd_delay_steps = (0, 2)       # PC → Pi (×50 ms)
-    obs_delay_steps = (0, 2)       # Pi → PC (odom·imu)
+    # documents/isaac/task-spec.md §3 기준: 명령·관측 각각 0~4 스텝 (0~200 ms)
+    cmd_delay_steps = (0, 4)       # PC → Pi (×50 ms)
+    obs_delay_steps = (0, 4)       # Pi → PC (odom·imu)
     sep_nominal_err = 0.08         # 드라이버 기준 간격 vs 실제 유효 간격 (회전 오차 → 자이로로만 보임)
     radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨, 강건성용)
     enc_noise = 0.005
     gyro_noise = 0.01
 
-    # 바닥/바퀴 마찰 — 기본은 steps floor 보정값, `--friction`이면 env별 랜덤
-    ground_friction = _FLOOR_FRICTION["ground"]
-    wheel_friction = _FLOOR_FRICTION["wheel"]
-    caster_friction = _FLOOR_FRICTION["caster"]
+    # 바닥/바퀴 마찰 — 학습은 기본으로 env별 랜덤+패치 (train.py가 켬), `--no-friction`이면 FrictionParam 기본값 고정
+    ground_friction = _FLOOR_FRICTION.ground
+    wheel_friction = _FLOOR_FRICTION.wheel
+    caster_friction = _FLOOR_FRICTION.caster
     randomize_friction = False
     ground_static_range = (0.50, 0.90)
     ground_dynamic_range = (0.40, 0.80)
+    # env 안 요철 (울퉁불퉁) — 바퀴가 올라타는 낮은 턱. 기하학적 외란. `--uneven`으로 켠다.
+    randomize_uneven = False
+    uneven_patch_count = 4
+    uneven_patch_size = (0.30, 0.55)    # [m] 한 변
+    uneven_patch_height = (0.01, 0.03)  # [m] 높이 — "약간"
     # env 안의 국소 마찰 패치 (파랑=미끄럼, 주황=끈적)
     friction_patch_count = 4
     friction_patch_radius = (0.55, 0.90)

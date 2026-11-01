@@ -15,6 +15,11 @@
 공통:
   /odom twist·pose, /imu angular z 사용. zero 명령은 zero 출력.
   No model / dim mismatch -> track은 passthrough, goal은 정지.
+
+실행 중 전환 (ROS 파라미터 — 한 번 실행에 A/B):
+  ros2 param set /rl_corrector enable false|true      입력마다 다시 읽음 (false = 바이패스)
+  ros2 param set /rl_corrector model_path <onnx>      즉시 다시 로드. 없는 경로·빈 값이면 바이패스
+  (ros2_ws/policy.sh 가 이걸 감싼다)
 """
 import math
 import time
@@ -23,6 +28,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import Point, Twist
 from nav_msgs.msg import Odometry
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Empty, Float32MultiArray
@@ -82,7 +88,8 @@ class RlCorrector(Node):
         self.prev_action = (0.0, 0.0)  # 정규화 [-1,1]
         self.last_cmd = (0.0, 0.0)
         self.changed_at = time.monotonic()
-        self._load_model()
+        self._load_model(self.get_parameter('model_path').value)
+        self.add_on_set_parameters_callback(self._on_params)
 
         self.create_subscription(Odometry, 'odom', self.cb_odom, 10)
         self.create_subscription(Imu, 'imu', self.cb_imu, 10)
@@ -93,16 +100,23 @@ class RlCorrector(Node):
         self.pub_dbg = self.create_publisher(Float32MultiArray, 'rl_debug', 10)
         self.create_timer(0.05, self.tick_goal)
 
-    def _load_model(self):
-        path = self.get_parameter('model_path').value
+    def _on_params(self, params):
+        """model_path가 바뀌면 바로 다시 로드 (실패해도 노드는 살아서 바이패스)."""
+        for p in params:
+            if p.name == 'model_path':
+                self._load_model(p.value)
+        return SetParametersResult(successful=True)
+
+    def _load_model(self, path: str):
+        self.session, self.in_name, self.obs_dim = None, None, 0   # 실패·빈 경로 = 바이패스
         if not path:
             self.get_logger().info('No model_path: passthrough mode')
             return
         try:
             import onnxruntime as ort
-            self.session = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
-            self.in_name = self.session.get_inputs()[0].name
-            self.obs_dim = int(self.session.get_inputs()[0].shape[1])
+            sess = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
+            in_name, obs_dim = sess.get_inputs()[0].name, int(sess.get_inputs()[0].shape[1])
+            self.session, self.in_name, self.obs_dim = sess, in_name, obs_dim   # 다 읽은 뒤에만 교체
             requested = self.get_parameter('mode').value
             if requested == 'auto':
                 self.mode = 'goal' if self.obs_dim == 10 else 'track'

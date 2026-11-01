@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import math
-import random
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -19,10 +18,10 @@ import isaaclab.sim as sim_utils
 from isaaclab import cloner
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
-from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
 
-from tasks.common import robot_spec as spec
+from training.rl_correction_wheel_drift.task.TaskScene import TaskScene
+from urdf import robot_spec as spec
 
 if TYPE_CHECKING:
     from training.rl_correction_wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg
@@ -68,99 +67,12 @@ class RlCorrectEnv(DirectRLEnv):
         self.sens_buf = torch.zeros(n, self.cfg.obs_delay_steps[1] + 1, 3, device=dev)
         self._rows = torch.arange(n, device=dev)
 
-    # ------------------------------------------------------------------ scene
-    def _setup_ground(self):
-        c = self.cfg
-        if getattr(c, "randomize_friction", False):
-            # env마다 ground slab을 따로 만들고, 그 위에 국소 마찰 패치를 뿌린다.
-            spacing = self.scene.cfg.env_spacing
-            size = max(1.0, spacing - 0.1)
-            pos = cloner.grid_transforms(self.scene.num_envs, spacing, device=self.device)[0]
-
-            slip_mat = sim_utils.RigidBodyMaterialCfg(
-                static_friction=c.slippery_friction[0], dynamic_friction=c.slippery_friction[1],
-                restitution=0.0, friction_combine_mode="average",
-            )
-            slip_mat.func("/World/Materials/friction_slippery", slip_mat)
-            stick_mat = sim_utils.RigidBodyMaterialCfg(
-                static_friction=c.sticky_friction[0], dynamic_friction=c.sticky_friction[1],
-                restitution=0.0, friction_combine_mode="average",
-            )
-            stick_mat.func("/World/Materials/friction_sticky", stick_mat)
-
-            for i, (x, y, _z) in enumerate(pos.detach().cpu().tolist()):
-                static = random.uniform(*c.ground_static_range)
-                dynamic = random.uniform(*c.ground_dynamic_range)
-                mat = sim_utils.RigidBodyMaterialCfg(
-                    static_friction=static, dynamic_friction=dynamic,
-                    restitution=0.0, friction_combine_mode="average",
-                )
-                cfg = sim_utils.CuboidCfg(
-                    size=(size, size, 0.1),
-                    collision_props=sim_utils.PhysxCollisionPropertiesCfg(),
-                    physics_material=mat,
-                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.45, 0.45, 0.45)),
-                )
-                cfg.func(f"/World/grounds/ground_{i}", cfg, translation=(x, y, -0.05))
-
-                # 파랑 = 미끄럼, 주황 = 끈적. 얇은 판이라 바퀴가 그대로 지나간다.
-                for j in range(int(c.friction_patch_count)):
-                    angle = (2.0 * math.pi * j / max(1, int(c.friction_patch_count))
-                             + random.uniform(-0.35, 0.35))
-                    radius = random.uniform(*c.friction_patch_radius)
-                    pw = random.uniform(*c.friction_patch_size)
-                    pd = random.uniform(*c.friction_patch_size)
-                    sticky = random.random() < 0.5
-                    mat_path = ("/World/Materials/friction_sticky" if sticky
-                                else "/World/Materials/friction_slippery")
-                    color = (1.0, 0.45, 0.10) if sticky else (0.20, 0.50, 1.0)
-                    patch = sim_utils.CuboidCfg(
-                        size=(pw, pd, 0.01),
-                        collision_props=sim_utils.PhysxCollisionPropertiesCfg(),
-                        visual_material=sim_utils.PreviewSurfaceCfg(
-                            diffuse_color=color, roughness=0.8),
-                    )
-                    path = f"/World/patches/patch_{i}_{j}"
-                    patch.func(path, patch,
-                               translation=(x + radius * math.cos(angle),
-                                            y + radius * math.sin(angle), -0.004))
-                    sim_utils.bind_physics_material(f"{path}/geometry/mesh", mat_path)
-        else:
-            g = c.ground_friction
-            mat = sim_utils.RigidBodyMaterialCfg(
-                static_friction=g[0], dynamic_friction=g[1],
-                restitution=0.0, friction_combine_mode="average",
-            )
-            spawn_ground_plane(prim_path="/World/ground",
-                               cfg=GroundPlaneCfg(physics_material=mat))
-
-    def _bind_robot_materials(self):
-        from pxr import UsdPhysics
-
-        c = self.cfg
-        wheel_mat = sim_utils.RigidBodyMaterialCfg(
-            static_friction=c.wheel_friction[0], dynamic_friction=c.wheel_friction[1],
-            restitution=0.0, friction_combine_mode="average",
-        )
-        wheel_mat.func("/World/Materials/wheel", wheel_mat)
-        caster_mat = sim_utils.RigidBodyMaterialCfg(
-            static_friction=c.caster_friction[0], dynamic_friction=c.caster_friction[1],
-            restitution=0.0, friction_combine_mode="min",
-        )
-        caster_mat.func("/World/Materials/caster", caster_mat)
-        for prim in self.scene.stage.Traverse():
-            path = str(prim.GetPath())
-            if not path.startswith("/World/envs/env_0/Robot") or not prim.HasAPI(UsdPhysics.CollisionAPI):
-                continue
-            if "wheel" in path:
-                sim_utils.bind_physics_material(path, "/World/Materials/wheel")
-            elif "caster" in path:
-                sim_utils.bind_physics_material(path, "/World/Materials/caster")
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
-        self._setup_ground()
-        self._bind_robot_materials()
+        self.task_scene = TaskScene(self.scene, self.cfg, self.device)
+        self.task_scene.setup_ground()
+        self.task_scene.bind_robot_materials()
         src, dest = "/World/envs/env_0", "/World/envs/env_{}"
         pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
         plan = cloner.clone_plan_from_env_0(src, dest, self.scene.num_envs, self.device, pos, ("/World/ground",))
@@ -265,7 +177,7 @@ class RlCorrectEnv(DirectRLEnv):
         self.robot.write_joint_state_to_sim(zeros, zeros, self._wheels, ids)
 
         self.tau[ids] = sample_uniform(*c.tau_range, (n, 2), dev)
-        self.gain[ids] = sample_uniform(*c.gain_range, (n, 2), dev)
+        self.gain[ids] = sample_uniform(*c.gain_range, (n, 2), dev) * torch.tensor(c.gain_center, device=dev)
         self.deadband[ids] = sample_uniform(*c.deadband_range, (n, 1), dev)
         self.r_nom[ids] = spec.WHEEL_RADIUS * (1 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (n,), dev))
         self.sep_nom[ids] = spec.WHEEL_SEP * (1 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (n,), dev))

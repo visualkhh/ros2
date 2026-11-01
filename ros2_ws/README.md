@@ -63,11 +63,14 @@ colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_ev
 | `rl-only.launch.py` | PC | RL 노드만: corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
 
-보통은 `tool/run-cli base start`가 `tb-only`를 띄웁니다. 직접 띄우려면:
+보통은 `tool/run-cli base start`가 `tb-only`를 띄웁니다. 직접(포그라운드) 띄우려면 — 스크립트가 ROS 환경·domain 25를 맞춘다:
 
 ```bash
-ros2 launch tb3_bringup tb-only.launch.py                     # Pi
-ros2 launch tb3_bringup tb-only.launch.py lidar:=false        # 라이다 없이
+./base-only.sh                     # Pi — = ros2 launch tb3_bringup tb-only.launch.py
+./base-only.sh lidar:=false        # 라이다 없이
+./rl-only.sh enable:=true label:=after   # PC — RL 노드 + 기록 (모델 isaac/artifacts/real/policy.onnx → ros2_ws/artifacts/real/raw.csv)
+./route.sh rl | direct | status    # 바퀴 경로 전환 (= tool/run-cli route, rl_corrector 없으면 거부)
+./policy.sh <정책.onnx> | off | on | status   # 실행 중 정책 교체 — 한 번 실행에 A/B (= ros2 param set /rl_corrector ...)
 ```
 
 외부에서 보내는 명령 (`/cmd_manual_*` → state_manager / cmd_manager):
@@ -110,7 +113,9 @@ ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx 
 비교 (같은 패턴을 두 번 달린 CSV):
 
 ```bash
-python3 src/rl_eval/compare_csv.py /tmp/before.csv /tmp/after.csv   # 직진 RMS · 회전 RMS(자이로·엔코더) · 보정량
+./report.py                                      # artifacts/real/raw.csv → artifacts/real/report.png
+./report.py artifacts/real/before.csv artifacts/real/after.csv   # 겹쳐 그림 + 직진 RMS · 회전 RMS(자이로·엔코더) · 보정량 표
+#   matplotlib 필요 — 없으면 ../isaac/.venv/bin/python ./report.py ...
 ```
 
 Pi에서 직접 추론할 경우 (탑재 전 체크):

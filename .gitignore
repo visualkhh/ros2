@@ -14,3 +14,8 @@ build/
 **/ros2_ws/src/m-explore-ros2/
 **/ros2_ws/src/cartographer/
 **/ros2_ws/src/cartographer_ros/
+/temp/
+/isaac/artifacts/
+/isaac/.venv/
+/.claude/
+/ros2_ws/artifacts/

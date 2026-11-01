@@ -3,7 +3,8 @@ export/**/*.onnx
 export/**/*.pt
 logs/
 checkpoints/
-usd/*
+/urdf/usd/*
 __pycache__/
 /export/
-/training/artifacts/
+/artifacts/
+.venv/

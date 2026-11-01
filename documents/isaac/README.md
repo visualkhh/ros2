@@ -7,7 +7,7 @@ TurtleBot3 Waffle Pi 개조 로봇의 **RL 이동 보정** 학습 쪽 문서. �
 
 ```
 Isaac Lab (우리 URDF) → 학습 → rl_correct_v2.onnx → PC rl-only (corrector) → ./run-cli route rl
-→ eval_recorder CSV (before / after) → compare_csv.py
+→ eval_recorder CSV (before / after) → ros2_ws/report.py
 ```
 
 ## 정책 (v2 — 이동 보정 1종)
@@ -23,6 +23,6 @@ Isaac Lab (우리 URDF) → 학습 → rl_correct_v2.onnx → PC rl-only (correc
 
 - 모델 파일: `isaac/export/rl_correct/<이름>.onnx` (git 제외). Pi에서 직접 돌릴 땐 `~/rl_models/`로 scp + `benchmark_onnx.py`
 - 실행: PC `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>` (PC에 onnxruntime) → `./run-cli route rl`
-- 계측: `rl_eval/eval_recorder` → `/tmp/before.csv` vs `/tmp/after.csv` → `rl_eval/compare_csv.py`
+- 계측: `rl_eval/eval_recorder` → `before.csv` vs `after.csv` → `ros2_ws/report.py` (report.png)
 
-관련: [ros2_ws README](../../ros2_ws/README.md) · [Lyrical 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [Isaac 단계별 실험 노트](../../isaac/calibration/README.md) · [Isaac sim ROS 2 토픽 계약](../../isaac/ROS2_TOPICS.md)
+관련: [ros2_ws README](../../ros2_ws/README.md) · [Lyrical 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [Isaac 단계별 실험 노트](../../isaac/calibration/README.md) · [Isaac sim ROS 2 토픽 계획](../../isaac/README.md#5-sim-ros-브리지-계획--미구현)
