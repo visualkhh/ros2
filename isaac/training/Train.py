@@ -38,6 +38,7 @@ class Train(ABC):
         self.run_dir = RUNS_DIR / f"{datetime.now():%Y%m%d_%H%M%S}-{args.exp_name}"
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._key_sub = None   # 구독 핸들 — 들고 있어야 유지된다
+        self.env = None        # run()이 채운다 — 스크린샷이 visualizer에 접근할 때
 
     @classmethod
     def add_args(cls, parser: argparse.ArgumentParser) -> None:
@@ -53,12 +54,33 @@ class Train(ABC):
         raise NotImplementedError
 
     def screenshot(self) -> Path:
-        """현재 뷰포트 → run_dir/screen_shot_<시각>.png (캡처는 다음 프레임들에 비동기로 써진다)."""
+        """현재 화면 → run_dir/screen_shot_<시각>.png.
+
+        IsaacLab 6.x `kit` visualizer는 `render_rgb_array()`로 RGB를 바로 준다.
+        예전 `omni.kit.viewport.utility` 캡처는 비동기라 학습 루프에서 파일이 안 생길 수 있어
+        visualizer 캡처를 먼저 시도하고, 안 되면 viewport 캡처로 넘어간다.
+        """
+        path = self.run_dir / f"screen_shot_{datetime.now():%Y%m%d_%H%M%S}.png"
+        env = getattr(self, "env", None)
+        sim = getattr(getattr(env, "unwrapped", None), "sim", None)
+        for viz in getattr(sim, "_visualizers", None) or []:
+            fn = getattr(viz, "render_rgb_array", None)
+            if fn is None:
+                continue
+            try:
+                rgb = fn()
+                if rgb is not None and getattr(rgb, "size", 0) and int(rgb.max()) > 0:
+                    from PIL import Image
+                    Image.fromarray(rgb).save(path)
+                    print(f"[train] screenshot → {path}", flush=True)
+                    return path
+            except Exception as exc:
+                print(f"[train] screenshot visualizer 실패: {exc}", flush=True)
+
         from omni.kit.viewport.utility import capture_viewport_to_file, get_active_viewport
 
-        path = self.run_dir / f"screen_shot_{datetime.now():%Y%m%d_%H%M%S}.png"
         capture_viewport_to_file(get_active_viewport(), str(path))
-        print(f"[train] screenshot → {path}", flush=True)
+        print(f"[train] screenshot (viewport) → {path}", flush=True)
         return path
 
     def bind_screenshot_key(self) -> None:
@@ -66,10 +88,10 @@ class Train(ABC):
         import carb.input
         import omni.appwindow
 
-        key = getattr(carb.input.KeyboardInput, self.SCREENSHOT_KEY)
+        getattr(carb.input.KeyboardInput, self.SCREENSHOT_KEY)   # 이름 검증
 
         def on_key(event, *_):
-            if event.type == carb.input.KeyboardEventType.KEY_PRESS and event.input == key:
+            if event.type == carb.input.KeyboardEventType.KEY_PRESS and event.input.name == self.SCREENSHOT_KEY:
                 self.screenshot()
             return True
 

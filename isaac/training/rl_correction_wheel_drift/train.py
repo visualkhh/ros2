@@ -171,6 +171,7 @@ class WheelDriftTrain(Train):
             agent_cfg.max_iterations = args.iterations
 
         env = RslRlVecEnvWrapper(RlCorrectEnv(env_cfg))
+        self.env = env
         if self.watch:
             from training.rl_correction_wheel_drift.FitPanel import FitPanel  # noqa: E402
             self.panel = FitPanel(env_cfg, base_fit["source"][0] if base_fit else None, lat)  # 참조 유지
