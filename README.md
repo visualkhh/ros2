@@ -10,6 +10,7 @@ Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyrical 로봇의 bringup · 운영 도�
 | [isaac/](isaac/) | Isaac Lab RL 이동 보정 — sim 보정 · 학습 · ONNX | [isaac/README.md](isaac/README.md) |
 | [firmware/](firmware/) | OpenCR 펌웨어 `tb3_wheels` (프로토콜 · 업로드) | [firmware/opencr/README.md](firmware/opencr/README.md) |
 | [setup/](setup/) | Pi 빌드 스크립트 (`build.sh`) | [setup/pi/README.md](setup/pi/README.md) |
+| [todo/](todo/) | 날짜별 할 일 · 테스트 체크리스트 | [todo/README.md](todo/README.md) |
 
 ## 빠른 시작
 
