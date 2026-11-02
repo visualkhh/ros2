@@ -33,19 +33,9 @@ sys.path.insert(0, str(ISAAC))
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
-import torch  # noqa: E402
-
-from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
-
-from calibration.Calibrate import Calibrate  # noqa: E402
-from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
-from calibration.excitation.DefaultCalibExcitation import DefaultCalibExcitation  # noqa: E402
+# pxr/isaaclab은 AppLauncher(args) 뒤에 import한다 (먼저 import하면 SimulationApp이 깨짐).
 from calibration.sensor.Sensor import Sensor  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
-from calibration.parameter.ActuatorParam import ActuatorParam  # noqa: E402
-from calibration.parameter.SimParam import SimParam  # noqa: E402
-from calibration.parameter.WheelLag import WheelLag  # noqa: E402
-from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 POLICY_DT = 1 / spec.CONTROL_HZ
@@ -116,6 +106,20 @@ class DefaultSensorSim(Sensor):
 
         app_launcher = AppLauncher(args)
         simulation_app = app_launcher.app
+
+        # AppLauncher가 pxr/physx를 초기화한 뒤에 런타임 모듈을 import한다.
+        global torch, SimulationCfg, SimulationContext, Calibrate, DefaultScene
+        global DefaultCalibExcitation, ActuatorParam, SimParam, WheelLag, wheel_targets
+        import torch
+        from isaaclab.sim import SimulationCfg, SimulationContext
+        from calibration.Calibrate import Calibrate
+        from calibration.scene.DefaultScene import DefaultScene
+        from calibration.excitation.DefaultCalibExcitation import DefaultCalibExcitation
+        from calibration.parameter.ActuatorParam import ActuatorParam
+        from calibration.parameter.SimParam import SimParam
+        from calibration.parameter.WheelLag import WheelLag
+        from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets
+
         try:
             cls._run(args, simulation_app)
         finally:

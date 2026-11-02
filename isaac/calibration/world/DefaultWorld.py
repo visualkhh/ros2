@@ -25,23 +25,9 @@ sys.path.insert(0, str(ISAAC))
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
-import carb  # noqa: E402
-
-try:
-    import carb.input  # noqa: F401
-    HAS_INPUT = True
-except Exception:
-    HAS_INPUT = False
-
-import omni  # noqa: E402
-import torch  # noqa: E402
-
-from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+# pxr/omni/isaaclab은 AppLauncher(args) 뒤에 import한다.
 from calibration.world.World import World  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
-from calibration.parameter.SimParam import SimParam  # noqa: E402
-from calibration.parameter.WheelLag import WheelLag  # noqa: E402
-from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
 
 POLICY_DT = 1 / spec.CONTROL_HZ
 FRAME_DT = 1 / 60.0
@@ -408,6 +394,22 @@ class DefaultWorld(World):
 
         app_launcher = AppLauncher(args)
         simulation_app = app_launcher.app
+
+        # AppLauncher가 pxr/physx를 초기화한 뒤에 런타임 모듈을 import한다.
+        global carb, omni, torch, DefaultScene, SimParam, WheelLag, wheel_targets, HAS_INPUT
+        import carb
+        try:
+            import carb.input  # noqa: F401
+            HAS_INPUT = True
+        except Exception:
+            HAS_INPUT = False
+        import omni
+        import torch
+        from calibration.scene.DefaultScene import DefaultScene
+        from calibration.parameter.SimParam import SimParam
+        from calibration.parameter.WheelLag import WheelLag
+        from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets
+
         try:
             headless = not getattr(args, "visualizer", None) or "kit" not in (args.visualizer or [])
             seed = args.seed if args.seed is not None else random.randrange(1_000_000)
