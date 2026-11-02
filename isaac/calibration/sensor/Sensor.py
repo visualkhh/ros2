@@ -43,10 +43,6 @@ class Sensor(ABC):
         return tuple(sum(r[i] for r in part) / len(part) for i in (8, 9, 10, 11, 12))
 
     @staticmethod
-    def find(segs, label: str):
-        return next(s for s in segs if s[4] == label)
-
-    @staticmethod
     def move_speeds_text(segs) -> str:
         return " / ".join(f"{s[2]:.2f}" for s in segs if s[4] == "move_left")
 
@@ -67,7 +63,9 @@ class Sensor(ABC):
                 print(f"[{self.tag}] {name.upper():5s} move{i} cmd={move[2]:.3f} "
                       f"v_enc={vf:+.3f} gain={gain:.3f} w_enc={wf:+.3f} "
                       f"w_gyro={gf:+.3f} | 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
-            turn = self.find(segs, f"turn_{name}")
+            turn = next((s for s in segs if s[4] == f"turn_{name}"), None)
+            if turn is None:   # 다른 excitation(--excitation)엔 이 구간이 없을 수 있다
+                continue
             vt, wt, gt, lt, rt = self.average(rows, turn[0], turn[1], skip=0.3)
             print(f"[{self.tag}] {name.upper():5s} turn  v_enc={vt:+.3f} w_enc={wt:+.3f} "
                   f"w_gyro={gt:+.3f} | 바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")

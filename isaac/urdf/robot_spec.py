@@ -5,7 +5,7 @@
 """
 import os
 
-WS = "/home/pank/workspaces/visualkhh/source/ros2"
+WS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # ros2/ (이 파일 = isaac/urdf/)
 # 학습용 URDF (ROS용 tb3_bringup/urdf/robot.urdf.xacro와 의도적으로 나눈 파일, 내용은 같음 — isaac/urdf/check_same.sh)
 URDF_DIR = WS + "/isaac/urdf/beebot"
 XACRO = URDF_DIR + "/urdf.xacro"
@@ -22,11 +22,13 @@ PHYSICS_HZ = 480.0
 DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tool/cli/op/bus.py DIAG_RADIUS)
 
 
-def robot_usd(out_dir: str = os.path.join(WS, "isaac", "urdf", "usd")) -> str:
+def robot_usd(xacro_path: str = XACRO, name: str = "tb3_waffle_pi",
+              out_dir: str = os.path.join(WS, "isaac", "urdf", "usd")) -> str:
     """xacro → URDF → USD (Isaac 앱이 켜진 뒤 호출). 매번 새로 변환 — URDF를 고치면 바로 반영.
 
-    결과는 isaac/urdf/usd/ 아래 (git 제외 — URDF가 정본, USDA는 파생물).
-    호출부는 인자 없이 쓰면 됨 — scene/env가 여기서 불러다 사용.
+    결과는 isaac/urdf/usd/<name>/ (git 제외 — URDF가 정본, USDA는 파생물).
+    인자 없이 쓰면 우리 로봇. 다른 task는 자기 xacro와 이름을 준다 — 메시는 `<xacro 폴더>/meshes`,
+    xacro 안에서 `$(arg mesh_uri)`로 받는다. 예: robot_usd("training/rl_next/urdf/robot.xacro", "rl_next")
     """
     import glob
     import shutil
@@ -34,16 +36,18 @@ def robot_usd(out_dir: str = os.path.join(WS, "isaac", "urdf", "usd")) -> str:
     import xacro
     from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
 
+    xacro_path = os.path.abspath(xacro_path if os.path.isabs(xacro_path) else os.path.join(WS, "isaac", xacro_path))
     os.makedirs(out_dir, exist_ok=True)
-    # importer는 같은 이름 폴더가 있으면 tb3_waffle_pi_1, _2...로 쌓는다 — 이전 변환물 먼저 제거
-    for old in glob.glob(os.path.join(out_dir, "tb3_waffle_pi*")):
+    # importer는 같은 이름 폴더가 있으면 <name>_1, _2...로 쌓는다 — 이전 변환물 먼저 제거
+    for old in glob.glob(os.path.join(out_dir, f"{name}*")):
         if os.path.isdir(old):
             shutil.rmtree(old)
-    urdf = os.path.join(out_dir, "tb3_waffle_pi.urdf")
+    urdf = os.path.join(out_dir, f"{name}.urdf")
+    mesh_uri = os.path.join(os.path.dirname(xacro_path), "meshes")
     with open(urdf, "w") as f:
-        f.write(xacro.process_file(XACRO, mappings={"mesh_uri": URDF_DIR + "/meshes"}).toprettyxml(indent="  "))
+        f.write(xacro.process_file(xacro_path, mappings={"mesh_uri": mesh_uri}).toprettyxml(indent="  "))
     cfg = UrdfConverterCfg(
-        asset_path=urdf, usd_dir=out_dir, usd_file_name="tb3_waffle_pi.usd",
+        asset_path=urdf, usd_dir=out_dir, usd_file_name=f"{name}.usd",
         force_usd_conversion=True, fix_base=False, merge_fixed_joints=False, joint_drive=None,
     )
     return UrdfConverter(cfg).usd_path

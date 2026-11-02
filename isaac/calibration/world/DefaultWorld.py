@@ -244,7 +244,7 @@ class DefaultWorld(World):
     def __init__(self, *, condition: str = "raw", base_fit: dict | None = None, rooms: int = 8,
                  size_min: float = 3.5, size_max: float = 6.0, seed: int = 0,
                  speed: float = 0.15, turn: float = 1.0, seconds: float = 0.0,
-                 headless: bool = True, app=None, device: str = "cpu"):
+                 headless: bool = True, app=None, device: str = "cpu", scene_cls=None):
         super().__init__(device=device)
         self.seed = seed
         self.condition = condition
@@ -253,7 +253,7 @@ class DefaultWorld(World):
         self.seconds = seconds
         self.headless = headless
         self.app = app
-        self.world_scene = DefaultScene(condition=condition)
+        self.world_scene = (scene_cls or DefaultScene)(condition=condition)
         self.rooms = self.world_scene.build(rooms, size_min, seed,
                                             size_range=(size_min, size_max))
         self.world_scene.set_camera(self.sim, self.rooms[0].origin if self.rooms else (0, 0, 0))
@@ -366,6 +366,8 @@ class DefaultWorld(World):
         parser.add_argument("--seconds", type=float, default=0.0, help="0 = 창을 닫을 때까지")
         parser.add_argument("--fit", default=None,
                             help="입력 보정: real/fit.json 또는 real/fit.json,sim/fit.json (차이). 없으면 raw")
+        parser.add_argument("--scene", default=None,
+                            help="장면 클래스 (기본 DefaultScene): pkg.mod.Class 또는 path/to/file.py[:Class] — calibration.scene.Scene 서브클래스, 생성자 (condition=, actuator=)")
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args(argv)
 
@@ -390,13 +392,17 @@ class DefaultWorld(World):
         from calibration.parameter.WheelLag import WheelLag
         from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets
 
+        scene_cls = None
+        if args.scene:
+            from calibration.scene.Scene import Scene
+            scene_cls = Calibrate.load_class(args.scene, Scene)
         try:
             headless = not getattr(args, "visualizer", None) or "kit" not in (args.visualizer or [])
             seed = args.seed if args.seed is not None else random.randrange(1_000_000)
             world = cls(base_fit=base_fit, rooms=args.rooms, size_min=args.size_min,
                         size_max=args.size_max, seed=seed, speed=args.speed, turn=args.turn,
                         seconds=args.seconds, headless=headless, app=simulation_app,
-                        device=args.device)
+                        device=args.device, scene_cls=scene_cls)
             world.run()
         finally:
             world.close()

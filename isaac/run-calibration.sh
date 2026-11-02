@@ -10,13 +10,15 @@
 #     ./run-calibration.sh sensor-sync-sim --viz none                         # raw plant (보정 없음)
 #     ./run-calibration.sh sensor-sync-sim --viz none --fit <real>/fit.json[,<sim>/fit.json]
 #     ./run-calibration.sh sensor-sync-sim --watch
+#     ./run-calibration.sh sensor-sync-sim --viz none --scene path/to/MyScene.py   # 장면 교체 (random-world도 같음)
+#     ./run-calibration.sh sensor-sync-sim --viz none --excitation path/to/MyPath.py   # 측정 경로 교체 (real·dummy도 같음)
 #   sensor-sync-real   real 센서 기록 (PC, Pi base+MANUAL 필요, ROS/peers 자동)
 #     ./run-calibration.sh sensor-sync-real --check-only
 #     ./run-calibration.sh sensor-sync-real --label real_floor
 #   plot-compare       sim/real CSV 비교 + fit (CSV 1개면 단건 리포트)
 #     ./run-calibration.sh plot-compare <sim.csv> <real.csv> [--show]
 #   calibrate          sim + real 같은 프로파일 기록 → 비교 → artifacts/calibration/<시각>-calibrate/
-#     ./run-calibration.sh calibrate [--label real_floor] [--side 0.5] [--speed 0.15] [--turn 1.0] [--fit F] [--show]
+#     ./run-calibration.sh calibrate [--label real_floor] [--side 0.5] [--speed 0.15] [--turn 1.0] [--fit F] [--excitation E] [--show]
 #     (sim은 --fit으로 준 보정만, 없으면 raw — 그대로 real,sim 차이 계산의 sim 기준이 된다)
 #   <센서>             그 밖은 python -m calibration 으로 그대로 (pkg.mod.Class | path/to/file.py[:Class])
 #     ./run-calibration.sh calibration/sensor/DummySensor.py --out artifacts/calibration/dummy_real/raw.csv --gain-l 0.96
@@ -78,7 +80,7 @@ case "$CMD" in
     ;;
   calibrate)
     LABEL=real_floor SIDE=0.5 SPEED=0.15 TURN=1.0
-    SIM_EXTRA=() SHOW=()
+    SIM_EXTRA=() SHOW=() COMMON_EXTRA=()
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --label) LABEL=${2:?--label 이름}; shift 2 ;;
@@ -86,6 +88,7 @@ case "$CMD" in
         --speed) SPEED=${2:?--speed 값}; shift 2 ;;
         --turn) TURN=${2:?--turn 값}; shift 2 ;;
         --fit) SIM_EXTRA+=(--fit "${2:?--fit 경로}"); shift 2 ;;
+        --excitation) COMMON_EXTRA+=(--excitation "${2:?--excitation 경로}"); shift 2 ;;
         --show) SHOW=(--show); shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "모르는 옵션: $1" >&2; exit 2 ;;
@@ -93,7 +96,7 @@ case "$CMD" in
     done
     RUN="artifacts/calibration/$(date +%Y%m%d_%H%M%S)-calibrate"
     mkdir -p "$RUN"
-    COMMON=(--side "$SIDE" --speed "$SPEED" --turn "$TURN")
+    COMMON=(--side "$SIDE" --speed "$SPEED" --turn "$TURN" ${COMMON_EXTRA[@]+"${COMMON_EXTRA[@]}"})
     echo "[calibrate] sim + real 시작 → $RUN"
     "$0" sensor-sync-sim --viz none "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
       --out "$RUN/sim/raw.csv" > "$RUN/sim.log" 2>&1 &

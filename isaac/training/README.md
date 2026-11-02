@@ -27,6 +27,7 @@ training/
 ```
 
 - task = `train.py`가 있는 폴더. `Train.main()`(베이스로 호출)은 그 폴더의 `train.main(argv)`로 넘기기만 한다.
+- 새 task는 자기 폴더에 env·장면(`task/`)·URDF를 따로 둘 수 있다. 로봇은 env cfg에서 `robot_spec.robot_usd("training/<task>/urdf/robot.xacro", "<task>")`(메시는 `<xacro 폴더>/meshes`).
 - 새 task는 `train.py`에서 `Train`을 상속해 `add_args` / `before_launch` / `run`만 구현하고
   `def main(argv=None): return MyTrain.main(argv)`를 둔다. 결과 폴더는 `self.run_dir`.
 - 보정값(`--fit`) 해석은 task가 한다 (env cfg가 task마다 다르다).

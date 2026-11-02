@@ -24,7 +24,6 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ISAAC))
 
 from calibration.Calibrate import Calibrate  # noqa: E402
-from calibration.excitation.DefaultCalibExcitation import DefaultCalibExcitation  # noqa: E402
 from calibration.parameter.SimParam import SimParam  # noqa: E402
 from calibration.parameter.WheelParam import WheelParam  # noqa: E402
 from calibration.sensor.Sensor import Sensor  # noqa: E402
@@ -135,10 +134,12 @@ class DummySensor(Sensor):
         parser.add_argument("--seed", type=int, default=0)
         parser.add_argument("--fit", default=None,
                             help="입력 보정: real/fit.json 또는 real/fit.json,sim/fit.json (차이)")
+        parser.add_argument("--excitation", default=None,
+                            help="측정 경로 클래스 (기본 DefaultCalibExcitation: 사각형→180°→역주행): pkg.mod.Class 또는 path/to/file.py[:Class] — calibration.excitation.CalibExcitation 서브클래스")
         args = parser.parse_args(argv)
 
         base_fit = Calibrate.load_fit(args.fit) if args.fit else None
-        excitation = DefaultCalibExcitation()
+        excitation = Calibrate.load_excitation(args.excitation)
         segs = excitation.make_profile(args.speed, args.turn, args.side)
         total = excitation.total(segs)
         sensor = cls(label=args.label, seed=args.seed, gain=args.gain,

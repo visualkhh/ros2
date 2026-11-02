@@ -129,6 +129,25 @@ class Calibrate:
     @staticmethod
     def _load_sensor_class(spec: str):
         """센서 클래스 로딩. `pkg.mod.Class` 또는 `path/to/file.py[:Class]`."""
+        sensor_cls = Calibrate.load_class(spec, Sensor)
+        if not callable(getattr(sensor_cls, "main", None)):
+            raise AttributeError(f"{sensor_cls.__name__}에 main(argv) 클래스메서드 없음")
+        return sensor_cls
+
+    @staticmethod
+    def load_excitation(spec: str | None):
+        """`--excitation` 값 → 측정 경로 인스턴스 (없으면 DefaultCalibExcitation). 표준 라이브러리만 써서 sim 전에 불러도 된다."""
+        from calibration.excitation.CalibExcitation import CalibExcitation
+        from calibration.excitation.DefaultCalibExcitation import DefaultCalibExcitation
+        return (Calibrate.load_class(spec, CalibExcitation) if spec else DefaultCalibExcitation)()
+
+    @staticmethod
+    def load_class(spec: str, base: type):
+        """`pkg.mod.Class` 또는 `path/to/file.py[:Class]` → base의 서브클래스 (센서 · 장면 공용).
+
+        파일만 주면 그 파일에 정의된 base 서브클래스가 1개여야 한다.
+        """
+        what = base.__name__
         path_part, _, class_name = spec.partition(":")
         if path_part.endswith(".py") or "/" in path_part or Path(path_part).exists():
             p = Path(path_part).expanduser()
@@ -136,40 +155,38 @@ class Calibrate:
                 p = Path.cwd() / p
             p = p.resolve()
             if not p.is_file():
-                raise FileNotFoundError(f"센서 파일 없음: {p}")
-            mod_name = f"calib_sensor_user_{abs(hash(str(p)))}"
+                raise FileNotFoundError(f"{what} 파일 없음: {p}")
+            mod_name = f"calib_user_{abs(hash(str(p)))}"
             mod_spec = importlib.util.spec_from_file_location(mod_name, p)
             if mod_spec is None or mod_spec.loader is None:
-                raise ImportError(f"센서 로드 실패: {p}")
+                raise ImportError(f"{what} 로드 실패: {p}")
             mod = importlib.util.module_from_spec(mod_spec)
             sys.modules[mod_name] = mod
             mod_spec.loader.exec_module(mod)
             if class_name:
-                sensor_cls = getattr(mod, class_name, None)
-                if sensor_cls is None:
+                found_cls = getattr(mod, class_name, None)
+                if found_cls is None:
                     raise AttributeError(f"{p}에 {class_name} 없음")
             else:
                 found = [v for v in vars(mod).values()
-                         if isinstance(v, type) and issubclass(v, Sensor)
-                         and v is not Sensor and v.__module__ == mod.__name__]
+                         if isinstance(v, type) and issubclass(v, base)
+                         and v is not base and v.__module__ == mod.__name__]
                 if len(found) != 1:
                     raise AttributeError(
-                        f"{p}에서 Sensor 서브클래스를 1개로 특정 불가 ({len(found)}개). "
+                        f"{p}에서 {what} 서브클래스를 1개로 특정 불가 ({len(found)}개). "
                         f"path/to/file.py:ClassName 형태로 지정하라")
-                sensor_cls = found[0]
+                found_cls = found[0]
         else:
             if "." not in path_part:
-                raise ValueError(f"센서 지정은 'pkg.mod.Class' 또는 파일 경로: {spec}")
+                raise ValueError(f"{what} 지정은 'pkg.mod.Class' 또는 파일 경로: {spec}")
             mod_name, _, cls_name = path_part.rpartition(".")
             mod = importlib.import_module(mod_name)
-            sensor_cls = getattr(mod, cls_name or class_name, None)
-            if sensor_cls is None:
+            found_cls = getattr(mod, cls_name or class_name, None)
+            if found_cls is None:
                 raise AttributeError(f"{path_part}에 클래스 없음")
-        if not (isinstance(sensor_cls, type) and issubclass(sensor_cls, Sensor)):
-            raise TypeError(f"{sensor_cls}는 Sensor 서브클래스가 아님")
-        if not callable(getattr(sensor_cls, "main", None)):
-            raise AttributeError(f"{sensor_cls.__name__}에 main(argv) 클래스메서드 없음")
-        return sensor_cls
+        if not (isinstance(found_cls, type) and issubclass(found_cls, base)):
+            raise TypeError(f"{found_cls}는 {what} 서브클래스가 아님")
+        return found_cls
 
     @classmethod
     def main(cls, argv: Sequence[str] | None = None) -> int:

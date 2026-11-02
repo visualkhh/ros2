@@ -101,21 +101,26 @@ class DefaultSensorSim(Sensor):
         parser.add_argument("--fit", default=None,
                             help="입력 보정: real/fit.json 또는 real/fit.json,sim/fit.json (차이) → WheelLag. "
                                  "없으면 raw plant (숨은 보정 파일은 안 읽는다)")
+        parser.add_argument("--scene", default=None,
+                            help="장면 클래스 (기본 DefaultScene): pkg.mod.Class 또는 path/to/file.py[:Class] — calibration.scene.Scene 서브클래스, 생성자 (condition=, actuator=)")
+        parser.add_argument("--excitation", default=None,
+                            help="측정 경로 클래스 (기본 DefaultCalibExcitation: 사각형→180°→역주행): pkg.mod.Class 또는 path/to/file.py[:Class] — calibration.excitation.CalibExcitation 서브클래스")
         parser.add_argument("--watch", action="store_true", help="1회 기록 후 창을 닫을 때까지 같은 장면 반복")
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args(argv)
+        from calibration.Calibrate import Calibrate as _Calibrate   # 표준 라이브러리만 — sim 전에 실패하게
+        args.excitation_obj = _Calibrate.load_excitation(args.excitation)
 
         app_launcher = AppLauncher(args)
         simulation_app = app_launcher.app
 
         # AppLauncher가 pxr/physx를 초기화한 뒤에 런타임 모듈을 import한다.
         global torch, SimulationCfg, SimulationContext, Calibrate, DefaultScene
-        global DefaultCalibExcitation, ActuatorParam, SimParam, WheelLag, wheel_targets
+        global ActuatorParam, SimParam, WheelLag, wheel_targets
         import torch
         from isaaclab.sim import SimulationCfg, SimulationContext
         from calibration.Calibrate import Calibrate
         from calibration.scene.DefaultScene import DefaultScene
-        from calibration.excitation.DefaultCalibExcitation import DefaultCalibExcitation
         from calibration.parameter.ActuatorParam import ActuatorParam
         from calibration.parameter.SimParam import SimParam
         from calibration.parameter.WheelLag import WheelLag
@@ -131,12 +136,18 @@ class DefaultSensorSim(Sensor):
         headless = not getattr(args, "visualizer", None) or "kit" not in (args.visualizer or [])
         # 보정은 사용자가 --fit으로 준 값만. 저장된 sim_calib_*.json은 읽지 않는다 (raw plant 기준).
         condition = "raw"
-        excitation = DefaultCalibExcitation()
+        excitation = args.excitation_obj
+        print(f"[02-sim] excitation: {type(excitation).__module__}.{type(excitation).__name__}")
         segs = excitation.make_profile(args.speed, args.turn, args.side)
         total = excitation.total(segs)
         sim = SimulationContext(SimulationCfg(dt=DT, device=args.device))
         act = ActuatorParam()
-        world = DefaultScene(condition=condition, actuator=act)
+        scene_cls = DefaultScene
+        if args.scene:
+            from calibration.scene.Scene import Scene
+            scene_cls = Calibrate.load_class(args.scene, Scene)
+        world = scene_cls(condition=condition, actuator=act)
+        print(f"[02-sim] scene: {scene_cls.__module__}.{scene_cls.__name__}")
         rooms = world.build(1 if args.room > 0 else 0, args.room, args.seed)
         world.set_camera(sim, rooms[0].origin if rooms else (0.0, 0.0, 0.0))
         scene, robot, _ = world.spawn()

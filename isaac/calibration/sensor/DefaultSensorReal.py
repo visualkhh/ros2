@@ -37,7 +37,6 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ISAAC))
 
 from calibration.Calibrate import Calibrate  # noqa: E402
-from calibration.excitation.DefaultCalibExcitation import DefaultCalibExcitation  # noqa: E402
 from calibration.sensor.Sensor import Sensor  # noqa: E402
 
 
@@ -140,7 +139,10 @@ class DefaultSensorReal(Node, Sensor):
         parser.add_argument("--side", type=float, default=0.5, help="정사각형 한 변 [m]")
         parser.add_argument("--rate", type=float, default=20.0)
         parser.add_argument("--check-only", action="store_true", help="상태만 확인하고 종료 (로봇 안 움직임)")
+        parser.add_argument("--excitation", default=None,
+                            help="측정 경로 클래스 (기본 DefaultCalibExcitation: 사각형→180°→역주행): pkg.mod.Class 또는 path/to/file.py[:Class] — calibration.excitation.CalibExcitation 서브클래스")
         args = parser.parse_args(argv)
+        excitation = Calibrate.load_excitation(args.excitation)   # 로봇 움직이기 전에 실패하게
 
         rclpy.init()
         node = cls(label=args.label)
@@ -164,7 +166,6 @@ class DefaultSensorReal(Node, Sensor):
             rate = args.rate
             t0 = time.monotonic()
             out = args.output   # None → Calibrate가 artifacts/calibration/<시각>-02-real/raw.csv
-            excitation = DefaultCalibExcitation()
             segs = excitation.make_profile(args.speed, args.turn, args.side)
             total = excitation.total(segs)
             speeds_txt = node.move_speeds_text(segs)

@@ -51,6 +51,10 @@ isaac/
 로봇 숫자(`urdf/robot_spec.py`): 바퀴 반지름 0.033 m · 간격 0.287 m · 최대 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 정책 20 Hz · 물리 480 Hz.
 USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd()`, `urdf/usd/` git 제외).
 따로 변환만: `$ISAACLAB_DIR/isaaclab.sh -p urdf/convert_urdf.py`.
+다른 로봇(새 task): `robot_usd("training/<task>/urdf/robot.xacro", "<task>")` — 인자 없이 쓰면 우리 로봇.
+calibration 장면 교체: `sensor-sync-sim` · `random-world`에 `--scene path/to/MyScene.py[:Class]` (`calibration/scene/Scene` 서브클래스, 생성자 `(condition=, actuator=)`).
+측정 경로 교체: `sensor-sync-sim` · `sensor-sync-real` · Dummy · `calibrate`에 `--excitation path/to/MyPath.py[:Class]`
+(`calibration/excitation/CalibExcitation` 서브클래스 — 보통 `DefaultCalibExcitation`을 상속해 `make_profile`만 바꾼다).
 
 ## 3. 절차 (2026-11-02 실제로 돈 순서)
 
