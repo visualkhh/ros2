@@ -57,14 +57,14 @@ class Train(ABC):
         raise NotImplementedError
 
     def add_snap_visualizer(self, env_cfg) -> None:
-        """--snap인데 창(--watch)이 없으면 화면 없는 Kit visualizer를 붙인다 (env 0 근처를 비스듬히)."""
+        """--snap인데 창(--watch)이 없으면 화면 없는 Kit visualizer를 붙인다 (격자 가운데를 비스듬히)."""
         if not self.args.snap or self.watch:
             return
         from isaaclab_visualizers.kit import KitVisualizerCfg
 
         env_cfg.sim.visualizer_cfgs = list(getattr(env_cfg.sim, "visualizer_cfgs", None) or []) + [
-            KitVisualizerCfg(headless=True, origin_type="env", origin_env_index=0,
-                             eye=(5.0, -5.0, 4.0), lookat=(1.5, 1.5, 0.0))]
+            # env 격자는 월드 원점 중심 (env 0은 모서리) → 원점을 비스듬히 내려다봄 = 가운데 3×3 env 정도
+            KitVisualizerCfg(headless=True, origin_type="world", eye=(6.0, -6.0, 5.0), lookat=(0.0, 0.0, 0.0))]
 
     def install_snap(self, raw_env) -> None:
         """env.step 뒤에 시간을 보고 --snap 초마다 저장. 학습 루프는 runner.learn()이 쥐고 있어 step에 건다."""
