@@ -148,6 +148,9 @@ cd ../ros2_ws
 ```
 
 - `rl-only.sh`는 **끝나지 않고 계속 돈다** — 아래 명령은 **다른 터미널(B)**에서. 한 터미널에 다 붙여 넣으면 첫 줄에서 멈춘 것처럼 보인다.
+  터미널 하나로 하려면 백그라운드: `./rl-only.sh start label:=ab output:=…` → 주행 … → `./rl-only.sh stop`.
+  ONNX를 바꿔 다시 켤 땐 `./rl-only.sh restart enable:=true output:=<새 이름>.csv` (인자 없이 restart면 지난 인자 그대로 — output 덮어씀).
+  `status`(켜짐·인자·모델 로드) · `log`(로그 따라 보기).
 - **`ONNX loaded`가 떠야** 정책이 들어간 것. `./policy.sh status`로 enable·경로 확인.
 - 실수했던 것 (2026-11-02): ① 정책을 `ros2_ws/artifacts/real/`에 복사하고 `isaac/artifacts/real/`을 가리킴 → B도 보정 없이 달림(A/A).
   지금은 `policy.sh`가 없는 파일을 **거부**하고, `report.py`가 "켬인데 실제로는 바이패스" 구간을 경고한다.

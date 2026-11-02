@@ -71,6 +71,7 @@ colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_ev
 ./rl-only.sh enable:=true label:=after   # PC — RL 노드 + 기록 (모델 isaac/artifacts/real/policy.onnx → ros2_ws/artifacts/real/raw.csv)
 ./route.sh rl | direct | status    # 바퀴 경로 전환 (= tool/run-cli route, rl_corrector 없으면 거부)
 ./policy.sh <정책.onnx> | off | on | status   # 실행 중 정책 교체 — 한 번 실행에 A/B (= ros2 param set /rl_corrector ...)
+./rl-only.sh start|stop|restart|status|log [인자...]   # 백그라운드로 켜고 끄기 (ONNX 바꾸고 restart) — 서브명령 없이 쓰면 앞에서 돔
 ```
 
 외부에서 보내는 명령 (`/cmd_manual_*` → state_manager / cmd_manager):

@@ -21,6 +21,14 @@
 # - 상대경로는 지금 위치 기준 → 절대경로로 바꿔 넘긴다. 저장 폴더는 없으면 만든다.
 # - 로봇(Pi)은 RL 경로여야 한다: ./run-cli route rl (끝나면 route direct). ROS_DOMAIN_ID=25.
 #
+# 백그라운드 실행 (ONNX 바꾸고 다시 켤 때 · 터미널 하나로):
+#   ./rl-only.sh start [인자...]     백그라운드로 켬 → corrector 로드 결과(ONNX loaded/passthrough/실패)를 보여 줌
+#   ./rl-only.sh stop               끔 (Ctrl+C와 같음 — CSV가 깨끗이 닫힘)
+#   ./rl-only.sh restart [인자...]   끄고 다시 켬. 인자 없으면 지난 start 인자 그대로 (output은 덮어씀 → 남기려면 새 output:=)
+#   ./rl-only.sh status             켜져 있나 · 인자 · 모델 로드 결과
+#   ./rl-only.sh log                로그 따라 보기 (Ctrl+C는 보기만 끝냄)
+#   pid·로그·인자: ros2_ws/.run/rl-only.{pid,log,args}. 서브명령 없이 쓰면 지금처럼 앞에서(foreground) 돈다.
+#
 #   -h, --help   이 도움말
 set -eo pipefail   # set -u 금지 — ROS setup.bash가 미설정 변수를 참조한다
 WS="$(cd "$(dirname "$0")" && pwd)"
@@ -29,6 +37,35 @@ REPO="$(cd "$WS/.." && pwd)"
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   sed -n '2,/^set -eo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
   exit 0
+fi
+
+RUN="$WS/.run"; PIDF="$RUN/rl-only.pid"; LOGF="$RUN/rl-only.log"; ARGSF="$RUN/rl-only.args"
+mkdir -p "$RUN"
+running() { [[ -f "$PIDF" ]] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
+load_line() { grep -aE "ONNX loaded|passthrough|ONNX load failed" "$LOGF" 2>/dev/null | tail -1 | sed 's/^.*\] //'; }
+stop_bg() {
+  running || { rm -f "$PIDF"; echo "[rl-only] 꺼져 있음"; return 0; }
+  local pid; pid=$(cat "$PIDF")
+  kill -INT -- "-$pid" 2>/dev/null || kill -INT "$pid"   # setsid로 띄움 → 프로세스 그룹째 (launch + 노드)
+  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+  kill -0 "$pid" 2>/dev/null && kill -KILL -- "-$pid" 2>/dev/null
+  rm -f "$PIDF"; echo "[rl-only] 끔 (pid $pid)"
+}
+MODE=fg
+case "${1:-}" in
+  stop)    stop_bg; exit 0 ;;
+  status)  if running; then echo "[rl-only] 켜짐 (pid $(cat "$PIDF")) · 인자: $(tr '\n' ' ' < "$ARGSF")"; echo "  $(load_line)"
+             echo "  (모델이 로드돼도 enable이 꺼져 있으면 바이패스 — 지금 켜짐/꺼짐: ./policy.sh status)"
+           else echo "[rl-only] 꺼짐"; fi; exit 0 ;;
+  log)     exec tail -n 50 -f "$LOGF" ;;
+  start)   shift; MODE=bg ;;
+  restart) shift; stop_bg
+           if [[ $# -eq 0 && -f "$ARGSF" ]]; then mapfile -t saved < "$ARGSF"; set -- "${saved[@]}"; fi
+           MODE=bg ;;
+esac
+if [[ "$MODE" == bg ]]; then
+  running && { echo "[rl-only] 이미 켜짐 (pid $(cat "$PIDF")) — ./rl-only.sh restart [인자...]" >&2; exit 1; }
+  printf '%s\n' "$@" > "$ARGSF"
 fi
 
 MODEL_DEFAULT="$REPO/isaac/artifacts/real/policy.onnx"
@@ -63,4 +100,11 @@ export ROS_DOMAIN_ID=25
 source "$REPO/tool/peers.sh"   # PC → 로봇 Pi 유니캐스트 탐색
 
 echo "[rl-only] enable=$enable model=${model:-(없음)} → $output"
-exec ros2 launch tb3_bringup rl-only.launch.py "${args[@]}"
+[[ "$MODE" == fg ]] && exec ros2 launch tb3_bringup rl-only.launch.py "${args[@]}"
+
+setsid nohup ros2 launch tb3_bringup rl-only.launch.py "${args[@]}" > "$LOGF" 2>&1 < /dev/null &
+echo $! > "$PIDF"
+for _ in $(seq 1 30); do [[ -n "$(load_line)" ]] && break; running || break; sleep 0.5; done
+running || { echo "[rl-only] 시작 실패 — 로그: $LOGF" >&2; tail -5 "$LOGF" >&2; rm -f "$PIDF"; exit 1; }
+echo "[rl-only] 켜짐 (pid $(cat "$PIDF")) · 로그 ./rl-only.sh log · 끄기 ./rl-only.sh stop"
+echo "  $(load_line)"
