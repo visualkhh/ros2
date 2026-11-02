@@ -90,7 +90,7 @@ class CalibHUD:
         self.models = {}
         self.kinds = {}
 
-        act, fr = params.actuator, params.friction
+        fr = params.friction
         gl = wheel_model.gain if wheel_model.gain_l is None else wheel_model.gain_l
         gr = wheel_model.gain if wheel_model.gain_r is None else wheel_model.gain_r
         self.start = {
@@ -100,8 +100,6 @@ class CalibHUD:
             "gain_l": float(gl),
             "gain_r": float(gr),
             "deadband": float(wheel_model.deadband),
-            "damping": float(act.damping),
-            "effort": float(act.effort),
             "ground_s": float(fr.ground[0]),
             "ground_d": float(fr.ground[1]),
             "wheel_s": float(fr.wheel[0]),
@@ -132,10 +130,6 @@ class CalibHUD:
                 self._row("gain L", "gain_l", "float")
                 self._row("gain R", "gain_r", "float")
                 self._row("deadband [rad/s]", "deadband", "float")
-
-                self._heading("ACTUATOR")
-                self._row("damping", "damping", "float")
-                self._row("effort [N.m]", "effort", "float")
 
                 self._heading("FRICTION (static / dynamic)")
                 self._pair("ground", "ground_s", "ground_d")
@@ -219,20 +213,6 @@ class CalibHUD:
         w.gain_l = self._num("gain_l")
         w.gain_r = self._num("gain_r")
         w.deadband = self._num("deadband")
-
-        n = len(self.wheel_ids)
-        damping = max(0.0, self._num("damping"))
-        effort = max(0.0, self._num("effort"))
-        try:
-            self.robot.write_joint_damping_to_sim_index(
-                damping=torch.full((1, n), damping, device=self.device),
-                joint_ids=self.wheel_ids)
-            self.robot.write_joint_effort_limit_to_sim_index(
-                limits=torch.full((1, n), effort, device=self.device),
-                joint_ids=self.wheel_ids)
-        except Exception as exc:
-            self.status.text = f"actuator write failed: {exc}"
-            return
 
         missing = [name for name, path in self.fric_paths.items()
                    if not self._set_friction(path, self._num(f"{name}_s"),

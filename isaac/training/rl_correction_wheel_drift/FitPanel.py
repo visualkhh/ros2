@@ -67,11 +67,6 @@ class FitPanel:
                     self._row("obs delay [step]", self._range(c.obs_delay_steps))
                     self._row("deadband [rad/s]", self._range(c.deadband_range))
 
-                    act = c.robot_cfg.actuators["wheels"]
-                    self._heading("ACTUATOR (calibration sim과 같음 · ActuatorParam)")
-                    self._row("damping", act.damping)
-                    self._row("effort [N·m]", act.effort_limit)
-
                     self._heading("FRICTION (static / dynamic)")
                     if c.randomize_friction:
                         self._row("ground", f"{self._range(c.ground_static_range)} / "

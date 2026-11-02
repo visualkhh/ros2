@@ -52,7 +52,7 @@ tensorboard --logdir artifacts/training
 
 - 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint(`model_<iter>.pt`, 50 iter마다), `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교),
   `--fit`/`--latency`면 `base-fit.json`(적용한 fit · 지연 · 랜덤 범위)
-- `--fit real/fit.json,sim/fit.json` — 학습 env는 calibration sim과 같은 바퀴 모터(`ActuatorParam`)라 차이를 그대로 쓴다. sim fit은 raw(`--fit` 없이) · 같은 damping으로 잰 것 (아니면 거부).
+- `--fit real/fit.json,sim/fit.json` — real−sim 차이를 학습 env 랜덤 범위의 중심으로. sim fit은 raw(`--fit` 없이) 잰 것.
 - `--watch`는 학습 장면(로봇들, 파랑/주황 패치)을 Isaac 창으로 보여주고,
   **TRAINING FIT** 창(읽기만)에 fit 값 · 적용된 랜덤 범위 · 마찰 설정을 띄운다.
   창에서 **P** 키 → `artifacts/training/<시각>-<exp-name>/screen_shot_<시각>.png` (뷰포트 캡처).

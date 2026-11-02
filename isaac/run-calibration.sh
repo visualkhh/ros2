@@ -9,7 +9,6 @@
 #   sensor-sync-sim    sim 센서 기록
 #     ./run-calibration.sh sensor-sync-sim --viz none                         # raw plant (보정 없음)
 #     ./run-calibration.sh sensor-sync-sim --viz none --fit <real>/fit.json[,<sim>/fit.json]
-#     ./run-calibration.sh sensor-sync-sim --viz none --damping 50 --out artifacts/calibration/damping_50/raw.csv  # damping 측정
 #     ./run-calibration.sh sensor-sync-sim --watch
 #   sensor-sync-real   real 센서 기록 (PC, Pi base+MANUAL 필요, ROS/peers 자동)
 #     ./run-calibration.sh sensor-sync-real --check-only

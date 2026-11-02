@@ -58,4 +58,4 @@ tensorboard --logdir artifacts/training
 ## 주의
 
 - 학습 전에 `calibration/`으로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 잘 돼도 real에서 효과가 없다.
-- `--fit`에는 `real/fit.json,sim/fit.json`(차이)을 넣는다. sim fit은 raw · 지금 `ActuatorParam`과 같은 damping으로 잰 것 (아니면 거부). 1개면 real 값 그대로.
+- `--fit`에는 `real/fit.json,sim/fit.json`(차이)을 넣는다. sim fit은 raw(`--fit` 없이) 잰 것. 1개면 real 값 그대로.

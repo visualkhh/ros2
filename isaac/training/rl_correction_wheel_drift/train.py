@@ -7,9 +7,7 @@ Usage (isaac/ 에서):
 기본은 headless. `--watch` = `--visualizer kit` (창 + TRAINING FIT 보정값 창, 읽기만, P 키 → 스크린샷).
 512 env는 느리니 `--watch --envs 16` 권장. 마찰 패치(파랑/주황)는 기본으로 켜짐, 끄려면 `--no-friction`.
 Fit: `--fit real/fit.json,sim/fit.json` → real − sim 차이를 바퀴 랜덤 범위의 중심으로 (폭은 그대로).
-     학습 env와 calibration sim은 같은 바퀴 모터(ActuatorParam)라 sim fit = 학습 env의 raw 응답.
-     sim fit은 --fit 없이(raw), 지금 ActuatorParam과 같은 damping으로 잰 것이어야 한다 (fit.json의 plant로 확인).
-     1개만 주면 real 값 그대로 (학습 env plant를 이상적이라고 보는 것 — 지연이 이중으로 들어감).
+     sim fit은 --fit 없이(raw) 잰 것을 쓴다. 1개만 주면 real 값 그대로 (학습 env plant를 이상적이라고 보는 것 — 지연이 이중으로 들어감).
 Latency: `--latency before.csv` = rl-only Before 기록(경로 rl, enable:=false) → RL 경로(Pi→PC→Pi) 지연을
      명령 지연 범위에 더하고 관측 지연 범위의 중심으로 (폭은 그대로). fit의 지연은 경로 direct로 잰 값이라 따로 더한다.
 Eval: 학습이 끝나면 같은 env·같은 seed로 정책 끔(보정 0) / 켬(policy.onnx와 같은 그래프)을 비교 → eval.json.
@@ -118,14 +116,6 @@ class WheelDriftTrain(Train):
         args.base_fit = None
         if args.fit:
             from calibration.Calibrate import Calibrate
-            from calibration.parameter.ActuatorParam import ActuatorParam
-            paths = [p for p in args.fit.split(",") if p.strip()]
-            if len(paths) == 2:   # sim fit이 지금 학습 env와 같은 모터 설정으로 잰 것인지
-                plant = json.loads(Path(paths[1]).expanduser().read_text()).get("plant")
-                want = ActuatorParam().damping
-                if not plant or abs(float(plant.get("actuator_damping", -1)) - want) > 1e-9:
-                    parser.error(f"sim fit의 damping({plant and plant.get('actuator_damping')})이 학습 env의 "
-                                 f"ActuatorParam.damping({want})과 다르다 — 같은 값으로 sensor-sync-sim을 다시 재라")
             args.base_fit = Calibrate.load_fit(args.fit)
         args.latency_info = None
         if args.latency:

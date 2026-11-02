@@ -73,7 +73,7 @@ artifacts/sim_calib_floor.json   ← plot_compare가 real CSV에서 생성 (참�
 { "wheel_gain": 0.994, "wheel_delay_steps": 2, "wheel_tau_s": 0.0455 }
 ```
 
-마찰/액추에이터 기본값은 `SimParam` 클래스 기본값:
-`damping 100`, `ground (0.8, 0.7)`, `wheel (1.0, 1.0)`, `caster (0.0, 0.0)`.
+마찰 기본값은 `SimParam` 클래스 기본값:
+`ground (0.8, 0.7)`, `wheel (1.0, 1.0)`, `caster (0.0, 0.0)`. 액추에이터(damping/effort)는 고정값.
 
 - 바닥(floor)은 sim 슬립·drift가 남음: `v_enc 0.133/0.149 · w_gyro 0.843/0.960` → 다음은 caster/마찰 튜닝.

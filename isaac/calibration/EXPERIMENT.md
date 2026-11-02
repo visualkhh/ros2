@@ -86,25 +86,11 @@ cd ~/ros2/tool
 
 > `random-world`도 같다: 기본 raw, `--fit`으로 준 값만 (C 키 보정값 창에 그 값이 뜬다).
 
-## 2.5 damping 정하기 (calibration sim · 학습 env 공용 바퀴 모터)
+## 2.5 damping/effort — 쓰지 않음
 
-calibration sim과 학습 env는 **같은 바퀴 모터 설정**(`calibration/parameter/ActuatorParam.py`)을 쓴다.
-그래야 raw sim fit이 곧 학습 env의 raw 응답이 되고, `--fit real,sim` 차이를 학습에도 그대로 쓸 수 있다.
-damping(속도 서보 이득)은 실측으로 정한다 (개념·왜 여러 값으로 재나: [documents/isaac/concepts.md](../../documents/isaac/concepts.md)):
-
-```bash
-./run-calibration.sh sensor-sync-real --label real_floor                     # real/fit.json (한 번)
-for d in 20 50 100 200; do
-  ./run-calibration.sh sensor-sync-sim --viz none --damping $d --out artifacts/calibration/damping_$d/raw.csv
-done
-```
-
-- 각 `damping_*/fit.json`(raw sim)과 `real/fit.json`을 비교한다. 고르는 기준:
-  1. sim gain이 1에 가깝다 (속도 서보가 명령 속도를 끝까지 따라감 — 정상상태 오차 없음)
-  2. sim의 지연·τ가 real보다 **작다** — 차이(real − sim)가 음수면 0으로 잘려 보정할 수 없다
-  3. 1·2를 만족하는 것 중 바퀴가 덜 떨리는 값 (report.png 바퀴 패널)
-- 정하면 `ActuatorParam.damping` 기본값 **한 곳만** 바꾸고, 그 값으로 raw sim을 다시 재서 학습에 쓴다.
-- fit.json의 `plant`에 잰 damping이 남는다. 학습(`--fit real,sim`)은 sim fit의 damping이 지금 `ActuatorParam`과 다르면 거부한다.
+`damping`/`effort`는 `calibration/parameter/ActuatorParam.py`의 **고정 모델값**이다.  
+`--damping`/`--effort`로 여러 값을 재봐도 sim 응답이 변하지 않아서(50/100/200/400, effort 3/10 모두 같은 fit)
+calibration 변수와 CLI 옵션에서 제거했다. 지금 calibration은 **real/sim raw fit + `--fit real,sim` 차이**만 쓴다.
 
 ## 3. 실험 — 바닥 (최종)
 
@@ -322,7 +308,7 @@ CSV 열:
 |---|---|
 | 바퀴 스케일/부호 (`wl`, `wr`) | `robot.yaml` `left_dir/right_dir` · 펌웨어 ID/방향 · URDF 바퀴 위치 |
 | `v_enc`/`w_enc` 스케일 | `wheel_radius` · `wheel_separation` (real: `robot.yaml`, sim: `robot_spec.py`/URDF) |
-| sim이 바닥에서만 미끄러짐/틀어짐 | `calibration/parameter/`의 마찰·damping/effort (또는 `sim_calib_floor.json`) |
+| sim이 바닥에서만 미끄러짐/틀어짐 | `calibration/parameter/`의 마찰 (또는 `sim_calib_floor.json`) |
 | real만 느림 (t90 큼) | real은 그대로. sim `WheelLag`의 `tau`/`delay` |
 | `w_gyro` 부호 반대 | IMU 축/부호 (real: driver/firmware/URDF; sim: `root_ang_vel_b`) |
 | 속도별 gain 차이 | `speed_fit` 확인 → 필요하면 `WheelLag` 속도 보간 |

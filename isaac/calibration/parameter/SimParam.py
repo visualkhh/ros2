@@ -55,7 +55,7 @@ class SimParam:
                 deadband=float(d.get("wheel_deadband", 0.0)),
             ),
             actuator=ActuatorParam(
-                damping=float(d.get("actuator_damping", 100.0)),
+                damping=float(d.get("actuator_damping", 50.0)),
                 effort=float(d.get("actuator_effort", 3.0)),
             ),
             friction=FrictionParam(
@@ -96,11 +96,11 @@ class SimParam:
         return keep
 
     def describe(self) -> str:
-        w, a = self.wheel, self.actuator
+        w = self.wheel
         gl, gr = w.gains()
         gains = f"gain={w.gain:.3f}" if (w.gain_l is None and w.gain_r is None) \
             else f"gain L/R={gl:.3f}/{gr:.3f}"
         return (f"tau={w.tau_s:.3f}s "
                 f"delay={w.delay_steps * 0.05:.2f}s "
                 f"{gains} deadband={w.deadband:.2f} "
-                f"damping={a.damping:.0f} src={self.source}")
+                f"src={self.source}")

@@ -228,7 +228,7 @@ fit 값 확인 포인트:
 ```
 - 새로 나온 sim CSV를 다시 fit
 - **`fit_sim ≈ fit_real`** 이면 성공 (sim이 real을 닮음)
-- 다르면 그 차이는 모델에 없는 성분(friction/damping/effort) → 추가 fit 필요
+- 다르면 그 차이는 모델에 없는 성분(friction/contact) → 추가 fit 필요
 
 ### Phase 4 — 학습 / export
 ```bash
@@ -255,7 +255,7 @@ ros2_ws/report.py before.csv after.csv   # → report.png + 지표 표
 1. **real 데이터가 아직 없다.** 지금 수치는 전부 `DummySensor` 검증용이다.
 2. **translation slip은 관측 불가.** 정책 입력은 엔코더(`v_enc`)와 자이로(`w_gyro`)뿐이라,
    바퀴가 헛도는 직진 미끄러짐은 보정 범위 밖이다(문서와 일치). 회전 slip만 `w_gyro`로 보인다.
-3. **fit은 wheel 파라미터**(gain L/R, tau, delay, deadband)를 잡는다. 마찰/댐핑/effort는 별도 노브다.
+3. **fit은 wheel 파라미터**(gain L/R, tau, delay, deadband)를 잡는다. 마찰/contact은 별도 노브다.
 4. **단일 floor라도** 반복 측정 분산이 있으므로, 학습 랜덤화 폭은 0으로 두지 말고 분산 기반으로 잡는다.
 5. **delta는 더하기 파라미터만.** deadband/포화/마찰은 단일 %로 환산하지 말고 구간별로 맞춘다.
 6. `run-calibration.sh` / `run-training.sh`는 `isaac/` 루트에 있다 (`python -m calibration|training` 래퍼).

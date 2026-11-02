@@ -101,12 +101,6 @@ class DefaultSensorSim(Sensor):
         parser.add_argument("--fit", default=None,
                             help="입력 보정: real/fit.json 또는 real/fit.json,sim/fit.json (차이) → WheelLag. "
                                  "없으면 raw plant (숨은 보정 파일은 안 읽는다)")
-        parser.add_argument("--damping", type=float, default=None,
-                            help="바퀴 모터 damping 덮어쓰기 (측정용 — 기본: ActuatorParam). fit.json의 plant에 기록")
-        parser.add_argument("--effort", type=float, default=None,
-                            help="바퀴 모터 effort limit 덮어쓰기 [N·m] (측정용)")
-        parser.add_argument("--velocity-limit", type=float, default=None,
-                            help="바퀴 모터 velocity limit 덮어쓰기 [rad/s] (측정용)")
         parser.add_argument("--watch", action="store_true", help="1회 기록 후 창을 닫을 때까지 같은 장면 반복")
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args(argv)
@@ -142,12 +136,6 @@ class DefaultSensorSim(Sensor):
         total = excitation.total(segs)
         sim = SimulationContext(SimulationCfg(dt=DT, device=args.device))
         act = ActuatorParam()
-        if args.damping is not None:
-            act.damping = args.damping
-        if args.effort is not None:
-            act.effort = args.effort
-        if args.velocity_limit is not None:
-            act.velocity_limit = args.velocity_limit
         world = DefaultScene(condition=condition, actuator=act)
         rooms = world.build(1 if args.room > 0 else 0, args.room, args.seed)
         world.set_camera(sim, rooms[0].origin if rooms else (0.0, 0.0, 0.0))
@@ -176,9 +164,7 @@ class DefaultSensorSim(Sensor):
         print(f"[02-sim] profile: side={args.side:.2f} m · {total:.1f}s · "
               f"speeds {speeds_txt} m/s · left square → 180° turn → reverse")
         cal = Calibrate(sync)
-        cal.run(segs, total, out, POLICY_DT, base_fit=base_fit,
-                plant={"actuator_damping": act.damping, "actuator_effort": act.effort,
-                       "actuator_velocity_limit": act.velocity_limit})
+        cal.run(segs, total, out, POLICY_DT, base_fit=base_fit)
 
         if args.watch and not headless:
             print("[02-sim] WATCH — 창을 닫을 때까지 반복 (left square → right square)")

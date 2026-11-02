@@ -94,8 +94,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 - 차이: gain = real/sim 비율, 지연·τ = real − sim, 데드밴드 = real 문턱 ÷ sim gain (sim 문턱이 더 크면 0).
 - Isaac/ROS 없이 흐름만: `./run-calibration.sh calibration/sensor/DummySensor.py --fit ...`.
 - 실기기 준비는 위 **real 기준 먼저 재기**: Pi `base start` · `control manual` · `route direct`.
-- 바퀴 모터 damping은 calibration sim · 학습 env **공용**(`calibration/parameter/ActuatorParam.py`) — 실측으로 정한다
-  (`--damping`으로 몇 개 재서 real과 비교, [calibration/EXPERIMENT.md](calibration/EXPERIMENT.md) 2.5).
+- damping/effort는 **고정 모델값**이다 (`calibration/parameter/ActuatorParam.py`). calibration 변수로 쓰지 않는다.
 - 자세히: [calibration/README.md](calibration/README.md) · [calibration/EXPERIMENT.md](calibration/EXPERIMENT.md).
 
 ### 3.2 학습
@@ -110,8 +109,7 @@ tensorboard --logdir artifacts/training
 ```
 
 - `--fit real,sim`: 차이(real − raw sim)를 바퀴 τ·gain·지연(·데드밴드) 랜덤 범위의 **중심**으로 (폭 유지).
-  학습 env와 calibration sim이 같은 모터라 raw sim fit = 학습 env의 raw 응답. sim fit의 damping이 지금
-  `ActuatorParam`과 다르면 거부한다 (fit.json `plant`). 1개만 주면 real 값 그대로.
+  sim fit은 **`--fit` 없이(raw)** 잰 것을 쓴다. 1개만 주면 real 값 그대로.
 - 마찰: 기본 env별 랜덤 + 파랑(미끄럼)/주황(끈적) 네모 패치 4개 (`--no-friction`으로 끔). `--uneven`이면 낮은 턱.
 - `--latency before.csv`: rl-only Before 기록(경로 rl, enable:=false)에서 관측 나이·corrector 처리 시간을 뽑아
   명령 지연 범위에 RL 경로 왕복(≈ 2×관측 나이 + 처리)을 더하고, 관측 지연 범위의 중심으로 둔다. PC·Pi 시계가 안 맞으면 거부.
@@ -147,8 +145,8 @@ cd ../ros2_ws
 
 ## 4. 아직 안 맞는 것 (학습 전에 결정 필요)
 
-1. **damping 미정** — calibration sim·학습 env는 이제 같은 모터(`ActuatorParam`)를 쓴다. 값(지금 임시 100)은
-   실측으로 정한다 ([calibration/EXPERIMENT.md](calibration/EXPERIMENT.md) 2.5).
+1. **sim actuator는 고정** — damping/effort는 실측해도 sim 응답이 변하지 않아 calibration 변수에서 뺐다.
+   남은 차이는 friction/contact 쪽에서 본다.
 2. (해결) ~~학습 env 응답 측정 도구 없음~~ — 같은 모터라 raw sim fit이 학습 env 응답. `--fit real,sim` 사용.
 3. (해결) ~~RL 경로 지연 미반영~~ — `--latency before.csv`. 왕복은 관측 나이로 추정해 센서 주기 절반만큼 크게 잡힌다.
 4. **데드밴드** — 측정 경로(사각형)엔 저속 구간이 없어 fit의 0은 "못 잼". 학습은 기본 범위(0~0.3) 사용.

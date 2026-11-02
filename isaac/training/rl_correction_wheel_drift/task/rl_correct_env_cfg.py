@@ -37,7 +37,7 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
                 effort_limit=_ACT.effort,
                 velocity_limit=_ACT.velocity_limit,    # 포화는 환경이 비례 축소로 직접 (드라이버와 같게)
                 stiffness=0.0,
-                damping=_ACT.damping,                  # 속도 서보 — 값은 calibration/parameter/ActuatorParam.py 한 곳
+                damping=_ACT.damping,                  # 속도 서보 — 고정 모델값 (ActuatorParam)
             ),
         },
     )

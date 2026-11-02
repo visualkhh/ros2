@@ -27,7 +27,7 @@ class Scene(ABC):
 
     def __init__(self, condition: str = "raw", actuator=None):
         self.condition = condition
-        self.actuator = actuator   # ActuatorParam — None이면 SimParam(condition)의 값 (damping 측정 때 덮어씀)
+        self.actuator = actuator   # ActuatorParam — None이면 SimParam(condition)의 고정값
         self.rooms = []
         self.scene = None
         self.robot = None
