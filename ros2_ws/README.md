@@ -115,6 +115,9 @@ ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx 
 ```bash
 ./report.py                                      # artifacts/real/raw.csv → artifacts/real/report.png
 ./report.py artifacts/real/before.csv artifacts/real/after.csv   # 겹쳐 그림 + 직진 RMS · 회전 RMS(자이로·엔코더) · 보정량 표
+./report.py a.csv b.csv --out 이름.png --show     # 그림 이름 지정 · 창으로도 띄움 (기본: 첫 CSV 옆 report.png)
+#   한 CSV 안에서 policy.sh로 바꿨으면(A/B 한 번에) CSV 하나만 줘도 rl_policy 구간별로 나눠 그림
+#   "정책 켬인데 실제로는 바이패스" 구간이 있으면 경고 — 그 구간은 보정한 게 아님 (모델 경로 확인)
 #   matplotlib 필요 — 없으면 ../isaac/.venv/bin/python ./report.py ...
 ```
 

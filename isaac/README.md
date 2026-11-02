@@ -133,22 +133,28 @@ tensorboard --logdir artifacts/training                           # 진행 그�
 ### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
 
 ```bash
-cp artifacts/training/<시각>-rl_correct/policy.onnx artifacts/real/policy.onnx
-# 로봇: 베이스 · MANUAL (3.1과 같음)
+cp artifacts/training/<시각>-rl_correct/policy.onnx artifacts/real/policy.onnx   # isaac/ 에서 — 본 학습(300회) 결과, eval.json 개선 + 확인 후
+# 로봇: 베이스 · MANUAL (3.1과 같음) · 출발 위치·방향을 A와 B에서 같게
 cd ../ros2_ws
 ./rl-only.sh label:=ab output:=artifacts/real/ab.csv          # 터미널 A — RL 노드 + 기록 (바이패스로 시작 = A)
 # 터미널 B
 ./route.sh rl                                                  # 바퀴 명령이 PC를 거치게 (corrector 없으면 거부)
 ../isaac/run-calibration.sh sensor-sync-real --label A         # A: 같은 사각형, 보정 없음
-./policy.sh ../isaac/artifacts/real/policy.onnx                # 정책 켜기 (멈춰 있을 때)
+./policy.sh ../isaac/artifacts/real/policy.onnx                # 정책 켜기 (멈춰 있을 때) → 터미널 A에 'ONNX loaded' 확인
 ../isaac/run-calibration.sh sensor-sync-real --label B         # B: 같은 사각형, 보정함
 ./route.sh direct
 # 터미널 A: Ctrl+C
 ./report.py artifacts/real/ab.csv                              # → artifacts/real/report.png (A/B 구간별 지표)
 ```
 
+- `rl-only.sh`는 **끝나지 않고 계속 돈다** — 아래 명령은 **다른 터미널(B)**에서. 한 터미널에 다 붙여 넣으면 첫 줄에서 멈춘 것처럼 보인다.
+- **`ONNX loaded`가 떠야** 정책이 들어간 것. `./policy.sh status`로 enable·경로 확인.
+- 실수했던 것 (2026-11-02): ① 정책을 `ros2_ws/artifacts/real/`에 복사하고 `isaac/artifacts/real/`을 가리킴 → B도 보정 없이 달림(A/A).
+  지금은 `policy.sh`가 없는 파일을 **거부**하고, `report.py`가 "켬인데 실제로는 바이패스" 구간을 경고한다.
+  ② `--watch` 5회 짧은 시험 정책을 올림 → 거의 학습 안 됨(sim 개선 ±1%) → 실기기에서 오히려 나빠짐. 본 학습 결과를 쓴다.
 - 볼 것: **회전 추종 RMS-자이로** B < A · B 구간의 바퀴 보정량이 0이 아님 (정책이 일함). 합격 기준은 task-spec.
-- `policy.sh <onnx> | off | on | status`: 실행 중 정책 교체(바로 다시 로드). 없는 경로 → 바이패스. 기록의 `rl_policy` 칸으로 report가 구간을 나눈다.
+  추종 RMS는 명령이 바뀌는 순간의 지연(≈0.1 s)이 대부분이라, 보정 효과가 작게 보일 수 있다.
+- `policy.sh <onnx> | off | on | status`: 실행 중 정책 교체(바로 다시 로드). 없는 경로는 거부 · 바이패스는 `off`. 기록의 `rl_policy` 칸으로 report가 구간을 나눈다.
 - 따로 기록해도 된다: `rl-only.sh label:=before output:=…/before.csv` → 주행 → Ctrl+C → `rl-only.sh enable:=true label:=after output:=…/after.csv`
   → 주행 → `report.py before.csv after.csv`. 한 번 실행(A/B)이 배터리·바닥이 같아 더 공정하다.
 - 기록(입력 1개 = 1줄): 입력 · 보정 출력 · 정책 원출력 · 드라이버 명령 · odom · 엔코더 · 바퀴 속도/전류 · IMU · 모터 온도 · 배터리 · 상태 · 메시지 시각.
