@@ -12,6 +12,6 @@ from dataclasses import dataclass
 
 @dataclass
 class ActuatorParam:
-    damping: float = 100.0       # 바퀴 속도 서보 이득 (ImplicitActuator, stiffness 0) — 실측 전 임시값
+    damping: float = 50.0        # 바퀴 속도 서보 이득 (ImplicitActuator, stiffness 0) — damping_50 측정값
     effort: float = 3.0          # [N·m] XM430-W210 stall 근사
     velocity_limit: float = 9.0  # [rad/s] MAX_WHEEL(8) + 여유 — 포화는 바퀴 모델이 드라이버처럼 비례 축소로 직접
