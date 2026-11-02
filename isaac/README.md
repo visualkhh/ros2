@@ -142,6 +142,23 @@ tensorboard --logdir artifacts/training                           # 진행 그�
   `improve_pct.rms_w`가 + 면 sim에서 회전 추종이 좋아짐 · `onnx_max_abs_diff` ≈ 0 이면 배포 파일 = 평가한 정책.
 - `--iterations` 1회 = envs×64스텝 수집 + PPO 업데이트 (512대 ≈ 5.5 s). 자세히: [training/README.md](training/README.md).
 
+### 3.4b sim에서 정책 play — 실기기 전에 A/B
+
+```bash
+FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit.json
+./run-calibration.sh sensor-sync-sim --viz none --fit $FIT --label A                                # 보정 없이
+./run-calibration.sh sensor-sync-sim --watch --fit $FIT --policy artifacts/real/policy.onnx --label B  # 정책으로 (창)
+../ros2_ws/report.py artifacts/calibration/<A>/raw.csv artifacts/calibration/<B>/raw.csv            # A/B 비교 그림
+```
+
+- `--policy`: ros2 corrector와 같은 규칙(관측 6개 → ONNX 보정량 더하고 clip · 정지 명령엔 0)으로 같은 사각형을 달린다.
+  `--fit real,sim`으로 real처럼 맞춘 sim이라 실기기 A/B를 미리 보는 셈. 기록의 `lin/ang_out` = 보정 출력.
+- 차이: 실기기의 WiFi 왕복 지연은 없다 (sim은 정책이 바로 본다).
+- 창(`--watch`, 학습 `--watch`·`--snap`도 같음): **초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로**
+  (calibration은 사각형 전체, 학습은 명령이 바뀐 순간부터 그 명령대로 갈 길). 노란 점에서 벗어나는 만큼이 드리프트.
+- 옵션 전체 · 화면 · sim play 자세히: [calibration/README.md](calibration/README.md) "sensor-sync-sim — 옵션 · 화면 · sim play"
+  · 학습 화면: [training/README.md](training/README.md) "화면" · `./run-calibration.sh -h` · `./run-training.sh -h`
+
 ### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
 
 ```bash

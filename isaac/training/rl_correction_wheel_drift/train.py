@@ -149,6 +149,8 @@ class WheelDriftTrain(Train):
         if args.gyro_bias is not None:
             env_cfg.gyro_bias = args.gyro_bias
         self.add_snap_visualizer(env_cfg)
+        # 창·스냅샷이 있을 때만 명령/실제 막대 + 목표 경로 표시 (headless 학습엔 영향 없음)
+        env_cfg.debug_vis = bool(self.watch or getattr(args, "snap", None))
         if args.uneven:
             env_cfg.randomize_uneven = True
             env_cfg.uneven_patch_count = args.uneven_count

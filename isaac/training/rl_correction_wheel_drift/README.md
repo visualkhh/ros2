@@ -53,6 +53,9 @@ tensorboard --logdir artifacts/training
 ```
 
 - `--watch` 창에서 **P** 키 → 결과 폴더에 `screen_shot_<시각>.png`
+- 화면(`--watch`·`--snap`): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 랜덤 명령의 목표 경로
+  (명령이 바뀐 순간부터 그 명령대로 갈 길). 구현: `task/rl_correct_env.py` `_set_debug_vis_impl` · `_debug_vis_callback`
+- 학습한 정책을 sim에서 play: `./run-calibration.sh sensor-sync-sim --watch --fit <real>,<sim> --policy <결과>/policy.onnx`
 - 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint, `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교), (`--fit`/`--latency`면) `base-fit.json`
 
 ## 주의

@@ -45,7 +45,7 @@ calibration/
 ## 실행
 
 ```bash
-cd /home/pank/workspaces/visualkhh/source/ros2/isaac
+cd isaac
 ./run-calibration.sh random-world
 ```
 
@@ -55,6 +55,53 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   - tau/dead steps/gain/deadband/마찰을 **실행 중 수정** (즉시 적용, JSON 저장 안 함)
   - **0 set** → 표시된 숫자 전부 0, **reset** → 창을 열 때 읽은 값(JSON/DEFAULTS)으로 복구
   - 맨 아래 `source`가 `real_floor.csv`면 JSON 사용, `defaults`면 기본값 사용
+
+## sensor-sync-sim — 옵션 · 화면 · sim play
+
+sim 측정의 모든 옵션 (`./run-calibration.sh sensor-sync-sim --help`와 같음):
+
+| 옵션 | 기본 | 뜻 |
+|---|---|---|
+| `--fit F[,G]` | 없음 (raw) | 입력 보정. 1개 = 그 fit 그대로 · 2개(쉼표, 공백 없이, **real 먼저**) = real − sim 차이. 숨은 보정 파일은 안 읽는다 |
+| `--policy ONNX` | 없음 | 학습한 정책으로 보정하며 달림 (**sim play**) — 아래 |
+| `--label NAME` | `02-sim` | 폴더 `<시각>-NAME` · CSV label |
+| `--out PATH` | 자동 | 정확한 `raw.csv` 경로 (label보다 우선) |
+| `--side` `--speed` `--turn` | 0.5 · 0.15 · 1.0 | 사각형 한 변 [m] · 기준 전진 [m/s] (변마다 1.0/0.67/1.33/0.8배) · 회전 [rad/s] — real과 같아야 같은 명령 |
+| `--room` `--seed` | 0 · 0 | 방 크기 [m] (0 = 빈 바닥, 측정은 0) · 장면 시드 |
+| `--scene CLS` | `DefaultScene` | 장면 교체 — `calibration.scene.Scene` 서브클래스, 생성자 `(condition=, actuator=)` |
+| `--excitation CLS` | `DefaultCalibExcitation` | 측정 경로 교체 — `CalibExcitation` 서브클래스 (보통 `DefaultCalibExcitation` 상속해 `make_profile`만) |
+| `--watch` | 끔 | 기록 후 창을 닫을 때까지 같은 경로 반복 재생 |
+| `--viz none\|kit` | `kit` | 창 끔/켬 (기록만 할 땐 `none`) |
+
+`CLS` 형식: `path/to/file.py` (파일에 해당 서브클래스가 1개면) · `path/to/file.py:Class` · `pkg.mod.Class`.
+해당 베이스를 상속하지 않으면 "서브클래스가 아님"으로 거부한다.
+
+### 화면 (`--watch`)
+
+| 표시 | 뜻 |
+|---|---|
+| 초록 막대 | 명령 (v, w)대로라면 갈 방향 — 길이 ∝ 속도, 방향 = 지금 방향 + w × 0.25 s (원호의 현) |
+| 파랑 막대 | 실제 몸체 속도로 가는 방향 (같은 규칙) |
+| 노란 점 | 목표 경로 — 측정 경로(`excitation.profile_path`)를 로봇 시작 자세 기준으로 바닥에 |
+
+로봇이 노란 점에서 벗어나는 만큼, 초록과 파랑이 어긋나는 만큼이 드리프트다. 제자리 회전도 보이게 막대에 최소 길이가 있다.
+구현: `scene/CommandMarkers.py` (Isaac Lab `VisualizationMarkers` · 막대/점이라 Nucleus 없이 된다) — 학습 env와 공용.
+
+### sim play (`--policy`) — 실기기 전에 A/B
+
+```bash
+FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
+./run-calibration.sh sensor-sync-sim --viz none --fit $FIT --label A                                 # 보정 없이
+./run-calibration.sh sensor-sync-sim --watch --fit $FIT --policy artifacts/real/policy.onnx --label B # 정책으로 (창)
+../ros2_ws/report.py artifacts/calibration/<A>/raw.csv artifacts/calibration/<B>/raw.csv             # A/B 그림
+```
+
+- ros2 corrector와 **같은 규칙**: 관측 `[명령 v, 명령 w, v_enc, w_enc, w_gyro, 명령 바뀐 뒤 시간(≤2 s)]` → ONNX 보정량을
+  더하고 ±0.26 m/s · ±1.82 rad/s로 자름 · 정지 명령엔 보정 0. 기록의 `lin_out/ang_out` = 보정 출력 (`lin/ang_raw` = 명령).
+- `--fit real,sim`과 같이 쓴다 — real처럼 맞춘 sim이라 실기기 A/B를 미리 보는 셈.
+- 실기기와 다른 점: WiFi 왕복 지연 없음 (sim에선 정책이 센서를 바로 본다).
+- ONNX 파일이 없거나 입력이 6차원이 아니면 Isaac을 띄우기 전에 거부한다. onnxruntime은 Isaac venv에 있다.
+- report에서 볼 것: B 궤적오차 < A · B 보정량 ≠ 0. **sim에서도 안 좋아지면 실기기에 올리지 않는다.**
 
 ## 02 — 센서 싱크 (sim 기준 생성됨)
 

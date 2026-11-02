@@ -43,6 +43,7 @@ class RlCorrectEnv(DirectRLEnv):
         self.scale = torch.tensor(self.cfg.action_scale, device=dev)
         self.cmd = torch.zeros(n, 2, device=dev)
         self.hold = torch.zeros(n, device=dev)
+        self.hold_total = torch.zeros(n, device=dev)       # 이번 명령의 유지 시간 (목표 경로 그림용)
         self.t_change = torch.zeros(n, device=dev)
         self.delta = torch.zeros(n, 2, device=dev)
         self.prev_delta = torch.zeros(n, 2, device=dev)
@@ -61,6 +62,33 @@ class RlCorrectEnv(DirectRLEnv):
         self.sens_buf = torch.zeros(n, self.cfg.obs_delay_steps[1] + 1, 3, device=dev)
         self._rows = torch.arange(n, device=dev)
 
+
+    # ------------------------------------------------------------------ 화면 표시 (--watch · --snap)
+    def _set_debug_vis_impl(self, debug_vis: bool):
+        """명령(초록) · 실제(파랑) 막대 + 목표 경로(노란 점). cfg.debug_vis가 켜졌을 때만 (train.py가 창 볼 때 켬)."""
+        if debug_vis and getattr(self, "cmd_markers", None) is None:
+            from calibration.scene.CommandMarkers import CommandMarkers
+            self.cmd_markers = CommandMarkers()
+            self._vis_start = torch.zeros(self.num_envs, 4, device=self.device)   # 명령이 바뀐 순간 (x, y, z, yaw)
+            self._vis_t_prev = torch.full((self.num_envs,), 1e9, device=self.device)
+        if getattr(self, "cmd_markers", None) is not None:
+            self.cmd_markers.set_visible(debug_vis)
+
+    def _debug_vis_callback(self, event):
+        if not hasattr(self, "t_change"):   # 부모 __init__ 도중엔 아직 없음
+            return
+        pos = self.robot.data.root_pos_w.torch
+        yaw = self.cmd_markers.yaw_of(self.robot.data.root_quat_w.torch)
+        v, w = self._true_twist()
+        changed = self.t_change < self._vis_t_prev      # 명령이 바뀐(또는 리셋된) env — 그 순간 자세를 시작점으로
+        self._vis_start[changed] = torch.cat([pos[changed], yaw[changed, None]], dim=-1)
+        self._vis_t_prev = self.t_change.clone()
+        moving = self.cmd.abs().sum(dim=-1) > 0
+        path = None
+        if moving.any():
+            path = self.cmd_markers.arc(self._vis_start[moving], self.cmd[moving, 0], self.cmd[moving, 1],
+                                        self.hold_total[moving])
+        self.cmd_markers.update(pos, yaw, self.cmd[:, 0], self.cmd[:, 1], v, w, path)
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
@@ -94,6 +122,7 @@ class RlCorrectEnv(DirectRLEnv):
         v, w = v * (~stop), w * (~stop)
         self.cmd[ids] = torch.stack([v, w], dim=-1)
         self.hold[ids] = sample_uniform(*self.cfg.hold_range, (k,), dev)
+        self.hold_total[ids] = self.hold[ids]
         self.t_change[ids] = 0.0
 
     # ------------------------------------------------------------------ 한 스텝

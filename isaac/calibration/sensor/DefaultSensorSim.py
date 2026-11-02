@@ -14,6 +14,13 @@
   # 보정은 --fit으로 준 값만 (없으면 raw plant: gain 1 · delay 0 · tau 0 · deadband 0)
   ./run-calibration.sh sensor-sync-sim --viz none --fit <real>/fit.json[,<sim>/fit.json]
 
+  # 학습한 정책을 sim에서 play — corrector와 같은 규칙으로 보정하며 같은 경로를 달린다 (실기기 A/B를 sim에서 미리)
+  ./run-calibration.sh sensor-sync-sim --watch --fit <real>,<sim> --policy artifacts/real/policy.onnx --label B
+  ./run-calibration.sh sensor-sync-sim --viz none --fit <real>,<sim> --label A        # 같은 조건, 보정 없이
+  ../ros2_ws/report.py <A>/raw.csv <B>/raw.csv                                         # A/B 비교
+
+창(--watch)에서: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로(사각형).
+
 출력: artifacts/calibration/<시각>-<label>/ (raw.csv · fit.json · report.png, --fit이면 base-fit.json)
       --label 없으면 <시각>-02-sim, CSV label은 sim_sensor_floor. --out으로 정확한 경로 지정.
 CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)
@@ -48,7 +55,8 @@ class DefaultSensorSim(Sensor):
 
     TAG = "02-sim"
 
-    def __init__(self, sim, scene, robot, wheel_ids, wheel_model, label: str):
+    def __init__(self, sim, scene, robot, wheel_ids, wheel_model, label: str,
+                 policy=None, markers=None, path_w=None):
         super().__init__()
         self.sim = sim
         self.scene = scene
@@ -60,27 +68,60 @@ class DefaultSensorSim(Sensor):
         self.r = torch.tensor([spec.WHEEL_RADIUS], device=self.dev)
         self.sep = torch.tensor([spec.WHEEL_SEP], device=self.dev)
         self.ox = self.oy = self.oyaw = 0.0
+        self.policy = policy          # onnxruntime 세션 (--policy) — 없으면 입력 그대로
+        self.markers = markers        # CommandMarkers (창 볼 때만)
+        self.path_w = path_w          # 목표 경로 점 (m, 3)
+        self.last_out = (0.0, 0.0)
+        self._t = 0.0
+        self._last_cmd = (0.0, 0.0)
+        self._changed_at = 0.0
+
+    def _sense(self):
+        """(바퀴 rad/s 좌우, v_enc, w_enc, w_gyro) — 드라이버 /odom · /imu와 같은 식."""
+        jv = self.robot.data.joint_vel.torch[0, self.wheel_ids].tolist()
+        v_enc = spec.WHEEL_RADIUS * (jv[0] + jv[1]) / 2.0
+        w_enc = spec.WHEEL_RADIUS * (jv[1] - jv[0]) / spec.WHEEL_SEP
+        return jv, v_enc, w_enc, self.robot.data.root_ang_vel_b.torch[0, 2].item()
+
+    def correct(self, v: float, w: float) -> tuple[float, float]:
+        """ros2 corrector와 같은 규칙: obs 6개 → ONNX 보정량 더하고 clip · 정지 명령엔 보정 0."""
+        if abs(v - self._last_cmd[0]) > 1e-3 or abs(w - self._last_cmd[1]) > 1e-3:
+            self._changed_at = self._t
+        self._last_cmd = (v, w)
+        if self.policy is None or (v == 0.0 and w == 0.0):
+            return v, w
+        _, v_enc, w_enc, w_gyro = self._sense()
+        obs = [[v, w, v_enc, w_enc, w_gyro, min(self._t - self._changed_at, 2.0)]]
+        dv, dw = self.policy.run(None, {self.policy.get_inputs()[0].name: np.array(obs, dtype=np.float32)})[0][0]
+        return (max(-spec.MAX_LIN, min(spec.MAX_LIN, v + float(dv))),
+                max(-spec.MAX_ANG, min(spec.MAX_ANG, w + float(dw))))
 
     def send(self, v: float, w: float) -> None:
-        wheels = self.wheel_model.step(v, w, wheel_targets, self.r, self.sep,
+        lo, ao = self.correct(v, w)
+        self.last_out = (lo, ao)
+        wheels = self.wheel_model.step(lo, ao, wheel_targets, self.r, self.sep,
                                        spec.MAX_WHEEL, self.dev)
         self.robot.set_joint_velocity_target(wheels, joint_ids=self.wheel_ids)
         self.scene.write_data_to_sim()
         for _ in range(SUBSTEPS):
             self.sim.step(render=False)
         self.scene.update(POLICY_DT)
+        self._t += POLICY_DT
+        if self.markers is not None:
+            d = self.robot.data
+            yaw = self.markers.yaw_of(d.root_quat_w.torch)
+            t = lambda x: torch.tensor([x], device=self.dev)
+            self.markers.update(d.root_pos_w.torch, yaw, t(v), t(w),
+                                d.root_lin_vel_b.torch[:, 0], d.root_ang_vel_b.torch[:, 2], self.path_w)
 
     def collect(self, t: float, v: float, w: float) -> list:
-        jv = self.robot.data.joint_vel.torch[0, self.wheel_ids].tolist()
+        jv, v_enc, w_enc, w_gyro = self._sense()
         jp = self.robot.data.joint_pos.torch[0, self.wheel_ids].tolist()
-        v_enc = spec.WHEEL_RADIUS * (jv[0] + jv[1]) / 2.0
-        w_enc = spec.WHEEL_RADIUS * (jv[1] - jv[0]) / spec.WHEEL_SEP
-        w_gyro = self.robot.data.root_ang_vel_b.torch[0, 2].item()
         self.oyaw += w_enc * POLICY_DT
         self.ox += v_enc * math.cos(self.oyaw) * POLICY_DT
         self.oy += v_enc * math.sin(self.oyaw) * POLICY_DT
         # sim은 단일 시계로 돌므로 msg 시각 = 기록 시각 (age 0 기준선)
-        return [round(t, 3), v, w, v, w, self.ox, self.oy, self.oyaw,
+        return [round(t, 3), v, w, self.last_out[0], self.last_out[1], self.ox, self.oy, self.oyaw,
                 v_enc, w_enc, w_gyro, jv[0], jv[1], jp[0], jp[1], self.label,
                 t, t, t, t]
 
@@ -105,18 +146,31 @@ class DefaultSensorSim(Sensor):
                             help="장면 클래스 (기본 DefaultScene): pkg.mod.Class 또는 path/to/file.py[:Class] — calibration.scene.Scene 서브클래스, 생성자 (condition=, actuator=)")
         parser.add_argument("--excitation", default=None,
                             help="측정 경로 클래스 (기본 DefaultCalibExcitation: 사각형→180°→역주행): pkg.mod.Class 또는 path/to/file.py[:Class] — calibration.excitation.CalibExcitation 서브클래스")
+        parser.add_argument("--policy", default=None,
+                            help="학습한 ONNX로 보정하며 달림 (ros2 corrector와 같은 규칙) — sim에서 정책 play · A/B")
         parser.add_argument("--watch", action="store_true", help="1회 기록 후 창을 닫을 때까지 같은 장면 반복")
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args(argv)
         from calibration.Calibrate import Calibrate as _Calibrate   # 표준 라이브러리만 — sim 전에 실패하게
         args.excitation_obj = _Calibrate.load_excitation(args.excitation)
+        args.policy_sess = None
+        if args.policy:   # sim 띄우기 전에 실패하게
+            import onnxruntime as ort
+            path = Path(args.policy) if os.path.isabs(args.policy) else ISAAC / args.policy
+            if not path.is_file():
+                parser.error(f"--policy 파일 없음: {path}")
+            args.policy_sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+            dim = args.policy_sess.get_inputs()[0].shape[1]
+            if dim != 6:
+                parser.error(f"--policy 입력이 {dim}차원 — track 정책(6)이어야 한다")
 
         app_launcher = AppLauncher(args)
         simulation_app = app_launcher.app
 
         # AppLauncher가 pxr/physx를 초기화한 뒤에 런타임 모듈을 import한다.
-        global torch, SimulationCfg, SimulationContext, Calibrate, DefaultScene
+        global np, torch, SimulationCfg, SimulationContext, Calibrate, DefaultScene
         global ActuatorParam, SimParam, WheelLag, wheel_targets
+        import numpy as np
         import torch
         from isaaclab.sim import SimulationCfg, SimulationContext
         from calibration.Calibrate import Calibrate
@@ -166,9 +220,26 @@ class DefaultSensorSim(Sensor):
             out = str(ISAAC / out)   # isaac/ 기준 (예: artifacts/...)
         env = "empty floor (no obstacles)" if args.room <= 0 else f"room {args.room:.1f} m"
         mode = f"FIT {', '.join(base_fit['source'])}" if base_fit else "RAW (no --fit)"
+        if args.policy:
+            mode += f" · POLICY {args.policy}"
         print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {mode} · {env}")
         print(f"[02-sim] calib: {params.describe()}")
-        sync = cls(sim, scene, robot, wheel_ids, wheel_model, label=tag)
+        markers = path_w = None
+        if not headless:   # 창이 있을 때만: 명령/실제 막대 + 목표 경로(로봇 시작 자세 기준 경로를 월드로)
+            from calibration.scene.CommandMarkers import CommandMarkers
+            markers = CommandMarkers()
+            p0 = robot.data.root_pos_w.torch[0]
+            yaw0 = float(markers.yaw_of(robot.data.root_quat_w.torch)[0])
+            pts = []
+            line = excitation.profile_path(args.side)
+            for (x0, y0), (x1, y1) in zip(line, line[1:]):
+                k = max(1, int(math.hypot(x1 - x0, y1 - y0) / 0.03))
+                pts += [(x0 + (x1 - x0) * i / k, y0 + (y1 - y0) * i / k) for i in range(k)]
+            c, s_ = math.cos(yaw0), math.sin(yaw0)
+            path_w = torch.tensor([[float(p0[0]) + c * x - s_ * y, float(p0[1]) + s_ * x + c * y,
+                                    float(p0[2])] for x, y in pts], device=robot.device)
+        sync = cls(sim, scene, robot, wheel_ids, wheel_model, label=tag,
+                   policy=args.policy_sess, markers=markers, path_w=path_w)
         if args.label:
             sync.run_name = args.label
         speeds_txt = sync.move_speeds_text(segs)
@@ -180,15 +251,9 @@ class DefaultSensorSim(Sensor):
         if args.watch and not headless:
             print("[02-sim] WATCH — 창을 닫을 때까지 반복 (left square → right square)")
             sim_t = 0.0
-            next_cmd = 0.0
             while simulation_app.is_running():
-                if sim_t >= next_cmd:
-                    next_cmd += POLICY_DT
-                    v, w = excitation.cmd_at(sim_t % total, segs)
-                    sync.send(v, w)
-                for _ in range(SUBSTEPS):
-                    sim.step(render=False)
-                scene.update(POLICY_DT)
+                v, w = excitation.cmd_at(sim_t % total, segs)
+                sync.send(v, w)          # send가 물리 스텝까지 돈다 (예전엔 여기서 또 돌려 2배 빨랐음)
                 sim.render()
                 sim_t += POLICY_DT
                 time.sleep(POLICY_DT)

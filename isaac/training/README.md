@@ -62,6 +62,28 @@ tensorboard --logdir artifacts/training
 - `--slope DEG`: env마다 바닥판을 랜덤 방향 · 0~DEG° 랜덤으로 기울임 (패치·`--uneven` 턱도 같이). 기본 3, 0 = 평평.
 - `--gyro-bias RAD_S`: 에피소드마다 자이로 영점 오차 ±RAD_S (기본 0.05, 0 = 끔).
 
+### 화면 (`--watch` · `--snap`)
+
+`--watch`(창)나 `--snap`(스냅샷)일 때만 env의 `debug_vis`를 켠다 — headless 학습엔 영향 없음.
+
+| 표시 | 뜻 |
+|---|---|
+| 초록 막대 | 지금 명령 (v, w)대로라면 갈 방향 (길이 ∝ 속도) |
+| 파랑 막대 | 실제 몸체 속도로 가는 방향 |
+| 노란 점 | **목표 경로** — 랜덤 명령이 바뀐 순간의 자세에서 그 명령대로 유지 시간(0.5~2 s) 동안 갈 길 (env마다 12점) |
+
+로봇이 노란 점에서 벗어나는 만큼이 드리프트다. 학습이 될수록 줄어야 한다. 정지 명령인 env는 경로를 안 그린다.
+구현: `rl_correct_env.py`의 `_set_debug_vis_impl` / `_debug_vis_callback` (Isaac Lab `DirectRLEnv` 훅) +
+`calibration/scene/CommandMarkers.py` (calibration sim과 공용).
+
+### 학습 뒤 sim에서 play
+
+```bash
+./run-calibration.sh sensor-sync-sim --watch --fit <real>/fit.json,<sim>/fit.json --policy artifacts/training/<시각>-rl_correct/policy.onnx
+```
+
+같은 사각형을 corrector와 같은 규칙으로 달린다. A/B 비교·옵션: [../calibration/README.md](../calibration/README.md) "sim play".
+
 ## 보정값과 RL의 관계
 
 - 바닥/바퀴/캐스터 **마찰**은 `FrictionParam` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env별 랜덤 + 패치.
