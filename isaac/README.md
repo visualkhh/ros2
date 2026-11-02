@@ -155,8 +155,10 @@ cd ../ros2_ws
 - 실수했던 것 (2026-11-02): ① 정책을 `ros2_ws/artifacts/real/`에 복사하고 `isaac/artifacts/real/`을 가리킴 → B도 보정 없이 달림(A/A).
   지금은 `policy.sh`가 없는 파일을 **거부**하고, `report.py`가 "켬인데 실제로는 바이패스" 구간을 경고한다.
   ② `--watch` 5회 짧은 시험 정책을 올림 → 거의 학습 안 됨(sim 개선 ±1%) → 실기기에서 오히려 나빠짐. 본 학습 결과를 쓴다.
-- 볼 것: **회전 추종 RMS-자이로** B < A · B 구간의 바퀴 보정량이 0이 아님 (정책이 일함). 합격 기준은 task-spec.
-  추종 RMS는 명령이 바뀌는 순간의 지연(≈0.1 s)이 대부분이라, 보정 효과가 작게 보일 수 있다.
+- **A/B 전에 OpenCR를 가만히 둔 채 켠다** — 부팅 2초 동안 자이로 영점을 잡는다. 움직이면 정지 중에도 w_gyro ≠ 0
+  (11-02 ab.csv: −0.257 rad/s) → 정책 입력이 오염돼 B가 엉뚱하게 돈다. report 표의 '자이로 정지 바이어스'가 노랗고 경고가 뜨면 재기록.
+- 볼 것 (report 맨 위 표, B vs A가 초록이면 좋아짐): **궤적오차 · 끝점 오차 · 정상상태 RMS** B < A · B 보정량 ≠ 0 (정책이 일함).
+  A와 B는 시작 자리·방향을 (0,0,0)·t=0으로 맞춰 겹쳐 그린다. '전체 RMS'는 계단 지연(≈0.1 s)이 대부분이라 참고만. 합격 기준은 task-spec.
 - `policy.sh <onnx> | off | on | status`: 실행 중 정책 교체(바로 다시 로드). 없는 경로는 거부 · 바이패스는 `off`. 기록의 `rl_policy` 칸으로 report가 구간을 나눈다.
 - 따로 기록해도 된다: `rl-only.sh label:=before output:=…/before.csv` → 주행 → Ctrl+C → `rl-only.sh enable:=true label:=after output:=…/after.csv`
   → 주행 → `report.py before.csv after.csv`. 한 번 실행(A/B)이 배터리·바닥이 같아 더 공정하다.

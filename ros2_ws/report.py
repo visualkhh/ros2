@@ -7,15 +7,12 @@
   ./report.py before.csv after.csv [--out compare.png]  # 여러 개면 겹쳐 그림 (선 모양으로 구분)
   한 CSV 안에서 policy.sh로 A/B를 바꿨으면(rl_policy 칸) 구간마다 따로 겹쳐 그리고 지표도 구간별로 낸다.
 
-패널 (CSV에 없는 칸의 패널은 건너뛴다 — 예전 12칸 CSV도 됨):
-  odom 주행 궤적: 명령 100%(이상) · odom 실측(보정함) · 보정 안 했다면(추정) · 시작/끝
-  · 직진 속도 · 회전 속도 · 추종 오차 · 보정량 왼쪽/오른쪽 바퀴 (0에 가까울수록 보정 없음)
-  · 왼쪽/오른쪽 바퀴 각속도 · 모터 전류 · 모터 온도+배터리 · IMU 가속도 · 방향(엔코더 vs IMU) · 지연
-  비상정지(state_estop=1) 구간은 빨강, 직결(state_rl=0) 구간은 회색 배경.
-보정 안 했다면(추정): 이 기록에서 바퀴별 gain(= 실제 바퀴 속도 / 보정 출력의 바퀴 명령, 중앙값)을 뽑아
-  입력 명령(lin/ang_raw)을 그 gain으로 재생해 적분한 궤적. 진짜 Before는 enable:=false로 따로 기록해 같이 넣는다.
-지표 (터미널 출력 · 그림 우상단 요약): 직진/회전 추종 RMS · 평균 바퀴 보정량 · 바퀴 gain(추정)
-  · 응답 지연 평균/p95 · 최대 전류·온도 · 배터리 강하 · 비상정지 행 수 (정지 명령 행 제외).
+구성: 맨 위 지표 표(A·B 열 + B vs A 변화율, ↓ 지표가 좋아지면 초록·나빠지면 빨강) → 주행 궤적 → 좌/우 짝 패널
+  (속도 · 오차 · 바퀴 오차 · 바퀴 보정량 · 모터 전류 · 온도/지연). CSV에 없는 칸의 패널은 건너뛴다.
+  구간마다 시작을 t=0 · odom (0,0) · 방향 0으로 맞춰 A와 B를 같은 축에 겹친다 (run 색 = A 회색 · B 파랑).
+정상상태 지표: 명령이 바뀐 뒤 0.5 s는 뺀다 (계단 지연이 RMS를 지배하지 않게). 전체 RMS도 같이 낸다.
+자이로 바이어스: 정지 행의 w_gyro 평균을 빼고 회전 지표를 계산하고, 0.02 rad/s 넘으면 경고
+  (OpenCR 부팅 때 움직이면 자이로 영점이 틀어짐 — 정책 입력이 오염되므로 그 기록의 B는 무효).
 필요: matplotlib (없으면 isaac/.venv/bin/python ./report.py ...)
 """
 import argparse
@@ -138,11 +135,34 @@ def uncorrected_path(rows, g):
     return integrate(rows, vw)
 
 
-def metrics(rows: list[dict]) -> dict:
-    moving = [r for r in rows if r["lin_raw"] == r["lin_raw"] and (r["lin_raw"] != 0.0 or r["ang_raw"] != 0.0)]
+BIAS_KEY = "자이로 정지 바이어스 [rad/s] (0이어야 함)"
+SETTLE_S = 0.5   # 명령이 바뀐 뒤 이 시간은 정상상태 지표에서 뺀다 (계단 지연이 RMS를 지배하지 않게)
 
-    def rms(a, b):
-        d = finite([r[a] - r[b] for r in moving if a in r and b in r])
+
+def gyro_bias(rows) -> float:
+    """정지(명령 0 · 두 바퀴 정지) 행의 w_gyro 평균 — 0이 아니면 OpenCR 부팅 때 자이로 보정 실패 (움직이며 켜짐)."""
+    w = finite([r.get("w_gyro", NAN) for r in rows if r["lin_raw"] == 0.0 and r["ang_raw"] == 0.0
+                and abs(r.get("wheel_l_vel", 1)) < 0.01 and abs(r.get("wheel_r_vel", 1)) < 0.01])
+    return sum(w) / len(w) if len(w) >= 20 else 0.0
+
+
+def metrics(rows: list[dict]) -> dict:
+    """작을수록 좋은 지표는 이름 끝이 ↓ — 표에서 B가 A보다 좋으면 초록."""
+    moving, steady, last_cmd, changed = [], [], None, -1e9
+    for r in rows:
+        if r["lin_raw"] != r["lin_raw"]:
+            continue
+        cmd = (r["lin_raw"], r["ang_raw"])
+        if cmd != last_cmd:
+            last_cmd, changed = cmd, r["t"]
+        if cmd != (0.0, 0.0):
+            moving.append(r)
+            if r["t"] - changed >= SETTLE_S:
+                steady.append(r)
+    bias = gyro_bias(rows)
+
+    def rms(sel, a, b, off=0.0):
+        d = finite([r[a] - (r.get(b, NAN) - off) for r in sel])
         return math.sqrt(sum(x * x for x in d) / len(d)) if d else NAN
 
     def col(k):
@@ -154,23 +174,28 @@ def metrics(rows: list[dict]) -> dict:
 
     cl, cr = wheel_corr(moving)
     lat = sorted(finite([(r["t_out"] - r["t_abs"]) * 1000 for r in rows if "t_out" in r]))
-    cur = col("wheel_l_cur") + col("wheel_r_cur")
-    temp = col("motor_l_temp") + col("motor_r_temp")
-    bat = col("battery_v")
+    cur = [abs(x) for x in col("wheel_l_cur") + col("wheel_r_cur")]
+    sx, sy = [r.get("odom_x", NAN) for r in rows], [r.get("odom_y", NAN) for r in rows]
+    cx, cy = integrate(rows, [(r["lin_raw"], r["ang_raw"]) for r in rows])
+    fx, fy = finite(sx), finite(sy)
     g = wheel_gains(rows)
-    return {"움직인 행 수": len(moving),
-            "직진 추종 RMS [m/s]": rms("lin_raw", "v_enc"),
-            "회전 추종 RMS-자이로 [rad/s]": rms("ang_raw", "w_gyro"),
-            "회전 추종 RMS-엔코더 [rad/s]": rms("ang_raw", "w_enc"),
-            "평균 왼쪽 바퀴 보정 [rad/s]": mean_abs(cl),
-            "평균 오른쪽 바퀴 보정 [rad/s]": mean_abs(cr),
-            "왼쪽 바퀴 gain (추정)": g[0] if g else NAN,
-            "오른쪽 바퀴 gain (추정)": g[1] if g else NAN,
-            "응답 지연 평균 [ms]": sum(lat) / len(lat) if lat else NAN,
-            "응답 지연 p95 [ms]": lat[int(0.95 * (len(lat) - 1))] if lat else NAN,
-            "최대 전류 [A]": max(cur) if cur else NAN,
-            "최대 온도 [°C]": max(temp) if temp else NAN,
-            "배터리 강하 [V]": (bat[0] - bat[-1]) if bat else NAN,
+    ts = [r["t"] for r in rows]
+    dts = [b - a for a, b in zip(ts, ts[1:])]
+    dt = sorted(dts)[len(dts) // 2] if dts else NAN
+    return {"주행 시간 [s] (명령≠0)": len(moving) * dt,
+            "궤적오차 평균 (이상 대비) [m] ↓": mean_dev(sx, sy, cx, cy),
+            "끝점 오차 (이상 대비) [m] ↓": math.hypot(fx[-1] - cx[-1], fy[-1] - cy[-1]) if fx else NAN,
+            "직진 RMS 정상상태 [m/s] ↓": rms(steady, "lin_raw", "v_enc"),
+            "회전 RMS 정상상태 엔코더 [rad/s] ↓": rms(steady, "ang_raw", "w_enc"),
+            "회전 RMS 정상상태 자이로-바이어스 [rad/s] ↓": rms(steady, "ang_raw", "w_gyro", bias),
+            "직진 RMS 전체 (계단 지연 포함) [m/s] ↓": rms(moving, "lin_raw", "v_enc"),
+            "회전 RMS 전체 자이로-바이어스 [rad/s] ↓": rms(moving, "ang_raw", "w_gyro", bias),
+            "바퀴 gain 왼쪽 (1=정확)": g[0] if g else NAN,
+            "바퀴 gain 오른쪽 (1=정확)": g[1] if g else NAN,
+            "평균 보정량 왼/오 [rad/s]": (mean_abs(cl) + mean_abs(cr)) / 2,
+            "응답 지연 p95 [ms] ↓": lat[int(0.95 * (len(lat) - 1))] if lat else NAN,
+            "최대 전류 |A| ↓": max(cur) if cur else NAN,
+            BIAS_KEY: bias,
             "비상정지 행 수": sum(1 for r in rows if r.get("state_estop") == 1.0)}
 
 
@@ -186,48 +211,55 @@ def korean_font(plt):
 
 
 def has(runs, *keys) -> bool:
-    """어느 run에든 그 칸들에 값이 하나라도 있으면 패널을 그린다. runs = [(이름, 짧은 이름, 행, 전체 행)]."""
-    return any(all(finite([r.get(k, NAN) for r in run[2]]) for k in keys) for run in runs)
+    """어느 run에든 그 칸들에 값이 하나라도 있으면 패널을 그린다. runs = [(이름, 행)]."""
+    return any(all(finite([r.get(k, NAN) for r in run[1]]) for k in keys) for run in runs)
+
+
+def rebase(rows: list[dict]) -> list[dict]:
+    """구간 시작을 t=0 · odom (0,0,0)으로 — A와 B를 같은 축에 겹쳐 비교 (자리·방향이 달라도)."""
+    rows = [dict(r) for r in rows]
+    t0 = rows[0]["t"]
+    first = next((r for r in rows if r.get("odom_x", NAN) == r.get("odom_x", NAN)), None)
+    x0, y0, a0 = (first["odom_x"], first["odom_y"], first["odom_yaw"]) if first else (0.0, 0.0, 0.0)
+    c, s_ = math.cos(-a0), math.sin(-a0)
+    for r in rows:
+        r["t"] -= t0
+        if first and r.get("odom_x", NAN) == r.get("odom_x", NAN):
+            dx, dy = r["odom_x"] - x0, r["odom_y"] - y0
+            r["odom_x"], r["odom_y"], r["odom_yaw"] = c * dx - s_ * dy, s_ * dx + c * dy, r["odom_yaw"] - a0
+    return rows
 
 
 def split_phases(path: Path) -> list:
-    """CSV 하나 → [(이름, 짧은 이름, 행, 전체 행)]. rl_policy(A/B 구간)가 여럿이면 구간마다 하나씩.
-
-    구간 행은 시간축을 그대로 두고, 다른 구간 자리는 nan으로 비운다 (그래프에서 그 구간만 보이게).
-    """
+    """CSV 하나 → [(이름, 행)]. policy.sh로 바꾼 연속 구간(rl_policy)마다 하나 — 각 구간은 rebase."""
     rows = load(path)
     ghost = sum(1 for r in rows if r.get("rl_enable") == 1.0 and r.get("rl_policy") == "bypass")
     if ghost:   # 정책을 켰는데 모델 파일이 없어 실제로는 바이패스 — A/B가 아니다
         print(f"[report] 경고: {path.name} — 정책 켬(rl_enable=1)인데 실제로는 바이패스인 행 {ghost}개 "
               f"(모델 파일 없음: rl_model 확인). 이 구간은 '보정함'이 아니다.", file=sys.stderr)
-    phases = list(dict.fromkeys(r.get("rl_policy", "") for r in rows))
-    if len(phases) <= 1:
-        return [(f"{path.parent.name}/{path.name}", path.stem, rows, rows)]
+    segs = []
+    for r in rows:
+        ph = r.get("rl_policy", "") or path.stem
+        if not segs or segs[-1][0] != ph:
+            segs.append((ph, []))
+        segs[-1][1].append(r)
+    segs = [(ph, rs) for ph, rs in segs if len(rs) >= 40]   # 2초 미만 조각(전환 순간)은 버림
+    seen: dict[str, int] = {}
     out = []
-    for ph in phases:
-        masked = [r if r.get("rl_policy") == ph else
-                  {k: (v if k in ("t", "t_abs") else ("" if k in TEXT else NAN)) for k, v in r.items()}
-                  for r in rows]
-        out.append((f"{path.name} · {ph}", ph, masked, rows))
+    for ph, rs in segs:
+        seen[ph] = seen.get(ph, 0) + 1
+        name = ("A 바이패스" if ph == "bypass" else f"B {ph}") + (f" #{seen[ph]}" if seen[ph] > 1 else "")
+        out.append((name if len(segs) > 1 else path.parent.name, rebase(rs)))
     return out
-
-
-def shade(a, rows, key, value, color):
-    """state 칸이 value인 연속 구간을 배경색으로."""
-    start = None
-    for r in rows + [{"t": rows[-1]["t"], key: None}]:
-        on = r.get(key) == value
-        if on and start is None:
-            start = r["t"]
-        elif not on and start is not None:
-            a.axvspan(start, r["t"], color=color, alpha=0.12, lw=0)
-            start = None
 
 
 def fmt(v, nd=3) -> str:
     if isinstance(v, int):
         return str(v)
     return "—" if v != v else f"{v:.{nd}f}"
+
+
+COLORS = ("#6b6b6b", "tab:blue", "tab:orange", "tab:green", "tab:purple")   # run 색 — A(바이패스) 회색, B 파랑
 
 
 def report(paths: list[Path], out: Path, show: bool) -> Path:
@@ -241,163 +273,136 @@ def report(paths: list[Path], out: Path, show: bool) -> Path:
     korean_font(plt)
 
     runs = [run for p in paths for run in split_phases(p)]
-    multi = len(runs) > 1
-    names = ["lin", "ang", "err"]
-    names += ["corr_l", "corr_r"] if has(runs, "lin_out") else []
-    names += ["wheel_l", "wheel_r"] if has(runs, "wheel_l_vel") else []
-    names += ["cur"] if has(runs, "wheel_l_cur") else []
-    names += ["temp"] if has(runs, "motor_l_temp") or has(runs, "battery_v") else []
-    names += ["acc"] if has(runs, "imu_ax") else []
-    names += ["yaw"] if has(runs, "imu_yaw") else []
-    names += ["lat"] if has(runs, "t_out") or has(runs, "t_odom") else []
+    ms = [metrics(rows) for _, rows in runs]
+    pairs = [("lin", "ang"), ("err_v", "err_w"), ("wheel_l", "wheel_r")]
+    pairs += [("corr_l", "corr_r")] if has(runs, "lin_out") else []
+    pairs += [("cur_l", "cur_r")] if has(runs, "wheel_l_cur") else []
+    pairs += [("temp", "lat")] if has(runs, "motor_l_temp") or has(runs, "t_out") else []
 
-    fig = plt.figure(figsize=(11, 4 + 2 * len(names)))
-    gs = fig.add_gridspec(len(names) + 1, 1, height_ratios=[1.7] + [1] * len(names))
-    ax_path = fig.add_subplot(gs[0])
-    axes = [fig.add_subplot(gs[i + 1]) for i in range(len(names))]
-    for a in axes[1:]:
-        a.sharex(axes[0])
-    ax = dict(zip(names, axes))
-    for a in [ax_path] + axes:
-        a.grid(True, alpha=0.3)
+    fig = plt.figure(figsize=(16, 9 + 2.6 * len(pairs)))
+    gs = fig.add_gridspec(2 + len(pairs), 2, height_ratios=[2.6, 3.2] + [1] * len(pairs), hspace=0.42, wspace=0.12,
+                          top=0.96, bottom=0.03)
+    ax_tab = fig.add_subplot(gs[0, :])
+    ax_path = fig.add_subplot(gs[1, :])
+    ax = {}
+    for i, (a, b) in enumerate(pairs):
+        ax[a] = fig.add_subplot(gs[2 + i, 0])
+        ax[b] = fig.add_subplot(gs[2 + i, 1], sharex=ax["lin"])
+        if i:
+            ax[a].sharex(ax["lin"])
+    for a_ in ax.values():
+        a_.grid(True, alpha=0.3)
+    ax_path.grid(True, alpha=0.3)
 
-    badges = []
-    for i, (name, stem, rows, full) in enumerate(runs):
-        ls = RUN_LS[i % len(RUN_LS)]
-        tag = f"[{name}] " if multi else ""
+    # ---- 지표 표 (맨 위) — 2개면 B vs A 변화율, ↓ 지표는 좋아지면 초록·나빠지면 빨강
+    names = [n for n, _ in runs]
+    keys = list(ms[0])
+    two = len(runs) == 2
+    cells, colors = [], []
+    for k in keys:
+        vals = [m[k] for m in ms]
+        row = [fmt(v, 1 if "시간" in k else 0 if "ms" in k or "행 수" in k else 3) for v in vals]
+        rc = ["white"] * len(vals)
+        if two:
+            a_, b_ = vals
+            pct = (b_ - a_) / abs(a_) * 100 if a_ == a_ and b_ == b_ and abs(a_) > 1e-9 else NAN
+            row.append("—" if pct != pct else f"{pct:+.0f}%" if abs(pct) < 300 else f"×{b_ / a_:.1f}")
+            good = "↓" in k and pct == pct and abs(pct) >= 3
+            rc.append(("#c8f0c8" if pct < 0 else "#f6c6c6") if good else "white")
+        if k == BIAS_KEY and any(abs(v) > 0.02 for v in vals):
+            rc = ["#ffe08a"] * len(rc)
+        cells.append(row)
+        colors.append(rc)
+    ax_tab.axis("off")
+    tab = ax_tab.table(cellText=cells, rowLabels=keys, cellColours=colors, cellLoc="center",
+                       colLabels=names + (["B vs A"] if two else []), bbox=[0.3, 0, 0.7, 0.86],
+                       colColours=list(COLORS[:len(names)]) + (["white"] if two else []))
+    tab.auto_set_font_size(False)
+    tab.set_fontsize(9)
+    for j in range(len(names)):
+        tab[0, j].get_text().set_color("white")
+        tab[0, j].get_text().set_weight("bold")
+    bad = [f"{n} {m[BIAS_KEY]:+.3f}" for n, m in zip(names, ms) if abs(m[BIAS_KEY]) > 0.02]
+    warn = [f"⚠ 자이로 정지 바이어스 {' · '.join(bad)} rad/s (0이어야 함) — OpenCR 부팅 때 로봇이 움직였음. "
+            f"가만히 둔 채 OpenCR 다시 켜고 재기록 (정책이 w_gyro를 입력으로 받아 B 결과 무효)"] if bad else []
+    ax_tab.text(0, 1.0, "A/B 지표 — 각 구간 시작을 t=0 · 위치 (0,0) · 방향 0으로 맞춰 겹침.  ↓ = 작을수록 좋음 · "
+                     f"정상상태 = 명령 바뀐 뒤 {SETTLE_S:g}s 제외", fontsize=10, transform=ax_tab.transAxes, va="bottom")
+    if warn:
+        ax_tab.text(0, 0.985, "\n".join(warn[:2]), transform=ax_tab.transAxes, va="top", fontsize=10,
+                    color="#b00000", weight="bold")
+
+    for i, (name, rows) in enumerate(runs):
+        c = COLORS[i % len(COLORS)]
         t = [r["t"] for r in rows]
+        bias = gyro_bias(rows)
 
         def col(k):
             return [r.get(k, NAN) for r in rows]
 
-        def diff(a, b):
-            return [x - y for x, y in zip(col(a), col(b))]
-
-        # ---- odom 주행 궤적
+        # ---- 궤적: 실측 실선 · 명령 100% 점선 (같은 색)
         sx, sy = col("odom_x"), col("odom_y")
         cx, cy = integrate(rows, zip(col("lin_raw"), col("ang_raw")))
-        ax_path.plot(cx, cy, color="tab:green", ls=":", lw=1.8, label=f"{tag}명령 100% 궤적 (이상)")
-        bypass = stem == "bypass"   # policy.sh off 구간 — 이미 보정 없음이라 추정선은 그리지 않는다
-        kind = "바이패스" if bypass else "보정함"
-        ax_path.plot(sx, sy, color="tab:gray" if bypass else "tab:blue", lw=1.4, ls=ls,
-                     label=f"{tag}odom 실측 궤적 ({kind})")
-        badge = f"{tag}이상 대비 평균 궤적오차: {kind} {mean_dev(sx, sy, cx, cy):.3f} m"
-        g = None if bypass else wheel_gains(rows)
-        if g:
-            ux, uy = uncorrected_path(rows, g)
-            ax_path.plot(ux, uy, color="tab:red", ls="--", lw=1.2,
-                         label=f"{tag}보정 안 했다면 (추정 · 바퀴 gain 왼/오 {g[0]:.3f}/{g[1]:.3f})")
-            badge += f" · 보정 안 했다면(추정) {mean_dev(ux, uy, cx, cy):.3f} m"
-        badges.append(badge)
+        ax_path.plot(cx, cy, color=c, ls=":", lw=1.4, alpha=0.8)
+        ax_path.plot(sx, sy, color=c, lw=2.0, label=f"{name} — odom 실측 (점선 = 명령대로 갔다면)")
         fx, fy = finite(sx), finite(sy)
         if fx:
-            ax_path.plot(fx[0], fy[0], "ko", ms=5, label="시작" if i == 0 else None)
-            ax_path.plot(fx[-1], fy[-1], "r.", ms=9, label="끝" if i == 0 else None)
+            ax_path.plot(fx[-1], fy[-1], "o", color=c, ms=7, mec="k")
 
-        # ---- 직진 · 회전 · 추종 오차
-        if i == 0:   # 입력은 모든 run이 같은 패턴이라는 가정 — 첫 번째 CSV 전체로
-            ft = [r["t"] for r in full]
-            ax["lin"].plot(ft, [r["lin_raw"] for r in full], "k--", lw=1.0, label="입력 명령 (lin_raw)")
-            ax["ang"].plot(ft, [r["ang_raw"] for r in full], "k--", lw=1.0, label="입력 명령 (ang_raw)")
-            for k in ("lin", "ang"):
-                shade(ax[k], full, "state_estop", 1.0, "red")
-                shade(ax[k], full, "state_rl", 0.0, "gray")
-        ax["lin"].plot(t, col("lin_out"), color="tab:orange", lw=1.0, ls=ls, label=f"{tag}보정 출력 (lin_out)")
-        if has([(name, stem, rows, full)], "cmd_base_lin"):
-            ax["lin"].plot(t, col("cmd_base_lin"), color="tab:purple", lw=0.8, ls=":",
-                           label=f"{tag}드라이버 명령 (cmd_vel_base)")
-        ax["lin"].plot(t, col("v_enc"), color="tab:blue", lw=1.2, ls=ls, label=f"{tag}v_enc 엔코더 속도")
-        ax["ang"].plot(t, col("ang_out"), color="tab:orange", lw=1.0, ls=ls, label=f"{tag}보정 출력 (ang_out)")
-        ax["ang"].plot(t, col("w_gyro"), color="tab:blue", lw=1.2, ls=ls, label=f"{tag}w_gyro 자이로 실측")
-        ax["ang"].plot(t, col("w_enc"), color="tab:blue", lw=1.0, ls=":", label=f"{tag}w_enc 엔코더 계산")
-        ax["err"].plot(t, diff("lin_raw", "v_enc"), color="tab:blue", ls=ls, label=f"{tag}v_cmd - v_enc 직진 오차")
-        ax["err"].plot(t, diff("ang_raw", "w_gyro"), color="tab:orange", ls=ls, label=f"{tag}w_cmd - w_gyro 회전 오차")
+        # ---- 속도: 명령(검은 점선, 첫 run만) · 실측(run 색)
+        if i == 0:
+            ax["lin"].plot(t, col("lin_raw"), "k--", lw=0.9, label="명령")
+            ax["ang"].plot(t, col("ang_raw"), "k--", lw=0.9, label="명령")
+        ax["lin"].plot(t, col("v_enc"), color=c, lw=1.2, label=name)
+        ax["ang"].plot(t, [w - bias for w in col("w_gyro")], color=c, lw=1.2, label=name)
+        ax["err_v"].plot(t, [a - b for a, b in zip(col("lin_raw"), col("v_enc"))], color=c, lw=1.0, label=name)
+        ax["err_w"].plot(t, [a - (b - bias) for a, b in zip(col("ang_raw"), col("w_gyro"))], color=c, lw=1.0, label=name)
 
-        # ---- 보정량: 바퀴별 (0 = 보정 없음)
+        # ---- 바퀴: 실측 − 명령 (0 = 정확) — 겹쳐도 차이가 보이게 오차로
+        bl = [wheel_cmd(r["lin_raw"], r["ang_raw"]) for r in rows]
+        ax["wheel_l"].plot(t, [v - b[0] for v, b in zip(col("wheel_l_vel"), bl)], color=c, lw=1.0, label=name)
+        ax["wheel_r"].plot(t, [v - b[1] for v, b in zip(col("wheel_r_vel"), bl)], color=c, lw=1.0, label=name)
         if "corr_l" in ax:
             al, ar = wheel_corr(rows)
-            for k, color, vals in (("corr_l", "tab:blue", al), ("corr_r", "tab:cyan", ar)):
-                ax[k].plot(t, vals, color=color, lw=1.2, ls=ls, label=f"{tag}실제 적용 보정 (보정 출력 - 입력)")
-                if not multi:
-                    ax[k].fill_between(t, 0, [v if v == v else 0 for v in vals], color=color, alpha=0.25)
-            if has([(name, stem, rows, full)], "model_dv"):
-                ml, mr = wheel_corr(rows, "model_dv", "model_dw")
-                ax["corr_l"].plot(t, ml, color="tab:red", lw=0.7, ls="--", label=f"{tag}정책 원출력 (제한 전)")
-                ax["corr_r"].plot(t, mr, color="tab:orange", lw=0.7, ls="--", label=f"{tag}정책 원출력 (제한 전)")
-
-        # ---- 바퀴 · 모터 · IMU · 지연
-        if "wheel_l" in ax:
-            ax["wheel_l"].plot(t, col("wheel_l_vel"), color="tab:blue", ls=ls, label=f"{tag}실측 왼쪽 바퀴 (wheel L)")
-            ax["wheel_r"].plot(t, col("wheel_r_vel"), color="tab:cyan", ls=ls, label=f"{tag}실측 오른쪽 바퀴 (wheel R)")
-            bl = [wheel_cmd(r["lin_raw"], r["ang_raw"]) for r in rows]
-            ax["wheel_l"].plot(t, [b[0] for b in bl], color="tab:red", ls="--", lw=0.9, label=f"{tag}입력 명령의 바퀴 속도")
-            ax["wheel_r"].plot(t, [b[1] for b in bl], color="tab:orange", ls="--", lw=0.9, label=f"{tag}입력 명령의 바퀴 속도")
-        if "cur" in ax:
-            ax["cur"].plot(t, col("wheel_l_cur"), color="tab:blue", lw=1.0, ls=ls, label=f"{tag}왼쪽 모터")
-            ax["cur"].plot(t, col("wheel_r_cur"), color="tab:cyan", lw=1.0, ls=ls, label=f"{tag}오른쪽 모터")
+            ax["corr_l"].plot(t, al, color=c, lw=1.0, label=name)
+            ax["corr_r"].plot(t, ar, color=c, lw=1.0, label=name)
+        if "cur_l" in ax:
+            ax["cur_l"].plot(t, col("wheel_l_cur"), color=c, lw=0.9, label=name)
+            ax["cur_r"].plot(t, col("wheel_r_cur"), color=c, lw=0.9, label=name)
         if "temp" in ax:
-            ax["temp"].plot(t, col("motor_l_temp"), color="tab:blue", ls=ls, label=f"{tag}왼쪽 모터 온도")
-            ax["temp"].plot(t, col("motor_r_temp"), color="tab:cyan", ls=ls, label=f"{tag}오른쪽 모터 온도")
-            if i == 0:
-                ax["bat"] = ax["temp"].twinx()
-                ax["bat"].set_ylabel("배터리 전압 [V]")
-            ax["bat"].plot(t, col("battery_v"), color="tab:green", lw=1.0, ls=ls, label=f"{tag}배터리 전압")
-        if "acc" in ax:
-            ax["acc"].plot(t, col("imu_ax"), color="tab:blue", lw=0.8, ls=ls, label=f"{tag}앞뒤 가속도 (ax)")
-            ax["acc"].plot(t, col("imu_ay"), color="tab:orange", lw=0.8, ls=ls, label=f"{tag}좌우 가속도 (ay)")
-        if "yaw" in ax:
-            ax["yaw"].plot(t, unwrap(col("odom_yaw")), color="tab:blue", lw=1.2, ls=ls, label=f"{tag}엔코더 방향 (odom yaw)")
-            ax["yaw"].plot(t, unwrap(col("imu_yaw")), color="tab:green", lw=1.2, ls=ls, label=f"{tag}IMU 방향 (imu yaw)")
-        if "lat" in ax:
-            ms = lambda a_, b_: [(x - y) * 1000 for x, y in zip(col(a_), col(b_))]
-            ax["lat"].plot(t, ms("t_out", "t_abs"), color="tab:orange", lw=1.2, ls=ls, label=f"{tag}corrector 응답")
-            for k, name, c_ in (("t_odom", "odom", "tab:blue"), ("t_imu", "imu", "tab:green"),
-                                ("t_joint", "joint", "tab:purple")):
-                ax["lat"].plot(t, ms("t_abs", k), color=c_, lw=0.8, ls=ls, label=f"{tag}{name}")
+            ax["temp"].plot(t, col("motor_l_temp"), color=c, lw=1.0, label=f"{name} 왼쪽")
+            ax["temp"].plot(t, col("motor_r_temp"), color=c, lw=1.0, ls="--", label=f"{name} 오른쪽")
+            ax["lat"].plot(t, [(a - b) * 1000 for a, b in zip(col("t_out"), col("t_abs"))], color=c, lw=0.9, label=name)
 
     ax_path.set_aspect("equal", adjustable="datalim")
-    ax_path.set_xlabel("x 위치 [m]")
-    ax_path.set_ylabel("y 위치 [m]")
-    ax_path.set_title("odom 주행 궤적")
-    ax_path.legend(loc="best", fontsize=8)
-    if badges:
-        ax_path.text(0.02, 0.02, "\n".join(badges), transform=ax_path.transAxes, fontsize=8, color="tab:purple",
-                     bbox=dict(boxstyle="round", facecolor="white", alpha=0.7))
+    ax_path.set_xlabel("x [m] (구간 시작 방향 = +x)")
+    ax_path.set_ylabel("y [m]")
+    ax_path.plot(0, 0, "k*", ms=12, label="시작 (모든 구간)")
+    ax_path.set_title("주행 궤적 — ●끝 · 실선과 점선이 가까울수록 명령대로 감", fontsize=11, loc="left")
+    ax_path.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), fontsize=9)
 
-    ylabels = {"lin": "직진 속도 v [m/s]\n(몸체 선속도)", "ang": "회전 속도 w [rad/s]\n(몸체 각속도)",
-               "err": "추종 오차 [m/s 또는 rad/s]\n(명령 - 실측)",
-               "corr_l": "왼쪽 바퀴 보정량 [rad/s]\n(0 = 보정 없음)", "corr_r": "오른쪽 바퀴 보정량 [rad/s]\n(0 = 보정 없음)",
-               "wheel_l": "왼쪽 바퀴 각속도 [rad/s]", "wheel_r": "오른쪽 바퀴 각속도 [rad/s]",
-               "cur": "모터 전류 [A]", "temp": "모터 온도 [°C]", "acc": "IMU 가속도 [m/s²]",
-               "yaw": "방향 [rad]\n(차이 = 바퀴 슬립)", "lat": "지연 [ms]\n(수신 - 발행)"}
+    titles = {"lin": "직진 속도 [m/s] — v_enc", "ang": "회전 속도 [rad/s] — 자이로 (바이어스 뺌)",
+              "err_v": "직진 오차 [m/s] = 명령 − v_enc", "err_w": "회전 오차 [rad/s] = 명령 − 자이로",
+              "wheel_l": "왼쪽 바퀴 오차 [rad/s] = 실측 − 명령", "wheel_r": "오른쪽 바퀴 오차 [rad/s] = 실측 − 명령",
+              "corr_l": "왼쪽 바퀴 보정량 [rad/s] (0 = 보정 없음)", "corr_r": "오른쪽 바퀴 보정량 [rad/s] (0 = 보정 없음)",
+              "cur_l": "왼쪽 모터 전류 [A]", "cur_r": "오른쪽 모터 전류 [A]",
+              "temp": "모터 온도 [°C] (실선 왼 · 점선 오)", "lat": "corrector 응답 지연 [ms]"}
     for k, a in ax.items():
-        if k == "bat":
-            continue
-        a.set_ylabel(ylabels[k], fontsize=9)
-        a.legend(loc="lower left" if k == "temp" else "lower right", fontsize=8)
-        if k not in ("temp", "yaw"):
+        a.set_title(titles[k], fontsize=10, loc="left")
+        if k not in ("temp", "lat"):
             a.axhline(0, color="k", lw=0.6)
-    if "bat" in ax:
-        ax["bat"].legend(loc="lower right", fontsize=8)
-    axes[-1].set_xlabel("시간 [s]")
+        a.tick_params(labelsize=8)
+    ax["lin"].legend(loc="upper right", fontsize=8)
+    for k in pairs[-1]:
+        ax[k].set_xlabel("구간 시작부터 시간 [s]")
 
-    # ---- 제목 · 우상단 요약 · 터미널 지표
-    ms = [metrics(run[2]) for run in runs]
-    fig.suptitle("  vs  ".join(f"{p.parent.name}/{p.name}" for p in paths), fontsize=12, x=0.3, y=0.995)
-    summary = []
-    for (_, stem, _, _), m in zip(runs, ms):
-        head = f"{stem}: " if multi else ""
-        summary.append(f"{head}추종 RMS 직진 {fmt(m['직진 추종 RMS [m/s]'])} · 회전 {fmt(m['회전 추종 RMS-자이로 [rad/s]'])}"
-                       f"  |  바퀴 gain 왼/오 {fmt(m['왼쪽 바퀴 gain (추정)'])}/{fmt(m['오른쪽 바퀴 gain (추정)'])}"
-                       f"  |  응답 지연 {fmt(m['응답 지연 평균 [ms]'], 0)} ms")
-    fig.text(0.99, 0.997, "\n".join(summary), ha="right", va="top", fontsize=9,
-             bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
-    for k in ms[0]:
-        print(f"{k}: " + "  ".join(f"{run[1]}={fmt(m[k], 4)}" for run, m in zip(runs, ms)))
+    fig.suptitle("  vs  ".join(f"{p.parent.name}/{p.name}" for p in paths), fontsize=13, y=0.997)
+    for k in keys:
+        print(f"{k}: " + "  ".join(f"[{n}] {fmt(m[k], 4)}" for n, m in zip(names, ms)))
+    for w in warn:
+        print(f"[report] {w}", file=sys.stderr)
 
-    fig.tight_layout(rect=(0, 0, 1, 0.985))
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=150)
+    fig.savefig(out, dpi=110, bbox_inches="tight")
     print(f"[report] {out}")
     if show:
         plt.show()
