@@ -114,6 +114,7 @@ class Menu(Page):
             if not visible:
                 return STAY
             keys = [(it.key, it.label()) for it in visible]
+            self.ui.center_fn = self.center
             choice = self.ui.select(self.title, keys, self.center(),
                                     back=not self.root, main=not self.root)
             if choice == TIMEOUT:

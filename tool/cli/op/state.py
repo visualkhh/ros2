@@ -42,6 +42,7 @@ class StateStore:
         self.robot_level = -1                                      # 0 OK · 1 WARN · 2 ERROR · -1 모름
         self.robot_msg = ''
         self.robot_vals: dict[str, str] = {}                       # 전류·온도·uptime·jumps
+        self.joints: dict[str, tuple[float, float, float | None]] = {}  # /joint_states 이름 → (rad, rad/s, 전류 A)
         self.last_cmd: tuple[float, float] = (0.0, 0.0)
         self.st_control: str | None = None                            # state_manager /state_* (None = 수신 없음)
         self.st_rl: bool | None = None
@@ -67,6 +68,18 @@ class StateStore:
         p = msg.pose.pose
         self.pose = (p.position.x, p.position.y, self.yaw(p.orientation))
         self.vel = (msg.twist.twist.linear.x, msg.twist.twist.angular.z)
+
+    def on_joint_states(self, msg) -> None:
+        """opencr_driver /joint_states — effort = 모터 Present Current [A] (펌웨어 S 6·7번째, 없으면 None)."""
+        for i, name in enumerate(msg.name):
+            eff = msg.effort[i] if i < len(msg.effort) else None
+            self.joints[name] = (msg.position[i], msg.velocity[i], eff)
+
+    def robot_val(self, key: str) -> float | None:
+        try:
+            return float(self.robot_vals[key])
+        except (KeyError, ValueError):
+            return None
 
     def on_scan(self, msg) -> None:
         self.scan.tick()

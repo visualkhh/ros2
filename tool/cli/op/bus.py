@@ -26,6 +26,7 @@ MAX_LIN, MAX_ANG = 0.26, 1.82
 # 후진 사선은 회전 부호 반대 (teleop_twist_keyboard와 같음: z = 뒤로 가며 왼쪽으로 휘어짐)
 TELEOP_MOVES = {'w': (1, 0), 'x': (-1, 0), 'a': (0, 1), 'd': (0, -1), 's': (0, 0),
                 'q': (1, 1), 'e': (1, -1), 'z': (-1, -1), 'c': (-1, 1)}
+CURRENT_FULL_A = 1.5  # 전류 막대 끝 (XM430 정지 전류 대략) — 눈금일 뿐 한계 아님
 DIAG_RADIUS = 0.5   # [m] 사선 원호 반경
 DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
@@ -90,6 +91,38 @@ class Bus:
         if self.state.goal_status:
             lines.append(f' 목표  {self.state.goal_status}')
         return lines
+
+    def wheel_lines(self) -> list[str]:
+        """바퀴 실시간 표 — 각도 = 부팅 뒤 누적, 전류 = 모터 Present Current (/joint_states effort), 온도 = /diagnostics."""
+        st = self.state
+        rows = ['[바퀴 상태 — 실시간]', '        각도(°)    속도   mA  0─1.5A  온도']
+        for side, name in (('L', 'left'), ('R', 'right')):
+            pos, vel, cur = st.joints.get(f'wheel_{name}_joint', (None, None, None))
+            temp = st.robot_val(f'{name}_temp_C')
+            pos_txt = '      ?' if pos is None else f'{math.degrees(pos):+9.0f}'
+            vel_txt = '     ?' if vel is None else f'{vel:+6.2f}'
+            if cur is None or cur != cur:   # 예전 펌웨어(effort 없음)·토픽 미수신
+                cur_txt, bar = '    -', '     '
+            else:
+                n = min(5, round(abs(cur) / CURRENT_FULL_A * 5))
+                bar = self.term.paint('█' * n, RED if n >= 4 else YELLOW if n >= 3 else GREEN) + '·' * (5 - n)
+                cur_txt = f'{cur * 1000:+5.0f}'
+            temp_txt = '  -' if temp is None else self.term.paint(f'{temp:3.0f}', RED if temp >= 70 else '')
+            rows.append(f' 바퀴{side} {pos_txt} {vel_txt} {cur_txt} {bar} {temp_txt}℃')
+        if st.vel:
+            rows.append(f' 차체 {st.vel[0]:+.3f} m/s · 회전 {st.vel[1]:+.2f} rad/s')
+        return rows
+
+    def wheel_summary(self) -> str:
+        """텔레오퍼 창 한 줄 — 창이 떠 있는 동안 뒤 표는 가리므로 전류·온도·배터리는 창 안에."""
+        st = self.state
+        cur = [st.joints.get(f'wheel_{n}_joint', (0, 0, None))[2] for n in ('left', 'right')]
+        cur_txt = ('전류 ? (effort 없음)' if None in cur
+                   else f'전류 L {cur[0] * 1000:+.0f} R {cur[1] * 1000:+.0f} mA')
+        t = [st.robot_val(f'{n}_temp_C') for n in ('left', 'right')]
+        temp_txt = '온도 ?' if None in t else f'온도 L {t[0]:.0f} R {t[1]:.0f}℃'
+        bat = st.robot_val('battery_V')
+        return f'{cur_txt} · {temp_txt} · 배터리 {"-" if bat is None else f"{bat:.1f} V"}'
 
     def cmd_status(self, args) -> int:
         self._poll(2.5)
@@ -419,6 +452,7 @@ class Bus:
                     box.lines = [box.title,
                                 f'명령 v={linear:+.2f} m/s ω={angular:+.2f} rad/s',
                                 f'odom {self.state.odom_txt()}',
+                                self.wheel_summary(),
                                 f'scan {self.state.scan_txt()}',
                                 f'map  {self.state.map_txt()}',
                                 f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
@@ -431,6 +465,7 @@ class Bus:
                         last_send = now
                     key = keys.read(0.1)
                     self._poll(0.01)
+                    self.ui.refresh_top(box._geom)   # 창 뒤 상태바·바퀴 표(가리지 않은 줄) 갱신
                     if key is None:
                         continue
                     if key in ('esc', 'eof', '\x03'):

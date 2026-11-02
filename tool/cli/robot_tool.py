@@ -76,6 +76,8 @@ class RobotTool(Node):
         self.create_subscription(OccupancyGrid, '/map', self.state.on_map, LATCHED)
         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.state.on_amcl, LATCHED)
         self.create_subscription(DiagnosticArray, '/diagnostics', self.state.on_diagnostics, 10)
+        from sensor_msgs.msg import JointState
+        self.create_subscription(JointState, '/joint_states', self.state.on_joint_states, 10)
         from std_msgs.msg import Bool, String
         for key, typ in (('control', String), ('rl', Bool), ('estop', Bool), ('operation', String), ('map', String)):
             self.create_subscription(typ, f'/state_{key}',

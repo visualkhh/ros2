@@ -77,4 +77,4 @@ class DriveMenu(Menu):
     def center(self):
         return [f'[수동 주행] → {CMD_VEL}',
                 ' Nav가 주행 중이면 명령이 섞입니다 — 목표 취소 후 사용',
-                ' 맵핑 땐 천천히: 0.10 m/s · 0.5 rad/s 정도', ''] + self.bus.status_lines()
+                ' 맵핑 땐 천천히: 0.10 m/s · 0.5 rad/s 정도', ''] + self.bus.wheel_lines() + [''] + self.bus.status_lines()

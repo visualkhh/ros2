@@ -25,6 +25,8 @@ class Ui:
         self._busy = None   # 지금 떠 있는 처리 중 창 (메뉴 항목 실행 동안)
         self._title = None  # 마지막으로 그린 화면 제목 (창이 떠 있는 동안 상단 상태바만 다시 그리기용)
         self._top_at = 0.0
+        self.center_fn = None   # 지금 메뉴의 center() — 창이 떠 있는 동안 중앙(가리지 않은 줄) 다시 그리기용
+        self._lw = None         # 마지막 프레임의 왼쪽 메뉴 폭
         if hasattr(procs, 'on_wait'):
             procs.on_wait = self._remote_wait
 
@@ -110,21 +112,36 @@ class Ui:
         dlg.lines[4] = ''
         dlg.draw('key')
 
-    def tick(self, seconds: float) -> None:
-        """창(결과·확인·입력)이 떠 있는 동안: ROS 폴링 + 상단 상태바를 1초마다 갱신 (창 밑 화면이 멈춰 보이지 않게)."""
+    def tick(self, seconds: float, geom: tuple | None = None) -> None:
+        """창(결과·확인·입력)이 떠 있는 동안: ROS 폴링 + 상단 상태바·중앙 수치를 0.5초마다 갱신 (창 밑 화면이 멈춰 보이지 않게)."""
         self._poll(seconds)
-        self.refresh_top()
+        self.refresh_top(geom)
 
-    def refresh_top(self) -> None:
+    def refresh_top(self, geom: tuple | None = None) -> None:
+        """상단 상태바 + 중앙에서 창(geom = left, top, w, h)에 가리지 않은 줄만 다시 그림 — 창은 건드리지 않음."""
         cols, rows = self.term.size()
         if self._title is None or self._frame_size != (cols, rows) or cols < 70 or rows < 18:
             return   # 메뉴 화면을 아직 안 그렸거나 좁은 화면(세로 쌓기)
         now = time.monotonic()
-        if now - self._top_at < 1.0:
+        if now - self._top_at < 0.5:
             return
         self._top_at = now
-        for i, ln in enumerate(self.top_lines(self._title, cols)):
-            self.console.write(f'\033[{i + 1};1H\033[K' + self.term.fit(ln, cols))
+        top = self.top_lines(self._title, cols)
+        covered = range(geom[1], geom[1] + geom[3] + 1) if geom else range(0)
+        for i, ln in enumerate(top):
+            if i + 1 not in covered:
+                self.console.write(f'\033[{i + 1};1H\033[K' + self.term.fit(ln, cols))
+        if self.center_fn is not None and self._lw is not None:
+            try:
+                center = self.center_fn()
+            except Exception:   # 그리기 보조라 실패해도 창은 계속
+                center = []
+            cw = cols - self._lw - 4
+            body_h = max(1, rows - 1 - len(top) - 2)
+            for i, ln in enumerate(center[:body_h]):
+                row = len(top) + 1 + i
+                if row not in covered:
+                    self.console.write(f'\033[{row};{self._lw + 4}H' + self.term.fit(ln, cw))
         self.console.flush()
 
     def progress(self, text: str) -> None:
@@ -134,7 +151,7 @@ class Ui:
             return
         spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[int(time.monotonic() * 4) % 10]
         dlg.lines[4] = self.term.paint(f'{spin} {text}', DIM)
-        self.refresh_top()   # 상태바 먼저 → 창이 위에 (겹치는 줄이 있어도 창이 이김)
+        self.refresh_top(dlg._geom)   # 상태바 먼저 → 창이 위에 (겹치는 줄이 있어도 창이 이김)
         dlg.draw('key')
 
     def _remote_wait(self, elapsed: float) -> None:
@@ -194,6 +211,7 @@ class Ui:
         # 왼쪽(메뉴) 폭은 라벨에 맞춘다 — 최소 24, 최대 화면 절반
         lw = max(24, min(cols // 2, max([self.term.disp_len(l) for l in left] + [0]) + 1))
         cw = cols - lw - 4
+        self._lw = lw
         body_h = max(1, rows - 1 - len(top) - 2)
         left_lines = list(left)
         center_lines = list(center)
