@@ -59,6 +59,7 @@ class RlCorrectEnv(DirectRLEnv):
         self.tau = torch.ones(n, 2, device=dev) * 0.1
         self.gain = torch.ones(n, 2, device=dev)
         self.deadband = torch.zeros(n, 1, device=dev)
+        self.gyro_bias = torch.zeros(n, device=dev)        # 자이로 영점 오차 [rad/s] (에피소드 동안 고정)
         self.r_nom = torch.full((n,), spec.WHEEL_RADIUS, device=dev)
         self.sep_nom = torch.full((n,), spec.WHEEL_SEP, device=dev)
         self.cmd_delay = torch.zeros(n, dtype=torch.long, device=dev)
@@ -141,7 +142,7 @@ class RlCorrectEnv(DirectRLEnv):
         _, w_true = self._true_twist()
         sens = torch.stack([v_enc + torch.randn_like(v_enc) * self.cfg.enc_noise,
                             w_enc + torch.randn_like(w_enc) * self.cfg.enc_noise,
-                            w_true + torch.randn_like(w_true) * self.cfg.gyro_noise], dim=-1)
+                            w_true + self.gyro_bias + torch.randn_like(w_true) * self.cfg.gyro_noise], dim=-1)
         self.sens_buf = torch.roll(self.sens_buf, 1, dims=1)
         self.sens_buf[:, 0] = sens
         seen = self.sens_buf[self._rows, self.obs_delay]
@@ -181,6 +182,7 @@ class RlCorrectEnv(DirectRLEnv):
         self.deadband[ids] = sample_uniform(*c.deadband_range, (n, 1), dev)
         self.r_nom[ids] = spec.WHEEL_RADIUS * (1 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (n,), dev))
         self.sep_nom[ids] = spec.WHEEL_SEP * (1 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (n,), dev))
+        self.gyro_bias[ids] = sample_uniform(-c.gyro_bias, c.gyro_bias, (n,), dev)
         self.cmd_delay[ids] = torch.randint(c.cmd_delay_steps[0], c.cmd_delay_steps[1] + 1, (n,), device=dev)
         self.obs_delay[ids] = torch.randint(c.obs_delay_steps[0], c.obs_delay_steps[1] + 1, (n,), device=dev)
         self.cmd_buf[ids] = 0.0

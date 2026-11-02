@@ -58,7 +58,8 @@ tensorboard --logdir artifacts/training
   창에서 **P** 키 → `artifacts/training/<시각>-<exp-name>/screen_shot_<시각>.png` (뷰포트 캡처).
   headless일 때는 터미널 출력 + `base-fit.json`으로 남는다.
 - `--snap SEC`: 창 없이도 SEC초마다 `snaps/<시각>.png` + `latest.png` (화면 없는 Kit visualizer + `--enable_cameras` 자동, ~20% 느려짐).
-- `--slope DEG`: env 바닥판을 랜덤 방향으로 0~DEG° 기울임 (패치·`--uneven` 턱도 같이). 기본 0 = 평평.
+- `--slope DEG`: env마다 바닥판을 랜덤 방향 · 0~DEG° 랜덤으로 기울임 (패치·`--uneven` 턱도 같이). 기본 3, 0 = 평평.
+- `--gyro-bias RAD_S`: 에피소드마다 자이로 영점 오차 ±RAD_S (기본 0.05, 0 = 끔).
 
 ## 보정값과 RL의 관계
 

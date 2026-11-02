@@ -59,6 +59,9 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨, 강건성용)
     enc_noise = 0.005
     gyro_noise = 0.01
+    # 자이로 영점 오차 [rad/s] — 에피소드마다 ±gyro_bias 고정값을 w_gyro에 더함 (OpenCR 부팅 보정이 덜 된 경우).
+    # 정책이 w_enc와 비교해 영점을 무시하도록. 11-02 실기기 −0.257은 부팅 중 움직인 고장 — OpenCR 재부팅으로 고친다.
+    gyro_bias = 0.05
 
     # 바닥/바퀴 마찰 — 학습은 기본으로 env별 랜덤+패치 (train.py가 켬), `--no-friction`이면 FrictionParam 기본값 고정
     ground_friction = _FLOOR_FRICTION.ground

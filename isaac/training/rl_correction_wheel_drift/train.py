@@ -85,6 +85,8 @@ def apply_latency(env_cfg, lat: dict) -> None:
 
 
 RANGE_KEYS = ("gain_center", "gain_range", "tau_range", "cmd_delay_steps", "obs_delay_steps", "deadband_range")
+# 범위 아닌 숫자 랜덤도 base-fit.json에 같이 남김
+EXTRA_KEYS = ("slope_deg", "gyro_bias")
 
 
 class WheelDriftTrain(Train):
@@ -105,8 +107,10 @@ class WheelDriftTrain(Train):
                             help="env 안 요철(울퉁불퉁) 지형 켜기 (낮은 턱, 기하학적 외란)")
         parser.add_argument("--uneven-count", type=int, default=4,
                             help="env 안 요철 패치 수")
-        parser.add_argument("--slope", type=float, default=0.0, metavar="DEG",
-                            help="env 바닥을 랜덤 방향으로 0~DEG° 기울임 (예: 3). 기본 0 = 평평")
+        parser.add_argument("--slope", type=float, default=3.0, metavar="DEG",
+                            help="env마다 바닥을 랜덤 방향 · 랜덤 각도 0~DEG°로 기울임 (기본 3, 0 = 평평)")
+        parser.add_argument("--gyro-bias", type=float, default=None, metavar="RAD_S",
+                            help="에피소드마다 자이로 영점 오차 ±RAD_S 랜덤 (기본: cfg 0.05, 0 = 끔)")
         parser.add_argument("--fit", default=None,
                             help="real/fit.json,sim/fit.json → 차이를 바퀴 랜덤 범위 중심으로 (1개면 real 값 그대로)")
         parser.add_argument("--latency", default=None,
@@ -141,6 +145,8 @@ class WheelDriftTrain(Train):
         env_cfg.randomize_friction = args.friction
         env_cfg.friction_patch_count = args.patch_count
         env_cfg.slope_deg = args.slope
+        if args.gyro_bias is not None:
+            env_cfg.gyro_bias = args.gyro_bias
         self.add_snap_visualizer(env_cfg)
         if args.uneven:
             env_cfg.randomize_uneven = True
@@ -150,7 +156,7 @@ class WheelDriftTrain(Train):
         if lat is not None:
             apply_latency(env_cfg, lat)
         if base_fit is not None or lat is not None:
-            ranges = {k: list(getattr(env_cfg, k)) for k in RANGE_KEYS}
+            ranges = {k: list(getattr(env_cfg, k)) for k in RANGE_KEYS} | {k: getattr(env_cfg, k) for k in EXTRA_KEYS}
             print(f"[train] fit={base_fit and base_fit['source']} latency={lat} → {ranges}")
             (self.run_dir / "base-fit.json").write_text(json.dumps(
                 {"source": base_fit and base_fit["source"],
