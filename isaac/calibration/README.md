@@ -76,7 +76,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 - `plot_compare` 맨 위에 **odom x-y 궤적**이 나와서 사각형이 얼마나 틀어지는지 바로 보임.
 - real odom은 시작 위치와 초기 yaw를 0으로 맞춰서 sim과 같은 방향으로 겹쳐 그림.
 
-- 실행 결과: `artifacts/calibration/<시각>-<TAG>/` (sim `02-sim`, real `02-real`)에
+- 실행 결과: `artifacts/calibration/<시각>-<label>/` (`--label` 없으면 `<TAG>` — sim `02-sim`, real `02-real`)에
   `raw.csv` + `report.png` + `fit.json`(gain/delay/tau 피팅), `--fit`이면 `base-fit.json`.
   경로를 정하려면 sim `--out`, real `--output`.
 - sim은 `--fit`으로 준 보정만 쓴다 (없으면 raw). 숨은 보정 파일은 안 읽는다.

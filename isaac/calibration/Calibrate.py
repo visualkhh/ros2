@@ -13,6 +13,7 @@ import importlib
 import importlib.util
 import json
 import os
+import re
 import sys
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -36,8 +37,8 @@ class Calibrate:
             base_fit: dict | None = None, plant: dict | None = None) -> list:
         """같은 명령을 넣고 CSV로 저장. rows 반환.
 
-        out이 None이면 artifacts/calibration/<stamp>-<TAG>/raw.csv에
-        쌓는다 (flat 파일은 Before/After 비교용으로 호출자가 직접 지정).
+        out이 None이면 artifacts/calibration/<stamp>-<run_name>/raw.csv에
+        쌓는다 (run_name은 --label, 없으면 TAG. flat 파일은 호출자가 직접 지정).
         pace(k, t)가 있으면 send 뒤·collect 앞에 호출한다 (real wall-clock용).
         sim은 물리 스텝이 페이싱이라 pace 없이 돈다.
         base_fit(`load_fit` 결과)이 있으면 같은 폴더에 base-fit.json으로 남긴다.
@@ -46,7 +47,9 @@ class Calibrate:
         print(f"[{self.sensor.tag}] profile: {len(segs)} segs · {total:.1f}s")
         if out is None:
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            out = str(RUNS_DIR / f"{stamp}-{self.sensor.tag}" / "raw.csv")
+            name = getattr(self.sensor, "run_name", self.sensor.tag)
+            name = re.sub(r"[^0-9A-Za-z_.-]+", "_", str(name)).strip("._") or "run"
+            out = str(RUNS_DIR / f"{stamp}-{name}" / "raw.csv")
         rows = []
         n = int(round(total / dt))
         for k in range(n):

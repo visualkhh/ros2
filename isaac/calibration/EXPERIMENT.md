@@ -117,7 +117,7 @@ done
 # → artifacts/calibration/<시각>-calibrate/{sim,real}/fit.json · compare.png
 
 # 따로 돌릴 때
-./run-calibration.sh sensor-sync-real --label real_floor   # → artifacts/calibration/<시각>-02-real/
+./run-calibration.sh sensor-sync-real --label real_floor   # → artifacts/calibration/<시각>-real_floor/
 ./run-calibration.sh sensor-sync-sim --viz none            # → artifacts/calibration/<시각>-02-sim/
 ./run-calibration.sh plot-compare <sim>/raw.csv <real>/raw.csv --show
 ```
@@ -165,7 +165,7 @@ done
 ```
 
 - 로봇이 사각형을 두 번 그린 뒤 약 54초 뒤 정지.
-- `artifacts/calibration/<시각>-02-real/`에 `raw.csv` · `fit.json` · `report.png` 생성 (`--output`으로 경로 지정).
+- `artifacts/calibration/<시각>-real_floor/`에 `raw.csv` · `fit.json` · `report.png` 생성 (`--output`으로 경로 지정).
 
 ### 4.4 3단계 — 비교 + 피팅
 

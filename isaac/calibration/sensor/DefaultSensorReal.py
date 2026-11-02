@@ -14,7 +14,7 @@ sim 쪽 `DefaultSensorSim.py`와 같은 `excitation/CalibExcitation.py`를 쓴�
 
 실행:
   ./run-calibration.sh sensor-sync-real --label real_floor
-출력 기본: artifacts/<label>.csv
+출력 기본: artifacts/calibration/<시각>-<label>/raw.csv (--label 없으면 <시각>-02-real)
 """
 import argparse
 import math
@@ -50,10 +50,11 @@ class DefaultSensorReal(Node, Sensor):
 
     TAG = "02-real"
 
-    def __init__(self, label: str = "real"):
+    def __init__(self, label: str | None = None):
         Node.__init__(self, "sensor_sync")
         Sensor.__init__(self)
-        self.label = label
+        self.label = label or "real"
+        self.run_name = label or self.TAG
         self.state = None
         self.odom = None
         self.imu_w = 0.0
@@ -129,8 +130,10 @@ class DefaultSensorReal(Node, Sensor):
     @classmethod
     def main(cls, argv=None):
         parser = argparse.ArgumentParser(description="02: real 센서 싱크")
-        parser.add_argument("--output", default=None, help="기본: artifacts/calibration/<시각>-02-real/raw.csv")
-        parser.add_argument("--label", default="real")
+        parser.add_argument("--output", default=None,
+                            help="정확한 경로 (기본: artifacts/calibration/<시각>-<label>/raw.csv)")
+        parser.add_argument("--label", default=None,
+                            help="CSV label · 기본 폴더 이름 (<시각>-<label>) — 없으면 real / 02-real")
         parser.add_argument("--speed", type=float, default=0.15,
                             help="기준 전진 속도 [m/s] (변마다 1.0/0.67/1.33/0.8 배)")
         parser.add_argument("--turn", type=float, default=1.0)
@@ -167,7 +170,7 @@ class DefaultSensorReal(Node, Sensor):
             speeds_txt = node.move_speeds_text(segs)
             print(f"[02-real] 시작 · {total:.0f}s · {rate:.0f}Hz · side={args.side:.2f}m "
                   f"· speeds {speeds_txt} m/s · left square → 180° turn → reverse "
-                  f"· {args.label} → {out or 'artifacts/calibration/<시각>-02-real/'}")
+                  f"· {node.label} → {out or f'artifacts/calibration/<시각>-{node.run_name}/'}")
 
             def pace(k: int, t: float, _t0=t0, _rate=rate) -> None:
                 next_t = _t0 + (k + 1) / _rate

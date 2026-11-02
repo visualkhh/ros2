@@ -14,7 +14,8 @@
   # 보정은 --fit으로 준 값만 (없으면 raw plant: gain 1 · delay 0 · tau 0 · deadband 0)
   ./run-calibration.sh sensor-sync-sim --viz none --fit <real>/fit.json[,<sim>/fit.json]
 
-출력: artifacts/calibration/<시각>-02-sim/ (raw.csv · fit.json · report.png, --fit이면 base-fit.json)
+출력: artifacts/calibration/<시각>-<label>/ (raw.csv · fit.json · report.png, --fit이면 base-fit.json)
+      --label 없으면 <시각>-02-sim, CSV label은 sim_sensor_floor. --out으로 정확한 경로 지정.
 CSV: /joint_states(raw wheel rad/s) + /odom(v_enc,w_enc) + /imu(w_gyro)
 real: ./run-calibration.sh sensor-sync-real --label real_floor
 비교: ./run-calibration.sh plot-compare <sim.csv> <real.csv>
@@ -94,7 +95,9 @@ class DefaultSensorSim(Sensor):
         parser.add_argument("--turn", type=float, default=1.0)
         parser.add_argument("--side", type=float, default=0.5, help="정사각형 한 변 [m]")
         parser.add_argument("--out", default=None,
-                            help="기본: artifacts/calibration/<시각>-<TAG>/raw.csv")
+                            help="정확한 경로 (기본: artifacts/calibration/<시각>-<label>/raw.csv)")
+        parser.add_argument("--label", default=None,
+                            help="CSV label · 기본 폴더 이름 (<시각>-<label>) — 없으면 sim_sensor_floor / 02-sim")
         parser.add_argument("--fit", default=None,
                             help="입력 보정: real/fit.json 또는 real/fit.json,sim/fit.json (차이) → WheelLag. "
                                  "없으면 raw plant (숨은 보정 파일은 안 읽는다)")
@@ -158,7 +161,7 @@ class DefaultSensorSim(Sensor):
         if base_fit is not None:
             params.wheel = SimParam.from_dict(base_fit).wheel
         wheel_model = WheelLag(params.wheel, dt=POLICY_DT)
-        tag = "sim_sensor_floor"
+        tag = args.label or "sim_sensor_floor"
         out = args.out
         if out and not os.path.isabs(out):
             out = str(ISAAC / out)   # isaac/ 기준 (예: artifacts/...)
@@ -167,6 +170,8 @@ class DefaultSensorSim(Sensor):
         print(f"[02-sim] base 높이 {z:.3f} m · {tag} · {mode} · {env}")
         print(f"[02-sim] calib: {params.describe()}")
         sync = cls(sim, scene, robot, wheel_ids, wheel_model, label=tag)
+        if args.label:
+            sync.run_name = args.label
         speeds_txt = sync.move_speeds_text(segs)
         print(f"[02-sim] profile: side={args.side:.2f} m · {total:.1f}s · "
               f"speeds {speeds_txt} m/s · left square → 180° turn → reverse")

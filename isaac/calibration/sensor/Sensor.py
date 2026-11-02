@@ -22,6 +22,7 @@ class Sensor(ABC):
 
     def __init__(self, tag: str | None = None):
         self.tag = tag or self.TAG
+        self.run_name = self.tag   # 기본 폴더 이름 — --label을 주면 서브클래스가 바꾼다
 
     @abstractmethod
     def send(self, v: float, w: float) -> None:
