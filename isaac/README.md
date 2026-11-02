@@ -76,6 +76,8 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
 
 - 로봇 앞뒤좌우 1 m 비우고, 약 54초 동안 사각형 2바퀴. 중간에 잡거나 바닥을 밀지 말 것.
 - 결과: `artifacts/calibration/<시각>-02-real/{raw.csv,fit.json,report.png}`
+- 이 단계에서는 **`rl-only.sh`를 띄우지 않는다.** calibration은 `route direct`라 PC corrector를 안 거치고,
+  `sensor-sync-real`이 직접 명령을 내고 기록한다. `rl-only.sh`는 §3.3 RL Before/After용이다.
 - `base start`와 `ros2_ws/base-only.sh`는 **둘 중 하나만**. 이미 떠 있으면 `status`만 확인.
 - `--label`은 CSV의 label이고, 폴더 이름은 시각 기준이다. `--check-only`는 로봇을 움직이지 않는다.
 
