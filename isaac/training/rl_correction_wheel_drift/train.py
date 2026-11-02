@@ -186,7 +186,9 @@ class WheelDriftTrain(Train):
         path = self.run_dir / "policy.onnx"   # RL 관례 이름 (폴더 이름에 exp-name이 있다)
         export_actor(runner.alg._raw_actor, env_cfg.action_scale, str(path))
         print(f"[train] exported {path}")
-        result = self.evaluate(env.unwrapped, runner.alg._raw_actor, env_cfg.action_scale, path)
+        import torch
+        with torch.inference_mode():   # rsl_rl이 rollout을 inference_mode로 돌려 env 버퍼가 inference 텐서 → 밖에서 reset하면 RuntimeError
+            result = self.evaluate(env.unwrapped, runner.alg._raw_actor, env_cfg.action_scale, path)
         (self.run_dir / "eval.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
         env.close()
 
@@ -229,9 +231,11 @@ class WheelDriftTrain(Train):
         try:   # 배포 파일(ONNX)과 평가 그래프가 같은지
             import onnxruntime as ort
             obs, _ = raw.reset()
+            import numpy as np
             o = obs["policy"][:64]
             sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
-            onnx_out = sess.run(None, {"obs": o.detach().cpu().numpy().astype("float32")})[0]
+            rows = o.detach().cpu().numpy().astype("float32")   # ONNX 입력은 [1, 6] 고정 (ROS corrector와 같게) → 한 줄씩
+            onnx_out = np.concatenate([sess.run(None, {"obs": r[None]})[0] for r in rows])
             with torch.no_grad():
                 torch_out = policy(o).cpu().numpy()
             result["onnx_max_abs_diff"] = float(abs(onnx_out - torch_out).max())

@@ -44,7 +44,8 @@ def _korean_font():
     except Exception:
         return None
     for name in ("Apple SD Gothic Neo", "AppleGothic", "NanumGothic",
-                 "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR"):
+                 "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR",
+                 "Noto Sans CJK JP"):  # 같은 ttc(한글 포함) — Ubuntu fonts-noto-cjk는 matplotlib에 JP 이름으로만 잡힘
         if name in names:
             rcParams["font.family"] = [name, "DejaVu Sans"]
             rcParams["axes.unicode_minus"] = False

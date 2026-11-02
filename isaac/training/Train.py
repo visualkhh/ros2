@@ -115,6 +115,10 @@ class Train(ABC):
             if train.watch:
                 train.bind_screenshot_key()
             train.run()
+        except BaseException:
+            import traceback
+            traceback.print_exc()   # app.close()가 프로세스를 바로 끝내서 예외가 안 보이고 종료코드도 0이 됨 → 먼저 출력
+            raise
         finally:
             app_launcher.app.close()
         return 0

@@ -176,7 +176,8 @@ def metrics(rows: list[dict]) -> dict:
 def korean_font(plt):
     from matplotlib import font_manager
     names = {f.name for f in font_manager.fontManager.ttflist}
-    for name in ("NanumGothic", "Noto Sans CJK KR", "Noto Sans KR", "AppleGothic", "Malgun Gothic"):
+    # Noto CJK JP = 같은 ttc(한글 포함) — Ubuntu fonts-noto-cjk는 matplotlib에 JP 이름으로만 잡힘
+    for name in ("NanumGothic", "Noto Sans CJK KR", "Noto Sans KR", "Noto Sans CJK JP", "AppleGothic", "Malgun Gothic"):
         if name in names:
             plt.rcParams["font.family"] = name
             plt.rcParams["axes.unicode_minus"] = False
