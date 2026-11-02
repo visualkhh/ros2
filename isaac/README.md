@@ -56,6 +56,29 @@ USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd
 
 ### 3.1 보정 — sim을 real에 맞춤
 
+#### real 기준 먼저 재기
+
+`calibrate`는 sim+real을 같이 돌린다. real만 따로 잴 때는:
+
+```bash
+# Pi (또는 PC에서 tool/run-cli로)
+cd ~/ros2/tool
+./run-cli base start
+./run-cli control manual
+./run-cli route direct
+./run-cli status              # state=MANUAL · route=direct · estop=off
+
+# PC
+cd /home/pank/workspaces/visualkhh/source/ros2/isaac
+./run-calibration.sh sensor-sync-real --check-only   # [02-real] ROS_DOMAIN_ID=25 · state=MANUAL
+./run-calibration.sh sensor-sync-real --label real_floor
+```
+
+- 로봇 앞뒤좌우 1 m 비우고, 약 54초 동안 사각형 2바퀴. 중간에 잡거나 바닥을 밀지 말 것.
+- 결과: `artifacts/calibration/<시각>-02-real/{raw.csv,fit.json,report.png}`
+- `base start`와 `ros2_ws/base-only.sh`는 **둘 중 하나만**. 이미 떠 있으면 `status`만 확인.
+- `--label`은 CSV의 label이고, 폴더 이름은 시각 기준이다. `--check-only`는 로봇을 움직이지 않는다.
+
 ```bash
 ./run-calibration.sh calibrate --side 0.5        # sim(raw) + real 같은 경로 기록 → 비교
 #   → artifacts/calibration/<시각>-calibrate/{sim,real}/{raw.csv,fit.json,report.png} · compare.png
@@ -67,7 +90,7 @@ USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd
 - 차이 계산(`real,sim`)의 sim 기준은 반드시 `--fit` 없이 잰 것.
 - 차이: gain = real/sim 비율, 지연·τ = real − sim, 데드밴드 = real 문턱 ÷ sim gain (sim 문턱이 더 크면 0).
 - Isaac/ROS 없이 흐름만: `./run-calibration.sh calibration/sensor/DummySensor.py --fit ...`.
-- 실기기: Pi `ros2_ws/base-only.sh`(또는 `tool/run-cli base start`) · MANUAL · 경로 direct.
+- 실기기 준비는 위 **real 기준 먼저 재기**: Pi `base start` · `control manual` · `route direct`.
 - 바퀴 모터 damping은 calibration sim · 학습 env **공용**(`calibration/parameter/ActuatorParam.py`) — 실측으로 정한다
   (`--damping`으로 몇 개 재서 real과 비교, [calibration/EXPERIMENT.md](calibration/EXPERIMENT.md) 2.5).
 - 자세히: [calibration/README.md](calibration/README.md) · [calibration/EXPERIMENT.md](calibration/EXPERIMENT.md).
