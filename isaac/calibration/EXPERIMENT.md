@@ -90,7 +90,7 @@ cd ~/ros2/tool
 
 calibration sim과 학습 env는 **같은 바퀴 모터 설정**(`calibration/parameter/ActuatorParam.py`)을 쓴다.
 그래야 raw sim fit이 곧 학습 env의 raw 응답이 되고, `--fit real,sim` 차이를 학습에도 그대로 쓸 수 있다.
-damping(속도 서보 이득)은 실측으로 정한다:
+damping(속도 서보 이득)은 실측으로 정한다 (개념·왜 여러 값으로 재나: [documents/isaac/concepts.md](../../documents/isaac/concepts.md)):
 
 ```bash
 ./run-calibration.sh sensor-sync-real --label real_floor                     # real/fit.json (한 번)

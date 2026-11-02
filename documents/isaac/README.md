@@ -3,6 +3,8 @@
 TurtleBot3 Waffle Pi 개조 로봇의 **RL 이동 보정** 학습 쪽 문서. 목적: 같은 경로를 RL 끄고/켜고 달려 트래킹이 좋아짐을 수치로 (Before/After).
 학습은 lab PC(x86_64 + RTX), 추론도 PC(`rl-only`, onnxruntime) — 바퀴 명령이 cmd_manager → PC → cmd_manager로 돎.
 
+
+개념(damping · gain · 지연 · τ — 뭐고 왜 하나): [concepts.md](concepts.md)
 ## 파이프라인
 
 ```
