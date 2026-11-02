@@ -14,11 +14,14 @@ ISAAC = WS / "isaac"
 if str(ISAAC) not in sys.path:
     sys.path.insert(0, str(ISAAC))
 
+from urdf import robot_spec as spec  # noqa: E402
+
+
 class World(ABC):
     """Isaac sim 실행 단위. build/run/close 순으로 쓴다."""
 
     TAG = "world"
-    DT = 1 / 120.0
+    DT = 1 / spec.PHYSICS_HZ
 
     def __init__(self, device: str = "cpu"):
         # pxr은 AppLauncher 뒤에만 import한다.

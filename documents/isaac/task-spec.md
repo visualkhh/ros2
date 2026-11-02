@@ -35,7 +35,7 @@
 | 항목 | v2 |
 |---|---|
 | 로봇 | **우리 URDF** `isaac/urdf/beebot/urdf.xacro` (ROS용과 같은 내용 — `isaac/urdf/check_same.sh`) → USD (`robot_spec.robot_usd()`가 변환). 바퀴만 |
-| 제어 주기 | **20 Hz** (cmd_manager와 같게). sim 120 Hz · decimation 6 |
+| 제어 주기 | **20 Hz** (cmd_manager와 같게). 물리 **480 Hz** · decimation 24 (`robot_spec.PHYSICS_HZ` — 120/240 Hz는 제자리 회전 때 바퀴가 떨림) |
 | 지연 | 명령·관측 각각 0~4 스텝(0~200 ms) 에피소드마다 무작위 (WiFi 왕복) |
 | 모터 모델 | 바퀴별 1차 지연(τ 0.05~0.25 s) · 좌우 이득 비대칭 ±10% · 데드밴드 0~0.3 rad/s · 바퀴 8 rad/s 포화(두 바퀴 같은 비율, 드라이버와 동일) |
 | 기구 오차 | 유효 바퀴 간격 ±8% · 회전 미끄러짐(자이로가 있을 때만 의미) |

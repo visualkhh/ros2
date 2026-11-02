@@ -38,7 +38,7 @@ from isaaclab.app import AppLauncher  # noqa: E402
 from calibration.sensor.Sensor import Sensor  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
 
-DT = 1 / 120.0
+DT = 1 / spec.PHYSICS_HZ
 POLICY_DT = 1 / spec.CONTROL_HZ
 SUBSTEPS = round(POLICY_DT / DT)
 

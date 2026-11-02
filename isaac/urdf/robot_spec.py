@@ -16,6 +16,9 @@ MAX_LIN = 0.26         # [m/s]
 MAX_ANG = 1.82         # [rad/s]
 MAX_WHEEL = 8.0        # [rad/s] 펌웨어 VEL_LIMIT_RAD_S · 드라이버 max_wheel_speed
 CONTROL_HZ = 20.0      # cmd_manager mux 주기 = 정책 주기
+# 물리 계산 주기. 120/240 Hz는 제자리 회전 때 바퀴가 바닥에 붙었다 미끄러졌다 해서 바퀴 속도가 떨림
+# (정상 회전 구간 표준편차 120 Hz 0.62 · 240 Hz 0.15 · 360 Hz 0.11 · 480 Hz 0.027 · real 0.018 rad/s, 2026-11-02 실측 비교)
+PHYSICS_HZ = 480.0
 DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tool/cli/op/bus.py DIAG_RADIUS)
 
 

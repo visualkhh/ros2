@@ -19,13 +19,13 @@ _ACT = ActuatorParam()               # calibration sim과 같은 바퀴 모터 (
 
 @configclass
 class RlCorrectEnvCfg(DirectRLEnvCfg):
-    decimation = round(120 / spec.CONTROL_HZ)  # 120 Hz sim -> 20 Hz policy (= cmd_manager)
+    decimation = round(spec.PHYSICS_HZ / spec.CONTROL_HZ)  # 480 Hz 물리 -> 20 Hz 정책 (= cmd_manager)
     episode_length_s = 10.0
     action_space = 2       # [dV, dW]  (ONNX 출력은 action_scale 곱한 물리값)
     observation_space = 6  # [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]
     state_space = 0
 
-    sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=decimation)
+    sim: SimulationCfg = SimulationCfg(dt=1 / spec.PHYSICS_HZ, render_interval=decimation)
 
     robot_cfg: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
