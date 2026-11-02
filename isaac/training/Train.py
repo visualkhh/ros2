@@ -10,6 +10,8 @@
 - AppLauncher 띄우고 닫기
 - 결과 폴더 `artifacts/training/<시각>-<exp-name>/` (`self.run_dir`)
 - `--watch`일 때 `SCREENSHOT_KEY`(기본 P) → `run_dir/screen_shot_<시각>.png` (뷰포트 캡처)
+- `--snap SEC` → headless에서도 SEC초마다 `run_dir/snaps/<시각>.png` + `run_dir/latest.png`(덮어씀)
+  — task `run()`이 env cfg에 `add_snap_visualizer`, env 만든 뒤 `install_snap`을 부른다.
 """
 from __future__ import annotations
 
@@ -39,6 +41,7 @@ class Train(ABC):
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._key_sub = None   # 구독 핸들 — 들고 있어야 유지된다
         self.env = None        # run()이 채운다 — 스크린샷이 visualizer에 접근할 때
+        self._snap_at = 0.0
 
     @classmethod
     def add_args(cls, parser: argparse.ArgumentParser) -> None:
@@ -53,14 +56,48 @@ class Train(ABC):
         """env 만들고 학습. 결과는 `self.run_dir`에."""
         raise NotImplementedError
 
-    def screenshot(self) -> Path:
+    def add_snap_visualizer(self, env_cfg) -> None:
+        """--snap인데 창(--watch)이 없으면 화면 없는 Kit visualizer를 붙인다 (env 0 근처를 비스듬히)."""
+        if not self.args.snap or self.watch:
+            return
+        from isaaclab_visualizers.kit import KitVisualizerCfg
+
+        env_cfg.sim.visualizer_cfgs = list(getattr(env_cfg.sim, "visualizer_cfgs", None) or []) + [
+            KitVisualizerCfg(headless=True, origin_type="env", origin_env_index=0,
+                             eye=(5.0, -5.0, 4.0), lookat=(1.5, 1.5, 0.0))]
+
+    def install_snap(self, raw_env) -> None:
+        """env.step 뒤에 시간을 보고 --snap 초마다 저장. 학습 루프는 runner.learn()이 쥐고 있어 step에 건다."""
+        if not self.args.snap:
+            return
+        import shutil
+        import time
+
+        snaps = self.run_dir / "snaps"
+        snaps.mkdir(exist_ok=True)
+        step = raw_env.step
+
+        def step_and_snap(action):
+            out = step(action)
+            now = time.monotonic()
+            if now - self._snap_at >= self.args.snap:
+                self._snap_at = now
+                path = self.screenshot(snaps / f"{datetime.now():%H%M%S}.png")
+                if path and path.is_file():
+                    shutil.copyfile(path, self.run_dir / "latest.png")
+            return out
+
+        raw_env.step = step_and_snap
+        print(f"[train] --snap {self.args.snap:g}s → {snaps}/ · 최신: {self.run_dir / 'latest.png'}", flush=True)
+
+    def screenshot(self, path: Path | None = None) -> Path | None:
         """현재 화면 → run_dir/screen_shot_<시각>.png.
 
         IsaacLab 6.x `kit` visualizer는 `render_rgb_array()`로 RGB를 바로 준다.
         예전 `omni.kit.viewport.utility` 캡처는 비동기라 학습 루프에서 파일이 안 생길 수 있어
         visualizer 캡처를 먼저 시도하고, 안 되면 viewport 캡처로 넘어간다.
         """
-        path = self.run_dir / f"screen_shot_{datetime.now():%Y%m%d_%H%M%S}.png"
+        path = path or self.run_dir / f"screen_shot_{datetime.now():%Y%m%d_%H%M%S}.png"
         env = getattr(self, "env", None)
         sim = getattr(getattr(env, "unwrapped", None), "sim", None)
         for viz in getattr(sim, "_visualizers", None) or []:
@@ -77,6 +114,8 @@ class Train(ABC):
             except Exception as exc:
                 print(f"[train] screenshot visualizer 실패: {exc}", flush=True)
 
+        if not self.watch:   # 창 없음 — viewport 캡처 대상이 없다
+            return None
         from omni.kit.viewport.utility import capture_viewport_to_file, get_active_viewport
 
         capture_viewport_to_file(get_active_viewport(), str(path))
@@ -126,9 +165,13 @@ class Train(ABC):
 
         parser = argparse.ArgumentParser(description=(cls.__doc__ or "").strip())
         parser.add_argument("--exp-name", default=cls.NAME, help="결과 폴더 이름 (<시각>-<exp-name>)")
+        parser.add_argument("--snap", type=float, default=0.0, metavar="SEC",
+                            help="SEC초마다 화면 저장 → 결과 폴더 snaps/ + latest.png (headless도 됨, 기본 0 = 끔)")
         cls.add_args(parser)
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args(argv)
+        if args.snap and "kit" not in (args.visualizer or []):
+            args.enable_cameras = True   # 창 없이 캡처하려면 렌더(replicator) 확장이 필요 — AppLauncher가 이걸로 켬
         cls.before_launch(args, parser)
 
         app_launcher = AppLauncher(args)

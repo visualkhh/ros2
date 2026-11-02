@@ -24,7 +24,8 @@ class TaskScene:
 
     def setup_ground(self):
         c = self.cfg
-        slab_world = getattr(c, "randomize_friction", False) or getattr(c, "randomize_uneven", False)
+        slab_world = (getattr(c, "randomize_friction", False) or getattr(c, "randomize_uneven", False)
+                      or getattr(c, "slope_deg", 0.0) > 0.0)
         if slab_world:
             # env마다 ground slab을 따로 만든다. 위에는 마찰 패치 / 요철 패치를 뿌린다.
             spacing = self.scene.cfg.env_spacing
@@ -50,6 +51,7 @@ class TaskScene:
                 uneven_mat.func("/World/Materials/uneven", uneven_mat)
 
             for i, (x, y, _z) in enumerate(pos.detach().cpu().tolist()):
+                q, on_slab = self._tilt(x, y, getattr(c, "slope_deg", 0.0))
                 if getattr(c, "randomize_friction", False):
                     static = random.uniform(*c.ground_static_range)
                     dynamic = random.uniform(*c.ground_dynamic_range)
@@ -65,7 +67,7 @@ class TaskScene:
                     physics_material=mat,
                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.45, 0.45, 0.45)),
                 )
-                cfg.func(f"/World/grounds/ground_{i}", cfg, translation=(x, y, -0.05))
+                cfg.func(f"/World/grounds/ground_{i}", cfg, translation=(x, y, -0.05), orientation=q)
 
                 # 파랑=미끄럼, 주황=끈적. 얇은 판이라 바퀴가 그대로 지나간다.
                 patch_n = int(c.friction_patch_count) if getattr(c, "randomize_friction", False) else 0
@@ -86,9 +88,8 @@ class TaskScene:
                             diffuse_color=color, roughness=0.8),
                     )
                     path = f"/World/patches/patch_{i}_{j}"
-                    patch.func(path, patch,
-                               translation=(x + radius * math.cos(angle),
-                                            y + radius * math.sin(angle), -0.004))
+                    patch.func(path, patch, orientation=q,
+                               translation=on_slab(radius * math.cos(angle), radius * math.sin(angle), -0.004))
                     sim_utils.bind_physics_material(f"{path}/geometry/mesh", mat_path)
 
                 # 요철: 바퀴가 올라타는 낮은 턱. 기하학적 외란 (마찰과 독립).
@@ -98,8 +99,8 @@ class TaskScene:
                         bw = random.uniform(*c.uneven_patch_size)
                         bd = random.uniform(*c.uneven_patch_size)
                         bh = random.uniform(*c.uneven_patch_height)
-                        bx = x + random.uniform(-half + 0.35, half - 0.35)
-                        by = y + random.uniform(-half + 0.35, half - 0.35)
+                        bx = random.uniform(-half + 0.35, half - 0.35)
+                        by = random.uniform(-half + 0.35, half - 0.35)
                         bump = sim_utils.CuboidCfg(
                             size=(bw, bd, bh),
                             collision_props=sim_utils.PhysxCollisionPropertiesCfg(),
@@ -107,7 +108,7 @@ class TaskScene:
                                 diffuse_color=(0.55, 0.55, 0.58), roughness=0.9),
                         )
                         bump_path = f"/World/uneven/bump_{i}_{j}"
-                        bump.func(bump_path, bump, translation=(bx, by, bh / 2.0))
+                        bump.func(bump_path, bump, translation=on_slab(bx, by, bh / 2.0), orientation=q)
                         sim_utils.bind_physics_material(f"{bump_path}/geometry/mesh",
                                                         "/World/Materials/uneven")
         else:
@@ -118,6 +119,27 @@ class TaskScene:
             )
             spawn_ground_plane(prim_path="/World/ground",
                                cfg=GroundPlaneCfg(physics_material=mat))
+
+    @staticmethod
+    def _tilt(x: float, y: float, max_deg: float):
+        """env 바닥 기울기 — 방향 랜덤 · 각도 0~max_deg. (quat xyzw, 판 위 점 → 월드 좌표 함수).
+
+        판 중심(x, y, -0.05) 기준으로 돌려서 env 원점(로봇 스폰)의 바닥 높이는 거의 0 그대로.
+        """
+        th = math.radians(random.uniform(0.0, max_deg)) if max_deg > 0 else 0.0
+        phi = random.uniform(0.0, 2 * math.pi)
+        ax, ay = math.cos(phi), math.sin(phi)   # 수평 회전축
+        s, co = math.sin(th), math.cos(th)
+        q = (ax * math.sin(th / 2), ay * math.sin(th / 2), 0.0, math.cos(th / 2))
+
+        def on_slab(dx: float, dy: float, z: float):
+            # 평평할 때 월드 높이 z인 점 (판 중심 기준 dz = z + 0.05) → 축 (ax, ay, 0)으로 th 회전 (로드리게스)
+            v = (dx, dy, z + 0.05)
+            k_dot = ax * v[0] + ay * v[1]
+            cross = (ay * v[2], -ax * v[2], ax * v[1] - ay * v[0])
+            r = [v[i] * co + cross[i] * s + (ax, ay, 0.0)[i] * k_dot * (1 - co) for i in range(3)]
+            return (x + r[0], y + r[1], -0.05 + r[2])
+        return q, on_slab
 
     def bind_robot_materials(self):
         from pxr import UsdPhysics

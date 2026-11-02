@@ -72,6 +72,9 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     uneven_patch_count = 4
     uneven_patch_size = (0.30, 0.55)    # [m] 한 변
     uneven_patch_height = (0.01, 0.03)  # [m] 높이 — "약간"
+    # env 바닥 기울기 [deg] — env마다 방향 랜덤 · 0~slope_deg. 0이면 평평. `--slope`로 켠다.
+    # 오르막/내리막 = 바퀴 부하로 속도 처짐, 옆 기울기 = 아래로 흘러 휘어짐 (실내 바닥 1~2°, 경사로 ~5°)
+    slope_deg = 0.0
     # env 안의 국소 마찰 패치 (파랑=미끄럼, 주황=끈적)
     friction_patch_count = 4
     friction_patch_radius = (0.55, 0.90)

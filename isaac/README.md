@@ -115,6 +115,7 @@ cd isaac
 FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit.json
 ./run-training.sh --watch --envs 16 --iterations 5 --fit $FIT     # 짧게 확인: 창 + TRAINING FIT 창 · 창 클릭 후 P = 스크린샷
 ./run-training.sh --iterations 300 --fit $FIT                     # 본 학습 (창 없음, 512대, 약 30분)
+./run-training.sh --iterations 300 --fit $FIT --slope 3 --uneven --snap 60   # 더 거친 바닥 + 1분마다 화면 저장
 tensorboard --logdir artifacts/training                           # 진행 그래프 (다른 터미널)
 #   → artifacts/training/<시각>-rl_correct/ (policy.onnx · eval.json · base-fit.json · checkpoint · TensorBoard)
 ```
@@ -122,8 +123,12 @@ tensorboard --logdir artifacts/training                           # 진행 그�
 - **`--fit`은 꼭 준다.** 3.2의 sim은 지연 0 — 실기기 지연 0.1 s는 `--fit`이 학습 env 모터 모델(바퀴 τ·gain·지연 랜덤 범위)의
   **중심**으로 넣어야 들어간다 (폭은 유지). 궤적 그림이 비슷해 보여도 지연은 그림에 안 보인다.
 - `--fit`의 sim은 학습과 **같은 물리 설정**(`robot_spec.PHYSICS_HZ`)으로 잰 raw여야 한다.
-- 창 없는 학습은 키 입력을 못 받는다 (P 스크린샷은 `--watch`에서만).
-- 마찰: env별 랜덤 + 파랑(미끄럼)/주황(끈적) 패치 4개 (`--no-friction`으로 끔) · `--uneven`이면 낮은 턱.
+- 창 없이 돌면서 보고 싶으면 `--snap 60`: 60초마다 `<결과>/snaps/<시각>.png` + `<결과>/latest.png`(최신으로 덮어씀).
+  `eog <결과>/latest.png`로 열어 두면 바뀔 때 다시 그린다. 렌더가 켜져 학습이 ~20% 느려진다 (32대 5.2→6.2 s/iter).
+  P 키 스크린샷은 `--watch`(창)에서만.
+- 바닥: env별 마찰 랜덤 + 파랑(미끄럼)/주황(끈적) 패치 4개 (`--no-friction`으로 끔) · `--uneven`이면 낮은 턱(1~3 cm)
+  · `--slope 3`이면 env마다 바닥판을 랜덤 방향으로 0~3° 기울임 (오르막·내리막 = 바퀴 부하, 옆 기울기 = 흘러서 휨.
+  실내 바닥 1~2°, 경사로 ~5°). 패치·턱도 같은 판 위에 같이 기운다.
 - `--latency ../ros2_ws/artifacts/real/before.csv`: RL 경로(PC 왕복) 지연까지 반영. rl-only Before 기록(경로 rl, enable:=false)에서
   관측 나이·corrector 처리 시간을 뽑는다. **PC·Pi 시계가 안 맞으면 거부** (3.0).
 - 끝나면 sim Before/After를 자동으로 돈다(같은 env·seed, 정책 끔/켬) → `eval.json`:

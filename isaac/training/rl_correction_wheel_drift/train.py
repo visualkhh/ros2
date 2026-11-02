@@ -105,6 +105,8 @@ class WheelDriftTrain(Train):
                             help="env 안 요철(울퉁불퉁) 지형 켜기 (낮은 턱, 기하학적 외란)")
         parser.add_argument("--uneven-count", type=int, default=4,
                             help="env 안 요철 패치 수")
+        parser.add_argument("--slope", type=float, default=0.0, metavar="DEG",
+                            help="env 바닥을 랜덤 방향으로 0~DEG° 기울임 (예: 3). 기본 0 = 평평")
         parser.add_argument("--fit", default=None,
                             help="real/fit.json,sim/fit.json → 차이를 바퀴 랜덤 범위 중심으로 (1개면 real 값 그대로)")
         parser.add_argument("--latency", default=None,
@@ -138,6 +140,8 @@ class WheelDriftTrain(Train):
         env_cfg.scene.num_envs = args.envs
         env_cfg.randomize_friction = args.friction
         env_cfg.friction_patch_count = args.patch_count
+        env_cfg.slope_deg = args.slope
+        self.add_snap_visualizer(env_cfg)
         if args.uneven:
             env_cfg.randomize_uneven = True
             env_cfg.uneven_patch_count = args.uneven_count
@@ -162,6 +166,7 @@ class WheelDriftTrain(Train):
 
         env = RslRlVecEnvWrapper(RlCorrectEnv(env_cfg))
         self.env = env
+        self.install_snap(env.unwrapped)
         if self.watch:
             from training.rl_correction_wheel_drift.FitPanel import FitPanel  # noqa: E402
             self.panel = FitPanel(env_cfg, base_fit["source"][0] if base_fit else None, lat)  # 참조 유지

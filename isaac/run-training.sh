@@ -11,6 +11,8 @@
 #
 # - 기본 headless. --watch면 Isaac 창 + TRAINING FIT 패널(보정값·랜덤 범위·마찰, 읽기만)
 #   창에서 P 키 → 결과 폴더/screen_shot_<시각>.png
+# - --snap 60: 창 없이도 60초마다 결과 폴더/snaps/<시각>.png + latest.png (eog로 열어 두면 갱신됨, ~20% 느려짐)
+# - --slope 3: env 바닥을 랜덤 방향으로 0~3° 기울임 · --uneven: 낮은 턱 (둘 다 기본 끔)
 # - 마찰 패치(파랑=미끄럼/주황=끈적) 기본 켜짐, --no-friction으로 끔
 # - 결과: artifacts/training/<시각>-<exp-name>/ (checkpoint · policy.onnx · eval.json(sim 끔/켬) · TensorBoard · base-fit.json · 스크린샷)
 #
