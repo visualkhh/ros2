@@ -45,7 +45,8 @@ case "$1" in
   status) ros2 param get "$NODE" enable && ros2 param get "$NODE" model_path || exit 1 ;;
   *)
     model="$1"; [[ "$model" == /* ]] || model="$PWD/$model"
-    [[ -f "$model" ]] || echo "[policy] 경고: 파일 없음 — corrector는 바이패스가 된다: $model" >&2
+    # 없는 경로를 켜면 corrector가 조용히 바이패스 → A/B가 A/A가 됨. 바이패스는 'off'로만.
+    [[ -f "$model" ]] || { echo "[policy] 파일 없음 — 바꾸지 않음: $model (바이패스는 ./policy.sh off)" >&2; exit 1; }
     param model_path "$model"
     param enable true
     echo "[policy] $model"

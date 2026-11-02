@@ -21,6 +21,7 @@
 import argparse
 import csv
 import math
+import sys
 from pathlib import Path
 
 WS = Path(__file__).resolve().parent
@@ -195,6 +196,10 @@ def split_phases(path: Path) -> list:
     구간 행은 시간축을 그대로 두고, 다른 구간 자리는 nan으로 비운다 (그래프에서 그 구간만 보이게).
     """
     rows = load(path)
+    ghost = sum(1 for r in rows if r.get("rl_enable") == 1.0 and r.get("rl_policy") == "bypass")
+    if ghost:   # 정책을 켰는데 모델 파일이 없어 실제로는 바이패스 — A/B가 아니다
+        print(f"[report] 경고: {path.name} — 정책 켬(rl_enable=1)인데 실제로는 바이패스인 행 {ghost}개 "
+              f"(모델 파일 없음: rl_model 확인). 이 구간은 '보정함'이 아니다.", file=sys.stderr)
     phases = list(dict.fromkeys(r.get("rl_policy", "") for r in rows))
     if len(phases) <= 1:
         return [(f"{path.parent.name}/{path.name}", path.stem, rows, rows)]
