@@ -124,7 +124,7 @@ class DefaultSensorSim(Sensor):
         from calibration.parameter.ActuatorParam import ActuatorParam
         from calibration.parameter.SimParam import SimParam
         from calibration.parameter.WheelLag import WheelLag
-        from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets
+        from calibration.parameter.WheelLag import wheel_targets
 
         try:
             cls._run(args, simulation_app)

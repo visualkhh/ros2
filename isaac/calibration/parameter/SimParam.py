@@ -14,6 +14,7 @@ from pathlib import Path
 from calibration.parameter.ActuatorParam import ActuatorParam
 from calibration.parameter.FrictionParam import FrictionParam
 from calibration.parameter.WheelParam import WheelParam
+from urdf.robot_spec import CONTROL_HZ
 
 ISAAC = Path(__file__).resolve().parents[2]
 CALIB_DIR = ISAAC / "artifacts"
@@ -101,6 +102,6 @@ class SimParam:
         gains = f"gain={w.gain:.3f}" if (w.gain_l is None and w.gain_r is None) \
             else f"gain L/R={gl:.3f}/{gr:.3f}"
         return (f"tau={w.tau_s:.3f}s "
-                f"delay={w.delay_steps * 0.05:.2f}s "
+                f"delay={w.delay_steps / CONTROL_HZ:.2f}s "
                 f"{gains} deadband={w.deadband:.2f} "
                 f"src={self.source}")

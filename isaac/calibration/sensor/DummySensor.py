@@ -27,6 +27,9 @@ from calibration.Calibrate import Calibrate  # noqa: E402
 from calibration.parameter.SimParam import SimParam  # noqa: E402
 from calibration.parameter.WheelParam import WheelParam  # noqa: E402
 from calibration.sensor.Sensor import Sensor  # noqa: E402
+from urdf import robot_spec as spec  # noqa: E402
+
+R, SEP, MAX_WHEEL, DT = spec.WHEEL_RADIUS, spec.WHEEL_SEP, spec.MAX_WHEEL, 1.0 / spec.CONTROL_HZ
 
 
 class DummySensor(Sensor):
@@ -65,12 +68,12 @@ class DummySensor(Sensor):
         self.wheel_l = self.wheel_r = 0.0
 
     def send(self, v: float, w: float) -> None:
-        # 드라이버와 같은 식: v,w → 좌/우 rad/s → 8 rad/s 비례 축소
-        wl = (v - w * 0.287 / 2.0) / 0.033
-        wr = (v + w * 0.287 / 2.0) / 0.033
+        # 드라이버와 같은 식: v,w → 좌/우 rad/s → MAX_WHEEL 비례 축소
+        wl = (v - w * SEP / 2.0) / R
+        wr = (v + w * SEP / 2.0) / R
         peak = max(abs(wl), abs(wr))
-        if peak > 8.0:
-            k = 8.0 / peak
+        if peak > MAX_WHEEL:
+            k = MAX_WHEEL / peak
             wl, wr = wl * k, wr * k
         # 입력 보정 — WheelLag와 같은 순서: delay → gain → deadband → 1차 지연
         self._base_buf.append((wl, wr))
@@ -82,7 +85,7 @@ class DummySensor(Sensor):
         if abs(wr) < self.base.deadband:
             wr = 0.0
         if self.base.tau_s > 1e-6:
-            a = 1.0 - math.exp(-0.05 / self.base.tau_s)
+            a = 1.0 - math.exp(-DT / self.base.tau_s)
             bl, br = self._base_state
             wl, wr = bl + a * (wl - bl), br + a * (wr - br)
         self._base_state = (wl, wr)
@@ -97,19 +100,19 @@ class DummySensor(Sensor):
             target_l = 0.0
         if abs(target_r) < self.deadband:
             target_r = 0.0
-        alpha = 1.0 - math.exp(-0.05 / self.tau_s) if self.tau_s > 1e-9 else 1.0
+        alpha = 1.0 - math.exp(-DT / self.tau_s) if self.tau_s > 1e-9 else 1.0
         sl, sr = self._state
         sl += alpha * (target_l - sl)
         sr += alpha * (target_r - sr)
         self._state = (sl, sr)
         self.wheel_l, self.wheel_r = sl, sr
-        v_enc = 0.033 * (sl + sr) / 2.0 + self._rng.uniform(-self.noise, self.noise)
-        w_enc = 0.033 * (sr - sl) / 0.287 + self._rng.uniform(-self.noise, self.noise)
-        body_w = 0.033 * (sr - sl) / 0.287 * (1.0 - self.slip)
+        v_enc = R * (sl + sr) / 2.0 + self._rng.uniform(-self.noise, self.noise)
+        w_enc = R * (sr - sl) / SEP + self._rng.uniform(-self.noise, self.noise)
+        body_w = R * (sr - sl) / SEP * (1.0 - self.slip)
         w_gyro = body_w + self._rng.uniform(-self.noise, self.noise)
-        self.oyaw += w_enc * 0.05
-        self.ox += v_enc * math.cos(self.oyaw) * 0.05
-        self.oy += v_enc * math.sin(self.oyaw) * 0.05
+        self.oyaw += w_enc * DT
+        self.ox += v_enc * math.cos(self.oyaw) * DT
+        self.oy += v_enc * math.sin(self.oyaw) * DT
         return [round(t, 3), v, w, v, w, self.ox, self.oy, self.oyaw,
                 v_enc, w_enc, w_gyro, self.wheel_l, self.wheel_r,
                 0.0, 0.0, self.label,
@@ -147,7 +150,7 @@ class DummySensor(Sensor):
                      noise=args.noise, slip=args.slip, deadband=args.deadband,
                      base=base_fit)
         cal = Calibrate(sensor)
-        cal.run(segs, total, args.out, 0.05, base_fit=base_fit)
+        cal.run(segs, total, args.out, DT, base_fit=base_fit)
         return 0
 
 

@@ -20,6 +20,7 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
 
+from calibration.parameter.WheelLag import wheel_targets  # noqa: F401 — 드라이버 식 (calibration과 공용)
 from training.rl_correction_wheel_drift.task.TaskScene import TaskScene
 from urdf import robot_spec as spec
 
@@ -29,14 +30,6 @@ if TYPE_CHECKING:
 # 텔레오퍼 키 → (전후, 회전) 방향 (tool/cli/op/bus.py TELEOP_MOVES와 같음)
 TELEOP_MOVES = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1, 1))
 
-
-def wheel_targets(v, w, r, sep, max_wheel):
-    """Twist → (좌, 우) rad/s. 한 바퀴라도 넘으면 두 바퀴를 같은 비율로 (opencr_driver.wheel_speeds와 같음)."""
-    wl = (v - w * sep / 2.0) / r
-    wr = (v + w * sep / 2.0) / r
-    wheels = torch.stack([wl, wr], dim=-1)
-    peak = wheels.abs().max(dim=-1, keepdim=True).values
-    return wheels * torch.clamp(max_wheel / (peak + 1e-9), max=1.0)
 
 
 class RlCorrectEnv(DirectRLEnv):

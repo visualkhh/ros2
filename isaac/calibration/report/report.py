@@ -59,6 +59,8 @@ HERE = Path(__file__).resolve().parent
 ISAAC = HERE.parents[1]          # .../isaac (HERE = isaac/calibration/report)
 sys.path.insert(0, str(ISAAC))
 
+from urdf.robot_spec import CONTROL_HZ  # noqa: E402  (정책 주기 — dt 기본값 · 지연 스텝)
+
 
 def load(path: str):
     rows = []
@@ -137,7 +139,7 @@ def fit_wheels(rows, t, fit):
     """
     from urdf.robot_spec import MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP  # noqa: E402
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
-    dt = dts[len(dts) // 2] if dts else 0.05
+    dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
     gl = _gain(fit, "wheel_gain_l")
     gr = _gain(fit, "wheel_gain_r")
     tau = max(float(fit.get("wheel_tau_s", 0.05)), 1e-3)
@@ -208,7 +210,7 @@ def mean_dev(ax_, ay_, bx, by):
 def fit_path(rows, t, fit):
     """피팅 모델로 재구성한 궤적. v는 fit_v, yaw는 fit_ang(바퀴 모델) 적분."""
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
-    dt = dts[len(dts) // 2] if dts else 0.05
+    dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
     v_pred = fit_v(rows, t, fit)
     w_pred = fit_ang(rows, t, fit)
     xs, ys, x, y, yaw = [0.0], [0.0], 0.0, 0.0, 0.0
@@ -224,7 +226,7 @@ def fit_path(rows, t, fit):
 def cmd_path(rows, t):
     """명령을 100% 그대로 따랐다고 가정한 이상 궤적 (gain=1, 지연·시정수 0)."""
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
-    dt = dts[len(dts) // 2] if dts else 0.05
+    dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
     xs, ys, x, y, yaw = [0.0], [0.0], 0.0, 0.0, 0.0
     for r in rows:
         yaw += r["ang_raw"] * dt
@@ -243,7 +245,7 @@ def corrected_path(rows, t, fit):
     """
     from urdf.robot_spec import MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP  # noqa: E402
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
-    dt = dts[len(dts) // 2] if dts else 0.05
+    dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
     gl = _gain(fit, "wheel_gain_l")
     gr = _gain(fit, "wheel_gain_r")
     tau = max(float(fit.get("wheel_tau_s", 0.05)), 1e-3)
@@ -578,7 +580,7 @@ def fit_wheel(real):
         "wheel_gain_l": round(max(0.8, min(1.2, gain_l)), 4),
         "wheel_gain_r": round(max(0.8, min(1.2, gain_r)), 4),
         "wheel_delay_s": round(delay, 3),
-        "wheel_delay_steps": int(round(delay / 0.05)),
+        "wheel_delay_steps": int(round(delay * CONTROL_HZ)),
         "wheel_tau_s": round(tau, 4),
         "wheel_deadband": round(max(0.0, min(0.3, 0.5 * (db_l + db_r))), 4),
         "wheel_deadband_l": round(max(0.0, min(0.3, db_l)), 4),

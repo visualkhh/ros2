@@ -390,7 +390,7 @@ class DefaultWorld(World):
         from calibration.scene.DefaultScene import DefaultScene
         from calibration.parameter.SimParam import SimParam
         from calibration.parameter.WheelLag import WheelLag
-        from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets
+        from calibration.parameter.WheelLag import wheel_targets
 
         scene_cls = None
         if args.scene:

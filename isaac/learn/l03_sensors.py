@@ -60,7 +60,7 @@ from isaaclab.utils import configclass  # noqa: E402
 
 from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
-from training.rl_correction_wheel_drift.task.rl_correct_env import wheel_targets  # noqa: E402
+from calibration.parameter.WheelLag import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 FRAME_DT = 1 / 60.0
