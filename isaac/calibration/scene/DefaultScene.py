@@ -78,7 +78,8 @@ class DefaultScene(Scene):
         cond = condition or self.condition
         f = SimParam.load(cond).friction
         wheel_mat = self._material("/World/Materials/wheel", f.wheel)
-        caster_mat = self._material("/World/Materials/caster", f.caster)
+        # min: 캐스터 0과 바닥 마찰을 average하면 0.4로 끌림 → 바퀴가 명령의 87~95%만 냄 (학습 TaskScene과 같게 min)
+        caster_mat = self._material("/World/Materials/caster", f.caster, combine="min")
         for prim in scene.stage.Traverse():
             path = str(prim.GetPath())
             if not path.startswith(prim_path):
@@ -146,10 +147,10 @@ class DefaultScene(Scene):
         return robot.data.root_pos_w.torch[0, 2].item()
 
     @staticmethod
-    def _material(path: str, friction, restitution: float = 0.0):
+    def _material(path: str, friction, restitution: float = 0.0, combine: str = "average"):
         cfg = sim_utils.RigidBodyMaterialCfg(
             static_friction=friction[0], dynamic_friction=friction[1],
-            restitution=restitution, friction_combine_mode="average",
+            restitution=restitution, friction_combine_mode=combine,
         )
         cfg.func(path, cfg)
         return path
