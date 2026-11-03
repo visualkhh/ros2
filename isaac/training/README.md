@@ -5,7 +5,7 @@ Isaac Lab에서 돌리는 RL 학습 task를 **폴더별**로 둔다. 여기는 *
 
 ```text
 calibration/ 보정 (sim plant를 real에 맞춤 → real fit.json)
-  → training/rl_correction_wheel_drift/ 학습 (Isaac Lab, PPO, --fit)
+  → training/rl_correction_wheel_drift/ 학습 (Isaac Lab, PPO — 실측 값은 task env cfg에 숫자)
   → ONNX
   → PC의 rl_correction 노드 (track 모드)
   → /cmd_vel_rl_out
@@ -30,7 +30,7 @@ training/
 - 새 task는 자기 폴더에 env(`<name>_env.py`)·cfg(`<name>_env_cfg.py`)·`agents/`(Isaac Lab 구조)·URDF를 따로 둘 수 있다. 로봇은 env cfg에서 `robots/beebot/spec.robot_usd("training/<task>/urdf/robot.xacro", "<task>")`(메시는 `<xacro 폴더>/meshes`).
 - 새 task는 `train.py`에서 `Train`을 상속해 `add_args` / `before_launch` / `run`만 구현하고
   `def main(argv=None): return MyTrain.main(argv)`를 둔다. 결과 폴더는 `self.run_dir`.
-- 보정값(`--fit`) 해석은 task가 한다 (env cfg가 task마다 다르다).
+- 실기기 맞춤 값(calibration 측정의 real − sim 차이)은 task의 env cfg에 숫자로 넣는다 (task마다 자기 env).
 
 ## 실행
 
@@ -41,23 +41,20 @@ cd isaac   # Lab env (./isaaclab.sh -p ...)
 ./isaaclab.sh -p -m training
 
 # 학습 (기본: headless, 512 envs, 바퀴 마찰 랜덤 켜짐 — 끄려면 --no-friction)
-./isaaclab.sh -p -m training rl_correction_wheel_drift --iterations 300 \
-  --fit artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
+./isaaclab.sh -p -m training rl_correction_wheel_drift --iterations 300
 
 # 창 보면서 (512 envs는 무거움 → 16~32 권장)
-./isaaclab.sh -p -m training rl_correction_wheel_drift --watch --envs 16 \
-  --fit artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
+./isaaclab.sh -p -m training rl_correction_wheel_drift --watch --envs 16
 
 tensorboard --logdir artifacts/training
 ```
 
 - 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint(`model_<iter>.pt`, 50 iter마다), `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교),
-  `--fit`/`--latency`면 `base-fit.json`(적용한 fit · 지연 · 랜덤 범위)
-- `--fit real/fit.json,sim/fit.json` — real−sim 차이를 학습 env 랜덤 범위의 중심으로. sim fit은 raw(`--fit` 없이) 잰 것.
+  `ranges.json`(이번 랜덤 범위)
 - `--watch`는 학습 장면(로봇들, 지형)을 Isaac 창으로 보여주고,
-  **TRAINING FIT** 창(읽기만)에 fit 값 · 적용된 랜덤 범위 · 마찰 설정을 띄운다.
+  **TRAINING RANGES** 창(읽기만)에 랜덤 범위(실측 중심) · 마찰 · 지형 설정을 띄운다.
   창에서 **P** 키 → `artifacts/training/<시각>-<exp-name>/screen_shot_<시각>.png` (뷰포트 캡처).
-  headless일 때는 터미널 출력 + `base-fit.json`으로 남는다.
+  headless일 때는 터미널 출력 + `ranges.json`으로 남는다.
 - `--snap SEC`: 창 없이도 SEC초마다 `snaps/<시각>.png` + `latest.png` (화면 없는 Kit visualizer + `--enable_cameras` 자동, ~20% 느려짐).
 - `--slope DEG`: 지형에 경사 칸(피라미드 오르막/내리막 0~DEG°) 추가 · `--uneven`: 요철 칸(턱 1~3 cm) 추가 — Isaac Lab terrain generator, 8 m 칸 격자. 기본 3, 0 = 경사 없음.
 - `--gyro-bias RAD_S`: 에피소드마다 자이로 영점 오차 ±RAD_S (기본 0.05, 0 = 끔).
@@ -78,21 +75,15 @@ tensorboard --logdir artifacts/training
 
 ### 직접 운전 (학습 env)
 
-`../run-training.sh --drive --watch --fit $FIT --uneven --policy <결과>/policy.onnx` — `--drive`: 로봇 1대 · 키보드 명령 · C 정책 켬/끔. 자세히: [../README.md](../README.md) 3.4c.
+`../run-training.sh --drive --watch --uneven --policy <결과>/policy.onnx` — `--drive`: 로봇 1대 · 키보드 명령 · C 정책 켬/끔. 자세히: [../README.md](../README.md) 3.4c.
 
-### 학습 뒤 sim에서 play
-
-```bash
-./run-calibration.sh sensor-sync-sim --watch --fit <real>/fit.json,<sim>/fit.json --policy artifacts/training/<시각>-rl_correct/policy.onnx
-```
-
-같은 사각형을 corrector와 같은 규칙으로 달린다. A/B 비교·옵션: [../calibration/README.md](../calibration/README.md) "sim play".
+정책 효과는 실측 값이 들어간 학습 env(`--drive`, C = 정책 켬/끔)에서 본다. 순수 sim(calibration)은 거의 안 휜다.
 
 ## 보정값과 RL의 관계
 
 - 바닥/바퀴/캐스터 **마찰**은 `robots/beebot/config.py` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env마다 바퀴 마찰 랜덤 (events).
 - 바퀴 **τ·gain·지연·데드밴드**는 env가 에피소드마다 랜덤으로 뽑는다.
-  `--fit`을 주면 그 범위의 **중심을 real fit 값**으로 옮긴다 (폭은 그대로).
+  그 범위의 **중심 = 실측 값** (calibration의 real − sim 차이를 task env cfg에 숫자로, 폭은 그대로).
 - RL은 그 위의 **잔차**(좌우 비대칭, 슬립, 드리프트)를 학습한다.
 
 RL이 보정 자체를 대체하지는 못한다. wheel radius/sep 스케일, 바닥 슬립, 캐스터 마찰은

@@ -1,8 +1,7 @@
-"""sim 측정 — 사각형 명령을 calibration env(로봇 1대)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
+"""sim 측정 — 사각형 명령을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
 
-  ./run-calibration.sh sensor-sync-sim --viz none                                   # raw plant 측정
-  ./run-calibration.sh sensor-sync-sim --viz none --fit <real>/fit.json,<sim>/fit.json   # real처럼 맞춘 sim
-  ./run-calibration.sh sensor-sync-sim --watch --fit <real>,<sim> --policy artifacts/real/policy.onnx --label B   # sim play
+  ./run-calibration.sh sensor-sync-sim --viz none                  # 순수 sim 측정 → real과 비교해 차이를 구한다
+  ./run-calibration.sh sensor-sync-sim --watch --policy artifacts/real/policy.onnx --label B   # sim play
 창(--watch): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로. 기록 후 창 닫을 때까지 같은 경로 반복.
 출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-sim) · --out으로 정확한 경로.
 """
@@ -17,7 +16,6 @@ from pathlib import Path
 from isaaclab.app import AppLauncher
 
 from commands.square import SquareCommand
-from calibration.fit import describe, load_fit, wheel_of
 from calibration.record import ISAAC, record, run_path
 from robots.beebot import spec
 
@@ -33,7 +31,6 @@ def main(argv=None) -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=None, help="정확한 raw.csv 경로 (isaac/ 기준 상대경로 가능)")
     p.add_argument("--label", default=None, help="폴더 이름 <시각>-<label> · CSV label (기본 02-sim / sim_sensor_floor)")
-    p.add_argument("--fit", default=None, help="입력 보정 real/fit.json 또는 real,sim (차이). 없으면 raw plant")
     p.add_argument("--policy", default=None, help="학습한 ONNX로 보정하며 달림 (ros2 corrector와 같은 규칙)")
     p.add_argument("--watch", action="store_true", help="기록 후 창 닫을 때까지 같은 경로 반복")
     AppLauncher.add_app_launcher_args(p)
@@ -41,7 +38,6 @@ def main(argv=None) -> int:
 
     # sim 띄우기 전에 실패하게
     cmd = SquareCommand(args.speed, args.turn, args.side)
-    base_fit = load_fit(args.fit) if args.fit else None
     sess = None
     if args.policy:
         import onnxruntime as ort
@@ -56,7 +52,7 @@ def main(argv=None) -> int:
 
     app = AppLauncher(args).app
     try:
-        _run(args, app, cmd, base_fit, sess, out)
+        _run(args, app, cmd, sess, out)
     except BaseException:
         import traceback
         traceback.print_exc()   # app.close()가 프로세스를 바로 끝내 예외가 안 보임 → 먼저 출력
@@ -66,22 +62,24 @@ def main(argv=None) -> int:
     return 0
 
 
-def _run(args, app, cmd, base_fit, sess, out):
+def _run(args, app, cmd, sess, out):
     import numpy as np
     import torch
 
-    from calibration.calib_env import CalibEnv
-    from calibration.calib_env_cfg import CalibEnvCfg, WheelModelCfg
+    from envs.default.default_env import DefaultEnv
+    from envs.default.default_env_cfg import DefaultEnvCfg
+    from envs.rooms.rooms_env import RoomsEnv
+    from envs.rooms.rooms_env_cfg import RoomsEnvCfg
 
     headless = "kit" not in (getattr(args, "visualizer", None) or [])
-    cfg = CalibEnvCfg()
-    cfg.sim.device = args.device
-    if base_fit is not None:
-        cfg.wheel = WheelModelCfg(**wheel_of(base_fit))
-    if args.room > 0:
+    if args.room > 0:   # 방 1개 (측정은 빈 바닥 권장)
+        cfg, env_cls = RoomsEnvCfg(), RoomsEnv
         cfg.rooms, cfg.room_size, cfg.room_seed = 1, (args.room, args.room), args.seed
+    else:
+        cfg, env_cls = DefaultEnvCfg(), DefaultEnv
+    cfg.sim.device = args.device
     cfg.debug_vis = not headless
-    env = CalibEnv(cfg)
+    env = env_cls(cfg)
     env.reset()
     dt = env.policy_dt
     zero = torch.zeros(1, 2, device=env.device)
@@ -91,10 +89,9 @@ def _run(args, app, cmd, base_fit, sess, out):
     if not headless:
         env.set_path(cmd.path())   # 노란 점 = 사각형을 로봇 시작 자세로
     label = args.label or "sim_sensor_floor"
-    mode = f"FIT {', '.join(base_fit['source'])}" if base_fit else "RAW (no --fit)"
+    mode = "순수 sim (보정 없음)"
     print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {label} · {mode}{' · POLICY ' + args.policy if args.policy else ''} · "
           f"{'room %.1f m' % args.room if args.room > 0 else 'empty floor'}")
-    print(f"[{TAG}] wheel: {describe(cfg.wheel.to_dict())}")
     print(f"[{TAG}] square: side={args.side:.2f} m · {cmd.total:.1f}s · speeds {cmd.speeds_text()} m/s")
 
     st = {"t": 0.0, "changed": 0.0, "last": (0.0, 0.0), "out": (0.0, 0.0), "odom": [0.0, 0.0, 0.0]}
@@ -125,7 +122,7 @@ def _run(args, app, cmd, base_fit, sess, out):
         return [round(t, 3), v, w, *st["out"], *o, s["v_enc"], s["w_enc"], s["w_gyro"], *s["jv"], *s["jp"], label,
                 t, t, t, t]
 
-    record(TAG, send, collect, cmd, out, dt, base_fit=base_fit)
+    record(TAG, send, collect, cmd, out, dt)
 
     if args.watch and not headless:
         print(f"[{TAG}] WATCH — 창 닫을 때까지 반복")

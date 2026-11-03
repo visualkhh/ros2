@@ -1,30 +1,26 @@
-"""학습 중 보정값 보기 창 (`--watch` 전용, 읽기만).
+"""학습 중 랜덤 범위 보기 창 (`--watch` 전용, 읽기만).
 
-`--fit` fit.json 내용 + 그걸로 적용된 랜덤 범위 + 마찰 설정을 보여준다.
-학습 조건은 시작 때 고정이므로 `CalibHUD`(calibration/random_world.py)와 달리
-수정 필드는 두지 않는다.
+랜덤 범위(실기기 맞춤 중심 포함) + 마찰 · 지형 설정을 보여준다.
+학습 조건은 시작 때 고정이라 수정 필드는 두지 않는다.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 
 class FitPanel:
-    """env cfg(적용 후)와 fit.json 경로로 창을 만든다. 참조를 들고 있어야 창이 유지된다."""
+    """env cfg로 창을 만든다. 참조를 들고 있어야 창이 유지된다."""
 
     LABEL_STYLE = {"font_size": 13, "color": 0xFF9FB4C7}
     VALUE_STYLE = {"font_size": 13, "color": 0xFFF0F0F0}
     HEAD_STYLE = {"font_size": 12, "color": 0xFFF0C040}
 
-    def __init__(self, env_cfg, fit_path: str | None, latency: dict | None = None):
+    def __init__(self, env_cfg):
         import omni.ui as ui
 
         self.ui = ui
         c = env_cfg
-        fit = json.loads(Path(fit_path).read_text())["fit"] if fit_path else None
 
-        self.window = ui.Window("TRAINING FIT", width=460, height=640)
+        self.window = ui.Window("TRAINING RANGES", width=460, height=640)
         try:
             self.window.position_x, self.window.position_y = 18, 48
         except Exception:
@@ -32,33 +28,6 @@ class FitPanel:
         with self.window.frame:
             with ui.ScrollingFrame():
                 with ui.VStack(spacing=3):
-                    self._heading("FIT (--fit)")
-                    if fit is None:
-                        self._row("source", "없음 — 기본 범위")
-                    else:
-                        p = Path(fit_path)
-                        power = fit.get("power") or {}
-                        self._row("source", f"{p.parent.name}/{p.name}")
-                        self._row("gain L / R", self._pair(fit.get("wheel_gain_l"), fit.get("wheel_gain_r")))
-                        self._row("delay", f"{fit.get('wheel_delay_steps')} step ({fit.get('wheel_delay_s')} s)")
-                        self._row("tau [s]", fit.get("wheel_tau_s"))
-                        self._row("deadband [rad/s]", fit.get("wheel_deadband"))
-                        self._heading("FIT — 학습에 안 씀 (참고)")
-                        self._row("deadband L / R", self._pair(fit.get("wheel_deadband_l"), fit.get("wheel_deadband_r")))
-                        self._row("power straight L / R", self._pair(power.get("straight_l"), power.get("straight_r")))
-                        self._row("power turn L / R", self._pair(power.get("turn_l"), power.get("turn_r")))
-                        self._row("wheel max obs [rad/s]", fit.get("wheel_max_obs"))
-                        self._row("saturated samples", fit.get("saturated_samples"))
-
-                    self._heading("RL 경로 지연 (--latency)")
-                    if latency is None:
-                        self._row("source", "없음 — 기본 지연 범위")
-                    else:
-                        self._row("source", Path(latency["source"]).name)
-                        self._row("관측 나이 / 처리 [ms]", self._pair(latency["obs_age_ms"], latency["proc_ms"]))
-                        self._row("관측 지연 / 명령 추가 [step]",
-                                  self._pair(latency["obs_delay_steps"], latency["cmd_extra_steps"]))
-
                     self._heading("RANGES (에피소드마다 랜덤)")
                     self._row("gain center L / R", self._pair(*c.gain_center))
                     self._row("gain range (× center)", self._range(c.gain_range))

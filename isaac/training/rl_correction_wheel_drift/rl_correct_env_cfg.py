@@ -72,12 +72,15 @@ class RlCorrectEnvCfg(BaseEnvCfg):
     action_scale = (0.10, 0.60)  # [m/s, rad/s]
 
     # 에피소드마다 무작위 (실제에서 엔코더·자이로로 보이는 오차만)
-    tau_range = (0.05, 0.25)       # [s] 바퀴별 1차 지연
+    # 실기기 맞춤 (2026-11-02 측정: artifacts/calibration/20261102_140931-02-real − …144928-sim_480, sim raw 대비 차이)
+    #   gain L/R 0.9927/0.9938 (real/sim 비율) · 명령 지연 +2 스텝(0.1 s) · τ 차이 0 · 데드밴드 0 → 아래 범위의 중심
+    #   하드웨어가 바뀌면 다시 측정(sensor-sync-real + report)해서 고치고 sensor-sync-sim으로 맞는지 확인
+    tau_range = (0.01, 0.10)       # [s] 바퀴별 1차 지연 (τ 차이 0 ± 0.1, 최소 0.01)
     gain_range = (0.90, 1.10)      # 바퀴별 이득 (좌우 비대칭)
-    gain_center = (1.0, 1.0)       # 좌/우 gain 중심 — gain_range 샘플에 곱함 (`--fit`이면 real fit)
+    gain_center = (0.9927, 0.9938) # 좌/우 gain 중심 (실측) — gain_range 샘플에 곱함
     deadband_range = (0.0, 0.3)    # [rad/s] 이보다 작은 바퀴 명령은 안 돎
     # documents/isaac/task-spec.md §3 기준: 명령·관측 각각 0~4 스텝 (0~200 ms)
-    cmd_delay_steps = (0, 4)       # PC → Pi (×50 ms)
+    cmd_delay_steps = (0, 4)       # 명령 지연 [×50 ms] (실측 2 ± 2)
     obs_delay_steps = (0, 4)       # Pi → PC (odom·imu)
     sep_nominal_err = 0.08         # 드라이버 기준 간격 vs 실제 유효 간격 (회전 오차 → 자이로로만 보임)
     radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨, 강건성용)
@@ -89,7 +92,7 @@ class RlCorrectEnvCfg(BaseEnvCfg):
 
     # 바닥은 make_terrain · 바퀴 마찰 랜덤은 EventCfg · 바퀴/캐스터 기본 마찰은 BaseEnvCfg
     ground_friction = GROUND_FRICTION   # fit_panel 표시용
-    slope_deg = 0.0    # 기록용 (base-fit.json) — 실제 바닥은 terrain
+    slope_deg = 0.0    # 기록용 (ranges.json) — 실제 바닥은 terrain
     uneven = False
 
     # 명령: hold_range 초마다 바뀜 (텔레오퍼 키 · 부드러운 곡선 · 정지)

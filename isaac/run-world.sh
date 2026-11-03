@@ -9,12 +9,12 @@
 #   --env       환경: envs/ 아래 이름 (기본 default — 아무것도 없는 평평한 바닥) · 없는 이름이면 MOD:CLASS로 직접
 #               이름 규칙: envs/<name>/<name>_env.py <Name>Env + <name>_env_cfg.py <Name>EnvCfg (Isaac Lab task 폴더)
 #   --env-cfg   환경 설정 MOD:CLASS — 안 주면 --env 규칙으로 (MOD:CLASS면 <mod>_cfg:<Class>Cfg로 추측)
-#               행동이 [v, w] 명령인 env면 된다 (BaseEnv 계열: DefaultEnv · calibration CalibEnv)
+#               행동이 [v, w] 명령인 env면 된다 (BaseEnv 계열: envs/default · envs/rooms)
 #   --cmd       명령 (commands/): keyboard = 직접 운전 (기본) · square = 네모 54 s (노란 점 = 목표 경로, calibration 측정과 같은 명령)
 #               · MOD:CLASS = commands.base_command.BaseCommand 상속 클래스 (생성자 speed=, turn=)
 #   --speed --turn   기준 전진 [m/s] · 회전 [rad/s] (keyboard: 키 하나 · square: 사각형 기준 속도)
 #
-# 키: W/A/S/D(화살표) 주행(keyboard) · Shift 느리게 · X 정지 · R 원점 + 명령 처음부터 · F 카메라를 로봇 쪽으로 · 창 닫으면 끝
+# 키: W/A/S/D(화살표) 주행(keyboard) · Shift 느리게 · X 정지 · R 원점 + 명령 처음부터 · N 다음 방(rooms) · F 카메라 · 창 닫으면 끝
 # 카메라: 마우스 휠 줌 · 오른쪽 드래그 회전 · 가운데 드래그 이동 (고정 안 함)
 # 화면: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 (cfg.debug_vis) · 터미널: 0.5 s마다 명령 / 엔코더 / 자이로
 #
@@ -22,7 +22,7 @@
 #   ./run-world.sh --robot beebot
 #   ./run-world.sh --robot ~/my_robots/beebot2              # robots/ 밖의 로봇 폴더
 #   ./run-world.sh --cmd square                                  # 로봇이 혼자 네모 — 드리프트를 노란 점과 비교
-#   ./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물
+#   ./run-world.sh --env rooms                                   # 방 + 장애물 (N = 다음 방)
 set -euo pipefail
 ISAAC=$(cd "$(dirname "$0")" && pwd)
 ISAACLAB="${ISAACLAB_DIR:-/home/pank/pa-course/IsaacLab-6.1}"

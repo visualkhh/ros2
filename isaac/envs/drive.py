@@ -96,6 +96,9 @@ def main(argv=None) -> int:
             if "R" in new:
                 env.place((0.0, 0.0, 0.0))
                 sim_t, ended = start(), False
+            if "N" in new and hasattr(env, "next_room"):   # 방 환경 (--env rooms)
+                env.next_room()
+                sim_t, ended = start(), False
             if "F" in new:   # 카메라는 평소 자유 (따라가게 고정하면 마우스 줌·회전이 매 프레임 덮어씌워짐)
                 env.look_at(env.robot.data.root_pos_w.torch[0].tolist())
             v, w = (0.0, 0.0) if cmd.done(sim_t) else cmd(sim_t)

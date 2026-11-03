@@ -8,7 +8,7 @@
 
 ```text
 calibration/  real·sim 응답 측정 → fit.json (sim을 real에 맞춤)
-  → training/   Isaac Lab PPO 학습 (--fit으로 real 값 중심 랜덤화) → policy.onnx
+  → training/   Isaac Lab PPO 학습 (실기기 맞춤 값 중심 랜덤화 — cfg에 숫자) → policy.onnx
   → ros2_ws/rl-only.sh   PC corrector가 ONNX로 보정 + 기록(raw.csv)
   → ros2_ws/report.py    Before/After 그림
 ```
@@ -37,13 +37,13 @@ isaac/
 ├── envs/                     환경 바탕 — 모든 env가 상속
 │   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
 │   ├── default/              DefaultEnv — 아무것도 없는 기본 환경 (새 환경은 이걸 복사해 시작)
+│   ├── rooms/                RoomsEnv — 벽 + 장애물 방 여러 개
 │   ├── drive.py              운전 창 (./run-world.sh) — 로봇 · env · 명령 선택
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── robots/beebot/config.py   로봇 정의 한 곳 ROBOT_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
-├── calibration/              sim/real 응답 측정 · fit · 비교 리포트       → calibration/README.md
-│   ├── calib_env.py · calib_env_cfg.py   Isaac Lab Direct env (로봇 1대 · 바퀴 모델 · 방+장애물)
-│   ├── sensor_sync_sim.py · sensor_sync_real.py · dummy_sensor.py · random_world.py   실행 스크립트
-│   ├── record.py · fit.py    기록(명령 = commands/square) · --fit 해석 (1개 = real 값, 2개 = real − sim)
+├── calibration/              sim/real 응답 측정 · fit · 비교 리포트
+│   ├── sensor_sync_sim.py · sensor_sync_real.py · dummy_sensor.py   측정 스크립트 (sim = 순수 envs/default)
+│   ├── record.py             측정 기록 (명령 = commands/square) → raw.csv · fit.json(측정 결과) · report.png
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── trainer.py            실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
@@ -60,12 +60,12 @@ isaac/
 USD는 URDF · 메시가 바뀌면 자동으로 다시 변환된다 (`robots/urdf_to_usd.py` `robot_usd()` → `robots/<robot>/usd/`, git 제외).
 따로 변환만: `./run-usd.sh [robot]` (Isaac Sim을 창 없이 켜서 변환 — 변환기가 Isaac Sim 안에 있다).
 다른 로봇: `robots/<이름>/`에 `urdf/robot.urdf.xacro` + `meshes/` + `spec.py` + `config.py`(`ROBOT_CFG`)를 두고 `./run-world.sh --robot <이름>` (코드에선 `robots.use(env_cfg, "<이름>")`).
-측정 경로를 바꾸려면 `commands/square.py`(또는 BaseCommand를 상속한 새 명령), calibration 장면은 `calibration/calib_env_cfg.py` · `calib_env.py`를 고친다.
+측정 경로를 바꾸려면 `commands/square.py`(또는 BaseCommand를 상속한 새 명령), 측정 장면은 `envs/default`(또는 `envs/rooms`)다.
 
-## 3. 절차 (2026-11-02 실제로 돈 순서)
+## 3. 절차
 
-real 측정 → 같은 경로를 sim으로 측정 → 차이(`--fit real,sim`)로 학습 → 실기기에서 A/B.
-경로는 `isaac/` 기준. 예시 폴더 이름은 그날 실제 결과.
+real 측정 → 순수 sim 측정 (calibration은 여기까지) → **RL 쪽 env cfg에 차이를 숫자로** → 그 env로 맞았는지 확인 → 학습 → 실기기에서 A/B.
+경로는 `isaac/` 기준. 예시 폴더 이름은 2026-11-02 실제 결과. `--fit` 같은 런타임 보정 옵션은 없다 — 숫자는 코드에 있다.
 
 ### 3.0 준비 (처음 한 번)
 
@@ -73,9 +73,6 @@ real 측정 → 같은 경로를 sim으로 측정 → 차이(`--fit real,sim`)�
 cd isaac && ./setup_venv.sh                                               # real 측정·리포트용 .venv
 cd ../ros2_ws && colcon build --packages-select rl_correction rl_eval tb3_bringup   # PC
 ```
-
-PC·Pi 시계 동기(chrony)는 `--latency`(3.4)를 쓸 때만 필요하다. 2026-11-02 기준 Pi가 약 52 ms 빠름
-(기록의 메시지 지연이 음수 · fit의 `age` ≈ −0.05로 보임).
 
 ### 3.1 real 측정 — 실기기 사각형
 
@@ -89,81 +86,67 @@ cd isaac
 #   → artifacts/calibration/<시각>-real_floor/{raw.csv, fit.json, report.png}   (--label 없으면 <시각>-02-real)
 ```
 
-- 로봇 주변 1 m 비우기. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 약 54초. 중간에 잡지 말 것.
-- 이 단계엔 `rl-only.sh`를 띄우지 않는다 (직결, `sensor-sync-real`이 직접 명령·기록).
-- 볼 것(`fit.json`): gain 좌/우 · 지연 · τ. 2026-11-02 결과(`20261102_140931-02-real`): gain 0.994/0.995 · 지연 0.097 s · τ 0.045 s.
-  τ는 20 Hz 기록의 한계값(이보다 빠른 건 구분 못 함) · 데드밴드 0은 "못 잼"(저속 구간 없음).
+- 로봇 주변 1 m 비우기. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 약 54초. 중간에 잡지 말 것. `rl-only.sh`는 띄우지 않는다 (직결).
+- `fit.json` = 측정 결과 (gain 좌/우 · 지연 · τ · 데드밴드). 2026-11-02(`20261102_140931-02-real`): gain 0.9943/0.9951 · 지연 2스텝(0.1 s) · τ 0.046 s.
+  τ는 20 Hz 기록의 한계값 · 데드밴드 0은 "못 잼"(저속 구간 없음).
 
-### 3.2 sim 측정 — 같은 명령, 보정 없이 (raw)
+### 3.2 sim 측정 — 같은 명령, 순수 sim (envs/default, 보정 없음)
 
 ```bash
-./run-calibration.sh sensor-sync-sim --viz none --label sim        # 창 보려면 --viz none 빼기
-#   → artifacts/calibration/<시각>-sim/{raw.csv, fit.json, report.png}
+./run-calibration.sh sensor-sync-sim --viz none --label sim
 ./run-calibration.sh plot-compare artifacts/calibration/<시각>-sim/raw.csv artifacts/calibration/<real>/raw.csv
 ```
 
 - 사각형 기본값(`--side 0.5 --speed 0.15 --turn 1.0`)이 real과 같아 **같은 명령**이 재생된다.
-- `--fit` 없이 잰다 — 이게 3.4 차이 계산의 sim 기준. 정상이면 "이상적인 모터": gain ≈ 1 · 지연 0 · 사각형이 몇 cm 안에서 닫힘.
-  (2026-11-02 `20261102_144928-sim_480`: gain 1.002/1.001 · 회전 자이로/명령 0.956, real 0.950)
-- sim은 **`--fit`으로 준 값만** 쓴다. 숨은 보정 파일은 읽지 않는다.
-- real·sim 한 번에: `./run-calibration.sh calibrate --side 0.5` → `<시각>-calibrate/{sim,real}/…` · `compare.png`.
+- 2026-11-02(`20261102_144928-sim_480`): gain 1.0016/1.0013 · 지연 0 · τ 0.05 s — sim 로봇 자체 응답.
 - sim이 real과 크게 다르면 먼저 sim 물리를 의심한다 (2026-11-02에 고친 것 — 아래 4번).
 
-### 3.3 (선택) 맞춰졌는지 확인
+### 3.3 RL 쪽 env에 숫자 넣기 — real − sim 차이
 
-```bash
-./run-calibration.sh sensor-sync-sim --viz none --fit artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit.json
-#   → 새 폴더의 fit.json ≈ real의 fit.json 이면 OK (넣은 값은 base-fit.json)
-```
+calibration은 측정만 한다. sim을 real처럼 만드는 건 **각 RL task의 env cfg**가 한다 (task마다 자기 env를 만들고 값을 바꿔가며 맞춘다).
+지금 task(`training/rl_correction_wheel_drift/rl_correct_env_cfg.py`)에 넣은 값 (2026-11-02):
 
-`--fit` 형식: 경로 1개 = 그 값 그대로 · 경로 2개(쉼표, 띄어쓰기 없이, **real 먼저**) = real − sim 차이
-(gain은 비율, 지연·τ는 차, 데드밴드 = real 문턱 ÷ sim gain).
+| 값 | 계산 | 2026-11-02 | 학습 cfg |
+|---|---|---|---|
+| 좌/우 gain | real ÷ sim | 0.9927 / 0.9938 | `gain_center` |
+| 명령 지연 | real − sim | +2 스텝 | `cmd_delay_steps` 중심 (0~4) |
+| τ | real − sim (음수면 0) | 0 | `tau_range` 중심 (0.01~0.10) |
+| 데드밴드 | real ÷ sim gain (sim이 더 크면 0) | 0 | `deadband_range` |
+
+real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)에 **더해지는** 값이라 차이만 넣는다.
+맞았는지는 그 env로 몰아보며(`./run-training.sh --drive --watch`) 또는 task의 확인 스크립트로 본다.
 
 ### 3.4 학습
 
 ```bash
-FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit.json
-./run-training.sh --watch --envs 16 --iterations 5 --fit $FIT     # 짧게 확인: 창 + TRAINING FIT 창 · 창 클릭 후 P = 스크린샷
-./run-training.sh --iterations 300 --fit $FIT                     # 본 학습 (창 없음, 512대, 약 30분)
-./run-training.sh --iterations 300 --fit $FIT --uneven --snap 60  # + 낮은 턱 + 1분마다 화면 저장
-tensorboard --logdir artifacts/training                           # 진행 그래프 (다른 터미널)
-#   → artifacts/training/<시각>-rl_correct/ (policy.onnx · eval.json · base-fit.json · checkpoint · TensorBoard)
+./run-training.sh --watch --envs 16 --iterations 5               # 짧게 확인: 창 + 랜덤 범위 창 · 창 클릭 후 P = 스크린샷
+./run-training.sh --iterations 300                               # 본 학습 (창 없음, 512대, 약 30분)
+./run-training.sh --iterations 300 --uneven --snap 60            # + 낮은 턱 + 1분마다 화면 저장
+tensorboard --logdir artifacts/training                          # 진행 그래프 (다른 터미널)
+#   → artifacts/training/<시각>-rl_correct/ (policy.onnx · eval.json · ranges.json · checkpoint · TensorBoard)
 ```
 
-- **`--fit`은 꼭 준다.** 3.2의 sim은 지연 0 — 실기기 지연 0.1 s는 `--fit`이 학습 env 모터 모델(바퀴 τ·gain·지연 랜덤 범위)의
-  **중심**으로 넣어야 들어간다 (폭은 유지). 궤적 그림이 비슷해 보여도 지연은 그림에 안 보인다.
-- `--fit`의 sim은 학습과 **같은 물리 설정**(`envs/rates.py PHYSICS_HZ`)으로 잰 raw여야 한다.
+- 실측 값(3.3)이 학습 env 랜덤 범위의 **중심**이다 (폭은 유지). `ranges.json`에 이번 학습의 범위가 남는다.
 - 창 없이 돌면서 보고 싶으면 `--snap 60`: 60초마다 `<결과>/snaps/<시각>.png` + `<결과>/latest.png`(최신으로 덮어씀).
   `eog <결과>/latest.png`로 열어 두면 바뀔 때 다시 그린다. 렌더가 켜져 학습이 ~20% 느려진다 (32대 5.2→6.2 s/iter).
   P 키 스크린샷은 `--watch`(창)에서만.
-- 바닥: Isaac Lab 지형(8 m 칸 격자: 평평 · 경사 피라미드 0~`--slope`° · `--uneven` 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1(events) (`--no-friction`으로 마찰 랜덤 끔)
-  · 기울기: **기본 켜짐** — env마다 바닥판을 랜덤 방향·랜덤 각도 0~3°로 (오르막·내리막 = 바퀴 부하, 옆 기울기 = 흘러서 휨.
-  실내 바닥 1~2°, 경사로 ~5°). 상한만 `--slope 5`로 바꾸고 `--slope 0`이면 평평. 턱도 같은 지형에 같이 기운다.
+- 바닥: Isaac Lab 지형(8 m 칸 격자: 평평 · 경사 피라미드 0~`--slope`° · `--uneven` 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1(events) (`--no-friction`으로 마찰 랜덤 끔).
+  경사 **기본 켜짐** (0~3°, `--slope 0`이면 없음).
 - 자이로 영점 오차: **기본 켜짐** — 에피소드마다 ±0.05 rad/s 고정값을 w_gyro에 더함 (정책이 엔코더와 비교해 영점을 무시하게).
   `--gyro-bias 0.1`로 폭 변경 · `0`이면 끔. 실기기 11-02의 −0.257은 고장 수준 — 학습으로 덮지 말고 OpenCR 재부팅(가만히)으로 고친다.
-  slope·gyro_bias 값은 `base-fit.json` ranges에 남는다.
-- `--latency ../ros2_ws/artifacts/real/before.csv`: RL 경로(PC 왕복) 지연까지 반영. rl-only Before 기록(경로 rl, enable:=false)에서
-  관측 나이·corrector 처리 시간을 뽑는다. **PC·Pi 시계가 안 맞으면 거부** (3.0).
 - 끝나면 sim Before/After를 자동으로 돈다(같은 env·seed, 정책 끔/켬) → `eval.json`:
   `improve_pct.rms_w`가 + 면 sim에서 회전 추종이 좋아짐 · `onnx_max_abs_diff` ≈ 0 이면 배포 파일 = 평가한 정책.
 - `--iterations` 1회 = envs×64스텝 수집 + PPO 업데이트 (512대 ≈ 5.5 s). 자세히: [training/README.md](training/README.md).
 
-### 3.4b sim에서 정책 play — 실기기 전에 A/B
+### 3.4b 정책 몰아보기 — 실기기 전에
 
 ```bash
-FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit.json
-./run-calibration.sh sensor-sync-sim --viz none --fit $FIT --label A                                # 보정 없이
-./run-calibration.sh sensor-sync-sim --watch --fit $FIT --policy artifacts/real/policy.onnx --label B  # 정책으로 (창)
-../ros2_ws/report.py artifacts/calibration/<A>/raw.csv artifacts/calibration/<B>/raw.csv            # A/B 비교 그림
+./run-training.sh --drive --watch --uneven --policy artifacts/real/policy.onnx   # 학습 env(실측 맞춤) + C = 정책 켬/끔
+./run-calibration.sh sensor-sync-sim --watch --policy artifacts/real/policy.onnx  # 순수 sim에서 같은 네모 (참고용 — 휨이 거의 없다)
 ```
 
-- `--policy`: ros2 corrector와 같은 규칙(관측 6개 → ONNX 보정량 더하고 clip · 정지 명령엔 0)으로 같은 사각형을 달린다.
-  `--fit real,sim`으로 real처럼 맞춘 sim이라 실기기 A/B를 미리 보는 셈. 기록의 `lin/ang_out` = 보정 출력.
-- 차이: 실기기의 WiFi 왕복 지연은 없다 (sim은 정책이 바로 본다).
-- 창(`--watch`, 학습 `--watch`·`--snap`도 같음): **초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로**
-  (calibration은 사각형 전체, 학습은 명령이 바뀐 순간부터 그 명령대로 갈 길). 노란 점에서 벗어나는 만큼이 드리프트.
-- 옵션 전체 · 화면 · sim play 자세히: [calibration/README.md](calibration/README.md) "sensor-sync-sim — 옵션 · 화면 · sim play"
-  · 학습 화면: [training/README.md](training/README.md) "화면" · `./run-calibration.sh -h` · `./run-training.sh -h`
+- 학습 env는 실측 값이 들어간 sim이라 정책 효과가 보인다. 순수 sim(calibration)은 거의 안 휘어서 보정할 게 없다.
+- 창: **초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로**. 노란 점에서 벗어나는 만큼이 드리프트.
 
 ### 3.4c 직접 운전 — `run-world.sh` (로봇 · 환경 골라서)
 
@@ -171,11 +154,11 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 ./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + beebot
 ./run-world.sh --robot <robot>                       # 다른 로봇: robots/ 아래 이름 또는 로봇 디렉토리 경로
 ./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/<name>_env.py · <name>_env_cfg.py)
-./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물  (envs/ 밖은 MOD:CLASS)
+./run-world.sh --env rooms                          # 방 + 장애물 (N = 다음 방) · envs/ 밖 env는 MOD:CLASS
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
 ./run-world.sh -h
 # 학습 env 그대로 + 정책 켬/끔 (C 키): 행동이 보정량이라 학습 쪽 운전 모드로
-./run-training.sh --drive --watch --fit $FIT --uneven --policy artifacts/real/policy_30.onnx
+./run-training.sh --drive --watch --uneven --policy artifacts/real/policy_30.onnx
 ```
 
 - 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 원점 · **F 카메라를 로봇 쪽으로** · 창 닫으면 끝 (학습 --drive는 + C 정책 켬/끔)
@@ -229,7 +212,7 @@ cd ../ros2_ws
 4. **남은 차이**: 회전 때 몸체가 바퀴보다 덜 돎 — real 자이로/명령 0.950 vs 엔코더 0.995 (5%), sim 0.956 vs 1.017.
    학습 env의 바퀴 간격 오차 랜덤 범위(±8%)가 덮는다.
 5. **데드밴드** — 측정 경로에 저속 구간이 없어 fit의 0은 "못 잼". 학습은 기본 범위(0~0.3) 사용.
-6. 자세한 실험·판단: [calibration/README.md](calibration/README.md) · [calibration/EXPERIMENT.md](calibration/EXPERIMENT.md) · 개념: [../documents/isaac/concepts.md](../documents/isaac/concepts.md).
+6. 개념: [../documents/isaac/concepts.md](../documents/isaac/concepts.md).
 
 ## 5. sim ROS 브리지 (계획 · 미구현)
 

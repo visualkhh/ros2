@@ -4,7 +4,7 @@ import importlib
 import sys
 
 COMMANDS = {"sensor-sync-sim": "sensor_sync_sim", "sensor-sync-real": "sensor_sync_real",
-            "random-world": "random_world", "dummy": "dummy_sensor"}
+            "dummy": "dummy_sensor"}
 
 args = sys.argv[1:]
 if not args or args[0] not in COMMANDS:

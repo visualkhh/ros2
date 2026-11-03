@@ -26,12 +26,10 @@ def run_path(name: str) -> str:
     return str(RUNS_DIR / f"{datetime.now():%Y%m%d_%H%M%S}-{name}" / "raw.csv")
 
 
-def record(tag: str, send, collect, cmd, out: str, dt: float, pace=None,
-           base_fit: dict | None = None) -> list:
+def record(tag: str, send, collect, cmd, out: str, dt: float, pace=None) -> list:
     """명령 경로(commands.BaseCommand, 끝이 있는 것 — 보통 SquareCommand)를 dt마다 send → (pace) → collect. out에 CSV + 구간 표 + fit.json + report.png. rows 반환.
 
     pace(k, t): real의 wall-clock 맞추기 (sim은 물리 스텝이 시계라 없음).
-    base_fit: 넣은 입력 보정 → 같은 폴더 base-fit.json.
     """
     segs = getattr(cmd, "segs", [])
     print(f"[{tag}] {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
@@ -49,9 +47,6 @@ def record(tag: str, send, collect, cmd, out: str, dt: float, pace=None,
         cw.writerow(CSV_HEADER)
         cw.writerows(rows)
     run_dir = os.path.dirname(out)
-    if base_fit is not None:
-        _write_json(os.path.join(run_dir, "base-fit.json"),
-                    {"source": base_fit["source"], "fit": {k: v for k, v in base_fit.items() if k != "source"}})
     print_segments(tag, segs, rows, out)
     try:
         from calibration.report.report import fit_wheel, write_report_png

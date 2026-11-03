@@ -1,23 +1,13 @@
-"""calibration env — 기본 세상(BaseEnv) + 바퀴 모델 + 방·장애물. [v, w] 명령을 넣고 엔코더 · 자이로를 읽는다.
-
-한 스텝(20 Hz): 명령 → [지연] → 바퀴 rad/s (드라이버 식) → 좌/우 gain → 데드밴드 → 1차 지연 τ → 바퀴 속도 목표 → 물리 24회.
-측정용이라 보상 0 · 종료 없음 (BaseEnv 그대로). 기록 · 명령 경로는 스크립트(sensor_sync_sim · random_world)가 한다.
-"""
+"""RoomsEnv — 기본 환경 + 방 여러 개. 방 i 가운데 = (i × room_spacing, 0). `next_room()` = 다음 방으로 순간이동."""
 from __future__ import annotations
 
 import math
 import random
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
-
-import torch
 
 import isaaclab.sim as sim_utils
 
-from envs.base_env import BaseEnv
-
-if TYPE_CHECKING:
-    from calibration.calib_env_cfg import CalibEnvCfg
+from envs.default.default_env import DefaultEnv
 
 FREE_RADIUS = 0.75      # 방 가운데 로봇 자리 — 장애물 금지
 WALL_H, WALL_T = 1.1, 0.05
@@ -25,52 +15,27 @@ PALETTE = ((0.75, 0.15, 0.12), (0.12, 0.55, 0.20), (0.15, 0.30, 0.75),
            (0.75, 0.55, 0.10), (0.45, 0.20, 0.60), (0.20, 0.60, 0.65))
 
 
-class CalibEnv(BaseEnv):
-    cfg: CalibEnvCfg
-
-    def __init__(self, cfg: CalibEnvCfg, render_mode: str | None = None, **kwargs):
-        super().__init__(cfg, render_mode, **kwargs)
-        self.reset_wheel_model()
-
+class RoomsEnv(DefaultEnv):
     def _setup_scene(self):
         super()._setup_scene()
         self.rooms = spawn_rooms(self.cfg)
+        self.room = 0
 
-    # ------------------------------------------------------------------ 바퀴 모델
-    def reset_wheel_model(self):
-        self._buf = torch.zeros(int(self.cfg.wheel.delay_steps) + 1, 2, device=self.device)   # [0] = 최신 명령
-        self._lag = None
-
-    def _pre_physics_step(self, actions: torch.Tensor) -> None:
-        w = self.cfg.wheel   # 실행 중 바뀔 수 있다 (random_world 보정값 창)
-        self.cmd = actions[:1].clone()
-        n = max(0, int(w.delay_steps)) + 1
-        if self._buf.shape[0] != n:   # 지연이 바뀌면 마지막 명령으로 다시 채운다
-            self._buf = self._buf[:1].expand(n, 2).clone()
-        self._buf = torch.roll(self._buf, 1, dims=0)
-        self._buf[0] = self.cmd[0]
-        v, wz = self._buf[-1]
-        wheels = self.wheel_speeds(v[None], wz[None])
-        wheels = wheels * wheels.new_tensor([w.gain_l, w.gain_r])
-        if w.deadband > 0:
-            wheels = torch.where(wheels.abs() < w.deadband, torch.zeros_like(wheels), wheels)
-        if w.tau_s <= 1e-6 or self._lag is None:
-            self._lag = wheels
-        else:
-            self._lag = self._lag + (1.0 - math.exp(-self.policy_dt / w.tau_s)) * (wheels - self._lag)
-        self.target = self._lag
-
-    # ------------------------------------------------------------------ 리셋 · 이동
     def _reset_idx(self, env_ids: Sequence[int] | None):
         super()._reset_idx(env_ids)
-        self.place((0.0, 0.0, 0.0))
+        if getattr(self, "rooms", None):
+            self.place(self.rooms[self.room]["origin"])
 
-    def place(self, origin, yaw: float = 0.0, i: int = 0) -> None:
-        super().place(origin, yaw, i)
-        self.reset_wheel_model()
+    def next_room(self) -> None:
+        if not self.rooms:
+            return
+        self.room = (self.room + 1) % len(self.rooms)
+        rm = self.rooms[self.room]
+        self.place(rm["origin"])
+        self.look_at(rm["origin"])
+        print(f"[rooms] 방 {self.room + 1}/{len(self.rooms)} · {rm['size']:.1f} m · 장애물 {rm['obstacles']}개", flush=True)
 
 
-# ---------------------------------------------------------------------- 방 + 장애물
 def spawn_rooms(cfg) -> list[dict]:
     """cfg.rooms개 방 (벽 4 + 장애물 3~6개, 방마다 크기 랜덤). 방 i 가운데 = (i × room_spacing, 0). 반환: [{origin, size, obstacles}]."""
     if cfg.rooms <= 0:

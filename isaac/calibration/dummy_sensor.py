@@ -1,8 +1,7 @@
 """가짜 로봇 — Isaac/ROS 없이 calibration 흐름(기록 → fit.json → report)을 돌려볼 때. 표준 라이브러리만.
 
-plant: 지연 → 좌/우 gain → 데드밴드 → 1차 지연 + 잡음 · 회전 슬립. 입력 보정(--fit)은 sim 바퀴 모델과 같은 순서.
-  ./run-calibration.sh dummy --gain-l 0.96 --gain-r 1.02 --out artifacts/calibration/dummy_real/raw.csv
-  ./run-calibration.sh dummy --fit artifacts/calibration/dummy_real/fit.json,<sim>/fit.json
+plant: 지연 → 좌/우 gain → 데드밴드 → 1차 지연 + 잡음 · 회전 슬립.
+  ./run-calibration.sh dummy --gain-l 0.96 --gain-r 1.02 --out artifacts/calibration/dummy_real/raw.csv   # → fit.json에 같은 gain이 나오면 OK
 """
 from __future__ import annotations
 
@@ -12,7 +11,6 @@ import random
 from collections import deque
 
 from commands.square import SquareCommand
-from calibration.fit import load_fit, wheel_of
 from calibration.record import record, run_path
 from envs import rates
 from robots.beebot import spec
@@ -41,25 +39,17 @@ def main(argv=None) -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--label", default="dummy")
     p.add_argument("--out", default=None)
-    p.add_argument("--fit", default=None, help="입력 보정 real/fit.json 또는 real,sim (차이)")
     args = p.parse_args(argv)
-    base_fit = load_fit(args.fit) if args.fit else None
-    b = wheel_of(base_fit) if base_fit else {"tau_s": 0.0, "delay_steps": 0, "gain_l": 1.0, "gain_r": 1.0, "deadband": 0.0}
     gl = args.gain if args.gain_l is None else args.gain_l
     gr = args.gain if args.gain_r is None else args.gain_r
     rng = random.Random(args.seed)
-    base_buf = deque([(0.0, 0.0)] * (b["delay_steps"] + 1), maxlen=b["delay_steps"] + 1)
     buf = deque([(0.0, 0.0)] * (args.delay + 1), maxlen=args.delay + 1)
-    st = {"base": (0.0, 0.0), "plant": (0.0, 0.0), "odom": [0.0, 0.0, 0.0]}
+    st = {"plant": (0.0, 0.0), "odom": [0.0, 0.0, 0.0]}
 
     def send(v, w):
         wl, wr = (v - w * SEP / 2.0) / R, (v + w * SEP / 2.0) / R
         k = min(1.0, MAX_WHEEL / max(abs(wl), abs(wr), 1e-9))
-        base_buf.append((wl * k, wr * k))   # 입력 보정 — sim 바퀴 모델과 같은 순서
-        wl, wr = base_buf[0]
-        wl, wr = [0.0 if abs(x) < b["deadband"] else x for x in (wl * b["gain_l"], wr * b["gain_r"])]
-        st["base"] = _lag(st["base"], (wl, wr), b["tau_s"])
-        buf.append(st["base"])
+        buf.append((wl * k, wr * k))
 
     def collect(t, v, w):
         wl, wr = buf[0]
@@ -74,8 +64,7 @@ def main(argv=None) -> int:
         o[1] += v_enc * math.sin(o[2]) * DT
         return [round(t, 3), v, w, v, w, *o, v_enc, w_enc, w_gyro, sl, sr, 0.0, 0.0, args.label, t, t, t, t]
 
-    record("dummy", send, collect, SquareCommand(args.speed, args.turn, args.side), args.out or run_path("dummy"), DT,
-           base_fit=base_fit)
+    record("dummy", send, collect, SquareCommand(args.speed, args.turn, args.side), args.out or run_path("dummy"), DT)
     return 0
 
 

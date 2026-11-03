@@ -16,7 +16,7 @@ training/rl_correction_wheel_drift/
 └── README.md
 ```
 
-공용: `../../robots/beebot/spec.py` · `../onnx/onnx_export.py` · `../../calibration/` (`--fit`)
+공용: `../../robots/beebot/spec.py` · `../onnx/onnx_export.py` · `../../calibration/` (측정 — 실측 값은 `rl_correct_env_cfg.py`에 숫자)
 
 ## 환경
 
@@ -30,8 +30,7 @@ training/rl_correction_wheel_drift/
 | 랜덤화 (에피소드마다) | 바퀴별 τ·gain, 데드밴드, 명령/관측 지연, 바퀴 반지름·간격 기준 오차, 초기 yaw |
 | 마찰 (기본 켜짐) | env마다 바퀴 마찰 랜덤 0.7~1.1 (Isaac Lab events `EventCfg`, 시작 시 1회). 바닥은 고정 (0.8, 0.7). 끄려면 `--no-friction` |
 | `--uneven` | env별 낮은 턱 (1~3 cm) |
-| `--latency` | rl-only Before CSV → RL 경로 왕복을 명령 지연에 더하고 관측 지연 중심으로 |
-| `--fit` | `real/fit.json,sim/fit.json` → 차이를 τ·gain·지연(·데드밴드) 랜덤 범위의 **중심**으로 (폭 유지) |
+| 실기기 맞춤 | `rl_correct_env_cfg.py`: `gain_center` 0.9927/0.9938 · `cmd_delay_steps` (0, 4) · `tau_range` (0.01, 0.10) — 2026-11-02 real − sim |
 
 - obs에는 실기기에서 보이는 값만 넣는다 (true 속도는 보상에만).
 
@@ -41,11 +40,9 @@ training/rl_correction_wheel_drift/
 cd isaac   # Lab env
 
 # 기본: headless, 바퀴 마찰 랜덤 켜짐
-./isaaclab.sh -p -m training rl_correction_wheel_drift --iterations 300 \
-  --fit artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
-# 창으로 보기 (512 env는 무거우니 16~32개만) — TRAINING FIT 창에 fit·범위·마찰이 같이 뜸
-./isaaclab.sh -p -m training rl_correction_wheel_drift --watch --envs 16 \
-  --fit artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
+./isaaclab.sh -p -m training rl_correction_wheel_drift --iterations 300
+# 창으로 보기 (512 env는 무거우니 16~32개만) — 랜덤 범위 창이 같이 뜸
+./isaaclab.sh -p -m training rl_correction_wheel_drift --watch --envs 16
 
 tensorboard --logdir artifacts/training
 ```
@@ -53,10 +50,10 @@ tensorboard --logdir artifacts/training
 - `--watch` 창에서 **P** 키 → 결과 폴더에 `screen_shot_<시각>.png`
 - 화면(`--watch`·`--snap`): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 랜덤 명령의 목표 경로
   (명령이 바뀐 순간부터 그 명령대로 갈 길). 구현: `rl_correct_env.py` `_set_debug_vis_impl` · `_debug_vis_callback`
-- 학습한 정책을 sim에서 play: `./run-calibration.sh sensor-sync-sim --watch --fit <real>,<sim> --policy <결과>/policy.onnx`
-- 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint, `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교), (`--fit`/`--latency`면) `base-fit.json`
+- 학습한 정책 몰아보기: `../../run-training.sh --drive --watch --policy <결과>/policy.onnx` (C = 정책 켬/끔)
+- 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint, `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교), `ranges.json`
 
 ## 주의
 
 - 학습 전에 `calibration/`으로 sim/real 신호를 먼저 맞춘다. 안 맞으면 학습이 잘 돼도 real에서 효과가 없다.
-- `--fit`에는 `real/fit.json,sim/fit.json`(차이)을 넣는다. sim fit은 raw(`--fit` 없이) 잰 것. 1개면 real 값 그대로.
+- 실측 값을 바꾸면(하드웨어 변경 등) `rl_correct_env_cfg.py` 숫자를 고친다 — real − sim 차이 (`../../README.md` 3.3).
