@@ -440,7 +440,7 @@ def report(paths: list[Path], out: Path, show: bool) -> Path:
     ax_path.set_aspect("equal", adjustable="datalim")
     ax_path.set_xlabel("x [m] (구간 시작 방향 = +x)")
     ax_path.set_ylabel("y [m]")
-    ax_path.plot(0, 0, "k*", ms=12, label="★ 시작 (모든 구간) · ● 끝")
+    ax_path.plot(0, 0, "k*", ms=12, label="시작 (A·B 각자 자기 시작점 = (0,0) · 방향 0) · ● 끝")
     ax_path.set_title("주행 궤적 — ●끝 · 실선과 점선이 가까울수록 명령대로 감", fontsize=11, loc="left")
     ax_path.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), fontsize=9)
 
