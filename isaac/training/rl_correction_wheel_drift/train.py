@@ -100,6 +100,9 @@ class WheelDriftTrain(Train):
         import importlib.metadata as _md
         from isaaclab_rl.rsl_rl.utils import handle_deprecated_rsl_rl_cfg  # noqa: E402
 
+        from agents.base_agent import check  # noqa: E402
+
+        check(agent_cfg)   # agent.py가 안 채운 값이 있으면 이름과 함께 멈춤
         handle_deprecated_rsl_rl_cfg(agent_cfg, _md.version("rsl-rl-lib"))
         runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
         runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)

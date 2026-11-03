@@ -1,38 +1,56 @@
-"""BaseAgentCfg — 우리 공통 PPO 기본값 (RSL-RL, Isaac Lab 6.1 RslRlOnPolicyRunnerCfg).
+"""BaseAgentCfg — 학습자(agent) 설정의 바탕. **task와 상관없는 PPO 표준값만** (Isaac Lab rsl_rl 예제들의 공통값).
 
-  policy     정책(actor) · 가치(critic) 신경망 — actor가 policy.onnx로 나간다
-  algorithm  PPO 학습 방법 (학습률 · 탐색 보너스 · 한 번에 얼마나 바꿀지)
-  그 밖      env마다 모으는 스텝 · 학습 횟수 · 저장 간격 · 로그
+task마다 맞춰야 하는 값은 비워 둔다 (MISSING — task agent.py가 안 정하면 학습 시작 때 에러):
+  num_steps_per_env · max_iterations · experiment_name
+  policy: init_noise_std · actor_hidden_dims · critic_hidden_dims
+  algorithm: learning_rate · entropy_coef
+task는 `policy = POLICY.replace(...)` · `algorithm = PPO.replace(...)`로 채운다. 빠지면 check()가 학습 전에 멈춘다.
 """
+from dataclasses import MISSING
+
 from isaaclab.utils import configclass
 
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 
+# 정책(actor) · 가치(critic) 신경망 — 크기 · 초기 노이즈는 task가
+POLICY = RslRlPpoActorCriticCfg(activation="elu")
+
+# PPO 학습 방법 — 학습률 · 탐색 보너스는 task가
+PPO = RslRlPpoAlgorithmCfg(
+    value_loss_coef=1.0,
+    use_clipped_value_loss=True,
+    clip_param=0.2,              # 한 번에 정책을 너무 크게 안 바꾸게
+    num_learning_epochs=5,
+    num_mini_batches=4,
+    schedule="adaptive",         # desired_kl 보고 학습률 자동 조절
+    gamma=0.99,                  # 미래 보상 할인
+    lam=0.95,                    # GAE
+    desired_kl=0.01,
+    max_grad_norm=1.0,
+)
+
+
+# task agent.py가 꼭 채워야 하는 값 (train.py가 학습 전에 check()로 확인)
+REQUIRED = ("experiment_name", "num_steps_per_env", "max_iterations",
+            "policy.init_noise_std", "policy.actor_hidden_dims", "policy.critic_hidden_dims",
+            "algorithm.learning_rate", "algorithm.entropy_coef")
+
+
+def check(cfg) -> None:
+    """REQUIRED 중 안 채운 값이 있으면 이름을 모아 에러 (Isaac Lab validate()는 호환 변환이 나중에 채우는 칸까지 잡아서 못 씀)."""
+    def get(path):
+        v = cfg
+        for k in path.split("."):
+            v = getattr(v, k)
+        return v
+    missing = [p for p in REQUIRED if isinstance(get(p), type(MISSING))]   # configclass가 MISSING을 복사해서 is로는 안 잡힘
+    if missing:
+        raise TypeError(f"{type(cfg).__name__}: task agent.py에서 정해야 하는 값 — {', '.join(missing)}")
+
 
 @configclass
 class BaseAgentCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 64      # 1회 학습에 env마다 모으는 스텝
-    max_iterations = 300        # 기본 학습 횟수 (run-training.sh --iterations)
-    save_interval = 50          # model_<N>.pt 저장 간격
-    experiment_name = "agent"
+    save_interval = 50           # model_<N>.pt 저장 간격
     logger = "tensorboard"
-    policy = RslRlPpoActorCriticCfg(
-        init_noise_std=0.5,          # 처음 탐색 노이즈
-        actor_hidden_dims=[64, 64],  # 정책 신경망 (→ policy.onnx, 약 20 KB)
-        critic_hidden_dims=[64, 64],
-        activation="elu",
-    )
-    algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.005,          # 탐색 보너스 — 신호가 약하면 노이즈가 커지는 쪽으로 밀 수 있다 (2026-11-02 8000회 폭주)
-        num_learning_epochs=5,
-        num_mini_batches=4,
-        learning_rate=3e-4,
-        schedule="adaptive",
-        gamma=0.99,
-        lam=0.95,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-    )
+    policy = POLICY
+    algorithm = PPO
