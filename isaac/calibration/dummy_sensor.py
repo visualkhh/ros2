@@ -11,7 +11,7 @@ import math
 import random
 from collections import deque
 
-from calibration import profile
+from commands.square import SquareCommand
 from calibration.fit import load_fit, wheel_of
 from calibration.record import record, run_path
 from urdf import robot_spec as spec
@@ -73,8 +73,8 @@ def main(argv=None) -> int:
         o[1] += v_enc * math.sin(o[2]) * DT
         return [round(t, 3), v, w, v, w, *o, v_enc, w_enc, w_gyro, sl, sr, 0.0, 0.0, args.label, t, t, t, t]
 
-    segs = profile.make_profile(args.speed, args.turn, args.side)
-    record("dummy", send, collect, segs, profile.total(segs), args.out or run_path("dummy"), DT, base_fit=base_fit)
+    record("dummy", send, collect, SquareCommand(args.speed, args.turn, args.side), args.out or run_path("dummy"), DT,
+           base_fit=base_fit)
     return 0
 
 

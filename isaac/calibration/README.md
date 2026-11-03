@@ -31,11 +31,10 @@ calibration/
 ├── sensor_sync_real.py      real 측정 스크립트 (ROS, run-calibration.sh sensor-sync-real)
 ├── dummy_sensor.py          가짜 로봇 — Isaac/ROS 없이 흐름 확인 (run-calibration.sh dummy)
 ├── random_world.py          랜덤 방 + 키보드 주행 + C 보정값 창 (run-calibration.sh random-world)
-├── profile.py               측정 명령 경로 (사각형 → 180° → 역주행, 54 s) — sim · real · dummy 공용
+├── (명령 경로 = ../commands/square.py SquareCommand — sim · real · dummy 공용)
 ├── record.py                기록 1회 (CSV 한 줄 모양 · 구간 표 · fit.json · report.png)
 ├── fit.py                   fit.json ↔ 바퀴 모델 값 · --fit 해석 (1개 = real 값, 2개 = real − sim 차이)
 ├── command_markers.py       화면 막대/점 (학습 env와 공용)
-├── keyboard.py              창 키 폴링 (학습 --drive와 공용)
 ├── report/report.py         단건 리포트 + sim/real 비교·fit (`plot-compare`)
 ├── (산출물은 `../artifacts/` — calibration/RL/real 공용, git 제외)
 ├── PRE_RL.md              차이값을 URDF/마찰/env cfg 중 어디에 넣는지
@@ -72,7 +71,7 @@ sim 측정의 모든 옵션 (`./run-calibration.sh sensor-sync-sim --help`와 �
 | `--watch` | 끔 | 기록 후 창을 닫을 때까지 같은 경로 반복 재생 |
 | `--viz none\|kit` | `kit` | 창 끔/켬 (기록만 할 땐 `none`) |
 
-측정 경로를 바꾸려면 `profile.py`의 `make_profile`을, 장면을 바꾸려면 `calib_env_cfg.py`(cfg)·`calib_env.py`(`_setup_scene`)를 고친다.
+측정 경로를 바꾸려면 `../commands/square.py`(또는 BaseCommand를 상속한 새 명령)를, 장면을 바꾸려면 `calib_env_cfg.py`(cfg)·`calib_env.py`(`_setup_scene`)를 고친다.
 
 ### 화면 (`--watch`)
 
@@ -80,7 +79,7 @@ sim 측정의 모든 옵션 (`./run-calibration.sh sensor-sync-sim --help`와 �
 |---|---|
 | 초록 막대 | 명령 (v, w)대로라면 갈 방향 — 길이 ∝ 속도, 방향 = 지금 방향 + w × 0.25 s (원호의 현) |
 | 파랑 막대 | 실제 몸체 속도로 가는 방향 (같은 규칙) |
-| 노란 점 | 목표 경로 — 측정 경로(`profile.profile_path`)를 로봇 시작 자세 기준으로 바닥에 |
+| 노란 점 | 목표 경로 — 측정 경로(`SquareCommand.path()`)를 로봇 시작 자세 기준으로 바닥에 |
 
 로봇이 노란 점에서 벗어나는 만큼, 초록과 파랑이 어긋나는 만큼이 드리프트다. 제자리 회전도 보이게 막대에 최소 길이가 있다.
 구현: `command_markers.py` (Isaac Lab `VisualizationMarkers` · 막대/점이라 Nucleus 없이 된다) — 학습 env와 공용.

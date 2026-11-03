@@ -16,7 +16,7 @@ from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
-from calibration import profile
+from commands.square import SquareCommand
 from calibration.fit import describe, load_fit, wheel_of
 from calibration.record import ISAAC, record, run_path
 from urdf import robot_spec as spec
@@ -40,8 +40,7 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     # sim 띄우기 전에 실패하게
-    segs = profile.make_profile(args.speed, args.turn, args.side)
-    total = profile.total(segs)
+    cmd = SquareCommand(args.speed, args.turn, args.side)
     base_fit = load_fit(args.fit) if args.fit else None
     sess = None
     if args.policy:
@@ -57,7 +56,7 @@ def main(argv=None) -> int:
 
     app = AppLauncher(args).app
     try:
-        _run(args, app, segs, total, base_fit, sess, out)
+        _run(args, app, cmd, base_fit, sess, out)
     except BaseException:
         import traceback
         traceback.print_exc()   # app.close()가 프로세스를 바로 끝내 예외가 안 보임 → 먼저 출력
@@ -67,7 +66,7 @@ def main(argv=None) -> int:
     return 0
 
 
-def _run(args, app, segs, total, base_fit, sess, out):
+def _run(args, app, cmd, base_fit, sess, out):
     import numpy as np
     import torch
 
@@ -88,23 +87,15 @@ def _run(args, app, segs, total, base_fit, sess, out):
     zero = torch.zeros(1, 2, device=env.device)
     for _ in range(10):   # 0.5 s — 스폰 높이에서 떨어져 바퀴·캐스터로 서게
         env.step(zero)
-    d = env.robot.data
-    p0, q = d.root_pos_w.torch[0], d.root_quat_w.torch[0].tolist()
-    yaw0 = math.atan2(2 * (q[3] * q[2] + q[0] * q[1]), 1 - 2 * (q[1] ** 2 + q[2] ** 2))   # xyzw
-    if not headless:   # 목표 경로 = 사각형을 로봇 시작 자세로
-        line, pts = profile.profile_path(args.side), []
-        for (x0, y0), (x1, y1) in zip(line, line[1:]):
-            k = max(1, int(math.hypot(x1 - x0, y1 - y0) / 0.03))
-            pts += [(x0 + (x1 - x0) * i / k, y0 + (y1 - y0) * i / k) for i in range(k)]
-        c, s_ = math.cos(yaw0), math.sin(yaw0)
-        env.path_w = torch.tensor([[float(p0[0]) + c * x - s_ * y, float(p0[1]) + s_ * x + c * y, float(p0[2])]
-                                   for x, y in pts], device=env.device)
+    p0 = env.robot.data.root_pos_w.torch[0]
+    if not headless:
+        env.set_path(cmd.path())   # 노란 점 = 사각형을 로봇 시작 자세로
     label = args.label or "sim_sensor_floor"
     mode = f"FIT {', '.join(base_fit['source'])}" if base_fit else "RAW (no --fit)"
     print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {label} · {mode}{' · POLICY ' + args.policy if args.policy else ''} · "
           f"{'room %.1f m' % args.room if args.room > 0 else 'empty floor'}")
     print(f"[{TAG}] wheel: {describe(cfg.wheel.to_dict())}")
-    print(f"[{TAG}] profile: side={args.side:.2f} m · {total:.1f}s · speeds {profile.speeds_text(segs)} m/s")
+    print(f"[{TAG}] square: side={args.side:.2f} m · {cmd.total:.1f}s · speeds {cmd.speeds_text()} m/s")
 
     st = {"t": 0.0, "changed": 0.0, "last": (0.0, 0.0), "out": (0.0, 0.0), "odom": [0.0, 0.0, 0.0]}
 
@@ -134,13 +125,13 @@ def _run(args, app, segs, total, base_fit, sess, out):
         return [round(t, 3), v, w, *st["out"], *o, s["v_enc"], s["w_enc"], s["w_gyro"], *s["jv"], *s["jp"], label,
                 t, t, t, t]
 
-    record(TAG, send, collect, segs, total, out, dt, base_fit=base_fit)
+    record(TAG, send, collect, cmd, out, dt, base_fit=base_fit)
 
     if args.watch and not headless:
         print(f"[{TAG}] WATCH — 창 닫을 때까지 반복")
         k = 0
         while app.is_running():
-            send(*profile.cmd_at((k * dt) % total, segs))
+            send(*cmd((k * dt) % cmd.total))
             k += 1
             time.sleep(dt)
     env.close()

@@ -224,7 +224,7 @@ class WheelDriftTrain(Train):
             import onnxruntime as ort
             sess = ort.InferenceSession(args.policy, providers=["CPUExecutionProvider"])
         use_policy = sess is not None
-        from envs import keyboard as kb   # 키 상태 폴링 (random-world와 공용)
+        from commands import keyboard as kb   # 키 상태 폴링 (공용)
 
         obs, _ = raw.reset()
         raw.look_at(raw.robot.data.root_pos_w.torch[0].tolist())

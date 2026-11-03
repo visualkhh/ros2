@@ -36,12 +36,13 @@ isaac/
 ├── envs/                     환경 바탕 — 모든 env가 상속
 │   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
 │   ├── default/              DefaultEnv — 아무것도 없는 기본 환경 (새 환경은 이걸 복사해 시작)
-│   ├── drive.py              키보드 운전 (./run-world.sh) · keyboard.py 키 폴링 (공용)
+│   ├── drive.py              운전 창 (./run-world.sh) — 로봇 · env · 명령 선택
+├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── assets/tb3_waffle_pi.py   로봇 정의 한 곳 TB3_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트       → calibration/README.md
 │   ├── calib_env.py · calib_env_cfg.py   Isaac Lab Direct env (로봇 1대 · 바퀴 모델 · 방+장애물)
 │   ├── sensor_sync_sim.py · sensor_sync_real.py · dummy_sensor.py · random_world.py   실행 스크립트
-│   ├── profile.py · record.py · fit.py   측정 경로(사각형 54 s) · 기록 · --fit 해석 (1개 = real 값, 2개 = real − sim)
+│   ├── record.py · fit.py    기록(명령 = commands/square) · --fit 해석 (1개 = real 값, 2개 = real − sim)
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── Train.py              실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
@@ -57,7 +58,7 @@ isaac/
 USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd()` → `urdf/<robot>/usd/`, git 제외).
 따로 변환만: `$ISAACLAB_DIR/isaaclab.sh -p urdf/convert_urdf.py`.
 다른 로봇: `urdf/<이름>/`에 `urdf.xacro` + `meshes/`를 두고 `robot_usd("<이름>")` — 인자 없이 쓰면 우리 로봇(`beebot`).
-측정 경로를 바꾸려면 `calibration/profile.py`, calibration 장면은 `calibration/calib_env_cfg.py` · `calib_env.py`를 고친다.
+측정 경로를 바꾸려면 `commands/square.py`(또는 BaseCommand를 상속한 새 명령), calibration 장면은 `calibration/calib_env_cfg.py` · `calib_env.py`를 고친다.
 
 ## 3. 절차 (2026-11-02 실제로 돈 순서)
 
@@ -168,6 +169,7 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 ./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + beebot
 ./run-world.sh --usd-dir urdf/<robot>                # 다른 로봇 (urdf/<robot>/urdf.xacro → USD, 또는 USD 폴더/파일)
 ./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물
+./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
 ./run-world.sh -h
 # 학습 env 그대로 + 정책 켬/끔 (C 키): 행동이 보정량이라 학습 쪽 운전 모드로
 ./run-training.sh --drive --watch --fit $FIT --uneven --policy artifacts/real/policy_30.onnx

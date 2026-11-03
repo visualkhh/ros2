@@ -1,7 +1,7 @@
-"""키보드 운전 — 로봇(USD)과 환경(env · env cfg)을 골라 띄운다. 기본 = envs/default (아무것도 없는 평평한 바닥).
+"""운전 창 — 로봇(USD) · 환경(env · env cfg) · 명령(commands)을 골라 띄운다. 기본 = 빈 바닥 + 키보드.
 
-  ./run-world.sh [--usd-dir DIR|FILE] [--env MOD:CLASS] [--env-cfg MOD:CLASS]
-행동이 [v, w] 명령인 env(BaseEnv 계열)면 된다. 키: W/A/S/D · Shift 느리게 · X 정지 · R 원점 · F 카메라 · 창 닫으면 끝
+  ./run-world.sh [--usd-dir DIR|FILE] [--env MOD:CLASS] [--env-cfg MOD:CLASS] [--cmd keyboard|square|MOD:CLASS]
+행동이 [v, w] 명령인 env(BaseEnv 계열)면 된다. 키: W/A/S/D(keyboard) · R 원점 + 명령 처음부터 · F 카메라 · 창 닫으면 끝
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import time
 from isaaclab.app import AppLauncher
 
 ISAAC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CMDS = {"keyboard": "commands.keyboard:KeyboardCommand", "square": "commands.square:SquareCommand"}
 
 
 def load(spec: str):
@@ -44,6 +45,7 @@ def main(argv=None) -> int:
     p.add_argument("--usd-dir", default=None, help="로봇: urdf/<robot> 폴더 · USD 폴더 · .usd/.usda (기본: env cfg의 로봇)")
     p.add_argument("--env", default="envs.default.default_env:DefaultEnv", help="환경 클래스 MOD:CLASS")
     p.add_argument("--env-cfg", default="envs.default.default_env_cfg:DefaultEnvCfg", help="환경 설정 클래스 MOD:CLASS")
+    p.add_argument("--cmd", default="keyboard", help="명령: keyboard(직접 운전) · square(네모 54 s, 노란 점 = 목표) · MOD:CLASS")
     p.add_argument("--speed", type=float, default=0.15, help="전진 [m/s]")
     p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")
     AppLauncher.add_app_launcher_args(p)
@@ -56,7 +58,7 @@ def main(argv=None) -> int:
     try:
         import torch
 
-        from envs import keyboard as kb
+        from commands import keyboard as kb
 
         cfg = load(args.env_cfg)()
         cfg.sim.device = args.device
@@ -64,21 +66,37 @@ def main(argv=None) -> int:
             usd = resolve_usd(args.usd_dir)
             cfg.robot_cfg = cfg.robot_cfg.replace(spawn=cfg.robot_cfg.spawn.replace(usd_path=usd))
         print(f"[drive] env {args.env} · cfg {args.env_cfg} · 로봇 {cfg.robot_cfg.spawn.usd_path}", flush=True)
+        cmd = load(CMDS.get(args.cmd, args.cmd))(speed=args.speed, turn=args.turn)
         env = load(args.env)(cfg)
         env.reset()
         env.look_at((0.0, 0.0, 0.0))
-        print("[drive] W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 원점 · F 카메라를 로봇 쪽으로 · 마우스 휠 줌 · 창 닫으면 끝", flush=True)
-        prev, t_print = set(), 0.0
+
+        def start():
+            for _ in range(10):   # 0.5 s 서게 한 뒤 그 자세를 명령 경로의 시작으로
+                env.step(torch.zeros(1, 2, device=env.device))
+            cmd.reset()
+            env.set_path(cmd.path())
+            return 0.0
+
+        sim_t = start()
+        print(f"[drive] 명령 {type(cmd).__name__} · W/A/S/D(keyboard) · R 원점 + 처음부터 · F 카메라를 로봇 쪽으로 · "
+              "마우스 휠 줌 · 창 닫으면 끝", flush=True)
+        prev, t_print, ended = set(), 0.0, False
         while app.is_running():
             t = time.monotonic()
             keys = kb.pressed()
             new, prev = keys - prev, keys
             if "R" in new:
                 env.place((0.0, 0.0, 0.0))
+                sim_t, ended = start(), False
             if "F" in new:   # 카메라는 평소 자유 (따라가게 고정하면 마우스 줌·회전이 매 프레임 덮어씌워짐)
                 env.look_at(env.robot.data.root_pos_w.torch[0].tolist())
-            v, w = kb.drive_cmd(keys, args.speed, args.turn)
+            v, w = (0.0, 0.0) if cmd.done(sim_t) else cmd(sim_t)
+            if cmd.done(sim_t) and not ended:
+                ended = True
+                print(f"[drive] 명령 끝 ({cmd.total:.0f} s) — R = 다시", flush=True)
             env.step(torch.tensor([[v, w]], device=env.device))
+            sim_t += env.policy_dt
             if (v or w) and t - t_print > 0.5:
                 t_print = t
                 s = env.sense()

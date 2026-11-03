@@ -13,7 +13,7 @@ import math
 import os
 import time
 
-from calibration import profile
+from commands.square import SquareCommand
 from calibration.record import record, run_path
 
 TAG = "02-real"
@@ -37,7 +37,7 @@ def main(argv=None) -> int:
     p.add_argument("--rate", type=float, default=20.0)
     p.add_argument("--check-only", action="store_true", help="상태만 확인 (로봇 안 움직임)")
     args = p.parse_args(argv)
-    segs = profile.make_profile(args.speed, args.turn, args.side)
+    cmd = SquareCommand(args.speed, args.turn, args.side)
 
     import rclpy
     from geometry_msgs.msg import Twist
@@ -108,15 +108,15 @@ def main(argv=None) -> int:
             print(f"[{TAG}] 거부: /odom 없음 — base/드라이버 확인")
             return 2
         out = args.output or run_path(args.label or TAG)
-        total, t0, rate = profile.total(segs), time.monotonic(), args.rate
-        print(f"[{TAG}] 시작 · {total:.0f}s · {rate:.0f}Hz · side={args.side:.2f}m · speeds {profile.speeds_text(segs)} m/s → {out}")
+        total, t0, rate = cmd.total, time.monotonic(), args.rate
+        print(f"[{TAG}] 시작 · {total:.0f}s · {rate:.0f}Hz · side={args.side:.2f}m · speeds {cmd.speeds_text()} m/s → {out}")
 
         def pace(k, _t):
             nxt = t0 + (k + 1) / rate
             while time.monotonic() < nxt:
                 rclpy.spin_once(node, timeout_sec=min(0.01, max(0.0, nxt - time.monotonic())))
 
-        record(TAG, send, collect, segs, total, out, 1.0 / rate, pace=pace)
+        record(TAG, send, collect, cmd, out, 1.0 / rate, pace=pace)
         stop()
         if s["imu_stamp"] is None:
             print(f"[{TAG}] 경고: /imu 없음 — w_gyro가 0")

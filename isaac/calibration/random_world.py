@@ -71,7 +71,7 @@ def _run(args, app, base_fit):
     print(f"[{TAG}] W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 리셋 · N 다음 방 · C 보정값 창")
     kb = hud = None
     if not headless:
-        from envs import keyboard as kb
+        from commands import keyboard as kb
         try:
             hud = CalibHUD(env, base_fit)
         except Exception as exc:

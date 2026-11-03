@@ -11,7 +11,6 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from calibration.profile import cmd_at
 
 ISAAC = Path(__file__).resolve().parents[1]
 RUNS_DIR = ISAAC / "artifacts" / "calibration"
@@ -27,18 +26,19 @@ def run_path(name: str) -> str:
     return str(RUNS_DIR / f"{datetime.now():%Y%m%d_%H%M%S}-{name}" / "raw.csv")
 
 
-def record(tag: str, send, collect, segs, total: float, out: str, dt: float, pace=None,
+def record(tag: str, send, collect, cmd, out: str, dt: float, pace=None,
            base_fit: dict | None = None) -> list:
-    """명령 경로를 dt마다 send → (pace) → collect. out에 CSV + 구간 표 + fit.json + report.png. rows 반환.
+    """명령 경로(commands.BaseCommand, 끝이 있는 것 — 보통 SquareCommand)를 dt마다 send → (pace) → collect. out에 CSV + 구간 표 + fit.json + report.png. rows 반환.
 
     pace(k, t): real의 wall-clock 맞추기 (sim은 물리 스텝이 시계라 없음).
     base_fit: 넣은 입력 보정 → 같은 폴더 base-fit.json.
     """
-    print(f"[{tag}] profile: {len(segs)} segs · {total:.1f}s")
+    segs = getattr(cmd, "segs", [])
+    print(f"[{tag}] {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
     rows = []
-    for k in range(int(round(total / dt))):
+    for k in range(int(round(cmd.total / dt))):
         t = k * dt
-        v, w = cmd_at(t, segs)
+        v, w = cmd(t)
         send(v, w)
         if pace is not None:
             pace(k, t)

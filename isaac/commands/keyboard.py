@@ -1,8 +1,13 @@
-"""Isaac 창 키보드 상태 폴링 (carb.input). 창이 있을 때만 — AppLauncher 뒤에 import. envs.drive · random_world · 학습 --drive 공용."""
+"""KeyboardCommand — 사람 입력 (Isaac 창의 키 상태 폴링, carb.input). AppLauncher 뒤에 import.
+
+W/A/S/D(화살표) 주행 · Shift = 0.3배 · X = 정지. `pressed()`는 다른 키(R · F · C · N)를 쓰는 루프도 같이 쓴다.
+"""
 from __future__ import annotations
 
 import carb.input
 import omni.appwindow
+
+from commands.base_command import BaseCommand
 
 KEYS = ("W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "LEFT_SHIFT", "RIGHT_SHIFT", "X", "C", "R", "N", "F")
 _inp = carb.input.acquire_input_interface()
@@ -22,3 +27,8 @@ def drive_cmd(keys: set, speed: float, turn: float, slow: float = 0.3) -> tuple[
     v = speed * k * (bool(keys & {"W", "UP"}) - bool(keys & {"S", "DOWN"}))
     w = turn * k * (bool(keys & {"A", "LEFT"}) - bool(keys & {"D", "RIGHT"}))
     return v, w
+
+
+class KeyboardCommand(BaseCommand):
+    def __call__(self, t: float) -> tuple[float, float]:
+        return drive_cmd(pressed(), self.speed, self.turn)
