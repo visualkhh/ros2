@@ -57,7 +57,7 @@ isaac/
 ├── requirements.txt · setup_venv.sh   실기기·리포트용 .venv (sim/학습은 IsaacLab venv)
 ```
 
-로봇 숫자(`robots/beebot/config.py`): 바퀴 반지름 0.033 m · 간격 0.287 m · 최대 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s. 주기(`envs/rates.py`): 정책 20 Hz · 물리 480 Hz.
+로봇 숫자(`robots/beebot/config.py`): 바퀴 반지름 0.033 m · 간격 0.287 m · 최대 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s. 주기(`envs/base_env_cfg.py`): 정책 20 Hz · 물리 480 Hz.
 USD는 URDF · 메시가 바뀌면 자동으로 다시 변환된다 (`robots/urdf_to_usd.py` `robot_usd()` → `robots/<robot>/usd/`, git 제외).
 따로 변환만: `./run-usd.sh [robot]` (Isaac Sim을 창 없이 켜서 변환 — 변환기가 Isaac Sim 안에 있다).
 다른 로봇: `robots/<이름>/`에 `urdf/robot.urdf.xacro` + `meshes/` + `config.py`(숫자 · `ROBOT_CFG`)를 두고 `./run-world.sh --robot <이름>` (코드에선 `robots.use(env_cfg, "<이름>")`).
@@ -207,7 +207,7 @@ cd ../ros2_ws
 
 1. **볼 캐스터 마찰** (2026-11-02 고침): calibration sim이 캐스터 마찰 0을 바닥과 `average`로 합쳐 0.4로 끌림 →
    바퀴가 명령의 87~95%만 냄(사각형 37 cm 어긋남). 학습 env처럼 `min` → gain ≈ 1.
-2. **물리 480 Hz** (2026-11-02, `envs/rates.py` `PHYSICS_HZ`): 120 Hz는 제자리 회전 때 바퀴가 붙었다 미끄러져 떨림.
+2. **물리 480 Hz** (2026-11-02, `envs/base_env_cfg.py` `PHYSICS_HZ`): 120 Hz는 제자리 회전 때 바퀴가 붙었다 미끄러져 떨림.
    정상 회전 구간 바퀴 속도 표준편차 120 Hz 0.62 · 240 Hz 0.15 · 360 Hz 0.11 · **480 Hz 0.027** · real 0.018 rad/s.
    solver 반복(16/4)·바퀴 마찰 0.6은 거의 효과 없음. calibration sim · 랜덤 월드 · 학습 env가 같은 값을 쓴다.
 3. **damping/effort는 고정** (`robots/beebot/config.py` WHEEL_DAMPING 50) — 바꿔도 sim 응답이 안 변해서 calibration 변수에서 뺐다.

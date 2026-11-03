@@ -16,8 +16,12 @@ from dataclasses import MISSING
 
 from isaaclab.utils import configclass
 
-from envs.rates import CONTROL_HZ, PHYSICS_HZ
 import robots
+
+CONTROL_HZ = 20.0      # 명령 주기 = cmd_manager mux 20 Hz = 정책 주기 (calibration report · dummy도 20 — 바꾸면 같이)
+# 물리 계산 주기. 120/240 Hz는 제자리 회전 때 바퀴가 바닥에 붙었다 미끄러졌다 해서 바퀴 속도가 떨림
+# (정상 회전 구간 표준편차 120 Hz 0.62 · 240 Hz 0.15 · 360 Hz 0.11 · 480 Hz 0.027 · real 0.018 rad/s, 2026-11-02 실측 비교)
+PHYSICS_HZ = 480.0
 
 GROUND_FRICTION = (0.8, 0.7)     # 바닥 (static, dynamic) — 로봇이 아니라 세상 쪽
 OBSTACLE_FRICTION = (0.7, 0.5)   # 장애물

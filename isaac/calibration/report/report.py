@@ -59,7 +59,7 @@ HERE = Path(__file__).resolve().parent
 ISAAC = HERE.parents[1]          # .../isaac (HERE = isaac/calibration/report)
 sys.path.insert(0, str(ISAAC))
 
-from envs.rates import CONTROL_HZ  # noqa: E402  (정책 주기 — dt 기본값 · 지연 스텝)
+CONTROL_HZ = 20.0   # 기록 · 정책 주기 (= envs/base_env_cfg.py CONTROL_HZ — Isaac 없이 돌아서 따로, 바꾸면 같이)
 
 
 def load(path: str):
