@@ -5,7 +5,7 @@
 #   ./run-training.sh play --checkpoint <model_N.pt> [옵션...]   재생 + 내보내기 (exported/policy.onnx · policy.pt) — Ctrl+C로 끝
 #   ./run-training.sh train --help                  공식 옵션 전체
 #
-# task: training/<task>/__init__.py의 gym.register 이름 (기본 Beebot-WheelDrift). --external_callback training.register로 등록.
+# task: training/<task>/__init__.py의 gym.register 이름 (기본 Beebot-WheelDrift = beebot + beebot 실측). --external_callback training.register로 등록.
 # 결과: isaac/logs/rsl_rl/<experiment_name>/<시각>/  (model_<N>.pt · params/ · TensorBoard · play 하면 exported/)
 #
 # ─── 자주 쓰는 공식 옵션 ───────────────────────────────────────────────────────
@@ -15,6 +15,7 @@
 #   --video               영상 녹화 (logs/…/videos)
 #   --resume --checkpoint <model_N.pt>   이어서 학습
 # ─── cfg 덮어쓰기 (Hydra: env.<필드>=값 · agent.<필드>=값) ──────────────────────
+#   env.robot=<이름|폴더>  로봇만 바꿔 실험 (실측 중심은 task cfg 그대로 — 제대로는 로봇별 변형 등록)
 #   env.slope_deg=5       경사 칸 0~5° (기본 3, 0 = 없음)
 #   env.uneven=true       요철 칸 (턱 1~3 cm)
 #   env.events=null       바퀴 마찰 랜덤 끔

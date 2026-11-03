@@ -45,6 +45,9 @@ class BaseEnv(DirectRLEnv):
     def _setup_scene(self):
         from robots.urdf_to_usd import robot_usd
 
+        import robots
+
+        robots.use(self.cfg, self.cfg.robot)   # 덮어쓰기(env.robot=…)가 반영되게 여기서 한 번 더
         robot_usd(self.cfg.robot)   # URDF → USD (바뀌었을 때만) — Isaac 앱이 뜬 지금 (cfg엔 경로만 있다)
         self.robot = Articulation(self.cfg.robot_cfg)
         self.scene.articulations["robot"] = self.robot

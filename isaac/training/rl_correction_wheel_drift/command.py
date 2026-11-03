@@ -12,18 +12,18 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from commands.base_command import BaseCommand
-from robots.beebot import config as beebot
 
 # 텔레오퍼 키 → (전후, 회전) 방향 (tool/cli/op/bus.py TELEOP_MOVES와 같음)
 TELEOP_MOVES = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1, 1))
 
 
 class TeleopCommand(BaseCommand):
-    """speed · turn = 상한 (전진 0.10~speed · 제자리 회전 0.40~turn). 학습은 로봇 최대값(MAX_LIN · MAX_ANG)."""
+    """speed · turn = 상한 (전진 0.10~speed · 제자리 회전 0.40~turn). 학습 env는 로봇 최대값(cfg.max_lin · max_ang)을 넘긴다."""
 
-    def __init__(self, speed: float = beebot.MAX_LIN, turn: float = beebot.MAX_ANG,
-                 p_teleop: float = 0.6, p_smooth: float = 0.3, hold_range: tuple[float, float] = (0.5, 2.0)):
+    def __init__(self, speed: float = 0.26, turn: float = 1.82, p_teleop: float = 0.6, p_smooth: float = 0.3,
+                 hold_range: tuple[float, float] = (0.5, 2.0), diag_radius: float = 0.5):
         super().__init__(speed, turn)
+        self.diag_radius = diag_radius
         self.p_teleop, self.p_smooth, self.hold_range = p_teleop, p_smooth, hold_range
         self.reset()
 
@@ -35,7 +35,7 @@ class TeleopCommand(BaseCommand):
         moves = torch.tensor(TELEOP_MOVES, dtype=torch.float32, device=device)[torch.randint(0, len(TELEOP_MOVES), (k,), device=device)]
         # 텔레오퍼: 사선은 설정 속도 + 반경 DIAG_RADIUS 원호, 제자리 회전은 회전 속도
         v = moves[:, 0] * speed
-        w = torch.where(moves[:, 0] != 0, moves[:, 1] * speed / beebot.DIAG_RADIUS, moves[:, 1] * turn)
+        w = torch.where(moves[:, 0] != 0, moves[:, 1] * speed / self.diag_radius, moves[:, 1] * turn)
         smooth = (u >= self.p_teleop) & (u < self.p_teleop + self.p_smooth)
         v = torch.where(smooth, sample_uniform(0.0, self.speed, (k,), device), v)
         w = torch.where(smooth, sample_uniform(-1.0, 1.0, (k,), device), w)

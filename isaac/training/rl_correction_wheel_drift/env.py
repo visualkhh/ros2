@@ -17,7 +17,6 @@ from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
 from training.rl_correction_wheel_drift.command import TeleopCommand
-from robots.beebot import config as beebot
 
 if TYPE_CHECKING:
     from training.rl_correction_wheel_drift.env_cfg import RlCorrectEnvCfg
@@ -29,8 +28,9 @@ class RlCorrectEnv(BaseEnv):
     cfg: RlCorrectEnvCfg
 
     def __init__(self, cfg: RlCorrectEnvCfg, render_mode: str | None = None, **kwargs):
-        self.command = TeleopCommand(beebot.MAX_LIN, beebot.MAX_ANG, cfg.p_teleop, cfg.p_smooth, cfg.hold_range)
         super().__init__(cfg, render_mode, **kwargs)
+        c = self.cfg   # 로봇 숫자는 장면을 만들 때 cfg.robot으로 채워져 있다
+        self.command = TeleopCommand(c.max_lin, c.max_ang, c.p_teleop, c.p_smooth, c.hold_range, c.diag_radius)
         n, dev = self.num_envs, self.device
         self.scale = torch.tensor(self.cfg.action_scale, device=dev)
         self.hold = torch.zeros(n, device=dev)
@@ -45,8 +45,8 @@ class RlCorrectEnv(BaseEnv):
         self.gain = torch.ones(n, 2, device=dev)
         self.deadband = torch.zeros(n, 1, device=dev)
         self.gyro_bias = torch.zeros(n, device=dev)        # 자이로 영점 오차 [rad/s] (에피소드 동안 고정)
-        self.r_nom = torch.full((n,), beebot.WHEEL_RADIUS, device=dev)
-        self.sep_nom = torch.full((n,), beebot.WHEEL_SEP, device=dev)
+        self.r_nom = torch.full((n,), self.cfg.wheel_radius, device=dev)
+        self.sep_nom = torch.full((n,), self.cfg.wheel_sep, device=dev)
         self.cmd_delay = torch.zeros(n, dtype=torch.long, device=dev)
         self.obs_delay = torch.zeros(n, dtype=torch.long, device=dev)
         self.cmd_buf = torch.zeros(n, self.cfg.cmd_delay_steps[1] + 1, 2, device=dev)
@@ -96,8 +96,8 @@ class RlCorrectEnv(BaseEnv):
         moving = (self.cmd.abs().sum(dim=-1, keepdim=True) > 0).float()
         self.delta = actions.clamp(-1.0, 1.0) * self.scale * moving  # 정지 명령엔 보정 0 (ROS corrector와 같은 규칙 — 제자리 기어감 방지)
         out = self.cmd + self.delta
-        out = torch.stack([out[:, 0].clamp(-beebot.MAX_LIN, beebot.MAX_LIN),
-                           out[:, 1].clamp(-beebot.MAX_ANG, beebot.MAX_ANG)], dim=-1)
+        out = torch.stack([out[:, 0].clamp(-self.cfg.max_lin, self.cfg.max_lin),
+                           out[:, 1].clamp(-self.cfg.max_ang, self.cfg.max_ang)], dim=-1)
         self.cmd_buf = torch.roll(self.cmd_buf, 1, dims=1)
         self.cmd_buf[:, 0] = out
         applied = self.cmd_buf[self._rows, self.cmd_delay]
@@ -142,8 +142,8 @@ class RlCorrectEnv(BaseEnv):
         self.tau[ids] = sample_uniform(*c.tau_range, (n, 2), dev)
         self.gain[ids] = sample_uniform(*c.gain_range, (n, 2), dev) * torch.tensor(c.gain_center, device=dev)
         self.deadband[ids] = sample_uniform(*c.deadband_range, (n, 1), dev)
-        self.r_nom[ids] = beebot.WHEEL_RADIUS * (1 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (n,), dev))
-        self.sep_nom[ids] = beebot.WHEEL_SEP * (1 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (n,), dev))
+        self.r_nom[ids] = self.cfg.wheel_radius * (1 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (n,), dev))
+        self.sep_nom[ids] = self.cfg.wheel_sep * (1 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (n,), dev))
         self.gyro_bias[ids] = sample_uniform(-c.gyro_bias, c.gyro_bias, (n,), dev)
         self.cmd_delay[ids] = torch.randint(c.cmd_delay_steps[0], c.cmd_delay_steps[1] + 1, (n,), device=dev)
         self.obs_delay[ids] = torch.randint(c.obs_delay_steps[0], c.obs_delay_steps[1] + 1, (n,), device=dev)

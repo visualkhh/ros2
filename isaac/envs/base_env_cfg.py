@@ -47,6 +47,9 @@ class BaseEnvCfg(DirectRLEnvCfg):
     wheel_radius: float = MISSING                # 드라이버 식 숫자
     wheel_sep: float = MISSING
     max_wheel: float = MISSING
+    max_lin: float = MISSING                     # [m/s] 명령 한계 (드라이버 · corrector)
+    max_ang: float = MISSING                     # [rad/s]
+    diag_radius: float = MISSING                 # [m] 텔레오퍼 사선 원호
     wheel_friction: tuple[float, float] = MISSING
     caster_friction: tuple[float, float] = MISSING
     random_yaw = False          # 리셋 때 방향 랜덤 (학습) · False면 0
