@@ -11,7 +11,8 @@ import random
 from collections import deque
 
 import robots
-from calibration.sensor_sync import SensorSync, add_command_args, make_command, run_path
+from calibration.robot_interface import RobotInterface
+from calibration.sysid import add_command_args, make_command, record, run_path
 
 CONTROL_HZ = 20.0   # 기록 주기 (= envs/base_env_cfg.py CONTROL_HZ — Isaac 없이 돌아서 따로, 바꾸면 같이)
 robot_cfg = robots.load()
@@ -23,25 +24,25 @@ def _lag(state, target, tau):
     return tuple(s + a * (x - s) for s, x in zip(state, target))
 
 
-class SensorSyncDummy(SensorSync):
+class DummyInterface(RobotInterface):
     """명령 → 가짜 모터 (드라이버 바퀴 식 → 지연 → gain → 데드밴드 → τ) → 엔코더 · 자이로."""
 
     tag = "dummy"
 
-    def __init__(self, cmd, gain_lr=(0.99, 0.99), tau=0.05, delay=2, noise=0.002, slip=0.0, deadband=0.0,
+    def __init__(self, gain_lr=(0.99, 0.99), tau=0.05, delay=2, noise=0.002, slip=0.0, deadband=0.0,
                  seed=0, label="dummy"):
-        super().__init__(cmd, DT)
+        super().__init__(DT)
         self.gain_lr, self.tau, self.noise, self.slip, self.deadband, self.label = gain_lr, tau, noise, slip, deadband, label
         self.rng = random.Random(seed)
         self.buf = deque([(0.0, 0.0)] * (delay + 1), maxlen=delay + 1)
         self.plant, self.odom = (0.0, 0.0), [0.0, 0.0, 0.0]
 
-    def send(self, v, w):
+    def write(self, v, w):
         wl, wr = (v - w * SEP / 2.0) / R, (v + w * SEP / 2.0) / R
         k = min(1.0, MAX_WHEEL / max(abs(wl), abs(wr), 1e-9))
         self.buf.append((wl * k, wr * k))
 
-    def collect(self, t, v, w):
+    def read(self, t, v, w):
         (wl, wr), (gl, gr) = self.buf[0], self.gain_lr
         tl, tr = [0.0 if abs(x) < self.deadband else x for x in (wl * gl, wr * gr)]
         sl, sr = self.plant = _lag(self.plant, (tl, tr), self.tau)
@@ -71,8 +72,8 @@ def main(argv=None) -> int:
     p.add_argument("--out", default=None)
     args = p.parse_args(argv)
     gain_lr = (args.gain if args.gain_l is None else args.gain_l, args.gain if args.gain_r is None else args.gain_r)
-    SensorSyncDummy(make_command(args), gain_lr, args.tau, args.delay, args.noise, args.slip, args.deadband,
-                    args.seed, args.label).run(args.out or run_path("dummy"))
+    robot = DummyInterface(gain_lr, args.tau, args.delay, args.noise, args.slip, args.deadband, args.seed, args.label)
+    record(robot, make_command(args), args.out or run_path("dummy"))
     return 0
 
 

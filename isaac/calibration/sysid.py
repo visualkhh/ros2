@@ -1,9 +1,6 @@
-"""SensorSync — 측정 1회 공통 (sim · real · dummy). 명령(BaseCommand)은 밖에서 주입, 어디로 보내고 무엇을 읽는지는 하위 클래스.
+"""sysid (system identification) 1회 — record(robot, cmd, out): 명령(excitation, 보통 SquareCommand)을 로봇(RobotInterface)에 흘려보내며 기록.
 
-  SensorSyncSim (sensor_sync_sim.py)     env.step([[v, w]])        — Isaac
-  SensorSyncReal (sensor_sync_real.py)   /cmd_manual_vel publish   — ROS
-  SensorSyncDummy (sensor_sync_dummy.py) 가짜 모터 계산            — 표준 라이브러리만
-런타임이 달라도 기록 형식(CSV 한 줄 · 구간 표 · fit.json · report.png)은 같다. 이 파일은 표준 라이브러리만.
+로봇이 sim · real · dummy 어느 것이든 기록 형식(CSV 한 줄 · 구간 표 · fit.json · report.png)은 같다. 이 파일은 표준 라이브러리만.
 """
 from __future__ import annotations
 
@@ -52,38 +49,21 @@ def make_command(args):
     return cmd
 
 
-class SensorSync:
-    """명령(BaseCommand, 끝이 있는 것)을 dt마다 send → pace → collect. run()이 CSV + 구간 표 + fit.json + report.png."""
-
-    tag = "sync"
-
-    def __init__(self, cmd, dt: float):
-        self.cmd, self.dt = cmd, dt
-
-    def send(self, v: float, w: float) -> None:
-        """명령을 보낸다 (sim env · ROS topic · 가짜 모터)."""
-        raise NotImplementedError
-
-    def collect(self, t: float, v: float, w: float) -> list:
-        """CSV 한 줄 (CSV_HEADER 순서)."""
-        raise NotImplementedError
-
-    def pace(self, k: int, t: float) -> None:
-        """real만 — 벽시계 맞추기 (sim은 물리 스텝이 시계, dummy는 계산만)."""
-
-    def run(self, out: str) -> list:
-        tag, cmd, dt = self.tag, self.cmd, self.dt
-        segs = getattr(cmd, "segs", [])
-        print(f"[{tag}] {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
-        rows = []
-        for k in range(int(round(cmd.total / dt))):
-            t = k * dt
-            v, w = cmd(t)
-            self.send(v, w)
-            self.pace(k, t)
-            rows.append(self.collect(t, v, w))
-        _save(tag, segs, rows, out)
-        return rows
+def record(robot, cmd, out: str) -> list:
+    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace → read. out에 CSV + 구간 표 + fit.json + report.png."""
+    tag, dt = robot.tag, robot.dt
+    segs = getattr(cmd, "segs", [])
+    print(f"[{tag}] {type(robot).__name__} · {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
+    rows = []
+    robot.start()
+    for k in range(int(round(cmd.total / dt))):
+        t = k * dt
+        v, w = cmd(t)
+        robot.write(v, w)
+        robot.pace(k)
+        rows.append(robot.read(t, v, w))
+    _save(tag, segs, rows, out)
+    return rows
 
 
 def _save(tag: str, segs, rows, out: str) -> None:
