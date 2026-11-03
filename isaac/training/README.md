@@ -15,15 +15,15 @@ calibration/ 측정 (real · 순수 sim)  →  task env cfg에 차이를 숫자�
 ```text
 training/
 ├── __init__.py                 register() — training/ 아래 task 폴더를 import (각 __init__.py의 gym.register)
-└── rl_correction_wheel_drift/  바퀴 드리프트 보정 — task 이름 Beebot-WheelDrift
-    ├── __init__.py             gym.register — 로봇마다 이름 하나 (Beebot-WheelDrift)
-    ├── env.py · env_cfg.py     RlCorrectionWheelDriftEnv(BaseEnv) · RlCorrectionWheelDriftEnvCfg(BaseEnvCfg — robot=beebot + 실측 중심)
-    ├── command.py              RlCorrectionWheelDriftCommand(BaseCommand) — 학습 명령
-    └── agent.py                RlCorrectionWheelDriftAgentCfg(BaseAgentCfg) — PPO 값
+└── rl_correction_waypoint/     랜덤 웨이포인트를 이탈 없이 — task 이름 Beebot-Waypoint
+    ├── __init__.py             gym.register — 로봇마다 이름 하나
+    ├── env.py · env_cfg.py     RlCorrectionWaypointEnv(BaseEnv) · RlCorrectionWaypointEnvCfg(BaseEnvCfg — robot=beebot + 실측 중심)
+    ├── command.py              RlCorrectionWaypointCommand — env마다 랜덤 웨이포인트
+    └── agent.py                RlCorrectionWaypointAgentCfg(BaseAgentCfg) — PPO 값
 ```
 
 새 task: 폴더를 만들고 위 다섯 파일을 둔다 (`__init__.py`의 등록 이름이 `--task` 값).
-새 로봇 (같은 task): `env_cfg.py`에 `XWheelDriftEnvCfg(RlCorrectionWheelDriftEnvCfg)`(robot="x" + 그 로봇 실측) + `gym.register(id="X-WheelDrift", …)`.
+새 로봇 (같은 task): `env_cfg.py`에 `XWaypointEnvCfg(RlCorrectionWaypointEnvCfg)`(robot="x" + 그 로봇 실측) + `gym.register(id="X-Waypoint", …)`.
 실험으로 로봇만 바꾸기: `./run-training.sh env.robot=<이름|폴더>` (실측 중심은 그대로).
 `__init__.py`는 Isaac 앱보다 먼저 import되므로 등록은 문자열 위치만 적는다.
 
@@ -32,8 +32,8 @@ training/
 ```bash
 cd isaac
 ./run-training.sh --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
-./run-training.sh --max_iterations 300 env.uneven=true                             # 본 학습 (창 없음, 512대)
-./run-training.sh play --checkpoint logs/rsl_rl/rl_correct/<시각>/model_299.pt --num_envs 1   # 재생 + ONNX 내보내기 (Ctrl+C)
+./run-training.sh --max_iterations 500 env.uneven=true                             # 본 학습 (창 없음, 512대)
+./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # 재생 + ONNX 내보내기 (Ctrl+C)
 tensorboard --logdir logs/rsl_rl
 ./run-training.sh -h                                                               # 자주 쓰는 옵션 · cfg 덮어쓰기
 ```
@@ -51,9 +51,9 @@ tensorboard --logdir logs/rsl_rl
 |---|---|
 | 초록 막대 | 지금 명령 (v, w)대로라면 갈 방향 (길이 ∝ 속도) |
 | 파랑 막대 | 실제 몸체 속도로 가는 방향 |
-| 노란 점 | 목표 경로 — 랜덤 명령이 바뀐 순간의 자세에서 그 명령대로 유지 시간(0.5~2 s) 동안 갈 길 |
+| 노란 점 | 웨이포인트 경로 — 시작 → 웨이포인트 4개를 잇는 직선 |
 
-로봇이 노란 점에서 벗어나는 만큼이 드리프트다. 학습이 될수록 줄어야 한다.
+로봇이 노란 선에서 벗어나는 만큼이 경로 이탈이다. 학습이 될수록 줄어야 한다 (TensorBoard `Metrics/cross_track`).
 
 ## 보정값과 RL의 관계
 

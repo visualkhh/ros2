@@ -1,7 +1,6 @@
 """sim 측정 — 사각형 명령을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
 
   ./run-calibration.sh sensor-sync-sim --viz none                  # 순수 sim 측정 → real과 비교해 차이를 구한다
-  ./run-calibration.sh sensor-sync-sim --watch --policy artifacts/real/policy.onnx --label B   # sim play
 창(--watch): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로. 기록 후 창 닫을 때까지 같은 경로 반복.
 출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-sim) · --out으로 정확한 경로.
 """
@@ -11,13 +10,11 @@ import argparse
 import math
 import os
 import time
-from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
 from commands.square import SquareCommand
 from calibration.record import ISAAC, record, run_path
-from robots.beebot import config as beebot
 
 TAG = "02-sim"
 
@@ -31,30 +28,18 @@ def main(argv=None) -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=None, help="정확한 raw.csv 경로 (isaac/ 기준 상대경로 가능)")
     p.add_argument("--label", default=None, help="폴더 이름 <시각>-<label> · CSV label (기본 02-sim / sim_sensor_floor)")
-    p.add_argument("--policy", default=None, help="학습한 ONNX(play.py exported/policy.onnx)로 보정하며 달림 (ros2 corrector와 같은 규칙)")
-    p.add_argument("--action-scale", type=float, nargs=2, default=(0.10, 0.60), metavar=("LIN", "ANG"),
-                   help="정책 출력 [-1, 1] × 이 값 = 보정량 [m/s, rad/s] (= corrector action_scale_lin/ang · 학습 env action_scale)")
     p.add_argument("--watch", action="store_true", help="기록 후 창 닫을 때까지 같은 경로 반복")
     AppLauncher.add_app_launcher_args(p)
     args = p.parse_args(argv)
 
     # sim 띄우기 전에 실패하게
     cmd = SquareCommand(args.speed, args.turn, args.side)
-    sess = None
-    if args.policy:
-        import onnxruntime as ort
-        path = Path(args.policy) if os.path.isabs(args.policy) else ISAAC / args.policy
-        if not path.is_file():
-            p.error(f"--policy 파일 없음: {path}")
-        sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-        if sess.get_inputs()[0].shape[1] != 6:
-            p.error("--policy 입력이 6차원(track 정책)이 아님")
     out = args.out and (args.out if os.path.isabs(args.out) else str(ISAAC / args.out))
     out = out or run_path(args.label or TAG)
 
     app = AppLauncher(args).app
     try:
-        _run(args, app, cmd, sess, out)
+        _run(args, app, cmd, out)
     except BaseException:
         import traceback
         traceback.print_exc()   # app.close()가 프로세스를 바로 끝내 예외가 안 보임 → 먼저 출력
@@ -64,8 +49,7 @@ def main(argv=None) -> int:
     return 0
 
 
-def _run(args, app, cmd, sess, out):
-    import numpy as np
+def _run(args, app, cmd, out):
     import torch
 
     from envs.default.env import DefaultEnv
@@ -92,29 +76,15 @@ def _run(args, app, cmd, sess, out):
         env.set_path(cmd.path())   # 노란 점 = 사각형을 로봇 시작 자세로
     label = args.label or "sim_sensor_floor"
     mode = "순수 sim (보정 없음)"
-    print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {label} · {mode}{' · POLICY ' + args.policy if args.policy else ''} · "
+    print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {label} · {mode} · "
           f"{'room %.1f m' % args.room if args.room > 0 else 'empty floor'}")
     print(f"[{TAG}] square: side={args.side:.2f} m · {cmd.total:.1f}s · speeds {cmd.speeds_text()} m/s")
 
-    st = {"t": 0.0, "changed": 0.0, "last": (0.0, 0.0), "out": (0.0, 0.0), "odom": [0.0, 0.0, 0.0]}
+    st = {"out": (0.0, 0.0), "odom": [0.0, 0.0, 0.0]}
 
     def send(v, w):
-        """ros2 corrector와 같은 규칙: obs 6개 → ONNX 보정량 더하고 clip · 정지 명령엔 보정 0."""
-        if abs(v - st["last"][0]) > 1e-3 or abs(w - st["last"][1]) > 1e-3:
-            st["changed"] = st["t"]
-        st["last"] = (v, w)
-        lo, ao = v, w
-        if sess is not None and (v or w):
-            s = env.sense()
-            obs = np.array([[v, w, s["v_enc"], s["w_enc"], s["w_gyro"], min(st["t"] - st["changed"], 2.0)]], np.float32)
-            a = sess.run(None, {sess.get_inputs()[0].name: obs})[0][0]
-            dv = max(-1.0, min(1.0, float(a[0]))) * args.action_scale[0]   # corrector scale_action과 같음
-            dw = max(-1.0, min(1.0, float(a[1]))) * args.action_scale[1]
-            lo = max(-beebot.MAX_LIN, min(beebot.MAX_LIN, v + float(dv)))
-            ao = max(-beebot.MAX_ANG, min(beebot.MAX_ANG, w + float(dw)))
-        st["out"] = (lo, ao)
-        env.step(torch.tensor([[lo, ao]], device=env.device))
-        st["t"] += dt
+        st["out"] = (v, w)   # 보정 없음 — 측정은 순수 sim
+        env.step(torch.tensor([[v, w]], device=env.device))
 
     def collect(t, v, w):
         s = env.sense()

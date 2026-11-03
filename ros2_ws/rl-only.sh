@@ -5,7 +5,7 @@
 #
 #   ./rl-only.sh label:=before                    # 보정 없이 통과 (Before)
 #   ./rl-only.sh enable:=true label:=after        # 정책 보정 (After) — 기본 모델 isaac/artifacts/real/policy.onnx
-#   ./rl-only.sh enable:=true model:=<isaac>/logs/rsl_rl/rl_correct/<시각>/exported/policy.onnx   (play로 내보낸 것 — .onnx.data 같이)
+#   ./rl-only.sh enable:=true model:=<isaac>/logs/rsl_rl/rl_waypoint/<시각>/exported/policy.onnx   (play로 내보낸 것 — .onnx.data 같이)
 #
 # 기본 경로:
 #   model:=   isaac/artifacts/real/policy.onnx    쓸 정책을 여기에 복사해 두면 된다 (입력 6차원 → track 자동)

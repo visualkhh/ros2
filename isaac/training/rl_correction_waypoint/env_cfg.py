@@ -1,4 +1,4 @@
-"""rl_correct v2 config — 우리 Waffle Pi(URDF)로 '실제로 관측되는 것만' 보정 (documents/isaac/task-spec.md §3)."""
+"""rl_correction_waypoint 설정 — 랜덤 웨이포인트를 이탈 없이 따라가기 (기본 제어기 + 정책 보정). 로봇 = beebot + 실측 중심."""
 from __future__ import annotations
 
 import math
@@ -54,56 +54,61 @@ class EventCfg:
 
 
 @configclass
-class RlCorrectionWheelDriftEnvCfg(BaseEnvCfg):
-    """기본 세상(BaseEnvCfg: 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤 · 관측 6 / 행동 2. 로봇 = beebot + beebot 실측 중심.
+class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
+    """기본 세상(BaseEnvCfg: 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤. 관측 10 / 행동 2. 로봇 = beebot + beebot 실측 중심.
 
-    다른 로봇: 이 클래스를 상속해 robot · 실측 중심(gain_center · tau_range · cmd_delay_steps …)만 바꾸고 __init__.py에 등록.
+    로봇 corrector goal 모드와 같은 약속: 관측 [gx, gy, px, py, yaw, v_enc, w_enc, w_gyro, prev_a0, prev_a1]
+    (시작 자세 기준, 위치·방향 = 엔코더 거리 + 자이로 방향 적분) · 기본 제어기 식 · 행동 [-1, 1] × action_scale.
+    다른 로봇: 이 클래스를 상속해 robot · 실측 중심만 바꾸고 __init__.py에 등록.
     """
     robot: str = "beebot"
-    episode_length_s = 10.0
+    episode_length_s = 40.0        # 웨이포인트 num_waypoints개 (각 ≤ 1.5 m)를 다 돌 시간
     random_yaw = True
-    action_space = 2       # [dV, dW] — 정책 출력 [-1, 1] (corrector가 × action_scale)
-    observation_space = 6  # [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]
+    action_space = 2               # [Δv, Δw] 정책 출력 [-1, 1] (corrector가 × action_scale)
+    observation_space = 10
     state_space = 0
-
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=512, env_spacing=3.0, replicate_physics=True)   # --num_envs
     terrain: TerrainImporterCfg = make_terrain(3.0, False)   # env가 장면 만들 때 slope_deg · uneven으로 다시 만든다
     events: EventCfg | None = EventCfg()                    # env마다 바퀴 마찰 랜덤 — 끄려면 env.events=null
+    slope_deg = 3.0                # 경사 칸 0~DEG° (env.slope_deg=5 · 0 = 없음)
+    uneven = False                 # 요철 칸 (env.uneven=true)
+
+    # 웨이포인트 (command.py) — 시작 자세 기준, 앞 점에서 방향 turn_range만큼 꺾고 dist_range만큼
+    num_waypoints = 4
+    waypoint_dist = (0.5, 1.5)     # [m]
+    waypoint_turn = (-3.14159, 3.14159)   # [rad]
+
+    # 기본 제어기 (= rl_correction corrector goal 모드 파라미터, 바꾸면 같이)
+    k_dist = 1.0
+    k_heading = 2.0
+    turn_thresh = 0.5              # [rad] 이보다 방향이 틀어지면 제자리 회전 먼저
+    goal_tol = 0.05                # [m] 도착 판정 (추정 위치 기준)
 
     # 정책 출력 [-1, 1] → 보정량 (로봇 corrector의 action_scale_lin/ang과 같아야 한다)
-    action_scale = (0.10, 0.60)  # [m/s, rad/s]
+    action_scale = (0.10, 0.60)    # [m/s, rad/s]
 
-    # 에피소드마다 무작위 (실제에서 엔코더·자이로로 보이는 오차만)
-    # beebot 실측 중심 (2026-11-02: artifacts/calibration/20261102_140931-02-real − …144928-sim_480, sim raw 대비 차이)
+    # 에피소드마다 무작위 — beebot 실측 중심 (2026-11-02: artifacts/calibration/20261102_140931-02-real − …144928-sim_480)
     #   gain L/R 0.9927/0.9938 (real/sim 비율) · 명령 지연 +2 스텝(0.1 s) · τ 차이 0 · 데드밴드 0
-    #   하드웨어가 바뀌면 다시 측정(sensor-sync-real · sensor-sync-sim · plot-compare)해서 고친다
-    tau_range = (0.01, 0.10)       # [s] 바퀴별 1차 지연 (τ 차이 0 ± 0.1, 최소 0.01)
-    gain_range = (0.90, 1.10)      # 바퀴별 이득 (좌우 비대칭)
-    gain_center = (0.9927, 0.9938) # 좌/우 gain 중심 (실측) — gain_range 샘플에 곱함
-    deadband_range = (0.0, 0.3)    # [rad/s] 이보다 작은 바퀴 명령은 안 돎
-    # documents/isaac/task-spec.md §3 기준: 명령·관측 각각 0~4 스텝 (0~200 ms)
+    tau_range = (0.01, 0.10)       # [s] 바퀴별 1차 지연
+    gain_range = (0.90, 1.10)      # 바퀴별 이득 (좌우 비대칭) — gain_center에 곱함
+    gain_center = (0.9927, 0.9938)
+    deadband_range = (0.0, 0.3)    # [rad/s]
     cmd_delay_steps = (0, 4)       # 명령 지연 [×50 ms] (실측 2 ± 2)
-    obs_delay_steps = (0, 4)       # Pi → PC (odom·imu)
+    obs_delay_steps = (0, 4)       # 센서 지연 (odom · imu)
     sep_nominal_err = 0.08         # 드라이버 기준 간격 vs 실제 유효 간격 (회전 오차 → 자이로로만 보임)
-    radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨, 강건성용)
+    radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨)
     enc_noise = 0.005
     gyro_noise = 0.01
-    # 자이로 영점 오차 [rad/s] — 에피소드마다 ±gyro_bias 고정값을 w_gyro에 더함 (OpenCR 부팅 보정이 덜 된 경우).
-    # 정책이 w_enc와 비교해 영점을 무시하도록. 11-02 실기기 −0.257은 부팅 중 움직인 고장 — OpenCR 재부팅으로 고친다.
-    gyro_bias = 0.05
+    gyro_bias = 0.005              # [rad/s] ± — 방향을 자이로 적분으로 보므로 작게 (OpenCR 부팅 보정 후 실측 ≈ 0.0005)
 
-    # 바닥은 make_terrain · 바퀴 마찰 랜덤은 EventCfg · 바퀴/캐스터 기본 마찰은 BaseEnvCfg
-    # 지형 — 공식 학습 스크립트에서 env.slope_deg=5 env.uneven=true 로 바꾼다 (env가 장면 만들 때 make_terrain)
-    slope_deg = 3.0    # 경사 칸 0~DEG° (0 = 없음)
-    uneven = False     # 요철 칸 (턱 1~3 cm)
-
-    # 명령: hold_range 초마다 바뀜 (텔레오퍼 키 · 부드러운 곡선 · 정지)
-    hold_range = (0.5, 2.0)
-    p_teleop, p_smooth = 0.6, 0.3   # 나머지 = 정지
-
-    # 보상
-    ang_weight = 0.5
+    # 보상 (채점은 sim의 진짜 위치로)
+    w_cross = 2.0                  # 경로(앞 점 → 다음 점 직선)에서 벗어난 거리 [m]
+    w_heading = 0.5                # 직선 방향과 몸체 방향 차이 [rad] (전진 중일 때만)
+    w_progress = 2.0               # 목표에 가까워진 거리 [m]
+    reach_bonus = 1.0              # 웨이포인트 도착
+    w_reach_err = 5.0              # 도착 판정 순간 진짜 위치와 목표의 거리 [m]
+    fail_cross = 1.0               # [m] 경로에서 이만큼 벗어나면 실패로 끝냄
+    fail_penalty = 5.0
     action_penalty = 0.01
     smooth_penalty = 0.05
-

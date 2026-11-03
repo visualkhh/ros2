@@ -121,6 +121,9 @@ class BaseEnv(DirectRLEnv):
         self.robot.write_root_velocity_to_sim(torch.zeros(n, 6, device=dev), ids)
         zeros = torch.zeros(n, len(self._wheels), device=dev)
         self.robot.write_joint_state_to_sim(zeros, zeros, self._wheels, ids)
+        if not hasattr(self, "reset_pose"):   # 리셋 자세 (월드 x, y, yaw) — sim에서 다시 읽으면 다음 스텝 전엔 옛 값
+            self.reset_pose = torch.zeros(self.num_envs, 3, device=dev)
+        self.reset_pose[ids] = torch.stack([root[:, 0], root[:, 1], yaw], dim=-1)
 
     def place(self, origin, yaw: float = 0.0, i: int = 0) -> None:
         """env i 로봇을 월드 origin으로 순간이동 — 속도 · 바퀴 0."""

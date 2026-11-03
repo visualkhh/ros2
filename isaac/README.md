@@ -48,7 +48,7 @@ isaac/
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
-│   └── rl_correction_wheel_drift/   task Beebot-WheelDrift: __init__(gym.register) · env · env_cfg · command · agent
+│   └── rl_correction_waypoint/      task Beebot-Waypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent
 ├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) · config.py(바퀴 숫자 · 모터 · 마찰 · ROBOT_CFG)
 ├── learn/                    Isaac 개념 실습 L1~L5
@@ -104,7 +104,7 @@ cd isaac
 ### 3.3 RL 쪽 env에 숫자 넣기 — real − sim 차이
 
 calibration은 측정만 한다. sim을 real처럼 만드는 건 **각 RL task의 env cfg**가 한다 (task마다 자기 env를 만들고 값을 바꿔가며 맞춘다).
-지금 task(`training/rl_correction_wheel_drift/env_cfg.py` `RlCorrectionWheelDriftEnvCfg` — 로봇 beebot + 그 실측)에 넣은 값 (2026-11-02):
+지금 task(`training/rl_correction_waypoint/env_cfg.py` `RlCorrectionWaypointEnvCfg` — 로봇 beebot + 그 실측)에 넣은 값 (2026-11-02):
 
 | 값 | 계산 | 2026-11-02 | 학습 cfg |
 |---|---|---|---|
@@ -120,29 +120,29 @@ real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)�
 
 ```bash
 ./run-training.sh --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
-./run-training.sh --max_iterations 300                                            # 본 학습 (창 없음, 512대, 약 30분)
-./run-training.sh --max_iterations 300 env.uneven=true env.slope_deg=5            # + 요철 · 경사 5°
+./run-training.sh --max_iterations 500                                            # 본 학습 (창 없음, 512대)
+./run-training.sh --max_iterations 500 env.uneven=true env.slope_deg=5            # + 요철 · 경사 5°
 tensorboard --logdir logs/rsl_rl                                                  # 진행 그래프 (다른 터미널)
-#   → logs/rsl_rl/rl_correct/<시각>/ (model_<N>.pt · params/env.yaml · TensorBoard)
-./run-training.sh play --checkpoint logs/rsl_rl/rl_correct/<시각>/model_299.pt --num_envs 1
+#   → logs/rsl_rl/rl_waypoint/<시각>/ (model_<N>.pt · params/env.yaml · TensorBoard)
+./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1
 #   → <시각>/exported/policy.onnx + policy.onnx.data (+ policy.pt) — 내보낸 뒤 재생이 계속 돈다, Ctrl+C로 끝
 ```
 
-- task 이름 `Beebot-WheelDrift` (`training/rl_correction_wheel_drift/__init__.py` gym.register). `./run-training.sh -h`에 옵션 · 덮어쓰기.
+- task 이름 `Beebot-Waypoint` — 랜덤 웨이포인트 4개를 이탈 없이 (기본 제어기 + 정책 보정). 자세히: [training/rl_correction_waypoint/README.md](training/rl_correction_waypoint/README.md). `./run-training.sh -h`에 옵션 · 덮어쓰기.
+- 보는 지표: TensorBoard `Metrics/cross_track`(경로 이탈 평균 — 줄어야 함) · `Metrics/waypoints_done`(평균 도착 수 — 늘어야 함).
 - 실측 값(3.3)이 학습 env 랜덤 범위의 **중심**이다 (폭은 유지). 실제로 쓴 값은 `params/env.yaml`.
 - 바닥: Isaac Lab 지형(8 m 칸: 평평 · 경사 0~`env.slope_deg`°(기본 3) · `env.uneven=true`면 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1 (`env.events=null`로 끔).
-- 자이로 영점 오차: **기본 켜짐** — 에피소드마다 ±0.05 rad/s (`env.gyro_bias=0.1` · `0`이면 끔). 실기기 −0.257 같은 큰 값은 OpenCR 재부팅(가만히)으로 고친다.
+- 자이로 영점 오차: 에피소드마다 ±0.005 rad/s (방향을 자이로 적분으로 보므로 작게 · `env.gyro_bias=…`). 실기기 −0.257 같은 큰 값은 OpenCR 재부팅(가만히)으로 고친다.
 - 체크포인트는 50회마다 — 끝에서 망가져도 이전 `model_<N>.pt`를 `play`로 내보내면 된다.
 - `policy.onnx` 출력은 신경망 그대로 [-1, 1]. 로봇 corrector가 `clamp × action_scale`(0.10 · 0.60)을 한다 — **`.onnx.data`도 같이 복사**.
 
 ### 3.4b 정책 보기 — 실기기 전에
 
 ```bash
-./run-training.sh play --checkpoint logs/rsl_rl/rl_correct/<시각>/model_299.pt --num_envs 16 --viz kit env.debug_vis=true   # 학습 env에서 정책 재생
-./run-calibration.sh sensor-sync-sim --watch --policy logs/rsl_rl/rl_correct/<시각>/exported/policy.onnx   # 순수 sim 네모 (참고용 — 휨이 거의 없다)
+./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true   # 학습 env에서 정책 재생
 ```
 
-- 학습 env는 실측 값이 들어간 sim이라 정책 효과가 보인다. 순수 sim(calibration)은 거의 안 휘어서 보정할 게 없다.
+- 학습 env는 실측 값이 들어간 sim이라 정책 효과가 보인다 (노란 선 = 웨이포인트 경로).
 - 창: **초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로**. 노란 점에서 벗어나는 만큼이 드리프트.
 
 ### 3.4c 직접 운전 — `run-world.sh` (로봇 · 환경 골라서)
@@ -153,7 +153,6 @@ tensorboard --logdir logs/rsl_rl                                                
 ./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/env.py · env_cfg.py)
 ./run-world.sh --env rooms                          # 방 + 장애물 (N = 다음 방) · envs/ 밖 env는 MOD:CLASS
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
-./run-world.sh --cmd training.rl_correction_wheel_drift.command:RlCorrectionWheelDriftCommand --speed 0.26 --turn 1.82   # 학습 때 받는 랜덤 명령
 ./run-world.sh -h
 ```
 
@@ -164,7 +163,7 @@ tensorboard --logdir logs/rsl_rl                                                
 ### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
 
 ```bash
-cp logs/rsl_rl/rl_correct/<시각>/exported/policy.onnx* artifacts/real/   # isaac/ 에서 — policy.onnx + policy.onnx.data 둘 다
+cp logs/rsl_rl/rl_waypoint/<시각>/exported/policy.onnx* artifacts/real/   # isaac/ 에서 — policy.onnx + policy.onnx.data 둘 다
 # 로봇: 베이스 · MANUAL (3.1과 같음) · 출발 위치·방향을 A와 B에서 같게
 cd ../ros2_ws
 ./rl-only.sh label:=ab output:=artifacts/real/ab.csv          # 터미널 A — RL 노드 + 기록 (바이패스로 시작 = A)

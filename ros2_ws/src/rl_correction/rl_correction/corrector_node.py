@@ -7,11 +7,13 @@
     (Isaac Lab play.py가 내보낸 policy.onnx = 신경망 출력 그대로 — 스케일은 여기서. 2026-11-03 이전 파일은 스케일이 들어 있어 쓰지 말 것)
     /cmd_vel_in -> 보정 -> /cmd_vel_out
 
-  goal (obs 10)
-    [gx, gy, px, py, yaw, v_enc, w_enc, w_gyro, prev_dv, prev_dw]
-    /rl_goal (Point)을 받으면 nominal controller + ONNX 보정 -> /cmd_vel_out
+  goal (obs 10) — isaac/training/rl_correction_waypoint 와 같은 약속
+    [gx, gy, px, py, yaw, v_enc, w_enc, w_gyro, prev_a0, prev_a1]
+    자세(px, py, yaw) = 시작 자세 기준 추정 — 거리는 엔코더(/odom twist), 방향은 자이로(/imu) 적분 (20 Hz)
+      (/odom pose는 엔코더만이라 바퀴 gain 차이로 휘어도 안 보인다 → 쓰지 않는다)
+    /rl_goal (Point)을 받으면 nominal controller + ONNX 보정 (clamp × action_scale) -> /cmd_vel_out
+    goal_mode=absolute (기본): stop 전까지 첫 goal의 시작 자세를 고정 — 웨이포인트를 하나씩 보낸다 (학습과 같음)
     goal_mode=relative: goal마다 현재 자세가 시작점
-    goal_mode=absolute: stop 전까지 첫 goal의 시작 자세를 고정 (waypoint 경로)
 
 공통:
   /odom twist·pose, /imu angular z 사용. zero 명령은 zero 출력.
@@ -44,11 +46,6 @@ def wrap_to_pi(a: float) -> float:
     return (a + math.pi) % (2.0 * math.pi) - math.pi
 
 
-def yaw_of(q) -> float:
-    return math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                      1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-
-
 def scale_action(out, scale_lin: float, scale_ang: float) -> tuple[float, float]:
     """정책 출력 [-1, 1] → 물리 보정량 [dV m/s, dW rad/s] (학습 env와 같은 clamp × action_scale)."""
     return (max(-1.0, min(1.0, float(out[0]))) * scale_lin, max(-1.0, min(1.0, float(out[1]))) * scale_ang)
@@ -69,7 +66,7 @@ class RlCorrector(Node):
         self.declare_parameter('enable', False)
         self.declare_parameter('model_path', '')
         self.declare_parameter('mode', 'auto')  # auto | track | goal
-        self.declare_parameter('goal_mode', 'relative')  # relative | absolute
+        self.declare_parameter('goal_mode', 'absolute')  # absolute (웨이포인트, 학습과 같음) | relative
         self.declare_parameter('max_lin', 0.26)
         self.declare_parameter('max_ang', 1.82)
         # goal mode (학습 cfg와 같은 기본값)
@@ -87,9 +84,11 @@ class RlCorrector(Node):
         self.obs_dim = 0
         self.mode = 'track'
         self.v_enc = self.w_enc = self.w_gyro = 0.0
-        self.odom_pose = None          # (x, y, yaw)
+        self.odom_seen = False
+        self.est = (0.0, 0.0, 0.0)     # 시작 자세 기준 추정 (x, y, yaw) — 엔코더 거리 + 자이로 방향
+        self.est_t = None              # 마지막 적분 시각
         self.goal = None               # (gx, gy) 시작 자세 기준
-        self.start_pose = None
+        self.start_pose = None         # 추정을 시작했으면 True (absolute: stop 전까지 유지)
         self.goal_active = False
         self.prev_action = (0.0, 0.0)  # 정규화 [-1,1]
         self.last_cmd = (0.0, 0.0)
@@ -144,8 +143,7 @@ class RlCorrector(Node):
     def cb_odom(self, msg):
         self.v_enc = msg.twist.twist.linear.x
         self.w_enc = msg.twist.twist.angular.z
-        p = msg.pose.pose
-        self.odom_pose = (p.position.x, p.position.y, yaw_of(p.orientation))
+        self.odom_seen = True
 
     def cb_imu(self, msg):
         self.w_gyro = msg.angular_velocity.z
@@ -154,13 +152,13 @@ class RlCorrector(Node):
         if self.mode != 'goal':
             self.get_logger().warning(f'/rl_goal 무시: mode={self.mode}')
             return
-        if self.odom_pose is None:
+        if not self.odom_seen:
             self.get_logger().warning('/rl_goal 무시: /odom 아직 없음')
             return
         self.goal = (float(msg.x), float(msg.y))
         # absolute: stop 전까지 첫 goal의 시작 자세를 고정 (waypoint 경로용)
         if self.get_parameter('goal_mode').value != 'absolute' or self.start_pose is None:
-            self.start_pose = self.odom_pose
+            self.start_pose, self.est, self.est_t = True, (0.0, 0.0, 0.0), time.monotonic()
         self.goal_active = True
         self.prev_action = (0.0, 0.0)
         self.get_logger().info(
@@ -214,11 +212,16 @@ class RlCorrector(Node):
 
     # ------------------------------------------------------------------ goal
     def _rel_pose(self):
-        x, y, yaw = self.odom_pose
-        x0, y0, yaw0 = self.start_pose
-        dx, dy = x - x0, y - y0
-        c, s = math.cos(-yaw0), math.sin(-yaw0)
-        return c * dx - s * dy, s * dx + c * dy, wrap_to_pi(yaw - yaw0)
+        """추정 자세 적분 (학습 env _sense_and_advance와 같은 식): 방향 += 자이로 · dt, 위치 += 엔코더 v · (중간 방향)."""
+        now = time.monotonic()
+        dt = min(0.2, now - self.est_t) if self.est_t is not None else 0.0
+        self.est_t = now
+        x, y, yaw = self.est
+        yaw_mid = yaw + 0.5 * self.w_gyro * dt
+        x += self.v_enc * math.cos(yaw_mid) * dt
+        y += self.v_enc * math.sin(yaw_mid) * dt
+        self.est = (x, y, wrap_to_pi(yaw + self.w_gyro * dt))
+        return self.est
 
     def _goal_cmd(self, dist, herr):
         c = self.get_parameter
@@ -237,7 +240,7 @@ class RlCorrector(Node):
         if not self.get_parameter('enable').value or self.session is None:
             self.pub.publish(Twist())
             return
-        if self.odom_pose is None or self.start_pose is None or self.goal is None:
+        if not self.odom_seen or self.start_pose is None or self.goal is None:
             self.pub.publish(Twist())
             return
 
@@ -257,11 +260,9 @@ class RlCorrector(Node):
             return
 
         out = self.session.run(None, {self.in_name: np.array([obs], dtype=np.float32)})[0][0]
-        delta = (float(out[0]), float(out[1]))
-        sl = max(1e-6, self.get_parameter('action_scale_lin').value)
-        sa = max(1e-6, self.get_parameter('action_scale_ang').value)
-        self.prev_action = (max(-1.0, min(1.0, delta[0] / sl)),
-                            max(-1.0, min(1.0, delta[1] / sa)))
+        delta = scale_action(out, self.get_parameter('action_scale_lin').value,
+                             self.get_parameter('action_scale_ang').value)
+        self.prev_action = (max(-1.0, min(1.0, float(out[0]))), max(-1.0, min(1.0, float(out[1]))))
 
         lin, ang = correct((v, w), delta, self.get_parameter('max_lin').value,
                            self.get_parameter('max_ang').value)
