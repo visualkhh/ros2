@@ -74,6 +74,7 @@ class RlCorrectionWaypointEnv(BaseEnv):
 
         self.cfg.terrain = make_terrain(self.cfg.uneven)   # cfg 덮어쓰기(env.uneven=…)가 반영되게 여기서
         super()._setup_scene()
+        self._spawn_friction_patches()
 
     # ------------------------------------------------------------------ 자세 · 목표
     def goal(self) -> torch.Tensor:
@@ -214,8 +215,8 @@ class RlCorrectionWaypointEnv(BaseEnv):
         self.wheel_target[ids] = 0.0
         self.wheel_cmd[ids] = 0.0
 
-    def _setup_ground(self) -> None:
-        """마찰 패치 — env마다 출발점 둘레에 노랑(끈적) · 파랑(미끄럼) 얇은 판. 지형 prim 아래라 지형처럼 충돌.
+    def _spawn_friction_patches(self) -> None:
+        """마찰 패치 — env마다 출발점 둘레에 노랑(끈적) · 파랑(미끄럼) 얇은 판. 지형 prim 아래라 지형처럼 충돌 (지형 = 충돌 필터의 global).
         판 두께 1 cm, 윗면이 바닥 +1 mm (바퀴가 그대로 지나간다). 배치는 seed 고정 (학습마다 같은 자리)."""
         import random
 

@@ -55,7 +55,6 @@ class BaseEnv(DirectRLEnv):
         self.cfg.terrain.num_envs = self.scene.cfg.num_envs
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
-        self._setup_ground()   # 바닥 위 고정물 (task가 덮어씀) — 지형 prim 아래에 두면 지형처럼 모든 env와 충돌
         pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
         plan = cloner.clone_plan_from_env_0("/World/envs/env_0", "/World/envs/env_{}", self.scene.num_envs,
                                             self.device, pos, global_paths=(self.cfg.terrain.prim_path,))
@@ -64,9 +63,6 @@ class BaseEnv(DirectRLEnv):
             self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
         light = sim_utils.DistantLightCfg(intensity=3000.0, color=(0.95, 0.95, 0.95))
         light.func("/World/light", light, translation=(2.0, -2.0, 4.0))
-
-    def _setup_ground(self) -> None:
-        """지형 위에 더 깔 것 (마찰 패치 등). 기본 없음. 지형이 만들어진 뒤 · 복제 · 충돌 필터 전에 불린다."""
 
     # ------------------------------------------------------------------ 로봇 식 (드라이버와 같음)
     def wheel_speeds(self, v: torch.Tensor, w: torch.Tensor, r=None, sep=None) -> torch.Tensor:
