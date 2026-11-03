@@ -5,7 +5,6 @@ import math
 
 import isaaclab.sim as sim_utils
 import isaaclab.terrains as terrain_gen
-from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg, mdp
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -13,16 +12,12 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
 from isaaclab.sim import SimulationCfg
-from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils import configclass
 
 from urdf import robot_spec as spec
-from calibration.parameter.ActuatorParam import ActuatorParam
-from calibration.parameter.FrictionParam import FrictionParam
+from assets.tb3_waffle_pi import CASTER_FRICTION, GROUND_FRICTION, TB3_CFG, WHEEL_FRICTION
 
-_FLOOR_FRICTION = FrictionParam()   # 기본값 (숨은 sim_calib_*.json은 안 읽는다)
-_ACT = ActuatorParam()
-_GROUND = sim_utils.RigidBodyMaterialCfg(static_friction=_FLOOR_FRICTION.ground[0], dynamic_friction=_FLOOR_FRICTION.ground[1],
+_GROUND = sim_utils.RigidBodyMaterialCfg(static_friction=GROUND_FRICTION[0], dynamic_friction=GROUND_FRICTION[1],
                                          restitution=0.0, friction_combine_mode="average")
 
 
@@ -73,20 +68,7 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
 
     sim: SimulationCfg = SimulationCfg(dt=1 / spec.PHYSICS_HZ, render_interval=decimation)
 
-    robot_cfg: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot",
-        spawn=UsdFileCfg(usd_path=spec.robot_usd()),
-        init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 0.01)),
-        actuators={
-            "wheels": ImplicitActuatorCfg(
-                joint_names_expr=["wheel_left_joint", "wheel_right_joint"],
-                effort_limit=_ACT.effort,
-                velocity_limit=_ACT.velocity_limit,    # 포화는 환경이 비례 축소로 직접 (드라이버와 같게)
-                stiffness=0.0,
-                damping=_ACT.damping,                  # 속도 서보 — 고정 모델값 (ActuatorParam)
-            ),
-        },
-    )
+    robot_cfg: ArticulationCfg = TB3_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")   # 로봇 정의는 assets 한 곳
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=2048, env_spacing=3.0, replicate_physics=True)
     terrain: TerrainImporterCfg = make_terrain(0.0, False)   # train.py가 --slope/--uneven으로 다시 만듦
@@ -112,9 +94,9 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     gyro_bias = 0.05
 
     # 바퀴/캐스터 마찰 기본값 (바닥은 make_terrain · 바퀴 랜덤은 EventCfg)
-    ground_friction = _FLOOR_FRICTION.ground
-    wheel_friction = _FLOOR_FRICTION.wheel
-    caster_friction = _FLOOR_FRICTION.caster
+    ground_friction = GROUND_FRICTION
+    wheel_friction = WHEEL_FRICTION
+    caster_friction = CASTER_FRICTION
     slope_deg = 0.0    # 기록용 (base-fit.json) — 실제 바닥은 terrain
     uneven = False
 

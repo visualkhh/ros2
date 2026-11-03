@@ -59,9 +59,10 @@ import torch  # noqa: E402
 
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
-from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
+from isaaclab.scene import InteractiveScene  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
-from calibration.parameter.WheelLag import wheel_targets  # noqa: E402
+from assets.tb3_waffle_pi import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 POLICY_DT = 1 / spec.CONTROL_HZ      # 0.05 s
@@ -96,12 +97,11 @@ class Keyboard:
 class ToyEnv:
     """우리 로봇 + rl_correct와 같은 obs/action/reward를 가진 최소 환경."""
 
-    def __init__(self, world, sim, wheel_ids):
-        self.world = world
-        self.scene, self.robot = world.scene, world.robot
+    def __init__(self, scene, sim, wheel_ids):
+        self.scene, self.robot = scene, scene["robot"]
         self.sim = sim
         self.wheel_ids = wheel_ids
-        self.dev = robot.device
+        self.dev = self.robot.device
         self.r = torch.tensor([spec.WHEEL_RADIUS], device=self.dev)
         self.sep = torch.tensor([spec.WHEEL_SEP], device=self.dev)
         self.t = 0.0
@@ -125,7 +125,7 @@ class ToyEnv:
         return [self.cmd[0], self.cmd[1], v_enc, w_enc, w_gyro, min(self.t_change, 2.0)]
 
     def reset(self):
-        self.world.place((0.0, 0.0, 0.0), 0.0, self.wheel_ids)
+        place(self.robot, (0.0, 0.0, 0.0), 0.0, self.wheel_ids)
         self.scene.update(DT)
         self.t = 0.0
         self.t_change = 0.0
@@ -169,15 +169,15 @@ class ToyEnv:
 def main():
     headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
-    world = DefaultScene()
-    world.set_camera(sim)
-    world.build(1 if args_cli.room > 0 else 0, args_cli.room, 0)
-    scene, robot, _ = world.spawn()
-    sim.reset()
-    world.settle(sim)
+    sim.set_camera_view(eye=(1.8, -1.8, 1.55), target=(0.0, 0.0, 0.15))
+    if args_cli.room > 0:
+        rooms(1, args_cli.room)
+    scene = InteractiveScene(TB3SceneCfg(num_envs=1, env_spacing=2.0))
+    robot = scene["robot"]
+    ready(sim, scene)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
 
-    env = ToyEnv(world, sim, wheel_ids)
+    env = ToyEnv(scene, sim, wheel_ids)
     kb = Keyboard() if (HAS_INPUT and not headless) else None
     obs = env.reset()
     action = torch.tensor(args_cli.action, device=robot.device)

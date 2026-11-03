@@ -20,7 +20,7 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
 
-from calibration.parameter.WheelLag import wheel_targets  # noqa: F401 — 드라이버 식 (calibration과 공용)
+from assets.tb3_waffle_pi import bind_wheel_materials, wheel_targets
 from urdf import robot_spec as spec
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ class RlCorrectEnv(DirectRLEnv):
     def _set_debug_vis_impl(self, debug_vis: bool):
         """명령(초록) · 실제(파랑) 막대 + 목표 경로(노란 점). cfg.debug_vis가 켜졌을 때만 (train.py가 창 볼 때 켬)."""
         if debug_vis and getattr(self, "cmd_markers", None) is None:
-            from calibration.scene.CommandMarkers import CommandMarkers
+            from calibration.command_markers import CommandMarkers
             self.cmd_markers = CommandMarkers()
             self._vis_start = torch.zeros(self.num_envs, 4, device=self.device)   # 명령이 바뀐 순간 (x, y, z, yaw)
             self._vis_t_prev = torch.full((self.num_envs,), 1e9, device=self.device)
@@ -93,7 +93,7 @@ class RlCorrectEnv(DirectRLEnv):
         # Isaac Lab anymal_c_direct와 같은 순서: 로봇 → 지형 → 복제 → env끼리 충돌 끔
         self.robot = Articulation(self.cfg.robot_cfg)
         self.scene.articulations["robot"] = self.robot
-        self._bind_robot_materials()
+        bind_wheel_materials(self.scene.stage, "/World/envs/env_0/Robot", self.cfg.wheel_friction, self.cfg.caster_friction)
         self.cfg.terrain.num_envs = self.scene.cfg.num_envs
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
@@ -106,27 +106,6 @@ class RlCorrectEnv(DirectRLEnv):
             self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
         light_cfg = sim_utils.DistantLightCfg(intensity=2000.0, color=(1.0, 1.0, 1.0))
         light_cfg.func("/World/Light", light_cfg)
-
-    def _bind_robot_materials(self):
-        """바퀴 · 캐스터 재질 (env_0에 붙이면 복제로 전부). 바퀴 마찰 랜덤은 cfg.events가 그 위에 덮어씀.
-
-        캐스터는 min: 캐스터 0과 바닥을 average하면 끌려서 바퀴가 덜 나감 (calibration DefaultScene과 같음).
-        """
-        from pxr import UsdPhysics
-
-        c = self.cfg
-        for name, fr, mode in (("wheel", c.wheel_friction, "average"), ("caster", c.caster_friction, "min")):
-            mat = sim_utils.RigidBodyMaterialCfg(static_friction=fr[0], dynamic_friction=fr[1],
-                                                 restitution=0.0, friction_combine_mode=mode)
-            mat.func(f"/World/Materials/{name}", mat)
-        for prim in self.scene.stage.Traverse():
-            path = str(prim.GetPath())
-            if not path.startswith("/World/envs/env_0/Robot") or not prim.HasAPI(UsdPhysics.CollisionAPI):
-                continue
-            for name in ("wheel", "caster"):
-                if name in path:
-                    sim_utils.bind_physics_material(path, f"/World/Materials/{name}")
-                    break
 
     # ------------------------------------------------------------------ 명령
     def _new_commands(self, ids: torch.Tensor):

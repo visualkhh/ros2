@@ -55,9 +55,9 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg  # noqa: E402
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
-from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
-from calibration.parameter.WheelLag import wheel_targets  # noqa: E402
+from assets.tb3_waffle_pi import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 FRAME_DT = 1 / 60.0
@@ -85,23 +85,9 @@ def main():
     half = side * args_cli.spacing / 2.0
     sim.set_camera_view(eye=(half * 1.9, -half * 1.9, half * 1.6), target=(0.0, 0.0, 0.0))
 
-    world = DefaultScene()
-    world.build(0, 0.0, 0)
-    robot_cfg, usd_path = world.articulation_cfg(prim_path="{ENV_REGEX_NS}/Robot")
-    print(f"[l5] robot USD -> {usd_path}", flush=True)
-
-    @configclass
-    class SceneCfg(InteractiveSceneCfg):
-        num_envs = args_cli.envs
-        env_spacing = args_cli.spacing
-        robot = robot_cfg
-
-    scene = InteractiveScene(SceneCfg())
+    scene = InteractiveScene(TB3SceneCfg(num_envs=args_cli.envs, env_spacing=args_cli.spacing))
     robot = scene["robot"]
-    world.bind_robot_materials(scene, prim_path="/World/envs")
-    sim.reset()
-    scene.reset()
-    world.settle(sim, scene=scene, robot=robot)
+    ready(sim, scene)
 
     n = scene.num_envs
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)

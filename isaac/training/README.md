@@ -74,7 +74,7 @@ tensorboard --logdir artifacts/training
 
 로봇이 노란 점에서 벗어나는 만큼이 드리프트다. 학습이 될수록 줄어야 한다. 정지 명령인 env는 경로를 안 그린다.
 구현: `rl_correct_env.py`의 `_set_debug_vis_impl` / `_debug_vis_callback` (Isaac Lab `DirectRLEnv` 훅) +
-`calibration/scene/CommandMarkers.py` (calibration sim과 공용).
+`calibration/command_markers.py` (calibration sim과 공용).
 
 ### 직접 운전 (학습 env)
 
@@ -90,7 +90,7 @@ tensorboard --logdir artifacts/training
 
 ## 보정값과 RL의 관계
 
-- 바닥/바퀴/캐스터 **마찰**은 `FrictionParam` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env마다 바퀴 마찰 랜덤 (events).
+- 바닥/바퀴/캐스터 **마찰**은 `assets/tb3_waffle_pi.py` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env마다 바퀴 마찰 랜덤 (events).
 - 바퀴 **τ·gain·지연·데드밴드**는 env가 에피소드마다 랜덤으로 뽑는다.
   `--fit`을 주면 그 범위의 **중심을 real fit 값**으로 옮긴다 (폭은 그대로).
 - RL은 그 위의 **잔차**(좌우 비대칭, 슬립, 드리프트)를 학습한다.

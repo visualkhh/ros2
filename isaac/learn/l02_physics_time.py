@@ -53,9 +53,10 @@ import torch  # noqa: E402
 
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 
-from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
+from isaaclab.scene import InteractiveScene  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
-from calibration.parameter.WheelLag import wheel_targets  # noqa: E402
+from assets.tb3_waffle_pi import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0          # 물리 1스텝 = 8.33 ms
 CMD_DT = 1 / 20.0       # 명령은 20 Hz (cmd_manager와 같게)
@@ -78,12 +79,12 @@ class Keyboard:
 
 def main():
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
-    world = DefaultScene()
-    world.set_camera(sim)
-    world.build(1 if args_cli.room > 0 else 0, args_cli.room, 0)
-    scene, robot, _ = world.spawn()
-    sim.reset()
-    world.settle(sim)
+    sim.set_camera_view(eye=(1.8, -1.8, 1.55), target=(0.0, 0.0, 0.15))
+    if args_cli.room > 0:
+        rooms(1, args_cli.room)
+    scene = InteractiveScene(TB3SceneCfg(num_envs=1, env_spacing=2.0))
+    robot = scene["robot"]
+    ready(sim, scene)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
     r = torch.tensor([spec.WHEEL_RADIUS], device=dev)

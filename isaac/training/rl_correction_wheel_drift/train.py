@@ -28,7 +28,7 @@ from training.Train import Train  # noqa: E402
 
 
 def apply_fit(env_cfg, wheel) -> dict:
-    """real 바퀴 fit(WheelParam) → env cfg 랜덤 범위. 폭은 기존 그대로, 중심만 real로.
+    """real 바퀴 fit(`calibration.fit.wheel_of` 값) → env cfg 랜덤 범위. 폭은 기존 그대로, 중심만 real로.
 
     gain은 기존 gain_range(1.0 중심) 샘플에 좌/우 real gain을 곱한다(`gain_center`).
     deadband는 fit이 0이면 기존 범위 유지 — 사각형 excitation엔 저속 구간이 없어 못 잰 값이다.
@@ -37,12 +37,12 @@ def apply_fit(env_cfg, wheel) -> dict:
         half = (rng[1] - rng[0]) / 2.0
         return (round(max(lo, center - half), 4), round(center + half, 4))
 
-    env_cfg.gain_center = wheel.gains()
-    env_cfg.tau_range = around(env_cfg.tau_range, wheel.tau_s, lo=0.01)
+    env_cfg.gain_center = (wheel["gain_l"], wheel["gain_r"])
+    env_cfg.tau_range = around(env_cfg.tau_range, wheel["tau_s"], lo=0.01)
     half = (env_cfg.cmd_delay_steps[1] - env_cfg.cmd_delay_steps[0]) // 2
-    env_cfg.cmd_delay_steps = (max(0, wheel.delay_steps - half), wheel.delay_steps + half)
-    if wheel.deadband > 0:
-        env_cfg.deadband_range = around(env_cfg.deadband_range, wheel.deadband)
+    env_cfg.cmd_delay_steps = (max(0, wheel["delay_steps"] - half), wheel["delay_steps"] + half)
+    if wheel["deadband"] > 0:
+        env_cfg.deadband_range = around(env_cfg.deadband_range, wheel["deadband"])
 
 
 def rl_latency(path) -> dict:
@@ -128,8 +128,8 @@ class WheelDriftTrain(Train):
         # sim 띄우기 전에 fit부터 읽어서 잘못된 경로면 바로 실패
         args.base_fit = None
         if args.fit:
-            from calibration.Calibrate import Calibrate
-            args.base_fit = Calibrate.load_fit(args.fit)
+            from calibration.fit import load_fit
+            args.base_fit = load_fit(args.fit)
         args.latency_info = None
         if args.latency:
             try:
@@ -141,7 +141,7 @@ class WheelDriftTrain(Train):
         from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
         from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
-        from calibration.parameter.SimParam import SimParam  # noqa: E402
+        from calibration.fit import wheel_of  # noqa: E402
         from training.rl_correction_wheel_drift.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
         from training.rl_correction_wheel_drift.rl_correct_env import RlCorrectEnv  # noqa: E402
         from training.rl_correction_wheel_drift.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
@@ -160,7 +160,7 @@ class WheelDriftTrain(Train):
         # 창·스냅샷이 있을 때만 명령/실제 막대 + 목표 경로 표시 (headless 학습엔 영향 없음)
         env_cfg.debug_vis = bool(self.watch or getattr(args, "snap", None))
         if base_fit is not None:
-            apply_fit(env_cfg, SimParam.from_dict(base_fit).wheel)
+            apply_fit(env_cfg, wheel_of(base_fit))
         if lat is not None:
             apply_latency(env_cfg, lat)
         if base_fit is not None or lat is not None:
@@ -212,8 +212,6 @@ class WheelDriftTrain(Train):
         """
         import time
 
-        import carb.input
-        import omni.appwindow
         import omni.kit.app
         import torch
         from isaaclab_visualizers.kit import KitVisualizerCfg
@@ -229,16 +227,7 @@ class WheelDriftTrain(Train):
             import onnxruntime as ort
             sess = ort.InferenceSession(args.policy, providers=["CPUExecutionProvider"])
         use_policy = sess is not None
-        # 키 상태 폴링 (calibration/world/DefaultWorld.py Keyboard와 같은 방식 — 그 파일은 스크립트라 import 안 함)
-        inp, kbd = carb.input.acquire_input_interface(), omni.appwindow.get_default_app_window().get_keyboard()
-        names = ("W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "LEFT_SHIFT", "RIGHT_SHIFT", "X", "C", "R")
-        keymap = {n: getattr(carb.input.KeyboardInput, n) for n in names}
-
-        def pressed() -> set:
-            return {n for n, key in keymap.items() if inp.get_keyboard_button_flags(kbd, key) & (1 << 3)}
-
-        def held(keys, *names_):
-            return any(n in keys for n in names_)
+        from calibration import keyboard as kb   # 키 상태 폴링 (random-world와 공용)
 
         obs, _ = raw.reset()
         last_cmd, prev_keys, t_print = None, set(), 0.0
@@ -247,7 +236,7 @@ class WheelDriftTrain(Train):
         app = omni.kit.app.get_app()
         while app.is_running():
             t0 = time.monotonic()
-            keys = pressed()
+            keys = kb.pressed()
             new = keys - prev_keys
             prev_keys = keys
             if "C" in new and sess is not None:
@@ -255,11 +244,7 @@ class WheelDriftTrain(Train):
                 print(f"[drive] 정책 {'켬' if use_policy else '끔 (바이패스)'}", flush=True)
             if "R" in new:
                 obs, _ = raw.reset()
-            k = 0.3 if held(keys, "LEFT_SHIFT", "RIGHT_SHIFT") else 1.0
-            v = args.speed * k * (held(keys, "W", "UP") - held(keys, "S", "DOWN"))
-            w = args.turn * k * (held(keys, "A", "LEFT") - held(keys, "D", "RIGHT"))
-            if "X" in keys:
-                v = w = 0.0
+            v, w = kb.drive_cmd(keys, args.speed, args.turn)
             cmd = (v, w)
             raw.cmd[:] = torch.tensor(cmd, device=raw.device)
             raw.hold[:] = 1e9            # env가 랜덤 명령으로 바꾸지 않게

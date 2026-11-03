@@ -32,11 +32,12 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-training.sh           학습 실행기 (IsaacLab, 기본 headless)
+├── run-world.sh              직접 운전 (학습 env 그대로 · random = calibration 방)
+├── assets/tb3_waffle_pi.py   로봇 정의 한 곳 TB3_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트       → calibration/README.md
-│   ├── Calibrate.py          기록 실행기 + --fit 해석 (fit.json 1개 = real 값, 2개 = real − sim 차이)
-│   ├── sensor/               DefaultSensorSim · DefaultSensorReal · DummySensor (Isaac/ROS 없이 검증)
-│   ├── excitation/           측정 경로: 사각형 → 180° 턴 → 역주행 (54 s)
-│   ├── parameter/ scene/ world/   바퀴 지연 모델 · 장면 · 랜덤 월드(키보드 주행, C 보정값 창)
+│   ├── calib_env.py · calib_env_cfg.py   Isaac Lab Direct env (로봇 1대 · 바퀴 모델 · 방+장애물)
+│   ├── sensor_sync_sim.py · sensor_sync_real.py · dummy_sensor.py · random_world.py   실행 스크립트
+│   ├── profile.py · record.py · fit.py   측정 경로(사각형 54 s) · 기록 · --fit 해석 (1개 = real 값, 2개 = real − sim)
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── Train.py              실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
@@ -52,9 +53,7 @@ isaac/
 USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd()`, `urdf/usd/` git 제외).
 따로 변환만: `$ISAACLAB_DIR/isaaclab.sh -p urdf/convert_urdf.py`.
 다른 로봇(새 task): `robot_usd("training/<task>/urdf/robot.xacro", "<task>")` — 인자 없이 쓰면 우리 로봇.
-calibration 장면 교체: `sensor-sync-sim` · `random-world`에 `--scene path/to/MyScene.py[:Class]` (`calibration/scene/Scene` 서브클래스, 생성자 `(condition=, actuator=)`).
-측정 경로 교체: `sensor-sync-sim` · `sensor-sync-real` · Dummy · `calibrate`에 `--excitation path/to/MyPath.py[:Class]`
-(`calibration/excitation/CalibExcitation` 서브클래스 — 보통 `DefaultCalibExcitation`을 상속해 `make_profile`만 바꾼다).
+측정 경로를 바꾸려면 `calibration/profile.py`, calibration 장면은 `calibration/calib_env_cfg.py` · `calib_env.py`를 고친다.
 
 ## 3. 절차 (2026-11-02 실제로 돈 순서)
 
@@ -215,7 +214,7 @@ cd ../ros2_ws
 2. **물리 480 Hz** (2026-11-02, `urdf/robot_spec.py` `PHYSICS_HZ`): 120 Hz는 제자리 회전 때 바퀴가 붙었다 미끄러져 떨림.
    정상 회전 구간 바퀴 속도 표준편차 120 Hz 0.62 · 240 Hz 0.15 · 360 Hz 0.11 · **480 Hz 0.027** · real 0.018 rad/s.
    solver 반복(16/4)·바퀴 마찰 0.6은 거의 효과 없음. calibration sim · 랜덤 월드 · 학습 env가 같은 값을 쓴다.
-3. **damping/effort는 고정** (`calibration/parameter/ActuatorParam.py`, damping 50) — 바꿔도 sim 응답이 안 변해서 calibration 변수에서 뺐다.
+3. **damping/effort는 고정** (`assets/tb3_waffle_pi.py` WHEEL_DAMPING 50) — 바꿔도 sim 응답이 안 변해서 calibration 변수에서 뺐다.
 4. **남은 차이**: 회전 때 몸체가 바퀴보다 덜 돎 — real 자이로/명령 0.950 vs 엔코더 0.995 (5%), sim 0.956 vs 1.017.
    학습 env의 바퀴 간격 오차 랜덤 범위(±8%)가 덮는다.
 5. **데드밴드** — 측정 경로에 저속 구간이 없어 fit의 0은 "못 잼". 학습은 기본 범위(0~0.3) 사용.

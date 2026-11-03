@@ -24,9 +24,6 @@
 #     --out PATH         정확한 raw.csv 경로 (label보다 우선)
 #     --side 0.5 --speed 0.15 --turn 1.0    사각형 한 변 [m] · 기준 전진 [m/s] (변마다 1.0/0.67/1.33/0.8배) · 회전 [rad/s]
 #     --room 0           방 크기 [m] (0 = 장애물 없는 빈 바닥, 측정은 0 권장) · --seed 0
-#     --scene CLS        장면 교체 — calibration.scene.Scene 서브클래스 (보통 DefaultScene 상속), 생성자 (condition=, actuator=)
-#     --excitation CLS   측정 경로 교체 — CalibExcitation 서브클래스 (보통 DefaultCalibExcitation 상속해 make_profile만)
-#                        CLS 형식: path/to/file.py · path/to/file.py:Class · pkg.mod.Class (파일에 서브클래스 1개면 이름 생략)
 #     --watch            기록 후 창을 닫을 때까지 같은 경로 반복 재생 (창 필요)
 #     --viz none|kit     창 끔/켬. 안 주면 kit (창 표시) — 기록만 할 땐 --viz none
 #     창에서 보이는 것: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 (길이 ∝ 속도) · 노란 점 = 목표 경로(사각형)
@@ -41,12 +38,12 @@
 #   sensor-sync-real   실기기에서 측정 (PC · .venv · ROS 환경/peers 자동, ROS_DOMAIN_ID=25)
 #     준비: 로봇 베이스 켜기 · MANUAL · 경로 direct (rl-only 안 띄움) · OpenCR는 가만히 둔 채 켜기 · 주변 1 m 비우기
 #     --check-only       움직이지 않고 상태만 확인 (state=MANUAL · odom 수신)
-#     --label NAME · --output PATH · --side --speed --turn (sim과 같은 기본값 → 같은 명령) · --rate 20 · --excitation CLS
+#     --label NAME · --output PATH · --side --speed --turn (sim과 같은 기본값 → 같은 명령) · --rate 20
 #     ./run-calibration.sh sensor-sync-real --check-only
 #     ./run-calibration.sh sensor-sync-real --label real_floor
 #
 #   calibrate          sim(raw) + real을 같은 경로로 한 번에 기록 → 비교 그림
-#     --label real_floor --side --speed --turn --fit F --excitation CLS --show
+#     --label real_floor --side --speed --turn --fit F --show
 #     → artifacts/calibration/<시각>-calibrate/{sim,real}/{raw.csv,fit.json,report.png} · compare.png · sim_calib.json
 #     ./run-calibration.sh calibrate --side 0.5
 #
@@ -56,12 +53,12 @@
 #
 #   random-world       랜덤 방 + 로봇 키보드 주행 (IsaacLab, 창)
 #     W/A/S/D 주행 · Shift 느리게 · X 정지 · R 리셋 · N 다음 방 · C 보정값 창
-#     --fit F[,G] · --scene CLS · --seed 7 · --rooms 8 · --size-min 3.5 --size-max 6.0 · --speed --turn · --seconds 0(창 닫을 때까지)
+#     --fit F[,G] · --seed 7 · --rooms 8 · --size-min 3.5 --size-max 6.0 · --speed --turn · --seconds 0(창 닫을 때까지)
 #
-#   <센서 파일>        그 밖은 python -m calibration 으로 그대로 (Sensor 서브클래스 · main(argv) 필요)
-#     ./run-calibration.sh calibration/sensor/DummySensor.py --gain-l 0.96 --gain-r 1.02 --out artifacts/calibration/dummy_real/raw.csv
-#     ./run-calibration.sh calibration/sensor/DummySensor.py --fit artifacts/calibration/dummy_real/fit.json,artifacts/calibration/dummy_sim/fit.json
-#     (DummySensor = Isaac/ROS 없이 흐름 확인용 가짜 로봇: --gain/--gain-l/--gain-r --deadband --slip --noise --seed)
+#   dummy              가짜 로봇 (Isaac/ROS 없이 흐름 확인 — 표준 라이브러리만)
+#     ./run-calibration.sh dummy --gain-l 0.96 --gain-r 1.02 --out artifacts/calibration/dummy_real/raw.csv
+#     ./run-calibration.sh dummy --fit artifacts/calibration/dummy_real/fit.json,artifacts/calibration/dummy_sim/fit.json
+#     (--gain/--gain-l/--gain-r --tau --delay --deadband --slip --noise --seed)
 #
 # common:
 #   -h, --help, help   이 도움말
@@ -105,7 +102,7 @@ cd "$ISAAC"   # python -m calibration + 상대경로 기준
 CMD="$1"; shift
 case "$CMD" in
   random-world)
-    sim calibration/world/DefaultWorld.py "$@"
+    sim -m calibration random-world "$@"
     ;;
   sensor-sync-sim)
     sim -m calibration sensor-sync-sim "$@"
@@ -127,7 +124,6 @@ case "$CMD" in
         --speed) SPEED=${2:?--speed 값}; shift 2 ;;
         --turn) TURN=${2:?--turn 값}; shift 2 ;;
         --fit) SIM_EXTRA+=(--fit "${2:?--fit 경로}"); shift 2 ;;
-        --excitation) COMMON_EXTRA+=(--excitation "${2:?--excitation 경로}"); shift 2 ;;
         --show) SHOW=(--show); shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "모르는 옵션: $1" >&2; exit 2 ;;

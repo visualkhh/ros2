@@ -135,7 +135,7 @@ def fit_wheels(rows, t, fit):
     """피팅 모델로 좌/우 바퀴 각속도 예측.
 
     v/w 명령 → (지연) → 차동기구학 → 8 rad/s 비례 축소 → gain → deadband → 1차지연.
-    (plant의 WheelLag·wheel_targets와 같은 순서)
+    (calib_env 바퀴 모델 · wheel_targets와 같은 순서)
     """
     from urdf.robot_spec import MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP  # noqa: E402
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])

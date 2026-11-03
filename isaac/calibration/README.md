@@ -11,7 +11,7 @@ sim+real을 동시에 돌리고 비교 보고서까지 만들려면:
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| `world/DefaultWorld.py` | 랜덤 방(3.5~6 m) + 장애물 + 우리 로봇, `N` 다음 방 | ✅ |
+| `random_world.py` | 랜덤 방(3.5~6 m) + 장애물 + 우리 로봇, `N` 다음 방 | ✅ |
 | `sensor-sync-sim` + `sensor-sync-real` | IMU/odom/raw wheel 신호를 같은 명령에서 비교 | 둘 다 직접 실행 |
 | `step_floor.py` | 바닥 계단응답 sim/real | ☐ |
 | 차이 반영 | URDF / 마찰 / env cfg에 실측값 넣기 | ☐ |
@@ -21,21 +21,22 @@ sim+real을 동시에 돌리고 비교 보고서까지 만들려면:
 
 이름 규칙: **Isaac에서 도는 건 `_sim`**, **실제 로봇은 `_real`**.
 
+Isaac Lab 관례: env + env_cfg(Direct, 학습과 같은 구조) · 실행 스크립트는 함수 · 로봇은 `../assets/tb3_waffle_pi.py` 한 곳.
+
 ```
 calibration/
-├── Calibrate.py             기록 오케스트레이터 (Sensor 주입, sim/real 공용)
-├── report/report.py         단건 리포트 + sim/real 비교·fit (단일 파일, `plot-compare`도 이걸 씀)
-├── world/World.py             실행 단위 계약 (ABC, 한 파일 한 클래스)
-├── world/DefaultWorld.py    랜덤 주행 (오버라이딩 지점, run-calibration.sh random-world)
-├── sensor/Sensor.py         공용 베이스 (CSV+리포트, 한 파일 한 클래스)
-├── sensor/DefaultSensorSim.py  sim 센서 기록 (run-calibration.sh sensor-sync-sim)
-├── sensor/DefaultSensorReal.py real 센서 기록 (run-calibration.sh sensor-sync-real, ROS/peers 자동)
-├── excitation/CalibExcitation.py   excitation 계약 (ABC)
-├── excitation/DefaultCalibExcitation.py   기본 사각형/waypoint (sim·real 공용)
-├── parameter/               휠/액추에이터/마찰 타입 + WheelLag (sim·env 공용)
-├── scene/Scene.py             장면 계약 (ABC, 한 파일 한 클래스)
-├── scene/DefaultScene.py      기본 방+로봇+카메라 (오버라이딩 지점)
-├── scene/Room.py              방 한 칸
+├── calib_env_cfg.py         CalibEnvCfg (로봇 1대 · 평평 바닥 · 바퀴 모델 WheelModelCfg · 랜덤 없음) · RoomsEnvCfg (방 8개)
+├── calib_env.py             CalibEnv(DirectRLEnv) — [v, w] → 지연 → gain → 데드밴드 → τ → 바퀴 · 관측 v_enc/w_enc/w_gyro · 방+장애물
+├── sensor_sync_sim.py       sim 측정 스크립트 (run-calibration.sh sensor-sync-sim)
+├── sensor_sync_real.py      real 측정 스크립트 (ROS, run-calibration.sh sensor-sync-real)
+├── dummy_sensor.py          가짜 로봇 — Isaac/ROS 없이 흐름 확인 (run-calibration.sh dummy)
+├── random_world.py          랜덤 방 + 키보드 주행 + C 보정값 창 (run-calibration.sh random-world)
+├── profile.py               측정 명령 경로 (사각형 → 180° → 역주행, 54 s) — sim · real · dummy 공용
+├── record.py                기록 1회 (CSV 한 줄 모양 · 구간 표 · fit.json · report.png)
+├── fit.py                   fit.json ↔ 바퀴 모델 값 · --fit 해석 (1개 = real 값, 2개 = real − sim 차이)
+├── command_markers.py       화면 막대/점 (학습 env와 공용)
+├── keyboard.py              창 키 폴링 (학습 --drive와 공용)
+├── report/report.py         단건 리포트 + sim/real 비교·fit (`plot-compare`)
 ├── (산출물은 `../artifacts/` — calibration/RL/real 공용, git 제외)
 ├── PRE_RL.md              차이값을 URDF/마찰/env cfg 중 어디에 넣는지
 ├── hypotheses.md       가설·실측 표
@@ -68,13 +69,10 @@ sim 측정의 모든 옵션 (`./run-calibration.sh sensor-sync-sim --help`와 �
 | `--out PATH` | 자동 | 정확한 `raw.csv` 경로 (label보다 우선) |
 | `--side` `--speed` `--turn` | 0.5 · 0.15 · 1.0 | 사각형 한 변 [m] · 기준 전진 [m/s] (변마다 1.0/0.67/1.33/0.8배) · 회전 [rad/s] — real과 같아야 같은 명령 |
 | `--room` `--seed` | 0 · 0 | 방 크기 [m] (0 = 빈 바닥, 측정은 0) · 장면 시드 |
-| `--scene CLS` | `DefaultScene` | 장면 교체 — `calibration.scene.Scene` 서브클래스, 생성자 `(condition=, actuator=)` |
-| `--excitation CLS` | `DefaultCalibExcitation` | 측정 경로 교체 — `CalibExcitation` 서브클래스 (보통 `DefaultCalibExcitation` 상속해 `make_profile`만) |
 | `--watch` | 끔 | 기록 후 창을 닫을 때까지 같은 경로 반복 재생 |
 | `--viz none\|kit` | `kit` | 창 끔/켬 (기록만 할 땐 `none`) |
 
-`CLS` 형식: `path/to/file.py` (파일에 해당 서브클래스가 1개면) · `path/to/file.py:Class` · `pkg.mod.Class`.
-해당 베이스를 상속하지 않으면 "서브클래스가 아님"으로 거부한다.
+측정 경로를 바꾸려면 `profile.py`의 `make_profile`을, 장면을 바꾸려면 `calib_env_cfg.py`(cfg)·`calib_env.py`(`_setup_scene`)를 고친다.
 
 ### 화면 (`--watch`)
 
@@ -82,10 +80,10 @@ sim 측정의 모든 옵션 (`./run-calibration.sh sensor-sync-sim --help`와 �
 |---|---|
 | 초록 막대 | 명령 (v, w)대로라면 갈 방향 — 길이 ∝ 속도, 방향 = 지금 방향 + w × 0.25 s (원호의 현) |
 | 파랑 막대 | 실제 몸체 속도로 가는 방향 (같은 규칙) |
-| 노란 점 | 목표 경로 — 측정 경로(`excitation.profile_path`)를 로봇 시작 자세 기준으로 바닥에 |
+| 노란 점 | 목표 경로 — 측정 경로(`profile.profile_path`)를 로봇 시작 자세 기준으로 바닥에 |
 
 로봇이 노란 점에서 벗어나는 만큼, 초록과 파랑이 어긋나는 만큼이 드리프트다. 제자리 회전도 보이게 막대에 최소 길이가 있다.
-구현: `scene/CommandMarkers.py` (Isaac Lab `VisualizationMarkers` · 막대/점이라 Nucleus 없이 된다) — 학습 env와 공용.
+구현: `command_markers.py` (Isaac Lab `VisualizationMarkers` · 막대/점이라 Nucleus 없이 된다) — 학습 env와 공용.
 
 ### sim play (`--policy`) — 실기기 전에 A/B
 

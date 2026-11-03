@@ -58,9 +58,9 @@ from isaaclab.sensors.ray_caster import MultiMeshRayCasterCfg, patterns  # noqa:
 from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
-from calibration.scene.DefaultScene import DefaultScene  # noqa: E402
+from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
 from urdf import robot_spec as spec  # noqa: E402
-from calibration.parameter.WheelLag import wheel_targets  # noqa: E402
+from assets.tb3_waffle_pi import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 FRAME_DT = 1 / 60.0
@@ -118,11 +118,9 @@ def print_state(robot, imu, lidar, sim_t):
 def main():
     headless = not getattr(args_cli, "visualizer", None) or "kit" not in (args_cli.visualizer or [])
     sim = SimulationContext(SimulationCfg(dt=DT, device=args_cli.device))
-    world = DefaultScene()
-    world.set_camera(sim)
-    world.build(1 if args_cli.room > 0 else 0, args_cli.room, 0)
-    robot_cfg, usd_path = world.articulation_cfg(prim_path="{ENV_REGEX_NS}/Robot")
-    print(f"[l3] robot USD -> {usd_path}", flush=True)
+    sim.set_camera_view(eye=(1.8, -1.8, 1.55), target=(0.0, 0.0, 0.15))
+    if args_cli.room > 0:
+        rooms(1, args_cli.room)
 
     lidar_targets = [
         MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="/World/ground", track_mesh_transforms=False),
@@ -133,10 +131,9 @@ def main():
         )
 
     @configclass
-    class L3SceneCfg(InteractiveSceneCfg):
+    class L3SceneCfg(TB3SceneCfg):   # 바닥 · 조명 · 로봇 + 센서
         num_envs = 1
         env_spacing = 2.0
-        robot = robot_cfg
         if not args_cli.no_imu:
             imu = ImuCfg(
                 # imu_link는 base_link의 fixed child — 센서가 rigid 조상(base_link)을 찾아
@@ -162,11 +159,8 @@ def main():
     robot = scene["robot"]
     imu = scene.sensors.get("imu")
     lidar = scene.sensors.get("lidar")
-    world.bind_robot_materials(scene, prim_path="/World/envs/env_0/Robot")
     print("[l3] scene + sensors created", flush=True)
-    sim.reset()
-    print("[l3] sim.reset done", flush=True)
-    world.settle(sim, scene=scene, robot=robot)
+    ready(sim, scene)
     print("[l3] settle done", flush=True)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
