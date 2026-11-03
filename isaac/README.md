@@ -48,7 +48,7 @@ isaac/
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── trainer.py            실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
-│   └── rl_correction_wheel_drift/   task: env · PPO 설정 · train.py · fit_panel(보정값 창)
+│   └── rl_correction_wheel_drift/   task: env · env_cfg · command · agent · train.py
 ├── utils/onnx_export.py      학습된 actor → 배포용 ONNX (clamp × action_scale 포함 — corrector는 더하기만)
 ├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) · config.py(바퀴 숫자 · 모터 · 마찰 · ROBOT_CFG)
@@ -120,7 +120,7 @@ real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)�
 ### 3.4 학습
 
 ```bash
-./run-training.sh --watch --envs 16 --iterations 5               # 짧게 확인: 창 + 랜덤 범위 창 · 창 클릭 후 P = 스크린샷
+./run-training.sh --watch --envs 16 --iterations 5               # 짧게 확인: 창 · 창 클릭 후 P = 스크린샷
 ./run-training.sh --iterations 300                               # 본 학습 (창 없음, 512대, 약 30분)
 ./run-training.sh --iterations 300 --uneven --snap 60            # + 낮은 턱 + 1분마다 화면 저장
 tensorboard --logdir artifacts/training                          # 진행 그래프 (다른 터미널)

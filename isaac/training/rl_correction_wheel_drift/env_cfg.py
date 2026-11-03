@@ -11,7 +11,6 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
 from isaaclab.utils import configclass
 
-from envs.base_env_cfg import GROUND_FRICTION
 from envs.base_env_cfg import BaseEnvCfg
 
 from envs.base_env_cfg import GROUND as _GROUND  # noqa: E402
@@ -91,7 +90,6 @@ class RlCorrectEnvCfg(BaseEnvCfg):
     gyro_bias = 0.05
 
     # 바닥은 make_terrain · 바퀴 마찰 랜덤은 EventCfg · 바퀴/캐스터 기본 마찰은 BaseEnvCfg
-    ground_friction = GROUND_FRICTION   # fit_panel 표시용
     slope_deg = 0.0    # 기록용 (ranges.json) — 실제 바닥은 terrain
     uneven = False
 

@@ -51,9 +51,8 @@ tensorboard --logdir artifacts/training
 - 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint(`model_<iter>.pt`, 50 iter마다), `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교),
   `ranges.json`(이번 랜덤 범위)
 - `--watch`는 학습 장면(로봇들, 지형)을 Isaac 창으로 보여주고,
-  **TRAINING RANGES** 창(읽기만)에 랜덤 범위(실측 중심) · 마찰 · 지형 설정을 띄운다.
   창에서 **P** 키 → `artifacts/training/<시각>-<exp-name>/screen_shot_<시각>.png` (뷰포트 캡처).
-  headless일 때는 터미널 출력 + `ranges.json`으로 남는다.
+  랜덤 범위는 터미널 출력 + `ranges.json`으로 남는다.
 - `--snap SEC`: 창 없이도 SEC초마다 `snaps/<시각>.png` + `latest.png` (화면 없는 Kit visualizer + `--enable_cameras` 자동, ~20% 느려짐).
 - `--slope DEG`: 지형에 경사 칸(피라미드 오르막/내리막 0~DEG°) 추가 · `--uneven`: 요철 칸(턱 1~3 cm) 추가 — Isaac Lab terrain generator, 8 m 칸 격자. 기본 3, 0 = 경사 없음.
 - `--gyro-bias RAD_S`: 에피소드마다 자이로 영점 오차 ±RAD_S (기본 0.05, 0 = 끔).

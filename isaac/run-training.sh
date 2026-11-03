@@ -20,7 +20,7 @@
 #   --uneven           지형에 요철 칸(턱 1~3 cm) 추가 (기본 끔)
 #   --gyro-bias RAD_S  에피소드마다 자이로 영점 오차 ±RAD_S (기본 0.05, 0 = 끔)
 #   --exp-name NAME    결과 폴더 이름 (기본 rl_correct)
-#   --watch            Isaac 창으로 보기 (기본은 headless) + 랜덤 범위 창(실측 중심 · 마찰 · 지형, 읽기만)
+#   --watch            Isaac 창으로 보기 (기본은 headless)
 #                      창을 클릭하고 P 키 → <결과>/screen_shot_<시각>.png
 #   --snap SEC         창 없이도 SEC초마다 <결과>/snaps/<시각>.png + <결과>/latest.png (eog로 열어 두면 갱신, ~20% 느려짐)
 #   화면(--watch · --snap)에서 보이는 것:

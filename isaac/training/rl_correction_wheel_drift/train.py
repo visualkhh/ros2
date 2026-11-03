@@ -3,7 +3,7 @@
 Usage (isaac/ 에서):
   ./run-training.sh [--iterations N] [--watch] [--envs N] [--no-friction] [--uneven] [--slope DEG]
   (= ./isaaclab.sh -p -m training rl_correction_wheel_drift [옵션...])
-기본은 headless. `--watch` = `--visualizer kit` (창 + 랜덤 범위 창, 읽기만, P 키 → 스크린샷).
+기본은 headless. `--watch` = `--visualizer kit` (창, P 키 → 스크린샷).
 512 env는 느리니 `--watch --envs 16` 권장. 바퀴 마찰 랜덤(env마다)은 기본으로 켜짐, 끄려면 `--no-friction`. 바닥 = Isaac Lab 지형 (`--slope` 경사 · `--uneven` 요철).
 실기기 맞춤 값(바퀴 gain · 지연 · τ)은 env_cfg.py에 박혀 있다 (측정 → 숫자 → sensor-sync-sim으로 확인).
 Eval: 학습이 끝나면 같은 env·같은 seed로 정책 끔(보정 0) / 켬(policy.onnx와 같은 그래프)을 비교 → eval.json.
@@ -94,9 +94,6 @@ class WheelDriftTrain(Train):
         env = RslRlVecEnvWrapper(RlCorrectEnv(env_cfg))
         self.env = env
         self.install_snap(env.unwrapped)
-        if self.watch:
-            from training.rl_correction_wheel_drift.fit_panel import FitPanel  # noqa: E402
-            self.panel = FitPanel(env_cfg)  # 참조 유지
         import importlib.metadata as _md
         from isaaclab_rl.rsl_rl.utils import handle_deprecated_rsl_rl_cfg  # noqa: E402
 
