@@ -1,4 +1,4 @@
-"""calibration sim — SimRobot(robots/sim_robot.py)에 명령(기본 사각형)을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
+"""calibration sim — SimRobot(robots/sim_robot.py)에 명령(기본 사각형)을 CalibrationEnv(calibration/env.py = envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
 
   ./run-calibration.sh sim --viz none                  # 순수 sim 측정 → real과 비교해 차이를 구한다
 창(--watch): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로. 기록 후 창 닫을 때까지 같은 경로 반복.
@@ -48,8 +48,8 @@ def main(argv=None) -> int:
 def _run(args, app, cmd, out):
     import torch
 
-    from envs.default.env import DefaultEnv
-    from envs.default.env_cfg import DefaultEnvCfg
+    from calibration.env import CalibrationEnv
+    from calibration.env_cfg import CalibrationEnvCfg
     from envs.rooms.env import RoomsEnv
     from envs.rooms.env_cfg import RoomsEnvCfg
 
@@ -58,7 +58,7 @@ def _run(args, app, cmd, out):
         cfg, env_cls = RoomsEnvCfg(), RoomsEnv
         cfg.rooms, cfg.room_size, cfg.room_seed = 1, (args.room, args.room), args.seed
     else:
-        cfg, env_cls = DefaultEnvCfg(), DefaultEnv
+        cfg, env_cls = CalibrationEnvCfg(), CalibrationEnv
     cfg.sim.device = args.device
     cfg.debug_vis = not headless
     env = env_cls(cfg)
