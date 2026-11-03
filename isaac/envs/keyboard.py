@@ -4,7 +4,7 @@ from __future__ import annotations
 import carb.input
 import omni.appwindow
 
-KEYS = ("W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "LEFT_SHIFT", "RIGHT_SHIFT", "X", "C", "R", "N")
+KEYS = ("W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "LEFT_SHIFT", "RIGHT_SHIFT", "X", "C", "R", "N", "F")
 _inp = carb.input.acquire_input_interface()
 _kbd = omni.appwindow.get_default_app_window().get_keyboard()
 _map = {n: getattr(carb.input.KeyboardInput, n) for n in KEYS}

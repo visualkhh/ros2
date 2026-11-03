@@ -78,7 +78,7 @@ tensorboard --logdir artifacts/training
 
 ### 직접 운전 (학습 env)
 
-`../run-world.sh --fit $FIT --uneven --policy <결과>/policy.onnx` — `--drive`: 로봇 1대 · 키보드 명령 · C 정책 켬/끔. 자세히: [../README.md](../README.md) 3.4c.
+`../run-training.sh --drive --watch --fit $FIT --uneven --policy <결과>/policy.onnx` — `--drive`: 로봇 1대 · 키보드 명령 · C 정책 켬/끔. 자세히: [../README.md](../README.md) 3.4c.
 
 ### 학습 뒤 sim에서 play
 

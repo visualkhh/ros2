@@ -111,7 +111,7 @@ class WheelDriftTrain(Train):
         parser.add_argument("--fit", default=None,
                             help="real/fit.json,sim/fit.json → 차이를 바퀴 랜덤 범위 중심으로 (1개면 real 값 그대로)")
         parser.add_argument("--drive", action="store_true",
-                            help="학습 대신 키보드로 직접 운전 (학습 env 그대로 · 창 · W/A/S/D · C 정책 켬/끔 · R 리셋) — run-world.sh")
+                            help="학습 대신 키보드로 직접 운전 (학습 env 그대로 · 창 · W/A/S/D · C 정책 켬/끔 · R 리셋 · F 카메라)")
         parser.add_argument("--policy", default=None, metavar="ONNX",
                             help="--drive에서 보정에 쓸 정책 (C 키로 켬/끔, 기본 켬)")
         parser.add_argument("--speed", type=float, default=0.15, help="--drive 전진 [m/s] (Shift = 0.3배)")
@@ -124,7 +124,7 @@ class WheelDriftTrain(Train):
         if args.policy and not Path(args.policy).is_file():
             parser.error(f"--policy 파일 없음: {args.policy}")
         if args.drive and "kit" not in (args.visualizer or []):
-            parser.error("--drive는 창이 필요 — --watch를 같이 (run-world.sh가 붙여 줌)")
+            parser.error("--drive는 창이 필요 — --watch를 같이")
         # sim 띄우기 전에 fit부터 읽어서 잘못된 경로면 바로 실패
         args.base_fit = None
         if args.fit:
@@ -214,12 +214,9 @@ class WheelDriftTrain(Train):
 
         import omni.kit.app
         import torch
-        from isaaclab_visualizers.kit import KitVisualizerCfg
 
         args = self.args
         env_cfg.episode_length_s = 1e6   # 시간 초과 리셋 없음 (R 키로만)
-        env_cfg.sim.visualizer_cfgs = [KitVisualizerCfg(origin_type="asset", origin_track_path="robot",
-                                                        eye=(-1.2, -1.2, 1.0), lookat=(0.0, 0.0, 0.0))]   # 로봇 따라감
         raw = env_cls(env_cfg)
         self.env = raw
         sess = None
@@ -230,8 +227,10 @@ class WheelDriftTrain(Train):
         from envs import keyboard as kb   # 키 상태 폴링 (random-world와 공용)
 
         obs, _ = raw.reset()
+        raw.look_at(raw.robot.data.root_pos_w.torch[0].tolist())
         last_cmd, prev_keys, t_print = None, set(), 0.0
-        print("[drive] W/A/S/D(↑←↓→) 주행 · Shift 느리게 · X 정지 · C 정책 켬/끔 · R 리셋(제자리 · 바퀴 gain/τ 새로) · 창 닫으면 끝", flush=True)
+        print("[drive] W/A/S/D(↑←↓→) 주행 · Shift 느리게 · X 정지 · C 정책 켬/끔 · R 리셋(제자리 · 바퀴 gain/τ 새로) · "
+              "F 카메라를 로봇 쪽으로 · 마우스 휠 줌 · 창 닫으면 끝", flush=True)
         print(f"[drive] 정책 {'켬 ' + args.policy if use_policy else '없음 (바이패스)'}", flush=True)
         app = omni.kit.app.get_app()
         while app.is_running():
@@ -244,6 +243,8 @@ class WheelDriftTrain(Train):
                 print(f"[drive] 정책 {'켬' if use_policy else '끔 (바이패스)'}", flush=True)
             if "R" in new:
                 obs, _ = raw.reset()
+            if "F" in new:   # 카메라는 평소 자유 (따라가게 고정하면 마우스 줌·회전이 덮어씌워짐)
+                raw.look_at(raw.robot.data.root_pos_w.torch[0].tolist())
             v, w = kb.drive_cmd(keys, args.speed, args.turn)
             cmd = (v, w)
             raw.cmd[:] = torch.tensor(cmd, device=raw.device)

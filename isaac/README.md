@@ -32,11 +32,11 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-training.sh           학습 실행기 (IsaacLab, 기본 headless)
-├── run-world.sh              직접 운전 (학습 env 그대로 · random = calibration 방)
+├── run-world.sh              직접 운전 — 로봇(--usd-dir) · 환경(--env --env-cfg) 골라서 (기본 envs/default)
 ├── envs/                     환경 바탕 — 모든 env가 상속
 │   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
 │   ├── default/              DefaultEnv — 아무것도 없는 기본 환경 (새 환경은 이걸 복사해 시작)
-│   ├── drive.py              키보드 운전 (./run-world.sh empty) · keyboard.py 키 폴링 (공용)
+│   ├── drive.py              키보드 운전 (./run-world.sh) · keyboard.py 키 폴링 (공용)
 ├── assets/tb3_waffle_pi.py   로봇 정의 한 곳 TB3_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트       → calibration/README.md
 │   ├── calib_env.py · calib_env_cfg.py   Isaac Lab Direct env (로봇 1대 · 바퀴 모델 · 방+장애물)
@@ -162,18 +162,20 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 - 옵션 전체 · 화면 · sim play 자세히: [calibration/README.md](calibration/README.md) "sensor-sync-sim — 옵션 · 화면 · sim play"
   · 학습 화면: [training/README.md](training/README.md) "화면" · `./run-calibration.sh -h` · `./run-training.sh -h`
 
-### 3.4c 직접 운전 — `run-world.sh`
+### 3.4c 직접 운전 — `run-world.sh` (로봇 · 환경 골라서)
 
 ```bash
-./run-world.sh --fit $FIT --uneven --policy artifacts/real/policy_30.onnx   # 학습 env 그대로 (로봇 1대, 카메라가 따라감)
-./run-world.sh random --fit $FIT                                            # 랜덤 방 + 평평한 바닥 (= run-calibration.sh random-world)
-./run-world.sh -h                                                           # 옵션 전체
+./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + beebot
+./run-world.sh --usd-dir urdf/<robot>                # 다른 로봇 (urdf/<robot>/urdf.xacro → USD, 또는 USD 폴더/파일)
+./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물
+./run-world.sh -h
+# 학습 env 그대로 + 정책 켬/끔 (C 키): 행동이 보정량이라 학습 쪽 운전 모드로
+./run-training.sh --drive --watch --fit $FIT --uneven --policy artifacts/real/policy_30.onnx
 ```
 
-- 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · **C 정책 켬/끔** · R 리셋(train: 제자리 · 바퀴 gain/τ 새로) · 창 닫으면 끝
-- train = 학습 env(지형 경사 · `--uneven` 요철 · 바퀴 마찰/gain/τ/지연 · 자이로 영점 오차) + 랜덤 명령 대신 키 입력.
-  R = 제자리 리셋 (바퀴 gain/τ 새로). 터미널에 0.5 s마다 명령 / 실제 v·w / 보정 Δv·Δw.
-- 정책 켬/끔을 같은 바닥에서 번갈아 몰아보면 보정이 무엇을 하는지 눈으로 보인다 (노란 점 = 지금 명령대로 2 s 갈 길).
+- 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 원점 · **F 카메라를 로봇 쪽으로** · 창 닫으면 끝 (학습 --drive는 + C 정책 켬/끔)
+- 카메라는 고정하지 않는다 — 마우스 휠 줌 · 오른쪽 드래그 회전 · 가운데 드래그 이동. 로봇이 화면 밖으로 가면 F.
+- `--env`는 행동이 [v, w] 명령인 env(`BaseEnv` 계열). 터미널에 0.5 s마다 명령 / 엔코더 / 자이로.
 
 ### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
 
