@@ -88,7 +88,7 @@ class RlCorrectEnvCfg(BaseEnvCfg):
     gyro_bias = 0.05
 
     # 바닥은 make_terrain · 바퀴 마찰 랜덤은 EventCfg · 바퀴/캐스터 기본 마찰은 BaseEnvCfg
-    ground_friction = GROUND_FRICTION   # FitPanel 표시용
+    ground_friction = GROUND_FRICTION   # fit_panel 표시용
     slope_deg = 0.0    # 기록용 (base-fit.json) — 실제 바닥은 terrain
     uneven = False
 

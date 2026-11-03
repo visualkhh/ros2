@@ -45,9 +45,9 @@ isaac/
 │   ├── record.py · fit.py    기록(명령 = commands/square) · --fit 해석 (1개 = real 값, 2개 = real − sim)
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
-│   ├── Train.py              실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
+│   ├── trainer.py            실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
 │   ├── onnx/onnx_export.py   actor → ONNX
-│   └── rl_correction_wheel_drift/   task: env · PPO 설정 · train.py · FitPanel(보정값 창)
+│   └── rl_correction_wheel_drift/   task: env · PPO 설정 · train.py · fit_panel(보정값 창)
 ├── urdf/                     학습용 URDF(ROS용과 같은 내용 — urdf/check_same.sh) · robot_spec.py(로봇 숫자 한 곳)
 ├── learn/                    Isaac 개념 실습 L1~L5
 ├── artifacts/                산출물 (git 제외) — calibration/ · training/ · real/

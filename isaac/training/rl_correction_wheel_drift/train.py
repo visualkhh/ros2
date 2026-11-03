@@ -24,7 +24,7 @@ from pathlib import Path
 ISAAC = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ISAAC))
 
-from training.Train import Train  # noqa: E402
+from training.trainer import Train  # noqa: E402
 
 
 def apply_fit(env_cfg, wheel) -> dict:
@@ -185,7 +185,7 @@ class WheelDriftTrain(Train):
         self.env = env
         self.install_snap(env.unwrapped)
         if self.watch:
-            from training.rl_correction_wheel_drift.FitPanel import FitPanel  # noqa: E402
+            from training.rl_correction_wheel_drift.fit_panel import FitPanel  # noqa: E402
             self.panel = FitPanel(env_cfg, base_fit["source"][0] if base_fit else None, lat)  # 참조 유지
         import importlib.metadata as _md
         from isaaclab_rl.rsl_rl.utils import handle_deprecated_rsl_rl_cfg  # noqa: E402

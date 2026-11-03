@@ -40,7 +40,7 @@
 #   tensorboard --logdir artifacts/training                              # 진행 그래프
 #   학습 뒤 sim에서 play: ./run-calibration.sh sensor-sync-sim --watch --fit $FIT --policy <결과>/policy.onnx
 #
-# 새 task: training/<task>/train.py 에서 training.Train.Train 을 상속 (add_args · before_launch · run) — training/README.md
+# 새 task: training/<task>/train.py 에서 training.trainer.Train 을 상속 (add_args · before_launch · run) — training/README.md
 #
 # common:
 #   -h, --help, help   이 도움말

@@ -11,8 +11,8 @@ training/rl_correction_wheel_drift/
 ├── rl_correct_env_cfg.py       환경 설정 (obs 6 · action 2 · 랜덤 범위 · 지형 make_terrain · 바퀴 마찰 EventCfg)
 ├── rl_correct_env.py           환경 (Isaac Lab Direct — anymal_c_direct와 같은 구조)
 ├── agents/rsl_rl_ppo_cfg.py    PPO 설정
-├── FitPanel.py                 --watch 때 보정값/랜덤 범위/마찰 보기 창 (읽기만)
-├── train.py                    WheelDriftTrain(../Train.py 상속) — 학습 → 끝나면 ONNX export
+├── fit_panel.py                --watch 때 보정값/랜덤 범위/마찰 보기 창 (읽기만)
+├── train.py                    WheelDriftTrain(../trainer.py Train 상속) — 학습 → 끝나면 ONNX export
 └── README.md
 ```
 

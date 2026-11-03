@@ -19,7 +19,7 @@ calibration/ 보정 (sim plant를 real에 맞춤 → real fit.json)
 
 ```text
 training/
-├── Train.py                    실행기 + task 공통 베이스 — python -m training <task> [옵션...]
+├── trainer.py                  실행기 + task 공통 베이스 — python -m training <task> [옵션...]
 │                               (task 찾기 · --watch · AppLauncher · 결과 폴더 · P 키 스크린샷)
 ├── __main__.py
 ├── onnx/onnx_export.py         actor → ONNX (train.py 끝에서 씀)

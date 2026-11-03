@@ -1,4 +1,4 @@
-"""학습 실행기 + 공통 베이스. 한 파일 한 클래스.
+"""학습 실행기 + 공통 베이스.
 
 `python -m training <task> [옵션...]` → `Train.main()`이 task 폴더(`train.py`가 있는 폴더)를 찾아
 그 모듈의 `main(argv)`로 넘긴다. task의 `train.py`는 `Train`을 상속해서
