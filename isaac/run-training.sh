@@ -17,6 +17,7 @@
 #   --resume --checkpoint <model_N.pt>   이어서 학습
 # ─── cfg 덮어쓰기 (Hydra: env.<필드>=값 · agent.<필드>=값) ──────────────────────
 #   env.uneven=false      요철 칸 끔 = 평면만 (기본 true: 평평 + 턱 1~3 cm 칸)
+#   env.friction_patches=0   마찰 패치 끔 (기본 env마다 8개: 노랑 끈적 · 파랑 미끄럼)
 #   env.events=null       바퀴 마찰 랜덤 끔
 #   env.gyro_bias=0.01    자이로 영점 오차 ±0.01 rad/s (기본 0.005, 0 = 끔)
 #   env.debug_vis=true    창에 명령(초록)/실제(파랑) 막대 + 목표 경로(노란 점)

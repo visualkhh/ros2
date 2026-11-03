@@ -67,6 +67,12 @@ class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
     terrain: TerrainImporterCfg = make_terrain(True)   # env가 장면 만들 때 uneven으로 다시 만든다
     events: EventCfg | None = EventCfg()                    # env마다 바퀴 마찰 랜덤 — 끄려면 env.events=null
     uneven = True                  # 평평 + 요철 칸 (턱 1~3 cm) · env.uneven=false = 평면만
+    # 마찰 패치 — env마다 출발점 둘레에 얇은 판 (노랑 = 끈적, 파랑 = 미끄럼). 바퀴와 평균 결합. env.friction_patches=0 = 끔
+    friction_patches = 8              # env마다 개수 (반은 끈적 · 반은 미끄럼, 랜덤)
+    patch_radius = (0.3, 3.0)         # [m] 출발점에서 거리 (웨이포인트 경로가 지나가는 범위)
+    patch_size = (0.4, 0.9)           # [m] 한 변
+    sticky_friction = (1.10, 0.90)    # (static, dynamic)
+    slippery_friction = (0.20, 0.15)
 
     # 웨이포인트 (command.py) — 시작 자세 기준, 앞 점에서 방향 turn_range만큼 꺾고 dist_range만큼
     num_waypoints = 4
