@@ -21,7 +21,7 @@ sim+real을 동시에 돌리고 비교 보고서까지 만들려면:
 
 이름 규칙: **Isaac에서 도는 건 `_sim`**, **실제 로봇은 `_real`**.
 
-Isaac Lab 관례: env + env_cfg(Direct, 학습과 같은 구조) · 실행 스크립트는 함수 · 로봇은 `../robots/beebot/robot_cfg.py` 한 곳.
+Isaac Lab 관례: env + env_cfg(Direct, 학습과 같은 구조) · 실행 스크립트는 함수 · 로봇은 `../robots/beebot/config.py` 한 곳.
 
 ```
 calibration/

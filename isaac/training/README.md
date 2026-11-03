@@ -90,7 +90,7 @@ tensorboard --logdir artifacts/training
 
 ## 보정값과 RL의 관계
 
-- 바닥/바퀴/캐스터 **마찰**은 `robots/beebot/robot_cfg.py` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env마다 바퀴 마찰 랜덤 (events).
+- 바닥/바퀴/캐스터 **마찰**은 `robots/beebot/config.py` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env마다 바퀴 마찰 랜덤 (events).
 - 바퀴 **τ·gain·지연·데드밴드**는 env가 에피소드마다 랜덤으로 뽑는다.
   `--fit`을 주면 그 범위의 **중심을 real fit 값**으로 옮긴다 (폭은 그대로).
 - RL은 그 위의 **잔차**(좌우 비대칭, 슬립, 드리프트)를 학습한다.

@@ -3,7 +3,7 @@
 S4(센서)·S5(주행)에서 **무엇을 재서 무엇과 비교할지** 미리 못 박는다. 각 가설은 실기기에서 잴 수 있어야 하고, 합격/실패가 숫자로 나와야 한다.
 
 - 작성: 2026-10-30
-- 값의 출처: `robots/beebot/urdf.xacro` · `robots/beebot/spec.py` · `ros2_ws/src/tb3_bringup/config/robot.yaml` · `tool/config`
+- 값의 출처: `robots/beebot/urdf/robot.urdf.xacro` · `robots/beebot/spec.py` · `ros2_ws/src/tb3_bringup/config/robot.yaml` · `tool/config`
 - **TODO** = 아직 실측 안 함. S4/S5에서 채운다.
 
 ## H1 — 기하·질량

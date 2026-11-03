@@ -22,7 +22,7 @@ def load(spec: str):
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="키보드 운전 (로봇 · 환경 선택)")
-    p.add_argument("--robot", default=None, help="로봇 = robots/<이름> (robot_cfg.py · spec.py · urdf.xacro). 기본: env cfg의 로봇 (beebot)")
+    p.add_argument("--robot", default=None, help="로봇 = robots/<이름> (config.py · spec.py · urdf/robot.urdf.xacro). 기본: env cfg의 로봇 (beebot)")
     p.add_argument("--env", default="envs.default.default_env:DefaultEnv", help="환경 클래스 MOD:CLASS")
     p.add_argument("--env-cfg", default="envs.default.default_env_cfg:DefaultEnvCfg", help="환경 설정 클래스 MOD:CLASS")
     p.add_argument("--cmd", default="keyboard", help="명령: keyboard(직접 운전) · square(네모 54 s, 노란 점 = 목표) · MOD:CLASS")

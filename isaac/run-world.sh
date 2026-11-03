@@ -3,7 +3,7 @@
 #
 #   ./run-world.sh [--robot NAME] [--env MOD:CLASS] [--env-cfg MOD:CLASS] [--cmd keyboard|square|MOD:CLASS] [--speed 0.15] [--turn 1.0]
 #
-#   --robot     로봇 = robots/<이름>/ (urdf.xacro → USD 자동 변환 · robot_cfg.py ROBOT_CFG · spec.py 바퀴 숫자)
+#   --robot     로봇 = robots/<이름>/ (urdf/robot.urdf.xacro → usd/ 자동 변환 · config.py ROBOT_CFG · spec.py 바퀴 숫자)
 #               기본: env cfg의 로봇 (beebot). 바퀴 관절 이름은 wheel_left/right_joint여야 함
 #   --env       환경 클래스   (기본 envs.default.default_env:DefaultEnv — 아무것도 없는 평평한 바닥)
 #   --env-cfg   환경 설정 클래스 (기본 envs.default.default_env_cfg:DefaultEnvCfg)

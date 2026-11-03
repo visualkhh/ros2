@@ -106,7 +106,7 @@ class CalibHUD:
 
     def __init__(self, env, base_fit):
         import omni.ui as ui
-        from robots.beebot.robot_cfg import CASTER_FRICTION, WHEEL_FRICTION
+        from robots.beebot.config import CASTER_FRICTION, WHEEL_FRICTION
 
         from envs.base_env_cfg import GROUND_FRICTION
 

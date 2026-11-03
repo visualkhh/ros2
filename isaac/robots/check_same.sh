@@ -5,11 +5,11 @@ set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROS=$HERE/../../ros2_ws/src/tb3_bringup
 rc=0
-diff -u "$ROS/urdf/robot.urdf.xacro" "$HERE/beebot/urdf.xacro" || rc=1
+diff -u "$ROS/urdf/robot.urdf.xacro" "$HERE/beebot/urdf/robot.urdf.xacro" || rc=1
 for m in body.stl wheel_left.stl wheel_right.stl; do
   if ! cmp -s "$ROS/meshes/$m" "$HERE/beebot/meshes/$m"; then
     echo "메시 다름/없음: $m (두 meshes/ 폴더에 같은 파일이어야 함)"; rc=1
   fi
 done
-[ $rc = 0 ] && echo "OK: urdf.xacro · 메시 3개 같음"
+[ $rc = 0 ] && echo "OK: robot.urdf.xacro · 메시 3개 같음"
 exit $rc

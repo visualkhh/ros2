@@ -7,19 +7,19 @@ from robots import ROBOTS_DIR
 
 
 def robot_usd(robot: str) -> str:
-    """robots/<robot>/urdf.xacro → robots/<robot>/usd/<robot>/<robot>.usda (Isaac 앱이 켜진 뒤 호출).
+    """robots/<robot>/urdf/robot.urdf.xacro → robots/<robot>/usd/<robot>/<robot>.usda (Isaac 앱이 켜진 뒤 호출).
 
     URDF · meshes · 이 파일(변환 옵션)이 USD보다 새것일 때만 다시 변환 — URDF를 고치면 다음 실행에 반영.
     파일 잠금: Isaac 프로세스 여러 개(학습 + run-world 등)가 동시에 켜져도 서로의 변환물을 지우지 않게.
     usd/는 git 제외 (URDF가 정본, USD는 파생물). 메시는 robots/<robot>/meshes — xacro 안에서 `$(arg mesh_uri)`로 받는다.
-    새 로봇: robots/<이름>/ 폴더에 urdf.xacro + meshes/ + robot_cfg.py (ROBOT_CFG) + spec.py.
+    새 로봇: robots/<이름>/ 폴더에 urdf/robot.urdf.xacro + meshes/ + config.py (ROBOT_CFG) + spec.py.
     """
     import fcntl
     import glob
     import shutil
 
     robot_dir = os.path.join(ROBOTS_DIR, robot)
-    xacro_path, out_dir = os.path.join(robot_dir, "urdf.xacro"), os.path.join(robot_dir, "usd")
+    xacro_path, out_dir = os.path.join(robot_dir, "urdf", "robot.urdf.xacro"), os.path.join(robot_dir, "usd")
     if not os.path.isfile(xacro_path):
         raise FileNotFoundError(f"로봇 URDF 없음: {xacro_path}")
     os.makedirs(out_dir, exist_ok=True)

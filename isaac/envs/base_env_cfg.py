@@ -1,7 +1,7 @@
 """기본 세상 설정 — 로봇 1대 · 평평한 바닥 · 조명 · 480 Hz 물리 / 20 Hz 명령. 아무 규칙 없음 (보상 0 · 종료 없음).
 
 task cfg가 상속해서 바꾸는 것: scene.num_envs · terrain(지형) · 관측/행동 크기 · 자기 랜덤 범위.
-로봇은 robots/<robot>/robot_cfg.py (기본 beebot) — 다른 로봇이면 `robots.use(cfg, "<이름>")`.
+로봇은 robots/<robot>/config.py (기본 beebot) — 다른 로봇이면 `robots.use(cfg, "<이름>")`.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from isaaclab.utils import configclass
 
 from envs.rates import CONTROL_HZ, PHYSICS_HZ
 from robots.beebot import spec
-from robots.beebot.robot_cfg import CASTER_FRICTION, ROBOT_CFG, WHEEL_FRICTION
+from robots.beebot.config import CASTER_FRICTION, ROBOT_CFG, WHEEL_FRICTION
 
 GROUND_FRICTION = (0.8, 0.7)     # 바닥 (static, dynamic) — 로봇이 아니라 세상 쪽
 OBSTACLE_FRICTION = (0.7, 0.5)   # 장애물

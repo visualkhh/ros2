@@ -19,7 +19,7 @@ sys.argv = sys.argv[:1]   # AppLauncher가 인자를 안 보게
 app_launcher = AppLauncher(headless=True)
 
 from robots import DEFAULT  # noqa: E402
-from robots.usd import robot_usd  # noqa: E402
+from robots.urdf_to_usd import robot_usd  # noqa: E402
 
 if __name__ == "__main__":
     path = robot_usd(robot or DEFAULT)

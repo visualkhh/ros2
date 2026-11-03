@@ -1,7 +1,7 @@
 """beebot Isaac 설정 — ROBOT_CFG (Isaac Lab ArticulationCfg) · 바퀴 모터 · 바퀴/캐스터 마찰.
 
 Isaac Lab `isaaclab_assets/robots/anymal.py`의 `ANYMAL_C_CFG`와 같은 관례: env cfg가 `ROBOT_CFG.replace(prim_path=...)`.
-모양 · 질량 · 관절은 urdf.xacro → USD (robots.usd.robot_usd). 마찰 · 모터는 URDF에 없어서 여기서 넣는다.
+모양 · 질량 · 관절은 urdf/robot.urdf.xacro → usd/ (robots.urdf_to_usd.robot_usd). 마찰 · 모터는 URDF에 없어서 여기서 넣는다.
 USD 변환에 Isaac 앱이 필요 — AppLauncher 뒤에 import.
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
 
-from robots.usd import robot_usd
+from robots.urdf_to_usd import robot_usd
 
 # 바퀴 모터 — 고정 모델값 (실측 sweep해도 sim 응답이 안 변해서 calibration 변수가 아님)
 WHEEL_DAMPING = 50.0         # 속도 서보 이득 (ImplicitActuator, stiffness 0)

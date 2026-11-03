@@ -21,7 +21,7 @@ from isaaclab.sim import SimulationCfg  # noqa: E402
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, UsdFileCfg, spawn_ground_plane  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
-from robots.usd import robot_usd  # noqa: E402
+from robots.urdf_to_usd import robot_usd  # noqa: E402
 
 
 def main():
