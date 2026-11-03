@@ -294,7 +294,7 @@ def verdict(axv, keys, ms, names):
     items = []
     for k in keys:
         a_, b_ = ms[0][k], ms[1][k]
-        if "↓" in k and a_ == a_ and b_ == b_ and abs(a_) > 1e-9:
+        if "↓" in k and not k.startswith(("응답 지연", "센서 나이")) and a_ == a_ and b_ == b_ and abs(a_) > 1e-9:   # 지연은 네트워크 몫 — 판정에서 뺌
             items.append((k.replace(" ↓", ""), max(-100.0, min(100.0, (a_ - b_) / abs(a_) * 100))))
     if not items:
         axv.axis("off")
@@ -313,9 +313,11 @@ def verdict(axv, keys, ms, names):
     same = len(vals) - up - down
     head = "좋아짐" if up > down else "나빠짐" if down > up else "비슷"
     col = "#2e9e44" if up > down else "#d23c3c" if down > up else "#555555"
-    axv.set_title(f"{names[1]} vs {names[0]}:  {head}  —  좋아짐 {up} · 나빠짐 {down} · 비슷(±3%) {same}"
-                  "     (막대 = 개선율, 오른쪽 초록이 좋음 · ±100%에서 자름)", fontsize=12, loc="left", color=col,
-                  weight="bold")
+    axv.set_title(f"{names[1]} vs {names[0]}:  {head}  —  좋아짐 {up} · 나빠짐 {down} · 비슷 {same}",
+                  fontsize=12, loc="left", color=col, weight="bold")
+    axv.text(0.995, 0.03, "막대 = B 개선율 · 초록 좋아짐 · 빨강 나빠짐 · 회색 ±3% 비슷 · ±100%에서 자름\n(지연은 네트워크 몫이라 판정에서 뺌 — 표 참고)",
+             transform=axv.transAxes, ha="right", va="bottom", fontsize=8, color="#444",
+             bbox=dict(facecolor="white", alpha=0.85, edgecolor="#ccc"))
 
 
 def report(paths: list[Path], out: Path, show: bool) -> Path:
