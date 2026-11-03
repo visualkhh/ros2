@@ -131,7 +131,7 @@ real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)�
 ```bash
 ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
 ./run-training.sh rl_correction_waypoint --max_iterations 500                                            # 본 학습 (창 없음, 512대)
-./run-training.sh rl_correction_waypoint --max_iterations 500 env.uneven=true env.slope_deg=5            # + 요철 · 경사 5°
+./run-training.sh rl_correction_waypoint --max_iterations 500 env.uneven=false                          # 평면만 (기본은 평평 + 요철)
 tensorboard --logdir logs/rsl_rl                                                  # 진행 그래프 (다른 터미널)
 #   → logs/rsl_rl/rl_waypoint/<시각>/ (model_<N>.pt · params/env.yaml · TensorBoard)
 ./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1
@@ -141,7 +141,7 @@ tensorboard --logdir logs/rsl_rl                                                
 - task 이름 `RlCorrectionWaypoint` — 랜덤 웨이포인트 4개를 이탈 없이 (기본 제어기 + 정책 보정). 자세히: [training/rl_correction_waypoint/README.md](training/rl_correction_waypoint/README.md). `./run-training.sh -h`에 옵션 · 덮어쓰기.
 - 보는 지표: TensorBoard `Metrics/cross_track`(경로 이탈 평균 — 줄어야 함) · `Metrics/waypoints_done`(평균 도착 수 — 늘어야 함).
 - 실측 값(3.3)이 학습 env 랜덤 범위의 **중심**이다 (폭은 유지). 실제로 쓴 값은 `params/env.yaml`.
-- 바닥: Isaac Lab 지형(8 m 칸: 평평 · 경사 0~`env.slope_deg`°(기본 3) · `env.uneven=true`면 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1 (`env.events=null`로 끔).
+- 바닥: Isaac Lab 지형(8 m 칸: 평평 · 요철 턱 1~3 cm, 언덕 없음 · `env.uneven=false`면 평면만) + env마다 바퀴 마찰 랜덤 0.7~1.1 (`env.events=null`로 끔).
 - 자이로 영점 오차: 에피소드마다 ±0.005 rad/s (방향을 자이로 적분으로 보므로 작게 · `env.gyro_bias=…`). 실기기 −0.257 같은 큰 값은 OpenCR 재부팅(가만히)으로 고친다.
 - 체크포인트는 50회마다 — 끝에서 망가져도 이전 `model_<N>.pt`를 `play`로 내보내면 된다.
 - `policy.onnx` 출력은 신경망 그대로 [-1, 1]. 로봇 corrector가 `clamp × action_scale`(0.10 · 0.60)을 한다 — **`.onnx.data`도 같이 복사**.

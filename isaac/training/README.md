@@ -39,13 +39,13 @@ training/
 ```bash
 cd isaac
 ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
-./run-training.sh rl_correction_waypoint --max_iterations 500 env.uneven=true                             # 본 학습 (창 없음, 512대)
+./run-training.sh rl_correction_waypoint --max_iterations 500                                         # 본 학습 (창 없음, 512대 · 평평 + 요철)
 ./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # 재생 + ONNX 내보내기 (Ctrl+C)
 tensorboard --logdir logs/rsl_rl
 ./run-training.sh -h                                                               # 자주 쓰는 옵션 · cfg 덮어쓰기
 ```
 
-- cfg 덮어쓰기 (Hydra): `env.slope_deg=5` · `env.uneven=true` · `env.events=null`(마찰 랜덤 끔) · `env.gyro_bias=0.1` ·
+- cfg 덮어쓰기 (Hydra): `env.uneven=false`(평면만) · `env.events=null`(마찰 랜덤 끔) · `env.gyro_bias=0.1` ·
   `agent.algorithm.entropy_coef=0.0`. 실제로 쓴 값은 `logs/…/<시각>/params/env.yaml` · `agent.yaml`.
 - 결과: `logs/rsl_rl/<experiment_name>/<시각>/` — `model_<N>.pt`(50회마다) · `params/` · TensorBoard.
   `play`를 하면 같은 폴더에 `exported/policy.onnx` + `policy.onnx.data`(가중치) + `policy.pt`.

@@ -1,10 +1,8 @@
 """rl_correction_waypoint 설정 — 랜덤 웨이포인트를 이탈 없이 따라가기 (기본 제어기 + 정책 보정). 로봇과 상관없음."""
 from __future__ import annotations
 
-import math
-
 import isaaclab.terrains as terrain_gen
-from isaaclab.envs import mdp
+from isaaclab.envs import ViewerCfg, mdp
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -16,17 +14,13 @@ from envs.base_env_cfg import BaseEnvCfg
 from envs.base_env_cfg import GROUND as _GROUND  # noqa: E402
 
 
-def make_terrain(slope_deg: float, uneven: bool) -> TerrainImporterCfg:
-    """바닥 — Isaac Lab 지형 생성기 (anymal_c_direct Rough와 같은 방식). 둘 다 끄면 평면.
+def make_terrain(uneven: bool) -> TerrainImporterCfg:
+    """바닥 — Isaac Lab 지형 생성기 (anymal_c_direct Rough와 같은 방식). uneven이 꺼지면 평면.
 
-    8 m 칸을 격자로 깔고 칸마다 종류·난이도 랜덤 (curriculum 없음): 평평 · 경사(피라미드 오르막/내리막, 0~slope_deg)
-    · 요철(낮은 턱 1~3 cm). env는 칸 가운데(1 m 평평한 판)에서 출발 — 한 칸에 로봇 여럿이 겹쳐도 서로 충돌 안 함.
+    8 m 칸을 격자로 깔고 칸마다 종류 랜덤 (curriculum 없음): 평평 · 요철(낮은 턱 1~3 cm). 언덕(경사)은 없다.
+    env는 칸 가운데(1 m 평평한 판)에서 출발 — 한 칸에 로봇 여럿이 겹쳐도 서로 충돌 안 함.
     """
     sub = {"flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2)}
-    if slope_deg > 0:
-        rng = (0.0, math.radians(slope_deg))
-        sub["slope_up"] = terrain_gen.HfPyramidSlopedTerrainCfg(proportion=0.2, slope_range=rng, platform_width=1.0)
-        sub["slope_down"] = terrain_gen.HfInvertedPyramidSlopedTerrainCfg(proportion=0.2, slope_range=rng, platform_width=1.0)
     if uneven:
         sub["bumps"] = terrain_gen.HfDiscreteObstaclesTerrainCfg(
             proportion=0.4, obstacle_height_mode="fixed", obstacle_width_range=(0.30, 0.55),
@@ -69,10 +63,10 @@ class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
     state_space = 0
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=512, env_spacing=3.0, replicate_physics=True)   # --num_envs
-    terrain: TerrainImporterCfg = make_terrain(3.0, False)   # env가 장면 만들 때 slope_deg · uneven으로 다시 만든다
+    viewer: ViewerCfg = ViewerCfg(eye=(2.0, -2.0, 1.5), lookat=(0.0, 0.0, 0.0), origin_type="env", env_index=0)   # 창: env 0 로봇 근처 (env마다 8 m 칸이라 멀리 흩어져 있다)
+    terrain: TerrainImporterCfg = make_terrain(True)   # env가 장면 만들 때 uneven으로 다시 만든다
     events: EventCfg | None = EventCfg()                    # env마다 바퀴 마찰 랜덤 — 끄려면 env.events=null
-    slope_deg = 3.0                # 경사 칸 0~DEG° (env.slope_deg=5 · 0 = 없음)
-    uneven = False                 # 요철 칸 (env.uneven=true)
+    uneven = True                  # 평평 + 요철 칸 (턱 1~3 cm) · env.uneven=false = 평면만
 
     # 웨이포인트 (command.py) — 시작 자세 기준, 앞 점에서 방향 turn_range만큼 꺾고 dist_range만큼
     num_waypoints = 4

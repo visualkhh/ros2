@@ -71,7 +71,7 @@ class RlCorrectionWaypointEnv(BaseEnv):
     def _setup_scene(self):
         from training.rl_correction_waypoint.env_cfg import make_terrain
 
-        self.cfg.terrain = make_terrain(self.cfg.slope_deg, self.cfg.uneven)   # cfg 덮어쓰기(env.slope_deg=…)가 반영되게 여기서
+        self.cfg.terrain = make_terrain(self.cfg.uneven)   # cfg 덮어쓰기(env.uneven=…)가 반영되게 여기서
         super()._setup_scene()
 
     # ------------------------------------------------------------------ 자세 · 목표
