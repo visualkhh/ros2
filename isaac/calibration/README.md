@@ -159,5 +159,5 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<sim>/fit.json
 ## 다음 단계
 
 1. `step_floor.py` — 바닥 계단응답
-2. 차이를 `PRE_RL.md` 표에 따라 URDF / 마찰 / `training/rl_correction_wheel_drift/task/rl_correct_env_cfg.py`에 반영
+2. 차이를 `PRE_RL.md` 표에 따라 URDF / 마찰 / `training/rl_correction_wheel_drift/rl_correct_env_cfg.py`에 반영
 4. `run-training.sh --fit <real>/fit.json`로 학습

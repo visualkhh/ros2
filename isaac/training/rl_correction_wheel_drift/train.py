@@ -5,7 +5,7 @@ Usage (isaac/ 에서):
       [--fit artifacts/calibration/<real>/fit.json]
   (= ./isaaclab.sh -p -m training rl_correction_wheel_drift [옵션...])
 기본은 headless. `--watch` = `--visualizer kit` (창 + TRAINING FIT 보정값 창, 읽기만, P 키 → 스크린샷).
-512 env는 느리니 `--watch --envs 16` 권장. 마찰 패치(파랑/주황)는 기본으로 켜짐, 끄려면 `--no-friction`.
+512 env는 느리니 `--watch --envs 16` 권장. 바퀴 마찰 랜덤(env마다)은 기본으로 켜짐, 끄려면 `--no-friction`. 바닥 = Isaac Lab 지형 (`--slope` 경사 · `--uneven` 요철).
 Fit: `--fit real/fit.json,sim/fit.json` → real − sim 차이를 바퀴 랜덤 범위의 중심으로 (폭은 그대로).
      sim fit은 --fit 없이(raw) 잰 것을 쓴다. 1개만 주면 real 값 그대로 (학습 env plant를 이상적이라고 보는 것 — 지연이 이중으로 들어감).
 Latency: `--latency before.csv` = rl-only Before 기록(경로 rl, enable:=false) → RL 경로(Pi→PC→Pi) 지연을
@@ -87,7 +87,7 @@ def apply_latency(env_cfg, lat: dict) -> None:
 
 RANGE_KEYS = ("gain_center", "gain_range", "tau_range", "cmd_delay_steps", "obs_delay_steps", "deadband_range")
 # 범위 아닌 숫자 랜덤도 base-fit.json에 같이 남김
-EXTRA_KEYS = ("slope_deg", "gyro_bias")
+EXTRA_KEYS = ("slope_deg", "uneven", "gyro_bias")
 
 
 class WheelDriftTrain(Train):
@@ -101,15 +101,11 @@ class WheelDriftTrain(Train):
                             help="학습 반복 횟수 (1회 = envs×64스텝 수집 + PPO 업데이트, 기본: agents cfg의 300)")
         parser.add_argument("--envs", type=int, default=512, help="학습 환경 수 (창 볼 때는 16~32 권장)")
         parser.add_argument("--friction", action=argparse.BooleanOptionalAction, default=True,
-                            help="env별 바닥 마찰 랜덤 + 미끄럼/끈적 패치 (기본 켜짐, --no-friction으로 끔)")
-        parser.add_argument("--patch-count", type=int, default=4,
-                            help="env 안 국소 마찰 패치 수 (0이면 base friction만)")
+                            help="env마다 바퀴 마찰 랜덤 0.7~1.1 (Isaac Lab events, 기본 켜짐, --no-friction으로 끔)")
         parser.add_argument("--uneven", action="store_true",
-                            help="env 안 요철(울퉁불퉁) 지형 켜기 (낮은 턱, 기하학적 외란)")
-        parser.add_argument("--uneven-count", type=int, default=4,
-                            help="env 안 요철 패치 수")
+                            help="지형에 요철 칸 추가 (낮은 턱 1~3 cm, Isaac Lab terrain generator)")
         parser.add_argument("--slope", type=float, default=3.0, metavar="DEG",
-                            help="env마다 바닥을 랜덤 방향 · 랜덤 각도 0~DEG°로 기울임 (기본 3, 0 = 평평)")
+                            help="지형에 경사 칸 추가 (피라미드 오르막/내리막 0~DEG°, 기본 3, 0 = 없음)")
         parser.add_argument("--gyro-bias", type=float, default=None, metavar="RAD_S",
                             help="에피소드마다 자이로 영점 오차 ±RAD_S 랜덤 (기본: cfg 0.05, 0 = 끔)")
         parser.add_argument("--fit", default=None,
@@ -120,7 +116,6 @@ class WheelDriftTrain(Train):
                             help="--drive에서 보정에 쓸 정책 (C 키로 켬/끔, 기본 켬)")
         parser.add_argument("--speed", type=float, default=0.15, help="--drive 전진 [m/s] (Shift = 0.3배)")
         parser.add_argument("--turn", type=float, default=1.0, help="--drive 회전 [rad/s]")
-        parser.add_argument("--size", type=float, default=8.0, help="--drive 바닥판 한 변 [m] (학습은 3 m, 판 밖은 떨어짐)")
         parser.add_argument("--latency", default=None,
                             help="rl-only Before CSV (경로 rl, enable:=false) → RL 경로 지연을 명령·관측 지연 범위에")
 
@@ -148,25 +143,22 @@ class WheelDriftTrain(Train):
 
         from calibration.parameter.SimParam import SimParam  # noqa: E402
         from training.rl_correction_wheel_drift.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
-        from training.rl_correction_wheel_drift.task.rl_correct_env import RlCorrectEnv  # noqa: E402
-        from training.rl_correction_wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
+        from training.rl_correction_wheel_drift.rl_correct_env import RlCorrectEnv  # noqa: E402
+        from training.rl_correction_wheel_drift.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
 
         args, base_fit, lat, log_dir = self.args, self.args.base_fit, self.args.latency_info, str(self.run_dir)
         env_cfg = RlCorrectEnvCfg()
         env_cfg.scene.num_envs = 1 if args.drive else args.envs
-        if args.drive:
-            env_cfg.scene.env_spacing = args.size   # 바닥판 한 변 ≈ spacing — 학습(3 m)보다 넓게 (판 밖은 낭떠러지)
-        env_cfg.randomize_friction = args.friction
-        env_cfg.friction_patch_count = args.patch_count
-        env_cfg.slope_deg = args.slope
+        from training.rl_correction_wheel_drift.rl_correct_env_cfg import EventCfg, make_terrain  # noqa: E402
+
+        env_cfg.events = EventCfg() if args.friction else None
+        env_cfg.slope_deg, env_cfg.uneven = args.slope, args.uneven
+        env_cfg.terrain = make_terrain(args.slope, args.uneven)
         if args.gyro_bias is not None:
             env_cfg.gyro_bias = args.gyro_bias
         self.add_snap_visualizer(env_cfg)
         # 창·스냅샷이 있을 때만 명령/실제 막대 + 목표 경로 표시 (headless 학습엔 영향 없음)
         env_cfg.debug_vis = bool(self.watch or getattr(args, "snap", None))
-        if args.uneven:
-            env_cfg.randomize_uneven = True
-            env_cfg.uneven_patch_count = args.uneven_count
         if base_fit is not None:
             apply_fit(env_cfg, SimParam.from_dict(base_fit).wheel)
         if lat is not None:
@@ -214,7 +206,7 @@ class WheelDriftTrain(Train):
         env.close()
 
     def drive(self, env_cls, env_cfg) -> None:
-        """학습 env(기울기·패치·요철·바퀴 랜덤 그대로, 로봇 1대)를 키보드로 운전. 랜덤 명령 대신 키 입력이 명령.
+        """학습 env(지형 경사·요철 · 바퀴 마찰/gain/τ 랜덤 그대로, 로봇 1대)를 키보드로 운전. 랜덤 명령 대신 키 입력이 명령.
 
         정책은 ros2 corrector와 같은 규칙: 관측 6개 → ONNX 보정량(물리값) → env가 [-1,1]로 받아 scale 곱함 · 정지 명령엔 0.
         """
@@ -250,7 +242,7 @@ class WheelDriftTrain(Train):
 
         obs, _ = raw.reset()
         last_cmd, prev_keys, t_print = None, set(), 0.0
-        print("[drive] W/A/S/D(↑←↓→) 주행 · Shift 느리게 · X 정지 · C 정책 켬/끔 · R 리셋(새 바닥 랜덤) · 창 닫으면 끝", flush=True)
+        print("[drive] W/A/S/D(↑←↓→) 주행 · Shift 느리게 · X 정지 · C 정책 켬/끔 · R 리셋(제자리 · 바퀴 gain/τ 새로) · 창 닫으면 끝", flush=True)
         print(f"[drive] 정책 {'켬 ' + args.policy if use_policy else '없음 (바이패스)'}", flush=True)
         app = omni.kit.app.get_app()
         while app.is_running():

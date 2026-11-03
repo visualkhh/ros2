@@ -292,8 +292,8 @@ ros2_ws/report.py before.csv after.csv   # → report.png + 지표 표
 | fit / 비교 / 리포트 | `calibration/report/report.py` |
 | 센서 (sim/real/더미) | `calibration/sensor/DefaultSensorSim.py`, `DefaultSensorReal.py`, `DummySensor.py` |
 | sim 파라미터 로드 | `calibration/parameter/SimParam.py`, `WheelLag.py`, `WheelParam.py` |
-| 학습 환경 설정 | `training/rl_correction_wheel_drift/task/rl_correct_env_cfg.py` |
-| 학습 환경 로직 | `training/rl_correction_wheel_drift/task/rl_correct_env.py` |
+| 학습 환경 설정 | `training/rl_correction_wheel_drift/rl_correct_env_cfg.py` |
+| 학습 환경 로직 | `training/rl_correction_wheel_drift/rl_correct_env.py` |
 | 배포 노드 | `ros2_ws/src/rl_correction/rl_correction/corrector_node.py` |
 | Before/After 평가 | `ros2_ws/src/rl_eval/` |
 | 목적/설계 원본 | `documents/isaac/task-spec.md` |

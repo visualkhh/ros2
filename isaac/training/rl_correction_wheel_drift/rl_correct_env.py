@@ -21,11 +21,10 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
 
 from calibration.parameter.WheelLag import wheel_targets  # noqa: F401 — 드라이버 식 (calibration과 공용)
-from training.rl_correction_wheel_drift.task.TaskScene import TaskScene
 from urdf import robot_spec as spec
 
 if TYPE_CHECKING:
-    from training.rl_correction_wheel_drift.task.rl_correct_env_cfg import RlCorrectEnvCfg
+    from training.rl_correction_wheel_drift.rl_correct_env_cfg import RlCorrectEnvCfg
 
 # 텔레오퍼 키 → (전후, 회전) 방향 (tool/cli/op/bus.py TELEOP_MOVES와 같음)
 TELEOP_MOVES = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1, 1))
@@ -91,19 +90,43 @@ class RlCorrectEnv(DirectRLEnv):
         self.cmd_markers.update(pos, yaw, self.cmd[:, 0], self.cmd[:, 1], v, w, path)
 
     def _setup_scene(self):
+        # Isaac Lab anymal_c_direct와 같은 순서: 로봇 → 지형 → 복제 → env끼리 충돌 끔
         self.robot = Articulation(self.cfg.robot_cfg)
-        self.task_scene = TaskScene(self.scene, self.cfg, self.device)
-        self.task_scene.setup_ground()
-        self.task_scene.bind_robot_materials()
+        self.scene.articulations["robot"] = self.robot
+        self._bind_robot_materials()
+        self.cfg.terrain.num_envs = self.scene.cfg.num_envs
+        self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
+        self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
         src, dest = "/World/envs/env_0", "/World/envs/env_{}"
         pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
-        plan = cloner.clone_plan_from_env_0(src, dest, self.scene.num_envs, self.device, pos, ("/World/ground",))
+        plan = cloner.clone_plan_from_env_0(src, dest, self.scene.num_envs, self.device, pos,
+                                            global_paths=(self.cfg.terrain.prim_path,))
         cloner.replicate(plan, stage=self.scene.stage)
         if "physx" in self.scene.physics_backend:
-            self.scene.filter_collisions(global_prim_paths=[])
-        self.scene.articulations["robot"] = self.robot
+            self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
         light_cfg = sim_utils.DistantLightCfg(intensity=2000.0, color=(1.0, 1.0, 1.0))
         light_cfg.func("/World/Light", light_cfg)
+
+    def _bind_robot_materials(self):
+        """바퀴 · 캐스터 재질 (env_0에 붙이면 복제로 전부). 바퀴 마찰 랜덤은 cfg.events가 그 위에 덮어씀.
+
+        캐스터는 min: 캐스터 0과 바닥을 average하면 끌려서 바퀴가 덜 나감 (calibration DefaultScene과 같음).
+        """
+        from pxr import UsdPhysics
+
+        c = self.cfg
+        for name, fr, mode in (("wheel", c.wheel_friction, "average"), ("caster", c.caster_friction, "min")):
+            mat = sim_utils.RigidBodyMaterialCfg(static_friction=fr[0], dynamic_friction=fr[1],
+                                                 restitution=0.0, friction_combine_mode=mode)
+            mat.func(f"/World/Materials/{name}", mat)
+        for prim in self.scene.stage.Traverse():
+            path = str(prim.GetPath())
+            if not path.startswith("/World/envs/env_0/Robot") or not prim.HasAPI(UsdPhysics.CollisionAPI):
+                continue
+            for name in ("wheel", "caster"):
+                if name in path:
+                    sim_utils.bind_physics_material(path, f"/World/Materials/{name}")
+                    break
 
     # ------------------------------------------------------------------ 명령
     def _new_commands(self, ids: torch.Tensor):
@@ -191,7 +214,7 @@ class RlCorrectEnv(DirectRLEnv):
         ids = env_ids if isinstance(env_ids, torch.Tensor) else torch.as_tensor(env_ids, device=self.device)
         n, dev, c = len(ids), self.device, self.cfg
         root = self.robot.data.default_root_state.torch[ids].clone()
-        root[:, :2] += self.scene.env_origins[ids, :2]
+        root[:, :3] += self._terrain.env_origins[ids]   # 지형 칸 가운데 (경사 칸이면 높이 포함)
         yaw = sample_uniform(-math.pi, math.pi, (n,), dev)
         root[:, 3:7] = quat_from_euler_xyz(torch.zeros_like(yaw), torch.zeros_like(yaw), yaw)
         self.robot.write_root_pose_to_sim(root[:, :7], ids)

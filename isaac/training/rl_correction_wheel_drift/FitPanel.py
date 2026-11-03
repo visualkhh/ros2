@@ -68,18 +68,14 @@ class FitPanel:
                     self._row("deadband [rad/s]", self._range(c.deadband_range))
 
                     self._heading("FRICTION (static / dynamic)")
-                    if c.randomize_friction:
-                        self._row("ground", f"{self._range(c.ground_static_range)} / "
-                                            f"{self._range(c.ground_dynamic_range)} (env별)")
-                        self._row("patches", f"{c.friction_patch_count}개 / env")
-                        self._row("  slippery (파랑)", self._pair(*c.slippery_friction))
-                        self._row("  sticky (주황)", self._pair(*c.sticky_friction))
-                    else:
-                        self._row("ground", f"{self._pair(*c.ground_friction)} (고정, 패치 없음)")
+                    self._row("ground", f"{self._pair(*c.ground_friction)} (고정)")
+                    if c.events is not None:
+                        p = c.events.wheel_friction.params
+                        self._row("wheel (env마다 랜덤)", f"{self._range(p['static_friction_range'])} / "
+                                                         f"{self._range(p['dynamic_friction_range'])}")
                     self._row("wheel", self._pair(*c.wheel_friction))
                     self._row("caster", self._pair(*c.caster_friction))
-                    self._row("uneven", f"{c.uneven_patch_count}개, 높이 {self._range(c.uneven_patch_height)} m"
-                                        if c.randomize_uneven else "off")
+                    self._row("terrain", f"경사 0~{c.slope_deg:g}° · 요철 {'on' if c.uneven else 'off'}")
 
     @staticmethod
     def _v(x) -> str:

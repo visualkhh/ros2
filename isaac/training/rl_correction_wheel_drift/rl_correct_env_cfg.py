@@ -1,10 +1,17 @@
 """rl_correct v2 config — 우리 Waffle Pi(URDF)로 '실제로 관측되는 것만' 보정 (documents/isaac/task-spec.md §3)."""
 from __future__ import annotations
 
+import math
+
+import isaaclab.sim as sim_utils
+import isaaclab.terrains as terrain_gen
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
-from isaaclab.envs import DirectRLEnvCfg
+from isaaclab.envs import DirectRLEnvCfg, mdp
+from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
 from isaaclab.utils import configclass
@@ -14,7 +21,46 @@ from calibration.parameter.ActuatorParam import ActuatorParam
 from calibration.parameter.FrictionParam import FrictionParam
 
 _FLOOR_FRICTION = FrictionParam()   # 기본값 (숨은 sim_calib_*.json은 안 읽는다)
-_ACT = ActuatorParam()               # calibration sim과 같은 바퀴 모터 (fit 차이를 그대로 쓰려면 같아야 함)
+_ACT = ActuatorParam()
+_GROUND = sim_utils.RigidBodyMaterialCfg(static_friction=_FLOOR_FRICTION.ground[0], dynamic_friction=_FLOOR_FRICTION.ground[1],
+                                         restitution=0.0, friction_combine_mode="average")
+
+
+def make_terrain(slope_deg: float, uneven: bool) -> TerrainImporterCfg:
+    """바닥 — Isaac Lab 지형 생성기 (anymal_c_direct Rough와 같은 방식). 둘 다 끄면 평면.
+
+    8 m 칸을 격자로 깔고 칸마다 종류·난이도 랜덤 (curriculum 없음): 평평 · 경사(피라미드 오르막/내리막, 0~slope_deg)
+    · 요철(낮은 턱 1~3 cm). env는 칸 가운데(1 m 평평한 판)에서 출발 — 한 칸에 로봇 여럿이 겹쳐도 서로 충돌 안 함.
+    """
+    sub = {"flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2)}
+    if slope_deg > 0:
+        rng = (0.0, math.radians(slope_deg))
+        sub["slope_up"] = terrain_gen.HfPyramidSlopedTerrainCfg(proportion=0.2, slope_range=rng, platform_width=1.0)
+        sub["slope_down"] = terrain_gen.HfInvertedPyramidSlopedTerrainCfg(proportion=0.2, slope_range=rng, platform_width=1.0)
+    if uneven:
+        sub["bumps"] = terrain_gen.HfDiscreteObstaclesTerrainCfg(
+            proportion=0.4, obstacle_height_mode="fixed", obstacle_width_range=(0.30, 0.55),
+            obstacle_height_range=(0.01, 0.03), num_obstacles=30, platform_width=1.0)
+    if len(sub) == 1:
+        return TerrainImporterCfg(prim_path="/World/ground", terrain_type="plane", physics_material=_GROUND)
+    gen = TerrainGeneratorCfg(size=(8.0, 8.0), border_width=4.0, num_rows=8, num_cols=8,
+                              horizontal_scale=0.05, vertical_scale=0.002, slope_threshold=0.75,
+                              color_scheme="height", sub_terrains=sub)
+    return TerrainImporterCfg(prim_path="/World/ground", terrain_type="generator", terrain_generator=gen,
+                              physics_material=_GROUND, visual_material=None)
+
+
+@configclass
+class EventCfg:
+    """env마다 바퀴 마찰 랜덤 (anymal_c_direct EventCfg와 같은 방식). 바닥은 고정 · 접촉 마찰 = 바퀴와 바닥 평균.
+
+    바퀴 0.7~1.1 ↔ 바닥 (0.8, 0.7) 평균 = 0.75~0.95 — 예전 'env별 바닥 0.5~0.9 × 바퀴 1.0'과 같은 접촉 범위.
+    """
+    wheel_friction = EventTerm(
+        func=mdp.randomize_rigid_body_material, mode="startup",
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="wheel_.*_link"),
+                "static_friction_range": (0.7, 1.1), "dynamic_friction_range": (0.7, 1.1),
+                "restitution_range": (0.0, 0.0), "num_buckets": 64, "make_consistent": True})               # calibration sim과 같은 바퀴 모터 (fit 차이를 그대로 쓰려면 같아야 함)
 
 
 @configclass
@@ -43,6 +89,8 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     )
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=2048, env_spacing=3.0, replicate_physics=True)
+    terrain: TerrainImporterCfg = make_terrain(0.0, False)   # train.py가 --slope/--uneven으로 다시 만듦
+    events: EventCfg | None = None                          # train.py가 --friction(기본)이면 EventCfg()
 
     # 정책 출력 [-1, 1] → 보정량 (ONNX export도 같은 값으로 곱해 물리값을 낸다)
     action_scale = (0.10, 0.60)  # [m/s, rad/s]
@@ -63,27 +111,12 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     # 정책이 w_enc와 비교해 영점을 무시하도록. 11-02 실기기 −0.257은 부팅 중 움직인 고장 — OpenCR 재부팅으로 고친다.
     gyro_bias = 0.05
 
-    # 바닥/바퀴 마찰 — 학습은 기본으로 env별 랜덤+패치 (train.py가 켬), `--no-friction`이면 FrictionParam 기본값 고정
+    # 바퀴/캐스터 마찰 기본값 (바닥은 make_terrain · 바퀴 랜덤은 EventCfg)
     ground_friction = _FLOOR_FRICTION.ground
     wheel_friction = _FLOOR_FRICTION.wheel
     caster_friction = _FLOOR_FRICTION.caster
-    randomize_friction = False
-    ground_static_range = (0.50, 0.90)
-    ground_dynamic_range = (0.40, 0.80)
-    # env 안 요철 (울퉁불퉁) — 바퀴가 올라타는 낮은 턱. 기하학적 외란. `--uneven`으로 켠다.
-    randomize_uneven = False
-    uneven_patch_count = 4
-    uneven_patch_size = (0.30, 0.55)    # [m] 한 변
-    uneven_patch_height = (0.01, 0.03)  # [m] 높이 — "약간"
-    # env 바닥 기울기 [deg] — env마다 방향 랜덤 · 0~slope_deg. 0이면 평평. `--slope`로 켠다.
-    # 오르막/내리막 = 바퀴 부하로 속도 처짐, 옆 기울기 = 아래로 흘러 휘어짐 (실내 바닥 1~2°, 경사로 ~5°)
-    slope_deg = 0.0
-    # env 안의 국소 마찰 패치 (파랑=미끄럼, 주황=끈적)
-    friction_patch_count = 4
-    friction_patch_radius = (0.55, 0.90)
-    friction_patch_size = (0.35, 0.55)
-    slippery_friction = (0.20, 0.15)
-    sticky_friction = (1.10, 0.90)
+    slope_deg = 0.0    # 기록용 (base-fit.json) — 실제 바닥은 terrain
+    uneven = False
 
     # 명령: hold_range 초마다 바뀜 (텔레오퍼 키 · 부드러운 곡선 · 정지)
     hold_range = (0.5, 2.0)

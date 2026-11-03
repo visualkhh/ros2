@@ -19,7 +19,7 @@
 #                      S는 --fit 없이 잰 raw sim, 학습과 같은 물리(robot_spec.PHYSICS_HZ · ActuatorParam)로 잰 것 — 자동 확인은 없다.
 #                      1개면 real 값 그대로 (학습 env를 이상적 모터로 보는 것 — 보통은 2개)
 #   --latency CSV      rl-only Before 기록(경로 rl, enable:=false) → RL 경로 왕복 지연을 명령/관측 지연 범위에. PC·Pi 시계가 안 맞으면 거부
-#   --friction / --no-friction   env별 바닥 마찰 랜덤 + 파랑(미끄럼)/주황(끈적) 패치 (기본 켜짐) · --patch-count 4
+#   --friction / --no-friction   env마다 바퀴 마찰 랜덤 0.7~1.1 (Isaac Lab events, 기본 켜짐)
 #   --slope DEG        env마다 바닥을 랜덤 방향 · 0~DEG° 기울임 (기본 3, 0 = 평평)
 #   --uneven           낮은 턱(1~3 cm) 켜기 (기본 끔) · --uneven-count 4
 #   --gyro-bias RAD_S  에피소드마다 자이로 영점 오차 ±RAD_S (기본 0.05, 0 = 끔)
