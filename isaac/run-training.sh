@@ -5,7 +5,7 @@
 #   ./run-training.sh play --checkpoint <model_N.pt> [옵션...]   재생 + 내보내기 (exported/policy.onnx · policy.pt) — Ctrl+C로 끝
 #   ./run-training.sh train --help                  공식 옵션 전체
 #
-# task: training/<task>/__init__.py의 gym.register 이름 (기본 Beebot-Waypoint = 랜덤 웨이포인트 이탈 없이 · beebot + beebot 실측). --external_callback training.register로 등록.
+# task: training/<task>/__init__.py의 gym.register 이름 (기본 RlCorrectionWaypoint-Beebot = 랜덤 웨이포인트 이탈 없이 · beebot + beebot 실측). --external_callback training.register로 등록.
 # 결과: isaac/logs/rsl_rl/<experiment_name>/<시각>/  (model_<N>.pt · params/ · TensorBoard · play 하면 exported/)
 #
 # ─── 자주 쓰는 공식 옵션 ───────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ if [[ "${1:-}" == "train" || "${1:-}" == "play" ]]; then
   action=$1; shift
 fi
 args=("$@")
-[[ " $* " == *" --task "* ]] || args=(--task Beebot-Waypoint "${args[@]}")
+[[ " $* " == *" --task "* ]] || args=(--task RlCorrectionWaypoint-Beebot "${args[@]}")
 cd "$ISAAC"   # logs/ · 상대경로 기준 = isaac/
 export PYTHONPATH="$ISAAC${PYTHONPATH:+:$PYTHONPATH}"   # training.register · robots · envs (ROS 경로는 유지 — xacro)
 exec "$ISAACLAB/isaaclab.sh" -p "$ISAACLAB/scripts/reinforcement_learning/$action.py" \

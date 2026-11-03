@@ -48,7 +48,7 @@ isaac/
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
-│   └── rl_correction_waypoint/      task Beebot-Waypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent
+│   └── rl_correction_waypoint/      task RlCorrectionWaypoint-Beebot (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent
 ├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) · config.py(바퀴 숫자 · 모터 · 마찰 · ROBOT_CFG)
 ├── learn/                    Isaac 개념 실습 L1~L5
@@ -128,7 +128,7 @@ tensorboard --logdir logs/rsl_rl                                                
 #   → <시각>/exported/policy.onnx + policy.onnx.data (+ policy.pt) — 내보낸 뒤 재생이 계속 돈다, Ctrl+C로 끝
 ```
 
-- task 이름 `Beebot-Waypoint` — 랜덤 웨이포인트 4개를 이탈 없이 (기본 제어기 + 정책 보정). 자세히: [training/rl_correction_waypoint/README.md](training/rl_correction_waypoint/README.md). `./run-training.sh -h`에 옵션 · 덮어쓰기.
+- task 이름 `RlCorrectionWaypoint-Beebot` — 랜덤 웨이포인트 4개를 이탈 없이 (기본 제어기 + 정책 보정). 자세히: [training/rl_correction_waypoint/README.md](training/rl_correction_waypoint/README.md). `./run-training.sh -h`에 옵션 · 덮어쓰기.
 - 보는 지표: TensorBoard `Metrics/cross_track`(경로 이탈 평균 — 줄어야 함) · `Metrics/waypoints_done`(평균 도착 수 — 늘어야 함).
 - 실측 값(3.3)이 학습 env 랜덤 범위의 **중심**이다 (폭은 유지). 실제로 쓴 값은 `params/env.yaml`.
 - 바닥: Isaac Lab 지형(8 m 칸: 평평 · 경사 0~`env.slope_deg`°(기본 3) · `env.uneven=true`면 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1 (`env.events=null`로 끔).

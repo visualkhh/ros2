@@ -1,4 +1,4 @@
-# rl_correction_waypoint — 랜덤 웨이포인트를 이탈 없이 따라가기 (task 이름 Beebot-Waypoint)
+# rl_correction_waypoint — 랜덤 웨이포인트를 이탈 없이 따라가기 (task 이름 RlCorrectionWaypoint-Beebot)
 
 목적: 웨이포인트까지 가는 **동안에도** 경로(앞 점 → 다음 점 직선)를 벗어나지 않게. 기본 제어기가 웨이포인트로 몰고,
 정책이 그 명령에 보정 `[Δv, Δw]`를 더해 바퀴 gain 차이 · 지연 · 미끄러짐으로 생기는 드리프트를 잡는다.
@@ -7,7 +7,7 @@
 
 ```
 training/rl_correction_waypoint/
-├── __init__.py   gym.register("Beebot-Waypoint") — 공식 train.py · play.py가 이 이름으로 찾음
+├── __init__.py   gym.register("RlCorrectionWaypoint-Beebot") — 공식 train.py · play.py가 이 이름으로 찾음
 ├── env_cfg.py    RlCorrectionWaypointEnvCfg — robot=beebot · 실측 중심 · 랜덤 범위 · 기본 제어기 · 보상 가중치 · 지형
 ├── env.py        RlCorrectionWaypointEnv(BaseEnv) — 추정 자세 · 기본 제어기 · 모터 모델 · 관측 · 보상 · 도착/실패
 ├── command.py    RlCorrectionWaypointCommand — env마다 랜덤 웨이포인트 4개 (각 0.5~1.5 m, 방향 랜덤)
@@ -41,7 +41,7 @@ training/rl_correction_waypoint/
 
 ```bash
 cd isaac
-./run-training.sh --max_iterations 500                                   # 기본 task = Beebot-Waypoint (창 없음, 512대)
+./run-training.sh --max_iterations 500                                   # 기본 task = RlCorrectionWaypoint-Beebot (창 없음, 512대)
 ./run-training.sh --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 창 (노란 점 = 웨이포인트 경로)
 ./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true
 tensorboard --logdir logs/rsl_rl          # Metrics/cross_track (경로 이탈 평균) · Metrics/waypoints_done (평균 도착 수)

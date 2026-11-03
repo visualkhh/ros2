@@ -15,7 +15,7 @@ calibration/ 측정 (real · 순수 sim)  →  task env cfg에 차이를 숫자�
 ```text
 training/
 ├── __init__.py                 register() — training/ 아래 task 폴더를 import (각 __init__.py의 gym.register)
-└── rl_correction_waypoint/     랜덤 웨이포인트를 이탈 없이 — task 이름 Beebot-Waypoint
+└── rl_correction_waypoint/     랜덤 웨이포인트를 이탈 없이 — task 이름 RlCorrectionWaypoint-Beebot
     ├── __init__.py             gym.register — 로봇마다 이름 하나
     ├── env.py · env_cfg.py     RlCorrectionWaypointEnv(BaseEnv) · RlCorrectionWaypointEnvCfg(BaseEnvCfg — robot=beebot + 실측 중심)
     ├── command.py              RlCorrectionWaypointCommand — env마다 랜덤 웨이포인트
@@ -23,7 +23,7 @@ training/
 ```
 
 새 task: 폴더를 만들고 위 다섯 파일을 둔다 (`__init__.py`의 등록 이름이 `--task` 값).
-새 로봇 (같은 task): `env_cfg.py`에 `XWaypointEnvCfg(RlCorrectionWaypointEnvCfg)`(robot="x" + 그 로봇 실측) + `gym.register(id="X-Waypoint", …)`.
+새 로봇 (같은 task): `env_cfg.py`에 `XWaypointEnvCfg(RlCorrectionWaypointEnvCfg)`(robot="x" + 그 로봇 실측) + `gym.register(id="RlCorrectionWaypoint-X", …)`.
 실험으로 로봇만 바꾸기: `./run-training.sh env.robot=<이름|폴더>` (실측 중심은 그대로).
 `__init__.py`는 Isaac 앱보다 먼저 import되므로 등록은 문자열 위치만 적는다.
 
