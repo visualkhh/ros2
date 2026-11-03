@@ -19,15 +19,15 @@ from envs.base_env import BaseEnv
 from training.rl_correction_wheel_drift.command import TeleopCommand
 
 if TYPE_CHECKING:
-    from training.rl_correction_wheel_drift.env_cfg import RlCorrectEnvCfg
+    from training.rl_correction_wheel_drift.env_cfg import RlCorrectionWheelDriftEnvCfg
 
 
 
 
-class RlCorrectEnv(BaseEnv):
-    cfg: RlCorrectEnvCfg
+class RlCorrectionWheelDriftEnv(BaseEnv):
+    cfg: RlCorrectionWheelDriftEnvCfg
 
-    def __init__(self, cfg: RlCorrectEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: RlCorrectionWheelDriftEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         c = self.cfg   # 로봇 숫자는 장면을 만들 때 cfg.robot으로 채워져 있다
         self.command = TeleopCommand(c.max_lin, c.max_ang, c.p_teleop, c.p_smooth, c.hold_range, c.diag_radius)

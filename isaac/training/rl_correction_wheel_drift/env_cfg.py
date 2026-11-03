@@ -54,8 +54,12 @@ class EventCfg:
 
 
 @configclass
-class RlCorrectEnvCfg(BaseEnvCfg):
-    """기본 세상(BaseEnvCfg: 로봇 · 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤 · 관측 6 / 행동 2."""
+class RlCorrectionWheelDriftEnvCfg(BaseEnvCfg):
+    """기본 세상(BaseEnvCfg: 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤 · 관측 6 / 행동 2. 로봇 = beebot + beebot 실측 중심.
+
+    다른 로봇: 이 클래스를 상속해 robot · 실측 중심(gain_center · tau_range · cmd_delay_steps …)만 바꾸고 __init__.py에 등록.
+    """
+    robot: str = "beebot"
     episode_length_s = 10.0
     random_yaw = True
     action_space = 2       # [dV, dW] — 정책 출력 [-1, 1] (corrector가 × action_scale)
@@ -71,13 +75,15 @@ class RlCorrectEnvCfg(BaseEnvCfg):
     action_scale = (0.10, 0.60)  # [m/s, rad/s]
 
     # 에피소드마다 무작위 (실제에서 엔코더·자이로로 보이는 오차만)
-    # 로봇 실측에 맞출 중심은 로봇별 변형(아래 BeebotWheelDriftEnvCfg 등)이 정한다 — 여기는 로봇과 상관없는 기본
-    tau_range = (0.05, 0.25)       # [s] 바퀴별 1차 지연
+    # beebot 실측 중심 (2026-11-02: artifacts/calibration/20261102_140931-02-real − …144928-sim_480, sim raw 대비 차이)
+    #   gain L/R 0.9927/0.9938 (real/sim 비율) · 명령 지연 +2 스텝(0.1 s) · τ 차이 0 · 데드밴드 0
+    #   하드웨어가 바뀌면 다시 측정(sensor-sync-real · sensor-sync-sim · plot-compare)해서 고친다
+    tau_range = (0.01, 0.10)       # [s] 바퀴별 1차 지연 (τ 차이 0 ± 0.1, 최소 0.01)
     gain_range = (0.90, 1.10)      # 바퀴별 이득 (좌우 비대칭)
-    gain_center = (1.0, 1.0)       # 좌/우 gain 중심 — gain_range 샘플에 곱함
+    gain_center = (0.9927, 0.9938) # 좌/우 gain 중심 (실측) — gain_range 샘플에 곱함
     deadband_range = (0.0, 0.3)    # [rad/s] 이보다 작은 바퀴 명령은 안 돎
     # documents/isaac/task-spec.md §3 기준: 명령·관측 각각 0~4 스텝 (0~200 ms)
-    cmd_delay_steps = (0, 4)       # 명령 지연 [×50 ms]
+    cmd_delay_steps = (0, 4)       # 명령 지연 [×50 ms] (실측 2 ± 2)
     obs_delay_steps = (0, 4)       # Pi → PC (odom·imu)
     sep_nominal_err = 0.08         # 드라이버 기준 간격 vs 실제 유효 간격 (회전 오차 → 자이로로만 보임)
     radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨, 강건성용)
@@ -101,16 +107,3 @@ class RlCorrectEnvCfg(BaseEnvCfg):
     action_penalty = 0.01
     smooth_penalty = 0.05
 
-
-@configclass
-class BeebotWheelDriftEnvCfg(RlCorrectEnvCfg):
-    """beebot + beebot 실측 (2026-11-02: artifacts/calibration/20261102_140931-02-real − …144928-sim_480, sim raw 대비 차이).
-
-    gain L/R 0.9927/0.9938 (real/sim 비율) · 명령 지연 +2 스텝(0.1 s) · τ 차이 0 · 데드밴드 0 → 랜덤 범위의 중심.
-    하드웨어가 바뀌면 다시 측정(sensor-sync-real · sensor-sync-sim · plot-compare)해서 고친다.
-    다른 로봇: 이 클래스를 본떠 XWheelDriftEnvCfg(robot="x", 그 로봇 실측) + __init__.py에 gym.register.
-    """
-    robot: str = "beebot"
-    tau_range = (0.01, 0.10)       # τ 차이 0 ± 0.1 (최소 0.01)
-    gain_center = (0.9927, 0.9938)
-    cmd_delay_steps = (0, 4)       # 지연 차이 2 ± 2

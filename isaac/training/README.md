@@ -16,15 +16,14 @@ calibration/ 측정 (real · 순수 sim)  →  task env cfg에 차이를 숫자�
 training/
 ├── __init__.py                 register() — training/ 아래 task 폴더를 import (각 __init__.py의 gym.register)
 └── rl_correction_wheel_drift/  바퀴 드리프트 보정 — task 이름 Beebot-WheelDrift
-    ├── __init__.py             gym.register — 로봇마다 이름 하나 (Beebot-WheelDrift → BeebotWheelDriftEnvCfg)
-    ├── env.py · env_cfg.py     RlCorrectEnv(BaseEnv) · RlCorrectEnvCfg(BaseEnvCfg, 로봇과 상관없는 task 규칙)
-    │                           + BeebotWheelDriftEnvCfg(robot="beebot" + beebot 실측 중심)
+    ├── __init__.py             gym.register — 로봇마다 이름 하나 (Beebot-WheelDrift)
+    ├── env.py · env_cfg.py     RlCorrectionWheelDriftEnv(BaseEnv) · RlCorrectionWheelDriftEnvCfg(BaseEnvCfg — robot=beebot + 실측 중심)
     ├── command.py              TeleopCommand(BaseCommand) — 학습 명령
     └── agent.py                RlCorrectAgentCfg(BaseAgentCfg) — PPO 값
 ```
 
 새 task: 폴더를 만들고 위 다섯 파일을 둔다 (`__init__.py`의 등록 이름이 `--task` 값).
-새 로봇 (같은 task): `env_cfg.py`에 `XWheelDriftEnvCfg(RlCorrectEnvCfg)`(robot="x" + 그 로봇 실측) + `gym.register(id="X-WheelDrift", …)`.
+새 로봇 (같은 task): `env_cfg.py`에 `XWheelDriftEnvCfg(RlCorrectionWheelDriftEnvCfg)`(robot="x" + 그 로봇 실측) + `gym.register(id="X-WheelDrift", …)`.
 실험으로 로봇만 바꾸기: `./run-training.sh env.robot=<이름|폴더>` (실측 중심은 그대로).
 `__init__.py`는 Isaac 앱보다 먼저 import되므로 등록은 문자열 위치만 적는다.
 

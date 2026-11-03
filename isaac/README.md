@@ -104,7 +104,7 @@ cd isaac
 ### 3.3 RL 쪽 env에 숫자 넣기 — real − sim 차이
 
 calibration은 측정만 한다. sim을 real처럼 만드는 건 **각 RL task의 env cfg**가 한다 (task마다 자기 env를 만들고 값을 바꿔가며 맞춘다).
-지금 task(`training/rl_correction_wheel_drift/env_cfg.py` `BeebotWheelDriftEnvCfg` — 로봇 beebot + 그 실측)에 넣은 값 (2026-11-02):
+지금 task(`training/rl_correction_wheel_drift/env_cfg.py` `RlCorrectionWheelDriftEnvCfg` — 로봇 beebot + 그 실측)에 넣은 값 (2026-11-02):
 
 | 값 | 계산 | 2026-11-02 | 학습 cfg |
 |---|---|---|---|
