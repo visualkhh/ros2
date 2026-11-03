@@ -159,12 +159,12 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 - 옵션 전체 · 화면 · sim play 자세히: [calibration/README.md](calibration/README.md) "sensor-sync-sim — 옵션 · 화면 · sim play"
   · 학습 화면: [training/README.md](training/README.md) "화면" · `./run-calibration.sh -h` · `./run-training.sh -h`
 
-### 3.4c 직접 운전 — `world.sh`
+### 3.4c 직접 운전 — `run-world.sh`
 
 ```bash
-./world.sh --fit $FIT --uneven --policy artifacts/real/policy_30.onnx   # 학습 env 그대로 (로봇 1대, 카메라가 따라감)
-./world.sh random --fit $FIT                                            # 랜덤 방 + 평평한 바닥 (= run-calibration.sh random-world)
-./world.sh -h                                                           # 옵션 전체
+./run-world.sh --fit $FIT --uneven --policy artifacts/real/policy_30.onnx   # 학습 env 그대로 (로봇 1대, 카메라가 따라감)
+./run-world.sh random --fit $FIT                                            # 랜덤 방 + 평평한 바닥 (= run-calibration.sh random-world)
+./run-world.sh -h                                                           # 옵션 전체
 ```
 
 - 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · **C 정책 켬/끔** · R 리셋(train: 새 랜덤 바닥·바퀴) · 창 닫으면 끝

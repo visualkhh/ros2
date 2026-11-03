@@ -115,7 +115,7 @@ class WheelDriftTrain(Train):
         parser.add_argument("--fit", default=None,
                             help="real/fit.json,sim/fit.json → 차이를 바퀴 랜덤 범위 중심으로 (1개면 real 값 그대로)")
         parser.add_argument("--drive", action="store_true",
-                            help="학습 대신 키보드로 직접 운전 (학습 env 그대로 · 창 · W/A/S/D · C 정책 켬/끔 · R 리셋) — world.sh")
+                            help="학습 대신 키보드로 직접 운전 (학습 env 그대로 · 창 · W/A/S/D · C 정책 켬/끔 · R 리셋) — run-world.sh")
         parser.add_argument("--policy", default=None, metavar="ONNX",
                             help="--drive에서 보정에 쓸 정책 (C 키로 켬/끔, 기본 켬)")
         parser.add_argument("--speed", type=float, default=0.15, help="--drive 전진 [m/s] (Shift = 0.3배)")
@@ -129,7 +129,7 @@ class WheelDriftTrain(Train):
         if args.policy and not Path(args.policy).is_file():
             parser.error(f"--policy 파일 없음: {args.policy}")
         if args.drive and "kit" not in (args.visualizer or []):
-            parser.error("--drive는 창이 필요 — --watch를 같이 (world.sh가 붙여 줌)")
+            parser.error("--drive는 창이 필요 — --watch를 같이 (run-world.sh가 붙여 줌)")
         # sim 띄우기 전에 fit부터 읽어서 잘못된 경로면 바로 실패
         args.base_fit = None
         if args.fit:

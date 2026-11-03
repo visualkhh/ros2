@@ -1,7 +1,7 @@
 #!/bin/bash
 # 로봇을 직접 몰아보는 창 — 환경을 골라서.
 #
-#   ./world.sh [train|random] [옵션...]       (기본 train)
+#   ./run-world.sh [train|random] [옵션...]       (기본 train)
 #
 #   train   학습 env 그대로 (기울기 · 마찰 패치 파랑/주황 · 요철 · 바퀴 gain/τ/지연 랜덤 · 자이로 영점 오차), 로봇 1대
 #           = ./run-training.sh --drive --watch [옵션...]
@@ -18,8 +18,8 @@
 # 터미널(train): 0.5 s마다 명령 / 실제 v·w / 보정 Δv·Δw / 정책 켬·끔
 #
 #   FIT=artifacts/calibration/20261102_140931-02-real/fit.json,artifacts/calibration/20261102_144928-sim_480/fit.json
-#   ./world.sh --fit $FIT --uneven --policy artifacts/real/policy_30.onnx
-#   ./world.sh random --fit $FIT
+#   ./run-world.sh --fit $FIT --uneven --policy artifacts/real/policy_30.onnx
+#   ./run-world.sh random --fit $FIT
 set -euo pipefail
 ISAAC=$(cd "$(dirname "$0")" && pwd)
 
