@@ -45,6 +45,6 @@ def use(env_cfg, robot: str) -> None:
     else:                                   # 밖 = 파일 경로로
         tag = "robot_" + os.path.basename(d)
         cfg = _module(os.path.join(d, "config.py"), tag + "_config")
-    env_cfg.robot_cfg = cfg.ROBOT_CFG.replace(prim_path=env_cfg.robot_cfg.prim_path)
+    env_cfg.robot_cfg = cfg.ROBOT_CFG.replace(prim_path=env_cfg.robot_prim_path)
     env_cfg.wheel_radius, env_cfg.wheel_sep, env_cfg.max_wheel = cfg.WHEEL_RADIUS, cfg.WHEEL_SEP, cfg.MAX_WHEEL
     env_cfg.wheel_friction, env_cfg.caster_friction = cfg.WHEEL_FRICTION, cfg.CASTER_FRICTION
