@@ -18,7 +18,7 @@ training/
 └── rl_correction_wheel_drift/  바퀴 드리프트 보정 — task 이름 Beebot-WheelDrift
     ├── __init__.py             gym.register — 로봇마다 이름 하나 (Beebot-WheelDrift)
     ├── env.py · env_cfg.py     RlCorrectionWheelDriftEnv(BaseEnv) · RlCorrectionWheelDriftEnvCfg(BaseEnvCfg — robot=beebot + 실측 중심)
-    ├── command.py              TeleopCommand(BaseCommand) — 학습 명령
+    ├── command.py              RlCorrectionWheelDriftCommand(BaseCommand) — 학습 명령
     └── agent.py                RlCorrectionWheelDriftAgentCfg(BaseAgentCfg) — PPO 값
 ```
 

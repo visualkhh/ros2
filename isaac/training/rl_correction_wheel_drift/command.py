@@ -1,9 +1,9 @@
-"""TeleopCommand — 학습 명령: hold_range(0.5~2 s)마다 새로 뽑는다 — 텔레오퍼 키 (p_teleop) · 부드러운 곡선 (p_smooth) · 정지 (나머지).
+"""RlCorrectionWheelDriftCommand — 학습 명령: hold_range(0.5~2 s)마다 새로 뽑는다 — 텔레오퍼 키 (p_teleop) · 부드러운 곡선 (p_smooth) · 정지 (나머지).
 
 텔레오퍼 키 8방향 = tool/cli 키보드 운전과 같은 움직임: 전/후 · 제자리 좌/우 회전 · 사선 4개(반경 DIAG_RADIUS 원호).
   sample(k, device)  학습 env용 — 로봇 k대 분량을 한꺼번에 (torch)
   __call__(t)        BaseCommand 약속 — 한 대용, 유지 시간이 지나면 같은 분포에서 새로
-                     → ./run-world.sh --cmd training.rl_correction_wheel_drift.command:TeleopCommand (학습 명령을 눈으로)
+                     → ./run-world.sh --cmd training.rl_correction_wheel_drift.command:RlCorrectionWheelDriftCommand (학습 명령을 눈으로)
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from commands.base_command import BaseCommand
 TELEOP_MOVES = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1, 1))
 
 
-class TeleopCommand(BaseCommand):
+class RlCorrectionWheelDriftCommand(BaseCommand):
     """speed · turn = 상한 (전진 0.10~speed · 제자리 회전 0.40~turn). 학습 env는 로봇 최대값(cfg.max_lin · max_ang)을 넘긴다."""
 
     def __init__(self, speed: float = 0.26, turn: float = 1.82, p_teleop: float = 0.6, p_smooth: float = 0.3,

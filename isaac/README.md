@@ -153,7 +153,7 @@ tensorboard --logdir logs/rsl_rl                                                
 ./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/env.py · env_cfg.py)
 ./run-world.sh --env rooms                          # 방 + 장애물 (N = 다음 방) · envs/ 밖 env는 MOD:CLASS
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
-./run-world.sh --cmd training.rl_correction_wheel_drift.command:TeleopCommand --speed 0.26 --turn 1.82   # 학습 때 받는 랜덤 명령
+./run-world.sh --cmd training.rl_correction_wheel_drift.command:RlCorrectionWheelDriftCommand --speed 0.26 --turn 1.82   # 학습 때 받는 랜덤 명령
 ./run-world.sh -h
 ```
 

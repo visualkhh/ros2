@@ -16,7 +16,7 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
-from training.rl_correction_wheel_drift.command import TeleopCommand
+from training.rl_correction_wheel_drift.command import RlCorrectionWheelDriftCommand
 
 if TYPE_CHECKING:
     from training.rl_correction_wheel_drift.env_cfg import RlCorrectionWheelDriftEnvCfg
@@ -30,7 +30,7 @@ class RlCorrectionWheelDriftEnv(BaseEnv):
     def __init__(self, cfg: RlCorrectionWheelDriftEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         c = self.cfg   # 로봇 숫자는 장면을 만들 때 cfg.robot으로 채워져 있다
-        self.command = TeleopCommand(c.max_lin, c.max_ang, c.p_teleop, c.p_smooth, c.hold_range, c.diag_radius)
+        self.command = RlCorrectionWheelDriftCommand(c.max_lin, c.max_ang, c.p_teleop, c.p_smooth, c.hold_range, c.diag_radius)
         n, dev = self.num_envs, self.device
         self.scale = torch.tensor(self.cfg.action_scale, device=dev)
         self.hold = torch.zeros(n, device=dev)
@@ -80,7 +80,7 @@ class RlCorrectionWheelDriftEnv(BaseEnv):
 
     # ------------------------------------------------------------------ 명령
     def _new_commands(self, ids: torch.Tensor):
-        """명령 새로 뽑기 (command.py TeleopCommand) — 유지 시간 · 명령이 바뀐 뒤 시간(관측 t_change)도 같이."""
+        """명령 새로 뽑기 (command.py RlCorrectionWheelDriftCommand) — 유지 시간 · 명령이 바뀐 뒤 시간(관측 t_change)도 같이."""
         self.cmd[ids], self.hold[ids] = self.command.sample(len(ids), self.device)
         self.hold_total[ids] = self.hold[ids]
         self.t_change[ids] = 0.0
