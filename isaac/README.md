@@ -50,7 +50,7 @@ isaac/
 │   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent ·
 │                                    calibration/(1단계 측정: command · env · env_cfg) ·
 │                                    robot_cfg.py(로봇 ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 — 기본 로봇) · usda/robot.usda(외부 제공 USD) ·
-│                                    real_robot.py(RealRobot — 이 로봇의 실기기 ROS 토픽)
+│                                    sim_robot.py · real_robot.py(SimRobot · RealRobot — 이 로봇의 sim · 실기기 입출력)
 ├── robots/                   로봇 공통 · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   ├── robot_interface.py    RobotInterface — write(v, w) · read() 상태 (ros2_control hardware_interface 역할)
 │   ├── sim_robot.py · dummy_robot.py   SimRobot(env.step, 어떤 로봇이든) · DummyRobot(가짜 모터)

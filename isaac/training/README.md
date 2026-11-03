@@ -24,6 +24,7 @@ training/
     ├── calibration/            1단계 측정: command.py CalibrationCommand(SquareCommand) · env.py CalibrationEnv(DefaultEnv) · env_cfg.py CalibrationEnvCfg
     ├── agent.py                RlCorrectionWaypointAgentCfg(BaseAgentCfg) — PPO 값
     ├── robot_cfg.py            로봇: ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 RESPONSE_*
+    ├── sim_robot.py            SimRobot(robots.sim_robot.SimRobot) — 이 로봇의 sim 입출력 (지금은 공용 그대로)
     ├── real_robot.py           RealRobot(RobotInterface) — 이 로봇의 실기기 ROS 입출력 (/cmd_manual_vel · /odom · /imu · /joint_states)
     └── usda/robot.usda         로봇 USD (외부 제공, 변환 없이 그대로)
 ```

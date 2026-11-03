@@ -1,7 +1,7 @@
 """calibration 실행기 (공식 train.py 역할) — ./run-calibration.sh sim | real | dummy [--task X] [옵션...].
 
 task(--task)의 calibration/ 명령 · env와 로봇(그 task 폴더)으로 한 번 측정 → raw.csv · fit.json · report.png.
-  sim    SimRobot(CalibrationEnv) — Isaac venv · --viz none|kit · --watch (기록 후 창 닫을 때까지 반복)
+  sim    SimRobot (task 폴더 sim_robot.py) + CalibrationEnv — Isaac venv · --viz none|kit · --watch (기록 후 창 닫을 때까지 반복)
   real   RealRobot (task 폴더 real_robot.py) — ROS .venv · 준비: Pi base + cmd_manager MANUAL · --check-only (안 움직임)
   dummy  DummyRobot — 표준 라이브러리만 (가짜 모터: --gain-l --gain-r --tau --delay --deadband --slip --noise)
 출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-sim · 02-real · dummy) · --out으로 정확한 경로.
@@ -58,18 +58,17 @@ def _robot(mode: str, args, cmd):
         g = args.gain
         gain_lr = (g if args.gain_l is None else args.gain_l, g if args.gain_r is None else args.gain_r)
         return DummyRobot(gain_lr, args.tau, args.delay, args.noise, args.slip, args.deadband, args.seed, robot=task_dir(args)), None, None
+    import robots
     from isaaclab.app import AppLauncher
 
     app = AppLauncher(args).app
-    from robots.sim_robot import SimRobot
-
     cfg = task_class(args, "env_cfg", "CalibrationEnvCfg")()
     cfg.robot = task_dir(args)   # 로봇 = task 폴더 (robot_cfg.py · usda/robot.usda)
     cfg.sim.device = args.device
     cfg.debug_vis = "kit" in (getattr(args, "visualizer", None) or [])
     env = task_class(args, "env", "CalibrationEnv")(cfg)
     print(f"[{TAGS[mode]}] 높이 {env.start(cmd.path()):.3f} m · 순수 sim (보정 없음)")
-    robot = SimRobot(env)
+    robot = robots.load(task_dir(args), "sim_robot").SimRobot(env)   # task 폴더의 sim_robot.py
     return robot, (lambda: _watch(app, robot, cmd) if args.watch and cfg.debug_vis else None), app
 
 
