@@ -3,7 +3,7 @@
 import importlib
 import sys
 
-COMMANDS = {"sensor-sync-sim": "sim_interface", "sensor-sync-real": "real_interface", "dummy": "dummy_interface"}
+COMMANDS = {"sensor-sync-sim": "sysid_sim", "sensor-sync-real": "sysid_real", "dummy": "sysid_dummy"}
 
 args = sys.argv[1:]
 if not args or args[0] not in COMMANDS:

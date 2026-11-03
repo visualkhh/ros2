@@ -42,15 +42,17 @@ isaac/
 ├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트
-│   ├── robot_interface.py    RobotInterface — write(v, w) · read() (ros2_control hardware_interface 역할)
-│   ├── sim_interface.py · real_interface.py · dummy_interface.py   SimInterface(env.step) · RealInterface(/cmd_manual_vel) · DummyInterface(가짜 모터)
-│   ├── sysid.py              record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 흘려보내며 CSV · fit · report
+│   ├── sysid.py              record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
+│   ├── sysid_sim.py · sysid_real.py · sysid_dummy.py   실행 진입점 — SimRobot · RealRobot · DummyRobot을 만들어 record()
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
 │   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent ·
-│                                    robot_cfg.py(로봇 ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 — 기본 로봇) · usda/robot.usda(외부 제공 USD)
-├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
+│                                    robot_cfg.py(로봇 ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 — 기본 로봇) · usda/robot.usda(외부 제공 USD) ·
+│                                    real_robot.py(RealRobot — 이 로봇의 실기기 ROS 토픽)
+├── robots/                   로봇 공통 · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
+│   ├── robot_interface.py    RobotInterface — write(v, w) · read() 상태 (ros2_control hardware_interface 역할)
+│   ├── sim_robot.py · dummy_robot.py   SimRobot(env.step, 어떤 로봇이든) · DummyRobot(가짜 모터)
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) — URDF만 (로봇으로 쓰려면 robot_cfg.py 추가)
 ├── learn/                    Isaac 개념 실습 L1~L5
 ├── artifacts/                산출물 (git 제외) — calibration/ · training/ · real/

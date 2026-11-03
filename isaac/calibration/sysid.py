@@ -49,9 +49,12 @@ def make_command(args):
     return cmd
 
 
-def record(robot, cmd, out: str) -> list:
-    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace → read. out에 CSV + 구간 표 + fit.json + report.png."""
-    tag, dt = robot.tag, robot.dt
+def record(robot, cmd, out: str, tag: str = "sysid", label: str = "") -> list:
+    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace → read. out에 CSV + 구간 표 + fit.json + report.png.
+
+    CSV 한 줄 = 시각 · 보낸 명령 · robot.read() 상태 · label. 메시지 시각(t_*)이 없는 로봇(sim · dummy)은 기록 시각으로 채운다.
+    """
+    dt = robot.dt
     segs = getattr(cmd, "segs", [])
     print(f"[{tag}] {type(robot).__name__} · {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
     rows = []
@@ -61,7 +64,9 @@ def record(robot, cmd, out: str) -> list:
         v, w = cmd(t)
         robot.write(v, w)
         robot.pace(k)
-        rows.append(robot.read(t, v, w))
+        row = {"t_ros": t, "t_odom": t, "t_imu": t, "t_joint": t, **robot.read(), "t": round(t, 3), "lin_raw": v, "ang_raw": w,
+               "label": label}
+        rows.append([row[k] for k in CSV_HEADER])
     _save(tag, segs, rows, out)
     return rows
 

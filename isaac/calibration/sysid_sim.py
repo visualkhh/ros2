@@ -1,4 +1,4 @@
-"""sim 측정 — 명령(기본 사각형)을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
+"""sysid sim — SimRobot(robots/sim_robot.py)에 명령(기본 사각형)을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
 
   ./run-calibration.sh sensor-sync-sim --viz none                  # 순수 sim 측정 → real과 비교해 차이를 구한다
 창(--watch): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로. 기록 후 창 닫을 때까지 같은 경로 반복.
@@ -7,42 +7,14 @@
 from __future__ import annotations
 
 import argparse
-import math
 import os
 import time
 
 from isaaclab.app import AppLauncher
 
-from calibration.robot_interface import RobotInterface
 from calibration.sysid import ISAAC, add_command_args, make_command, record, run_path
 
 TAG = "02-sim"
-
-
-class SimInterface(RobotInterface):
-    """명령 → env.step([[v, w]]) (보정 없음) · 읽기 env.sense() — /odom은 드라이버처럼 엔코더 적분."""
-
-    tag = TAG
-
-    def __init__(self, env, label: str = "sim_sensor_floor"):
-        import torch
-
-        super().__init__(env.policy_dt)
-        self.torch, self.env, self.label = torch, env, label
-        self.out, self.odom = (0.0, 0.0), [0.0, 0.0, 0.0]
-
-    def write(self, v, w):
-        self.out = (v, w)   # 보정 없음 — 측정은 순수 sim
-        self.env.step(self.torch.tensor([[v, w]], device=self.env.device))
-
-    def read(self, t, v, w):
-        s, o, dt = self.env.sense(), self.odom, self.dt
-        o[2] += s["w_enc"] * dt
-        o[0] += s["v_enc"] * math.cos(o[2]) * dt
-        o[1] += s["v_enc"] * math.sin(o[2]) * dt
-        # sim은 단일 시계 — 메시지 시각 = 기록 시각
-        return [round(t, 3), v, w, *self.out, *o, s["v_enc"], s["w_enc"], s["w_gyro"], *s["jv"], *s["jp"], self.label,
-                t, t, t, t]
 
 
 def main(argv=None) -> int:
@@ -97,11 +69,13 @@ def _run(args, app, cmd, out):
     p0 = env.robot.data.root_pos_w.torch[0]
     if not headless and cmd.path():
         env.set_path(cmd.path())   # 노란 점 = 목표 경로를 로봇 시작 자세로
-    robot = SimInterface(env, args.label or "sim_sensor_floor")
-    print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {robot.label} · 순수 sim (보정 없음) · "
+    from robots.sim_robot import SimRobot
+
+    robot, label = SimRobot(env), args.label or "sim_sensor_floor"
+    print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {label} · 순수 sim (보정 없음) · "
           f"{'room %.1f m' % args.room if args.room > 0 else 'empty floor'}")
     print(f"[{TAG}] {args.cmd}: side={args.side:.2f} m · {cmd.total:.1f}s · speeds {getattr(cmd, 'speeds_text', lambda: '-')()} m/s")
-    record(robot, cmd, out)
+    record(robot, cmd, out, TAG, label)
 
     if args.watch and not headless:
         print(f"[{TAG}] WATCH — 창 닫을 때까지 반복")

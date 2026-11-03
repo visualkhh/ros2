@@ -3,6 +3,8 @@
   training/<task>/{robot_cfg.py, usda/robot.usda}       외부에서 받은 USD 그대로 (변환 없음) — 기본 로봇
   robots/<이름>/{robot_cfg.py, urdf/robot.urdf.xacro, meshes/}  URDF → usd/<이름>/<이름>.usda 변환 (robots.urdf_to_usd)
   robot_cfg.py  바퀴 숫자 · 모터 · 마찰 · 실측 응답 (표준 라이브러리로 읽힘) + ROBOT_CFG (Isaac Lab, 처음 쓸 때 만듦)
+  real_robot.py RealRobot — 그 로봇의 실기기 ROS 입출력 (robots.load(robot, "real_robot"))
+입출력 공통: robot_interface.RobotInterface (write · read) — sim_robot.SimRobot · dummy_robot.DummyRobot · <로봇>/real_robot.RealRobot
 다른 로봇: `use(env_cfg, "<이름>" 또는 "<디렉토리>")` · ./run-world.sh --robot <이름|디렉토리>
 """
 from __future__ import annotations
@@ -27,12 +29,14 @@ def robot_dir(robot: str) -> str:
     return d
 
 
-def load(robot: str = DEFAULT):
-    """로봇의 robot_cfg.py 모듈 (표준 라이브러리만 — 바퀴 숫자 등을 읽을 때). 같은 폴더는 한 번만 읽는다."""
+def load(robot: str = DEFAULT, name: str = "robot_cfg"):
+    """로봇 폴더의 <name>.py 모듈 — robot_cfg(바퀴 숫자 등, 표준 라이브러리만) · real_robot(RealRobot). 같은 파일은 한 번만 읽는다."""
     import importlib.util
     import sys
 
-    path = os.path.join(robot_dir(robot), SETTINGS)
+    path = os.path.join(robot_dir(robot), name + ".py")
+    if not os.path.isfile(path):
+        raise SystemExit(f"로봇 폴더에 {name}.py 없음: {path}")
     name = "robot_cfg_" + path.replace(os.sep, "_").replace(".", "_")
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(name, path)
