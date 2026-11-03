@@ -50,6 +50,11 @@ class BaseEnvCfg(DirectRLEnvCfg):
     max_lin: float = MISSING                     # [m/s] 명령 한계 (드라이버 · corrector)
     max_ang: float = MISSING                     # [rad/s]
     diag_radius: float = MISSING                 # [m] 텔레오퍼 사선 원호
+    # 실측 바퀴 응답 (calibration: sim raw 대비 차이) — 학습 task가 랜덤 범위의 중심으로
+    response_gain_lr: tuple[float, float] = MISSING
+    response_delay_steps: int = MISSING
+    response_tau_s: float = MISSING
+    response_deadband: float = MISSING
     wheel_friction: tuple[float, float] = MISSING
     caster_friction: tuple[float, float] = MISSING
     random_yaw = False          # 리셋 때 방향 랜덤 (학습) · False면 0

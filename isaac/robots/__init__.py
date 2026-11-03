@@ -48,4 +48,6 @@ def use(env_cfg, robot: str) -> None:
     env_cfg.robot_cfg = cfg.ROBOT_CFG.replace(prim_path=env_cfg.robot_prim_path)
     env_cfg.wheel_radius, env_cfg.wheel_sep, env_cfg.max_wheel = cfg.WHEEL_RADIUS, cfg.WHEEL_SEP, cfg.MAX_WHEEL
     env_cfg.max_lin, env_cfg.max_ang, env_cfg.diag_radius = cfg.MAX_LIN, cfg.MAX_ANG, cfg.DIAG_RADIUS
+    env_cfg.response_gain_lr, env_cfg.response_delay_steps = cfg.RESPONSE_GAIN_LR, cfg.RESPONSE_DELAY_STEPS
+    env_cfg.response_tau_s, env_cfg.response_deadband = cfg.RESPONSE_TAU_S, cfg.RESPONSE_DEADBAND
     env_cfg.wheel_friction, env_cfg.caster_friction = cfg.WHEEL_FRICTION, cfg.CASTER_FRICTION

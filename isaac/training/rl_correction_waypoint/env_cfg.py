@@ -1,4 +1,4 @@
-"""rl_correction_waypoint 설정 — 랜덤 웨이포인트를 이탈 없이 따라가기 (기본 제어기 + 정책 보정). 로봇 = beebot + 실측 중심."""
+"""rl_correction_waypoint 설정 — 랜덤 웨이포인트를 이탈 없이 따라가기 (기본 제어기 + 정책 보정). 로봇과 상관없음."""
 from __future__ import annotations
 
 import math
@@ -55,13 +55,13 @@ class EventCfg:
 
 @configclass
 class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
-    """기본 세상(BaseEnvCfg: 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤. 관측 10 / 행동 2. 로봇 = beebot + beebot 실측 중심.
+    """기본 세상(BaseEnvCfg: 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤. 관측 10 / 행동 2.
 
+    로봇은 BaseEnvCfg.robot (기본 robots.DEFAULT · 바꾸기: env.robot=<이름|폴더>) — 그 로봇의 config.py가
+    바퀴 숫자 · 실측 응답(RESPONSE_*)을 채운다. 실측 응답이 랜덤 범위의 중심, 여기는 폭만.
     로봇 corrector goal 모드와 같은 약속: 관측 [gx, gy, px, py, yaw, v_enc, w_enc, w_gyro, prev_a0, prev_a1]
     (시작 자세 기준, 위치·방향 = 엔코더 거리 + 자이로 방향 적분) · 기본 제어기 식 · 행동 [-1, 1] × action_scale.
-    다른 로봇: 이 클래스를 상속해 robot · 실측 중심만 바꾸고 __init__.py에 등록.
     """
-    robot: str = "beebot"
     episode_length_s = 40.0        # 웨이포인트 num_waypoints개 (각 ≤ 1.5 m)를 다 돌 시간
     random_yaw = True
     action_space = 2               # [Δv, Δw] 정책 출력 [-1, 1] (corrector가 × action_scale)
@@ -88,13 +88,12 @@ class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
     # 정책 출력 [-1, 1] → 보정량 (로봇 corrector의 action_scale_lin/ang과 같아야 한다)
     action_scale = (0.10, 0.60)    # [m/s, rad/s]
 
-    # 에피소드마다 무작위 — beebot 실측 중심 (2026-11-02: artifacts/calibration/20261102_140931-02-real − …144928-sim_480)
-    #   gain L/R 0.9927/0.9938 (real/sim 비율) · 명령 지연 +2 스텝(0.1 s) · τ 차이 0 · 데드밴드 0
-    tau_range = (0.01, 0.10)       # [s] 바퀴별 1차 지연
-    gain_range = (0.90, 1.10)      # 바퀴별 이득 (좌우 비대칭) — gain_center에 곱함
-    gain_center = (0.9927, 0.9938)
-    deadband_range = (0.0, 0.3)    # [rad/s]
-    cmd_delay_steps = (0, 4)       # 명령 지연 [×50 ms] (실측 2 ± 2)
+    # 에피소드마다 무작위 — 중심 = 로봇 실측 응답 (robots/<robot>/config.py RESPONSE_*), 여기는 폭만
+    tau_width = 0.10               # [s] τ = 실측 ± 이만큼 (최소 tau_min)
+    tau_min = 0.01
+    gain_range = (0.90, 1.10)      # 바퀴별 이득 — 실측 좌/우 gain에 곱함
+    delay_width = 2                # 명령 지연 = 실측 ± 이만큼 [20 Hz 스텝] (최소 0)
+    deadband_range = (0.0, 0.3)    # [rad/s] (실측 데드밴드 + 이 범위)
     obs_delay_steps = (0, 4)       # 센서 지연 (odom · imu)
     sep_nominal_err = 0.08         # 드라이버 기준 간격 vs 실제 유효 간격 (회전 오차 → 자이로로만 보임)
     radius_nominal_err = 0.03      # 기준 반지름 오차 (직진 거리 — 관측 안 됨)

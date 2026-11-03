@@ -48,7 +48,7 @@ isaac/
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
-│   └── rl_correction_waypoint/      task RlCorrectionWaypoint-Beebot (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent
+│   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent
 ├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) · config.py(바퀴 숫자 · 모터 · 마찰 · ROBOT_CFG)
 ├── learn/                    Isaac 개념 실습 L1~L5
@@ -103,15 +103,16 @@ cd isaac
 
 ### 3.3 RL 쪽 env에 숫자 넣기 — real − sim 차이
 
-calibration은 측정만 한다. sim을 real처럼 만드는 건 **각 RL task의 env cfg**가 한다 (task마다 자기 env를 만들고 값을 바꿔가며 맞춘다).
-지금 task(`training/rl_correction_waypoint/env_cfg.py` `RlCorrectionWaypointEnvCfg` — 로봇 beebot + 그 실측)에 넣은 값 (2026-11-02):
+calibration은 측정만 한다. 잰 차이는 **로봇 설정**(`robots/<robot>/config.py`의 `RESPONSE_*`)에 숫자로 넣는다 — 로봇의 성질이라서.
+학습 task는 그 값을 랜덤 범위의 **중심**으로 쓰고 폭만 자기가 정한다 (`env.robot=`으로 로봇을 바꾸면 그 로봇 값이 따라온다).
+beebot에 넣은 값 (2026-11-02):
 
-| 값 | 계산 | 2026-11-02 | 학습 cfg |
+| 값 | 계산 | 2026-11-02 | `robots/beebot/config.py` |
 |---|---|---|---|
-| 좌/우 gain | real ÷ sim | 0.9927 / 0.9938 | `gain_center` |
-| 명령 지연 | real − sim | +2 스텝 | `cmd_delay_steps` 중심 (0~4) |
-| τ | real − sim (음수면 0) | 0 | `tau_range` 중심 (0.01~0.10) |
-| 데드밴드 | real ÷ sim gain (sim이 더 크면 0) | 0 | `deadband_range` |
+| 좌/우 gain | real ÷ sim | 0.9927 / 0.9938 | `RESPONSE_GAIN_LR` |
+| 명령 지연 | real − sim | +2 스텝 | `RESPONSE_DELAY_STEPS` |
+| τ | real − sim (음수면 0) | 0 | `RESPONSE_TAU_S` |
+| 데드밴드 | real ÷ sim gain (sim이 더 크면 0) | 0 | `RESPONSE_DEADBAND` |
 
 real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)에 **더해지는** 값이라 차이만 넣는다.
 맞았는지는 그 env로 학습 장면을 보며(`./run-training.sh --num_envs 16 --viz kit env.debug_vis=true`) 확인한다.
@@ -128,7 +129,7 @@ tensorboard --logdir logs/rsl_rl                                                
 #   → <시각>/exported/policy.onnx + policy.onnx.data (+ policy.pt) — 내보낸 뒤 재생이 계속 돈다, Ctrl+C로 끝
 ```
 
-- task 이름 `RlCorrectionWaypoint-Beebot` — 랜덤 웨이포인트 4개를 이탈 없이 (기본 제어기 + 정책 보정). 자세히: [training/rl_correction_waypoint/README.md](training/rl_correction_waypoint/README.md). `./run-training.sh -h`에 옵션 · 덮어쓰기.
+- task 이름 `RlCorrectionWaypoint` — 랜덤 웨이포인트 4개를 이탈 없이 (기본 제어기 + 정책 보정). 자세히: [training/rl_correction_waypoint/README.md](training/rl_correction_waypoint/README.md). `./run-training.sh -h`에 옵션 · 덮어쓰기.
 - 보는 지표: TensorBoard `Metrics/cross_track`(경로 이탈 평균 — 줄어야 함) · `Metrics/waypoints_done`(평균 도착 수 — 늘어야 함).
 - 실측 값(3.3)이 학습 env 랜덤 범위의 **중심**이다 (폭은 유지). 실제로 쓴 값은 `params/env.yaml`.
 - 바닥: Isaac Lab 지형(8 m 칸: 평평 · 경사 0~`env.slope_deg`°(기본 3) · `env.uneven=true`면 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1 (`env.events=null`로 끔).

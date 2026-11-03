@@ -61,7 +61,10 @@ class RlCorrectionWaypointEnv(BaseEnv):
         self.sep_nom = torch.full((n,), c.wheel_sep, device=dev)
         self.cmd_delay = torch.zeros(n, dtype=torch.long, device=dev)
         self.obs_delay = torch.zeros(n, dtype=torch.long, device=dev)
-        self.cmd_buf = torch.zeros(n, c.cmd_delay_steps[1] + 1, 2, device=dev)
+        # 랜덤 범위 = 로봇 실측 응답(cfg.response_*, 장면 만들 때 robots.use가 채움) ± task 폭
+        self.tau_range = (max(c.tau_min, c.response_tau_s - c.tau_width), c.response_tau_s + c.tau_width)
+        self.delay_range = (max(0, c.response_delay_steps - c.delay_width), c.response_delay_steps + c.delay_width)
+        self.cmd_buf = torch.zeros(n, self.delay_range[1] + 1, 2, device=dev)
         self.sens_buf = torch.zeros(n, c.obs_delay_steps[1] + 1, 3, device=dev)
         self.seen = torch.zeros(n, 3, device=dev)           # 지연 거친 [v_enc, w_enc, w_gyro]
 
@@ -196,13 +199,13 @@ class RlCorrectionWaypointEnv(BaseEnv):
         self.cross[ids] = 0.0
         self.action[ids] = 0.0
         self.prev_action[ids] = 0.0
-        self.tau[ids] = sample_uniform(*c.tau_range, (n, 2), dev)
-        self.gain[ids] = sample_uniform(*c.gain_range, (n, 2), dev) * torch.tensor(c.gain_center, device=dev)
-        self.deadband[ids] = sample_uniform(*c.deadband_range, (n, 1), dev)
+        self.tau[ids] = sample_uniform(*self.tau_range, (n, 2), dev)
+        self.gain[ids] = sample_uniform(*c.gain_range, (n, 2), dev) * torch.tensor(c.response_gain_lr, device=dev)
+        self.deadband[ids] = c.response_deadband + sample_uniform(*c.deadband_range, (n, 1), dev)
         self.r_nom[ids] = c.wheel_radius * (1 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (n,), dev))
         self.sep_nom[ids] = c.wheel_sep * (1 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (n,), dev))
         self.gyro_bias[ids] = sample_uniform(-c.gyro_bias, c.gyro_bias, (n,), dev)
-        self.cmd_delay[ids] = torch.randint(c.cmd_delay_steps[0], c.cmd_delay_steps[1] + 1, (n,), device=dev)
+        self.cmd_delay[ids] = torch.randint(self.delay_range[0], self.delay_range[1] + 1, (n,), device=dev)
         self.obs_delay[ids] = torch.randint(c.obs_delay_steps[0], c.obs_delay_steps[1] + 1, (n,), device=dev)
         self.cmd_buf[ids] = 0.0
         self.sens_buf[ids] = 0.0

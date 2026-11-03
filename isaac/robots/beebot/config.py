@@ -19,6 +19,13 @@ MAX_ANG = 1.82         # [rad/s]
 MAX_WHEEL = 8.0        # [rad/s] 펌웨어 VEL_LIMIT_RAD_S · 드라이버 max_wheel_speed
 DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tool/cli/op/bus.py DIAG_RADIUS)
 
+# 실측 바퀴 응답 — sim raw 대비 차이 (2026-11-02: isaac/artifacts/calibration/20261102_140931-02-real − …144928-sim_480).
+# calibration으로 다시 재면 여기를 고친다. 학습 task는 이 값을 랜덤 범위의 중심으로 쓴다 (robots.use가 env cfg에 채움).
+RESPONSE_GAIN_LR = (0.9927, 0.9938)   # 좌/우 바퀴 gain (real ÷ sim)
+RESPONSE_DELAY_STEPS = 2              # 명령 지연 [20 Hz 스텝] (real − sim)
+RESPONSE_TAU_S = 0.0                  # 1차 지연 τ [s] (real − sim, 음수면 0)
+RESPONSE_DEADBAND = 0.0               # [rad/s] (real 문턱 ÷ sim gain, 못 쟀으면 0)
+
 # 바퀴 모터 — 고정 모델값 (실측 sweep해도 sim 응답이 안 변해서 calibration 변수가 아님)
 WHEEL_DAMPING = 50.0         # 속도 서보 이득 (ImplicitActuator, stiffness 0)
 WHEEL_EFFORT = 3.0           # [N·m] XM430-W210 stall 근사
