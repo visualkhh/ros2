@@ -1,4 +1,4 @@
-"""학습 중 보정값 보기 창 (`--watch` 전용, 읽기만)..
+"""학습 중 보정값 보기 창 (`--watch` 전용, 읽기만).
 
 `--fit` fit.json 내용 + 그걸로 적용된 랜덤 범위 + 마찰 설정을 보여준다.
 학습 조건은 시작 때 고정이므로 `CalibHUD`(calibration/random_world.py)와 달리
