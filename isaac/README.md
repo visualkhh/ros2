@@ -41,15 +41,14 @@ isaac/
 │   ├── drive.py              운전 창 (./run-world.sh) — 로봇 · env · 명령 선택
 ├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
-├── calibration/              sim/real 응답 측정 · fit · 비교 리포트
-│   ├── command.py            CalibrationCommand(SquareCommand) — 측정 명령 (네모, --cmd 기본)
-│   ├── env.py · env_cfg.py   CalibrationEnv(DefaultEnv) · CalibrationEnvCfg(DefaultEnvCfg) — sim 측정 환경
+├── calibration/              calibration 실행기 (공식 train.py 역할) — --task의 calibration/ 명령 · env로 sim/real 측정 · fit · 비교 리포트
 │   ├── record.py             record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
 │   ├── sim_robot.py · real_robot.py · dummy_robot.py   ./run-calibration.sh sim|real|dummy — SimRobot · RealRobot · DummyRobot을 만들어 record()
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
 │   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent ·
+│                                    calibration/(1단계 측정: command · env · env_cfg) ·
 │                                    robot_cfg.py(로봇 ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 — 기본 로봇) · usda/robot.usda(외부 제공 USD) ·
 │                                    real_robot.py(RealRobot — 이 로봇의 실기기 ROS 토픽)
 ├── robots/                   로봇 공통 · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)

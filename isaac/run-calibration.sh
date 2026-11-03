@@ -4,9 +4,10 @@
 #   ./run-calibration.sh <command> [옵션...]      (경로는 isaac/ 기준 상대경로 또는 절대경로)
 #   ./run-calibration.sh <command> --help        그 명령의 옵션 전체 (python argparse)
 #
-# 무엇을 하나: 같은 명령(commands/square: 사각형 → 180° 턴 → 역주행, 54 s)을 real과 순수 sim에 넣고 응답을 재서
+# 학습 전에 먼저: task(--task, 기본 RlCorrectionWaypoint)의 training/<task>/calibration/ 명령 · env로 측정한다.
+# 무엇을 하나: 같은 명령(CalibrationCommand = 네모: 사각형 → 180° 턴 → 역주행, 54 s)을 real과 순수 sim에 넣고 응답을 재서
 #   fit.json(바퀴 gain 좌/우 · 지연 · τ · 데드밴드 = 측정 결과)으로 만든다. real과 sim을 비교해 차이를 구하는 데까지가 여기 일.
-#   차이를 sim에 넣어 real처럼 만드는 건 RL 쪽 env가 한다 (task env cfg에 숫자). 자세히: README.md 3장.
+#   차이는 training/<task>/robot_cfg.py RESPONSE_*에 숫자로 → 학습 env가 그 값 중심으로 랜덤. 자세히: README.md 3장.
 #
 # 결과 폴더: artifacts/calibration/<시각>-<label>/  →  raw.csv · fit.json · report.png
 #   raw.csv  = 20 Hz 기록 (명령 · 보정 출력 · odom · 엔코더 · 자이로 · 바퀴 rad/s · 메시지 시각)

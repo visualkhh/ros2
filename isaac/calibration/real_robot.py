@@ -1,4 +1,4 @@
-"""calibration real (PC에서) — RealRobot(<기본 로봇 폴더>/real_robot.py)에 sim과 같은 명령을 로봇에 보내고 /odom · /imu · /joint_states를 기록 → raw.csv · fit.json · report.png.
+"""calibration real (PC에서) — RealRobot(training/<task>/real_robot.py)에 sim과 같은 명령을 로봇에 보내고 /odom · /imu · /joint_states를 기록 → raw.csv · fit.json · report.png.
 
 준비: Pi base + cmd_manager, 제어 MANUAL (cd ~/ros2/tool && ./run-cli base start && ./run-cli mode manual) · 경로 direct
       PC: ROS 환경 · ROS_DOMAIN_ID=25 (run-calibration.sh가 맞춤)
@@ -12,7 +12,7 @@ import argparse
 import os
 
 import robots
-from calibration.record import add_command_args, make_command, record, run_path
+from calibration.record import add_command_args, make_command, record, run_path, task_dir
 
 TAG = "02-real"
 
@@ -30,7 +30,7 @@ def main(argv=None) -> int:
     import rclpy
 
     rclpy.init()
-    robot = robots.load(robots.DEFAULT, "real_robot").RealRobot(args.rate)   # 기본 로봇 폴더의 real_robot.py
+    robot = robots.load(task_dir(args), "real_robot").RealRobot(args.rate)   # task 폴더의 real_robot.py
     try:
         robot.wait("state", 5.0)
         print(f"[{TAG}] ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '(unset)')} · state={robot.s['state']}")

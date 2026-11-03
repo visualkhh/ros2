@@ -1,4 +1,4 @@
-"""CalibrationEnvCfg — calibration sim 측정 설정 (= DefaultEnvCfg: 빈 평평한 바닥 · 로봇 robots.DEFAULT). training/<task>/env_cfg.py와 같은 자리."""
+"""CalibrationEnvCfg — 이 task의 calibration sim 측정 설정 (= DefaultEnvCfg: 빈 평평한 바닥). 로봇은 실행기가 이 task 폴더로 채운다."""
 from __future__ import annotations
 
 from isaaclab.utils import configclass

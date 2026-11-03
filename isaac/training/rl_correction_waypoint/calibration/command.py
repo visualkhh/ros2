@@ -1,4 +1,4 @@
-"""CalibrationCommand — calibration 측정 명령 (= 네모, commands/square.SquareCommand). training/<task>/command.py와 같은 자리.
+"""CalibrationCommand — 이 task의 calibration 측정 명령 (= 네모, commands/square.SquareCommand). 학습 전 1단계.
 
 측정 경로를 바꾸려면 여기서 (fit · 구간 표는 segs label move_* · turn_*을 쓴다). 표준 라이브러리만 — sim · real · dummy 공용.
 """

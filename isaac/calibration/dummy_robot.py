@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 
-from calibration.record import add_command_args, make_command, record, run_path
+from calibration.record import add_command_args, make_command, record, run_path, task_dir
 from robots.dummy_robot import DummyRobot
 
 
@@ -27,7 +27,7 @@ def main(argv=None) -> int:
     p.add_argument("--out", default=None)
     args = p.parse_args(argv)
     gain_lr = (args.gain if args.gain_l is None else args.gain_l, args.gain if args.gain_r is None else args.gain_r)
-    robot = DummyRobot(gain_lr, args.tau, args.delay, args.noise, args.slip, args.deadband, args.seed)
+    robot = DummyRobot(gain_lr, args.tau, args.delay, args.noise, args.slip, args.deadband, args.seed, robot=task_dir(args))
     record(robot, make_command(args), args.out or run_path("dummy"), "dummy", args.label)
     return 0
 
