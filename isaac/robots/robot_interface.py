@@ -2,7 +2,7 @@
 
 ros2_control hardware_interface의 read() · write()와 같은 역할. 명령 경로(BaseCommand)나 기록 형식은 모른다.
   SimRobot    robots/sim_robot.py (공용) · <로봇 폴더>/sim_robot.py (상속)   env.step([[v, w]])  — Isaac
-  DummyRobot  robots/dummy_robot.py                   가짜 모터 계산            — 표준 라이브러리만
+  DummyRobot  robots/dummy_robot.py (공용) · <로봇 폴더>/dummy_robot.py (상속)   가짜 모터 — 표준 라이브러리만
   RealRobot   <로봇 폴더>/real_robot.py (robots.load(robot, "real_robot"))   그 로봇의 ROS 토픽
 이 파일은 표준 라이브러리만.
 """

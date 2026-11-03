@@ -2,7 +2,7 @@
 
 task cfg가 상속해서 바꾸는 것: scene.num_envs · terrain(지형) · 관측/행동 크기 · 자기 랜덤 범위.
 로봇은 이름(`robot`)만 — cfg가 만들어질 때 그 로봇 폴더의 robot_cfg.py로 채운다 (robot_cfg · 바퀴 숫자 · 마찰).
-다른 로봇: `XxxEnvCfg(robot="<이름 또는 폴더>")` · ./run-world.sh --robot. 기본 로봇 이름은 robots.DEFAULT 한 곳.
+다른 로봇: `XxxEnvCfg(robot="<이름 또는 폴더>")` 기본 로봇 이름은 robots.DEFAULT 한 곳.
 """
 from __future__ import annotations
 

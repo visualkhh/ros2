@@ -5,7 +5,7 @@ import math
 
 
 class BaseCommand:
-    """시각 t [s] → (v [m/s], w [rad/s]). 생성자는 speed · turn을 받는다 (run-world.sh --speed --turn)."""
+    """시각 t [s] → (v [m/s], w [rad/s]). 생성자는 speed · turn을 받는다 (run-world.sh · run-calibration.sh --speed --turn)."""
 
     total = math.inf   # 길이 [s] — 끝 없는 명령(키보드 등)은 inf
 

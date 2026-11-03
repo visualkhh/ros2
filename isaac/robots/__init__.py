@@ -5,7 +5,7 @@
   robot_cfg.py  바퀴 숫자 · 모터 · 마찰 · 실측 응답 (표준 라이브러리로 읽힘) + ROBOT_CFG (Isaac Lab, 처음 쓸 때 만듦)
   real_robot.py RealRobot — 그 로봇의 실기기 ROS 입출력 (robots.load(robot, "real_robot"))
 입출력 공통: robot_interface.RobotInterface (write · read) — sim_robot.SimRobot · dummy_robot.DummyRobot · <로봇>/real_robot.RealRobot
-다른 로봇: `use(env_cfg, "<이름>" 또는 "<디렉토리>")` · ./run-world.sh --robot <이름|디렉토리>
+다른 로봇: `use(env_cfg, "<이름>" 또는 "<디렉토리>")`
 """
 from __future__ import annotations
 

@@ -33,7 +33,7 @@ isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-training.sh           학습 · 재생 — Isaac Lab 공식 train.py · play.py를 우리 task로 (logs/rsl_rl/)
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh <이름|디렉토리>)
-├── run-world.sh              직접 운전 — 로봇(--robot) · 환경(--env --env-cfg) 골라서 (기본 envs/default)
+├── run-world.sh              world 보기 — ./run-world.sh <task> [--calibration] [--command=keyboard]
 ├── envs/                     환경 바탕 — 모든 env가 상속
 │   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
 │   ├── default/              DefaultEnv — 아무것도 없는 기본 환경 (새 환경은 이걸 복사해 시작)
@@ -43,14 +43,14 @@ isaac/
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── calibration/              calibration 실행기 (공식 train.py 역할) — --task의 calibration/ 명령 · env로 sim/real 측정 · fit · 비교 리포트
 │   ├── record.py             record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
-│   ├── run.py                ./run-calibration.sh sim|real|dummy [--task] — SimRobot · RealRobot · DummyRobot 만들기 → ready() → record()
+│   ├── run.py                ./run-calibration.sh <task> --robot=sim|real|dummy — SimRobot · RealRobot · DummyRobot 만들기 → ready() → record()
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
 │   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent ·
 │                                    calibration/(1단계 측정: command · env · env_cfg) ·
 │                                    robot_cfg.py(로봇 ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 — 기본 로봇) · usda/robot.usda(외부 제공 USD) ·
-│                                    sim_robot.py · real_robot.py(SimRobot · RealRobot — 이 로봇의 sim · 실기기 입출력)
+│                                    sim_robot.py · real_robot.py · dummy_robot.py(이 로봇의 sim · 실기기 · 가짜 입출력)
 ├── robots/                   로봇 공통 · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   ├── robot_interface.py    RobotInterface — write(v, w) · read() 상태 (ros2_control hardware_interface 역할)
 │   ├── sim_robot.py · dummy_robot.py   SimRobot(env.step, 어떤 로봇이든) · DummyRobot(가짜 모터)
@@ -64,7 +64,7 @@ isaac/
 로봇 폴더 모양은 두 가지: `training/<task>/{robot_cfg.py, usda/robot.usda}`(외부 USD 그대로 — 기본) · `robots/<이름>/{robot_cfg.py, urdf/, meshes/}`.
 URDF 쪽 USD는 URDF · 메시가 바뀌면 자동으로 다시 변환된다 (`robots/urdf_to_usd.py` `robot_usd()` → `robots/<robot>/usd/`, git 제외).
 따로 변환만: `./run-usd.sh [robot]` (Isaac Sim을 창 없이 켜서 변환 — 변환기가 Isaac Sim 안에 있다).
-다른 로봇: `robots/<이름>/`에 `urdf/robot.urdf.xacro` + `meshes/` + `robot_cfg.py`(숫자 · `ROBOT_CFG`)를 두고 `./run-world.sh --robot <이름>` (코드에선 `robots.use(env_cfg, "<이름>")`).
+다른 로봇: `robots/<이름>/`에 `urdf/robot.urdf.xacro` + `meshes/` + `robot_cfg.py`(숫자 · `ROBOT_CFG`)를 두고 task 폴더에서 쓴다 (코드에선 `robots.use(env_cfg, "<이름>")`).
 측정 경로를 바꾸려면 `commands/square.py`(또는 BaseCommand를 상속한 새 명령), 측정 장면은 `envs/default`(또는 `envs/rooms`)다.
 
 ## 3. 절차
@@ -86,8 +86,8 @@ cd ../ros2_ws && colcon build --packages-select rl_correction rl_eval tb3_bringu
 ./tool/run-cli base start  &&  ./tool/run-cli control manual  &&  ./tool/run-cli route direct
 # PC
 cd isaac
-./run-calibration.sh real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
-./run-calibration.sh real --label real_floor
+./run-calibration.sh rl_correction_waypoint --robot=real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
+./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
 #   → artifacts/calibration/<시각>-real_floor/{raw.csv, fit.json, report.png}   (--label 없으면 <시각>-02-real)
 ```
 
@@ -98,7 +98,7 @@ cd isaac
 ### 3.2 sim 측정 — 같은 명령, 순수 sim (envs/default, 보정 없음)
 
 ```bash
-./run-calibration.sh sim --viz none --label sim
+./run-calibration.sh rl_correction_waypoint --robot=sim --viz none --label sim
 ./run-calibration.sh plot-compare artifacts/calibration/<시각>-sim/raw.csv artifacts/calibration/<real>/raw.csv
 ```
 
@@ -151,14 +151,12 @@ tensorboard --logdir logs/rsl_rl                                                
 - 학습 env는 실측 값이 들어간 sim이라 정책 효과가 보인다 (노란 선 = 웨이포인트 경로).
 - 창: **초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로**. 노란 점에서 벗어나는 만큼이 드리프트.
 
-### 3.4c 직접 운전 — `run-world.sh` (로봇 · 환경 골라서)
+### 3.4c world 보기 — `run-world.sh <task>` (학습 · 기록 없이 창으로)
 
 ```bash
-./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + 기본 로봇 (usda/robot.usda)
-./run-world.sh --robot <robot>                       # 다른 로봇: robots/ 아래 이름 또는 로봇 디렉토리 경로
-./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/env.py · env_cfg.py)
-./run-world.sh --env rooms                          # 방 + 장애물 (N = 다음 방) · envs/ 밖 env는 MOD:CLASS
-./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
+./run-world.sh rl_correction_waypoint                       # task env + command.py — 노란 점(랜덤 웨이포인트)을 기본 제어기가 따라감 (보정 0)
+./run-world.sh rl_correction_waypoint --calibration         # task calibration/ — CalibrationEnv + 네모
+./run-world.sh rl_correction_waypoint --command=keyboard    # 키보드로 직접 운전 (CalibrationEnv 빈 바닥)
 ./run-world.sh -h
 ```
 
@@ -175,9 +173,9 @@ cd ../ros2_ws
 ./rl-only.sh label:=ab output:=artifacts/real/ab.csv          # 터미널 A — RL 노드 + 기록 (바이패스로 시작 = A)
 # 터미널 B
 ./route.sh rl                                                  # 바퀴 명령이 PC를 거치게 (corrector 없으면 거부)
-../isaac/run-calibration.sh real --label A         # A: 같은 사각형, 보정 없음
+../isaac/run-calibration.sh rl_correction_waypoint --robot=real --label A         # A: 같은 사각형, 보정 없음
 ./policy.sh ../isaac/artifacts/real/policy.onnx                # 정책 켜기 (멈춰 있을 때) → 터미널 A에 'ONNX loaded' 확인
-../isaac/run-calibration.sh real --label B         # B: 같은 사각형, 보정함
+../isaac/run-calibration.sh rl_correction_waypoint --robot=real --label B         # B: 같은 사각형, 보정함
 ./route.sh direct
 # 터미널 A: Ctrl+C
 ./report.py artifacts/real/ab.csv                              # → artifacts/real/report.png (A/B 구간별 지표)

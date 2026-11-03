@@ -15,7 +15,6 @@ from pathlib import Path
 
 from commands import CMDS, command_class
 
-TASK = "RlCorrectionWaypoint"   # 기본 task (= run-training.sh 기본)
 
 
 ISAAC = Path(__file__).resolve().parents[1]
@@ -33,8 +32,8 @@ def run_path(name: str) -> str:
 
 
 def add_command_args(p) -> None:
-    """--task · --cmd · --speed · --turn · --side (세 측정 스크립트 공통)."""
-    p.add_argument("--task", default=TASK, help=f"task (기본 {TASK}) — training/<task>/calibration/의 명령 · env, 로봇 = 그 task 폴더")
+    """task · --cmd · --speed · --turn · --side (sim · real · dummy 공통)."""
+    p.add_argument("task", help="training/ 아래 task 폴더 이름 (예: rl_correction_waypoint) — 그 calibration/ 명령 · env, 로봇 = 그 폴더")
     p.add_argument("--cmd", default=None, help=f"명령 (기본 task의 calibration/command.py CalibrationCommand): {' · '.join(CMDS)} "
                                               "또는 MOD:CLASS (BaseCommand, 끝이 있는 것). fit · 구간 표는 segs가 있는 명령(square 계열)만")
     p.add_argument("--speed", type=float, default=0.15, help="기준 전진 [m/s] (square: 변마다 1.0/0.67/1.33/0.8배)")
@@ -43,7 +42,7 @@ def add_command_args(p) -> None:
 
 
 def task_dir(args) -> str:
-    """--task → training/<task>/ (= 로봇 폴더: robot_cfg.py · real_robot.py · usda/)."""
+    """task → training/<task>/ (= 로봇 폴더: robot_cfg.py · sim_robot.py · real_robot.py · usda/)."""
     from training import task_dir as _task_dir
 
     return _task_dir(args.task)

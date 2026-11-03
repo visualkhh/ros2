@@ -1,9 +1,9 @@
-"""calibration 실행기 (공식 train.py 역할) — ./run-calibration.sh sim | real | dummy [--task X] [옵션...].
+"""calibration 실행기 (공식 train.py 역할) — ./run-calibration.sh <task> --robot=sim|real|dummy [옵션...].
 
-task(--task)의 calibration/ 명령 · env와 로봇(그 task 폴더)으로 한 번 측정 → raw.csv · fit.json · report.png.
+training/<task>/calibration/ 명령 · env와 그 task 폴더의 로봇(sim_robot.py · real_robot.py)으로 한 번 측정 → raw.csv · fit.json · report.png.
   sim    SimRobot (task 폴더 sim_robot.py) + CalibrationEnv — Isaac venv · --viz none|kit · --watch (기록 후 창 닫을 때까지 반복)
   real   RealRobot (task 폴더 real_robot.py) — ROS .venv · 준비: Pi base + cmd_manager MANUAL · --check-only (안 움직임)
-  dummy  DummyRobot — 표준 라이브러리만 (가짜 모터: --gain-l --gain-r --tau --delay --deadband --slip --noise)
+  dummy  DummyRobot (task 폴더 dummy_robot.py) — 표준 라이브러리만 (가짜 모터: --gain-l --gain-r --tau --delay --deadband --slip --noise)
 출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-sim · 02-real · dummy) · --out으로 정확한 경로.
 """
 from __future__ import annotations
@@ -21,8 +21,9 @@ LABELS = {"sim": "sim_sensor_floor", "real": "real", "dummy": "dummy"}   # CSV l
 
 
 def _args(mode: str, argv):
-    p = argparse.ArgumentParser(prog=f"run-calibration.sh {mode}", description=f"calibration {mode} 측정")
+    p = argparse.ArgumentParser(prog="run-calibration.sh", description=f"calibration 측정 (--robot={mode})")
     add_command_args(p)
+    p.add_argument("--robot", choices=MODES, required=True, help="sim (task sim_robot.py) · real (task real_robot.py) · dummy (가짜 모터)")
     p.add_argument("--label", default=None, help=f"폴더 이름 <시각>-<label> · CSV label (기본 {TAGS[mode]} / {LABELS[mode]})")
     p.add_argument("--out", "--output", default=None, help="정확한 raw.csv 경로 (isaac/ 기준 상대경로 가능)")
     if mode == "sim":
@@ -53,11 +54,12 @@ def _robot(mode: str, args, cmd):
 
         return robots.load(task_dir(args), "real_robot").RealRobot(args.rate), None, None
     if mode == "dummy":
-        from robots.dummy_robot import DummyRobot
+        import robots
 
         g = args.gain
         gain_lr = (g if args.gain_l is None else args.gain_l, g if args.gain_r is None else args.gain_r)
-        return DummyRobot(gain_lr, args.tau, args.delay, args.noise, args.slip, args.deadband, args.seed, robot=task_dir(args)), None, None
+        dummy = robots.load(task_dir(args), "dummy_robot").DummyRobot   # task 폴더의 dummy_robot.py
+        return dummy(gain_lr, args.tau, args.delay, args.noise, args.slip, args.deadband, args.seed), None, None
     import robots
     from isaaclab.app import AppLauncher
 
@@ -83,10 +85,13 @@ def _watch(app, robot, cmd) -> None:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if not argv or argv[0] not in MODES:
-        print("사용법: run-calibration.sh <" + " | ".join(MODES) + "> [--task X] [옵션...]  (옵션: <mode> --help)")
-        return 0 if argv[:1] in (["-h"], ["--help"]) else 2
-    mode, args = argv[0], _args(argv[0], argv[1:])
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--robot", choices=MODES)
+    mode = pre.parse_known_args(argv)[0].robot
+    if mode is None:
+        print("사용법: run-calibration.sh <task> --robot=" + "|".join(MODES) + " [옵션...]  (옵션: --robot=<mode> --help)")
+        return 0 if {"-h", "--help"} & set(argv) else 2
+    args = _args(mode, argv)
     tag, label = TAGS[mode], args.label or LABELS[mode]
     cmd = make_command(args)   # 로봇 · sim 띄우기 전에 실패하게
     out = args.out and (args.out if os.path.isabs(args.out) else str(ISAAC / args.out))
