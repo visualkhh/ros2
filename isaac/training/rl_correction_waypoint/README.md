@@ -92,3 +92,33 @@ cd isaac
   첫 웨이포인트 때 시작 자세를 잡고, `/rl_goal`(Point, 시작 자세 기준 x · y)을 하나씩 보낸다. `/rl_goal_stop`으로 끝.
 - 웨이포인트를 차례로 보내는 쪽(도착하면 다음 점)은 아직 없다 — 다음 단계.
 - 기본 제어기 파라미터(k_dist · k_heading · turn_thresh · goal_tol)와 action_scale은 `env_cfg.py`와 corrector가 같아야 한다.
+
+## 학습 후 — 실기기에 정책 올리기 · A/B
+
+```bash
+# 1) 학습 → 재생으로 ONNX 내보내기 (PC isaac/)
+./run-training.sh --max_iterations 500
+./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # → <시각>/exported/policy.onnx (+ .onnx.data)
+# 2) 로봇 쪽은 calibration과 같게: base start · route rl (MANUAL)
+```
+
+정책을 켜는 방법은 두 가지 (PC `ros2_ws/`):
+
+| 방법 | 명령 | 언제 |
+|---|---|---|
+| rl-only를 정책으로 띄움 | `./rl-only.sh enable:=true label:=after model:=../isaac/logs/rsl_rl/rl_waypoint/<시각>/exported/policy.onnx` | 처음부터 B만 |
+| 띄운 채 파라미터로 전환 | `./policy.sh <정책.onnx>` (켬) · `./policy.sh off` (바이패스) · `./policy.sh status` | **한 번 실행 안에서 A/B** (같은 배터리 · 바닥) |
+
+- `policy.sh` = `ros2 param set /rl_corrector model_path · enable` — 다시 띄울 필요 없음, 다음 명령부터 적용. 기록 CSV의 `rl_policy` 칸으로 A/B 구간이 나뉜다 → `./report.py`.
+- `policy.onnx.data`(가중치)가 `policy.onnx` 옆에 같이 있어야 한다. 로드 결과는 rl-only 로그의 `ONNX loaded: … mode=goal`.
+- 이 정책은 관측 10차원이라 corrector가 **goal 모드**로 뜬다 — 키보드 · 네모(`/cmd_manual_vel`) 명령을 보정하는 게 아니라,
+  `/rl_goal`(Point, 시작 자세 기준 x · y [m])을 받아 기본 제어기 + 보정으로 그 점까지 간다. 끝: `/rl_goal_stop`.
+  ```bash
+  ros2 topic pub --once /rl_goal geometry_msgs/msg/Point "{x: 1.0, y: 0.0, z: 0.0}"   # 도착하면 다음 점을 보낸다
+  ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
+  ```
+
+**아직 없는 것 (A/B를 제대로 하려면 필요)**
+- **웨이포인트 송신기**: 도착하면 다음 `/rl_goal`을 보내는 쪽. 지금은 손으로 한 점씩.
+- **A = 보정 0인 기본 제어기**: goal 모드에서 `policy.sh off`(enable false)는 바이패스가 아니라 **정지**다 (기본 제어기도 안 돈다).
+  그래서 지금은 같은 웨이포인트로 "정책 없음 vs 정책" 비교가 안 된다 — corrector에 보정 0 모드가 있어야 한다.
