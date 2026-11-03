@@ -20,6 +20,9 @@ class SimRobot(RobotInterface):
         self.out = (v, w)
         self.env.step(self.torch.tensor([[v, w]], device=self.env.device))
 
+    def close(self):
+        self.env.close()
+
     def read(self):
         s, o, dt = self.env.sense(), self.odom, self.dt
         o[2] += s["w_enc"] * dt

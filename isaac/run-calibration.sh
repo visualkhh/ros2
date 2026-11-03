@@ -19,7 +19,7 @@
 #     --label NAME       폴더 이름 <시각>-NAME · CSV label (기본 02-sim / sim_sensor_floor)
 #     --out PATH         정확한 raw.csv 경로 (label보다 우선)
 #     --side 0.5 --speed 0.15 --turn 1.0    사각형 한 변 [m] · 기준 전진 [m/s] (변마다 1.0/0.67/1.33/0.8배) · 회전 [rad/s]
-#     --room 0           방 크기 [m] (0 = 장애물 없는 빈 바닥, 측정은 0 권장) · --seed 0
+#     --task NAME        task (기본 RlCorrectionWaypoint) — training/<task>/calibration/ 명령 · env, 로봇 = 그 task 폴더 (real · dummy도)
 #     --watch            기록 후 창을 닫을 때까지 같은 경로 반복 재생 (창 필요)
 #     --viz none|kit     창 끔/켬. 안 주면 kit (창 표시) — 기록만 할 땐 --viz none
 #     창: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로(사각형) — 벗어나는 만큼이 드리프트

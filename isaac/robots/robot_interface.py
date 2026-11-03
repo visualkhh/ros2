@@ -18,8 +18,19 @@ class RobotInterface:
     def __init__(self, dt: float):
         self.dt = dt   # 한 스텝 [s] — write · read 주기
 
+    def ready(self) -> str | None:
+        """움직여도 되는지 — 안 되면 이유 문자열 (real: MANUAL · /odom). 경고는 여기서 출력."""
+        return None
+
     def start(self) -> None:
         """첫 write 직전 (real: 벽시계 기준점)."""
+
+    def stop(self) -> None:
+        """멈춤 (명령 0)."""
+        self.write(0.0, 0.0)
+
+    def close(self) -> None:
+        """끝 — 자원 정리."""
 
     def write(self, v: float, w: float) -> None:
         """명령 (v [m/s], w [rad/s])을 보낸다."""

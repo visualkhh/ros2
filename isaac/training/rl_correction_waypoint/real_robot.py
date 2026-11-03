@@ -23,6 +23,9 @@ def _sec(ts) -> float:
 class RealRobot(RobotInterface):
     def __init__(self, rate: float = 20.0):
         import rclpy
+
+        if not rclpy.ok():
+            rclpy.init()
         from geometry_msgs.msg import Twist
         from nav_msgs.msg import Odometry
         from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -59,6 +62,22 @@ class RealRobot(RobotInterface):
         msg.linear.x, msg.angular.z = float(v), float(w)
         self.pub.publish(msg)
 
+    def ready(self):
+        """MANUAL이고 /odom이 와야 움직인다. /imu · /joint_states가 없으면 경고만."""
+        self.wait("state", 5.0)
+        if self.s["state"] != "MANUAL":
+            return f"MANUAL 아님 (state={self.s['state']}) — Pi에서 ./run-cli mode manual 먼저"
+        self.wait("odom", 3.0)
+        if self.s["odom"] is None:
+            return "/odom 없음 — base/드라이버 확인"
+        self.wait("imu_stamp", 1.0)
+        self.wait("joint_stamp", 1.0)
+        if self.s["imu_stamp"] is None:
+            print("[real] 경고: /imu 없음 — w_gyro가 0")
+        if self.s["joint_stamp"] is None:
+            print("[real] 경고: /joint_states 없음 — 바퀴 raw가 0")
+        return None
+
     def stop(self):
         for _ in range(3):
             self.write(0.0, 0.0)
@@ -90,3 +109,4 @@ class RealRobot(RobotInterface):
 
     def close(self):
         self.node.destroy_node()
+        self.rclpy.shutdown()

@@ -43,7 +43,7 @@ isaac/
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── calibration/              calibration 실행기 (공식 train.py 역할) — --task의 calibration/ 명령 · env로 sim/real 측정 · fit · 비교 리포트
 │   ├── record.py             record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
-│   ├── sim_robot.py · real_robot.py · dummy_robot.py   ./run-calibration.sh sim|real|dummy — SimRobot · RealRobot · DummyRobot을 만들어 record()
+│   ├── run.py                ./run-calibration.sh sim|real|dummy [--task] — SimRobot · RealRobot · DummyRobot 만들기 → ready() → record()
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
