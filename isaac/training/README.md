@@ -22,7 +22,6 @@ training/
 ├── trainer.py                  실행기 + task 공통 베이스 — python -m training <task> [옵션...]
 │                               (task 찾기 · --watch · AppLauncher · 결과 폴더 · P 키 스크린샷)
 ├── __main__.py
-├── onnx/onnx_export.py         actor → ONNX (train.py 끝에서 씀)
 └── rl_correction_wheel_drift/  바퀴 드리프트 보정 (track) — 자세한 건 그 폴더 README
 ```
 

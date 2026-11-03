@@ -1,4 +1,4 @@
-"""학습된 actor → ONNX (train.py 끝에서 씀).
+"""학습된 actor → 배포용 ONNX (학습 끝 · sim 평가가 같은 그래프를 씀).
 
 입력 `obs` [1, N] float32 → 출력 `actions` [1, 2] = 물리 보정량 [dV m/s, dW rad/s]
 (env와 같은 clamp(-1, 1) × action_scale을 그래프에 넣음 → ROS corrector는 더하기만).

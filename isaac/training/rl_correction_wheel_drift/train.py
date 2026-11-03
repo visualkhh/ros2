@@ -105,7 +105,7 @@ class WheelDriftTrain(Train):
         runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
         runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
 
-        from training.onnx.onnx_export import export_actor  # noqa: E402
+        from utils.onnx_export import export_actor  # noqa: E402
 
         path = self.run_dir / "policy.onnx"   # RL 관례 이름 (폴더 이름에 exp-name이 있다)
         export_actor(runner.alg._raw_actor, env_cfg.action_scale, str(path))
@@ -181,14 +181,14 @@ class WheelDriftTrain(Train):
     def evaluate(self, raw, actor, action_scale, onnx_path, episodes: int = 3, seed: int = 7) -> dict:
         """sim Before/After — 같은 env·같은 seed(같은 랜덤화·명령)로 정책 끔(보정 0) / 켬.
 
-        정책은 policy.onnx와 같은 그래프(onnx_export._Actor)로 돌린다. 지표는 실제 몸체 속도 vs 명령
+        정책은 policy.onnx와 같은 그래프(utils.onnx_export._Actor)로 돌린다. 지표는 실제 몸체 속도 vs 명령
         RMS (보상과 같은 기준, 정지 명령 제외). onnxruntime이 있으면 ONNX 출력이 같은지도 확인한다.
         """
         import random
 
         import torch
 
-        from training.onnx.onnx_export import _Actor  # noqa: E402
+        from utils.onnx_export import _Actor  # noqa: E402
 
         policy = _Actor(actor, action_scale).eval().to(raw.device)
         n, steps = raw.num_envs, int(round(raw.cfg.episode_length_s / raw.policy_dt))

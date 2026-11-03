@@ -47,8 +47,8 @@ isaac/
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── trainer.py            실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
-│   ├── onnx/onnx_export.py   actor → ONNX
 │   └── rl_correction_wheel_drift/   task: env · PPO 설정 · train.py · fit_panel(보정값 창)
+├── utils/onnx_export.py      학습된 actor → 배포용 ONNX (clamp × action_scale 포함 — corrector는 더하기만)
 ├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) · config.py(바퀴 숫자 · 모터 · 마찰 · ROBOT_CFG)
 ├── learn/                    Isaac 개념 실습 L1~L5
