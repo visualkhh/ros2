@@ -103,6 +103,13 @@ def integrate(rows, vw):
     return xs, ys
 
 
+def true_path(rows, bias):
+    """실측 궤적 — 거리는 v_enc, 방향은 자이로(−바이어스). odom 궤적은 쓰지 않는다:
+    odom은 엔코더 회전이라 바퀴가 명령대로 돌면 실제로 휘어도 직선으로 나오고,
+    B는 휨을 막으려고 바퀴를 일부러 명령과 다르게 돌리니 odom에선 오히려 휜 것처럼 보인다."""
+    return integrate(rows, [(r.get("v_enc", NAN), r.get("w_gyro", NAN) - bias) for r in rows])
+
+
 def mean_dev(ax_, ay_, bx, by) -> float:
     """같은 시각끼리 두 궤적 거리의 평균 [m]."""
     d = finite([math.hypot(a - c, b - e) for a, b, c, e in zip(ax_, ay_, bx, by)])
@@ -140,10 +147,12 @@ SETTLE_S = 0.5   # 명령이 바뀐 뒤 이 시간은 정상상태 지표에서 
 
 
 def gyro_bias(rows) -> float:
-    """정지(명령 0 · 두 바퀴 정지) 행의 w_gyro 평균 — 0이 아니면 OpenCR 부팅 때 자이로 보정 실패 (움직이며 켜짐)."""
+    """정지(명령 0 · 두 바퀴 정지) 행의 w_gyro 중앙값 — 0이 아니면 OpenCR 부팅 때 자이로 보정 실패 (움직이며 켜짐).
+
+    평균이 아니라 중앙값: 멈춘 직후 몸체가 덜 멈춘 행(캐스터 흔들림)이 평균을 끌어 가짜 바이어스가 나온다."""
     w = finite([r.get("w_gyro", NAN) for r in rows if r["lin_raw"] == 0.0 and r["ang_raw"] == 0.0
                 and abs(r.get("wheel_l_vel", 1)) < 0.01 and abs(r.get("wheel_r_vel", 1)) < 0.01])
-    return sum(w) / len(w) if len(w) >= 20 else 0.0
+    return sorted(w)[len(w) // 2] if len(w) >= 20 else 0.0
 
 
 def metrics(rows: list[dict]) -> dict:
@@ -175,7 +184,7 @@ def metrics(rows: list[dict]) -> dict:
     cl, cr = wheel_corr(moving)
     lat = sorted(finite([(r["t_out"] - r["t_abs"]) * 1000 for r in rows if "t_out" in r]))
     cur = [abs(x) for x in col("wheel_l_cur") + col("wheel_r_cur")]
-    sx, sy = [r.get("odom_x", NAN) for r in rows], [r.get("odom_y", NAN) for r in rows]
+    sx, sy = true_path(rows, bias)
     cx, cy = integrate(rows, [(r["lin_raw"], r["ang_raw"]) for r in rows])
     fx, fy = finite(sx), finite(sy)
     g = wheel_gains(rows)
@@ -185,8 +194,8 @@ def metrics(rows: list[dict]) -> dict:
     return {"주행 시간 [s] (명령≠0)": len(moving) * dt,
             "궤적오차 평균 (이상 대비) [m] ↓": mean_dev(sx, sy, cx, cy),
             "끝점 오차 (이상 대비) [m] ↓": math.hypot(fx[-1] - cx[-1], fy[-1] - cy[-1]) if fx else NAN,
-            "직진 RMS 정상상태 [m/s] ↓": rms(steady, "lin_raw", "v_enc"),
-            "회전 RMS 정상상태 엔코더 [rad/s] ↓": rms(steady, "ang_raw", "w_enc"),
+            "직진 RMS 정상상태 엔코더 [m/s] (참고 — B는 일부러 다름)": rms(steady, "lin_raw", "v_enc"),
+            "회전 RMS 정상상태 엔코더 [rad/s] (참고 — B는 일부러 다름)": rms(steady, "ang_raw", "w_enc"),
             "회전 RMS 정상상태 자이로-바이어스 [rad/s] ↓": rms(steady, "ang_raw", "w_gyro", bias),
             "직진 RMS 전체 (계단 지연 포함) [m/s] ↓": rms(moving, "lin_raw", "v_enc"),
             "회전 RMS 전체 자이로-바이어스 [rad/s] ↓": rms(moving, "ang_raw", "w_gyro", bias),
@@ -340,10 +349,10 @@ def report(paths: list[Path], out: Path, show: bool) -> Path:
             return [r.get(k, NAN) for r in rows]
 
         # ---- 궤적: 실측 실선 · 명령 100% 점선 (같은 색)
-        sx, sy = col("odom_x"), col("odom_y")
+        sx, sy = true_path(rows, bias)
         cx, cy = integrate(rows, zip(col("lin_raw"), col("ang_raw")))
         ax_path.plot(cx, cy, color=c, ls=":", lw=1.4, alpha=0.8)
-        ax_path.plot(sx, sy, color=c, lw=2.0, label=f"{name} — odom 실측 (점선 = 명령대로 갔다면)")
+        ax_path.plot(sx, sy, color=c, lw=2.0, label=f"{name} — 실측: 거리 엔코더 · 방향 자이로 (점선 = 명령대로 갔다면)")
         fx, fy = finite(sx), finite(sy)
         if fx:
             ax_path.plot(fx[-1], fy[-1], "o", color=c, ms=7, mec="k")
