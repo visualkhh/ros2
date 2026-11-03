@@ -31,7 +31,9 @@ def main(argv=None) -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=None, help="정확한 raw.csv 경로 (isaac/ 기준 상대경로 가능)")
     p.add_argument("--label", default=None, help="폴더 이름 <시각>-<label> · CSV label (기본 02-sim / sim_sensor_floor)")
-    p.add_argument("--policy", default=None, help="학습한 ONNX로 보정하며 달림 (ros2 corrector와 같은 규칙)")
+    p.add_argument("--policy", default=None, help="학습한 ONNX(play.py exported/policy.onnx)로 보정하며 달림 (ros2 corrector와 같은 규칙)")
+    p.add_argument("--action-scale", type=float, nargs=2, default=(0.10, 0.60), metavar=("LIN", "ANG"),
+                   help="정책 출력 [-1, 1] × 이 값 = 보정량 [m/s, rad/s] (= corrector action_scale_lin/ang · 학습 env action_scale)")
     p.add_argument("--watch", action="store_true", help="기록 후 창 닫을 때까지 같은 경로 반복")
     AppLauncher.add_app_launcher_args(p)
     args = p.parse_args(argv)
@@ -105,7 +107,9 @@ def _run(args, app, cmd, sess, out):
         if sess is not None and (v or w):
             s = env.sense()
             obs = np.array([[v, w, s["v_enc"], s["w_enc"], s["w_gyro"], min(st["t"] - st["changed"], 2.0)]], np.float32)
-            dv, dw = sess.run(None, {sess.get_inputs()[0].name: obs})[0][0]
+            a = sess.run(None, {sess.get_inputs()[0].name: obs})[0][0]
+            dv = max(-1.0, min(1.0, float(a[0]))) * args.action_scale[0]   # corrector scale_action과 같음
+            dw = max(-1.0, min(1.0, float(a[1]))) * args.action_scale[1]
             lo = max(-beebot.MAX_LIN, min(beebot.MAX_LIN, v + float(dv)))
             ao = max(-beebot.MAX_ANG, min(beebot.MAX_ANG, w + float(dw)))
         st["out"] = (lo, ao)

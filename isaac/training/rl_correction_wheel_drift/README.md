@@ -11,12 +11,12 @@ training/rl_correction_wheel_drift/
 ├── env_cfg.py                  환경 설정 (obs 6 · action 2 · 랜덤 범위 · 실측 중심 · 지형 make_terrain · 바퀴 마찰 EventCfg)
 ├── env.py                      환경 RlCorrectEnv(BaseEnv) — 모터 모델 · 관측 · 보상 · 리셋
 ├── command.py                  TeleopCommand(BaseCommand) — 0.5~2 s마다 텔레오퍼 키 · 곡선 · 정지 (학습: sample(k) · 한 대: __call__)
-├── agent.py                    학습자 설정 RlCorrectAgentCfg(../../agents/base_agent.py BaseAgentCfg) — 다른 값만
-├── train.py                    WheelDriftTrain(../trainer.py Train 상속) — 학습 → 끝나면 ONNX export
+├── agent.py                    학습자 설정 RlCorrectAgentCfg(../../agents/base_agent.py BaseAgentCfg) — 이 task 값
+├── __init__.py                 gym.register("Beebot-WheelDrift") — 공식 train.py · play.py가 이 이름으로 찾음
 └── README.md
 ```
 
-공용: `../../robots/beebot/config.py` · `../../utils/onnx_export.py` · `../../calibration/` (측정 — 실측 값은 `env_cfg.py`에 숫자)
+공용: `../../robots/beebot/config.py` · `../../envs/base_env.py` · `../../calibration/` (측정 — 실측 값은 `env_cfg.py`에 숫자)
 
 ## 환경
 
@@ -28,8 +28,8 @@ training/rl_correction_wheel_drift/
 | 명령 | 0.5~2 s마다 바뀜: 텔레오퍼 키 · 부드러운 곡선 · 정지 |
 | 보상 | `−(|v_cmd−v| + 0.5·|w_cmd−w|) − action/smooth penalty` (sim true 속도 기준) |
 | 랜덤화 (에피소드마다) | 바퀴별 τ·gain, 데드밴드, 명령/관측 지연, 바퀴 반지름·간격 기준 오차, 초기 yaw |
-| 마찰 (기본 켜짐) | env마다 바퀴 마찰 랜덤 0.7~1.1 (Isaac Lab events `EventCfg`, 시작 시 1회). 바닥은 고정 (0.8, 0.7). 끄려면 `--no-friction` |
-| `--uneven` | env별 낮은 턱 (1~3 cm) |
+| 마찰 (기본 켜짐) | env마다 바퀴 마찰 랜덤 0.7~1.1 (Isaac Lab events `EventCfg`, 시작 시 1회). 바닥은 고정 (0.8, 0.7). 끄려면 `env.events=null` |
+| 지형 | 경사 칸 0~`env.slope_deg`°(기본 3) · `env.uneven=true`면 요철 칸 (턱 1~3 cm) |
 | 실기기 맞춤 | `env_cfg.py`: `gain_center` 0.9927/0.9938 · `cmd_delay_steps` (0, 4) · `tau_range` (0.01, 0.10) — 2026-11-02 real − sim |
 
 - obs에는 실기기에서 보이는 값만 넣는다 (true 속도는 보상에만).
@@ -37,21 +37,17 @@ training/rl_correction_wheel_drift/
 ## 실행
 
 ```bash
-cd isaac   # Lab env
-
-# 기본: headless, 바퀴 마찰 랜덤 켜짐
-./isaaclab.sh -p -m training rl_correction_wheel_drift --iterations 300
-# 창으로 보기 (512 env는 무거우니 16~32개만) 
-./isaaclab.sh -p -m training rl_correction_wheel_drift --watch --envs 16
-
-tensorboard --logdir artifacts/training
+cd isaac
+./run-training.sh --max_iterations 300                                   # 기본: 창 없음, 512대, 바퀴 마찰 랜덤 켜짐
+./run-training.sh --num_envs 16 --viz kit env.debug_vis=true             # 창으로 보기 (16~32대)
+./run-training.sh play --checkpoint logs/rsl_rl/rl_correct/<시각>/model_299.pt --num_envs 1   # → exported/policy.onnx
+tensorboard --logdir logs/rsl_rl
 ```
 
-- `--watch` 창에서 **P** 키 → 결과 폴더에 `screen_shot_<시각>.png`
-- 화면(`--watch`·`--snap`): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 랜덤 명령의 목표 경로
-  (명령이 바뀐 순간부터 그 명령대로 갈 길). 구현: `env.py` `_set_debug_vis_impl` · `_debug_vis_callback`
-- 학습한 정책 몰아보기: `../../run-training.sh --drive --watch --policy <결과>/policy.onnx` (C = 정책 켬/끔)
-- 결과: `artifacts/training/<시각>-rl_correct/` — checkpoint, `policy.onnx`, `eval.json`(sim 정책 끔/켬 비교), `ranges.json`
+- 화면(`env.debug_vis=true`): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 랜덤 명령의 목표 경로
+  (명령이 바뀐 순간부터 그 명령대로 갈 길). 구현: `env.py` `vis_path` + `../../envs/base_env.py`
+- 학습 명령을 한 대로 보기: `../../run-world.sh --cmd training.rl_correction_wheel_drift.command:TeleopCommand --speed 0.26 --turn 1.82`
+- 결과: `logs/rsl_rl/rl_correct/<시각>/` — `model_<N>.pt` · `params/env.yaml`(실제로 쓴 범위) · TensorBoard · (play 후) `exported/`
 
 ## 주의
 

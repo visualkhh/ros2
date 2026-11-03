@@ -6,6 +6,18 @@ import os
 from robots import ROBOTS_DIR
 
 
+def _dirs(robot: str):
+    robot_dir = os.path.abspath(robot if os.sep in robot else os.path.join(ROBOTS_DIR, robot))   # 이름 또는 폴더 경로
+    name = os.path.basename(robot_dir)
+    return robot_dir, name, os.path.join(robot_dir, "usd", name, f"{name}.usda")
+
+
+def usd_path(robot: str) -> str:
+    """변환될 USD 경로만 (변환 안 함 · 표준 라이브러리). cfg는 Isaac 앱 전에 만들어질 수 있어서(공식 학습 스크립트) cfg엔 이걸 쓰고,
+    실제 변환은 env가 장면을 만들 때 robot_usd()로 한다."""
+    return _dirs(robot)[2]
+
+
 def robot_usd(robot: str) -> str:
     """robots/<robot>/urdf/robot.urdf.xacro → robots/<robot>/usd/<robot>/<robot>.usda (Isaac 앱이 켜진 뒤 호출).
 
@@ -18,13 +30,11 @@ def robot_usd(robot: str) -> str:
     import glob
     import shutil
 
-    robot_dir = os.path.abspath(robot if os.sep in robot else os.path.join(ROBOTS_DIR, robot))   # 이름 또는 폴더 경로
-    robot = os.path.basename(robot_dir)
+    robot_dir, robot, usd_path = _dirs(robot)
     xacro_path, out_dir = os.path.join(robot_dir, "urdf", "robot.urdf.xacro"), os.path.join(robot_dir, "usd")
     if not os.path.isfile(xacro_path):
         raise FileNotFoundError(f"로봇 URDF 없음: {xacro_path}")
     os.makedirs(out_dir, exist_ok=True)
-    usd_path = os.path.join(out_dir, robot, f"{robot}.usda")
     sources = [xacro_path, __file__] + glob.glob(os.path.join(robot_dir, "meshes", "**", "*"), recursive=True)
     with open(os.path.join(out_dir, ".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)   # 다른 프로세스가 변환 중이면 끝날 때까지 기다림

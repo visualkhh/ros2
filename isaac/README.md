@@ -31,7 +31,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 ```text
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
-├── run-training.sh           학습 실행기 (IsaacLab, 기본 headless)
+├── run-training.sh           학습 · 재생 — Isaac Lab 공식 train.py · play.py를 우리 task로 (logs/rsl_rl/)
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh [이름|디렉토리], 기본 beebot)
 ├── run-world.sh              직접 운전 — 로봇(--robot) · 환경(--env --env-cfg) 골라서 (기본 envs/default)
 ├── envs/                     환경 바탕 — 모든 env가 상속
@@ -47,9 +47,8 @@ isaac/
 │   ├── record.py             측정 기록 (명령 = commands/square) → raw.csv · fit.json(측정 결과) · report.png
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
-│   ├── trainer.py            실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
-│   └── rl_correction_wheel_drift/   task: env · env_cfg · command · agent · train.py
-├── utils/onnx_export.py      학습된 actor → 배포용 ONNX (clamp × action_scale 포함 — corrector는 더하기만)
+│   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
+│   └── rl_correction_wheel_drift/   task Beebot-WheelDrift: __init__(gym.register) · env · env_cfg · command · agent
 ├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) · config.py(바퀴 숫자 · 모터 · 마찰 · ROBOT_CFG)
 ├── learn/                    Isaac 개념 실습 L1~L5
@@ -115,35 +114,32 @@ calibration은 측정만 한다. sim을 real처럼 만드는 건 **각 RL task�
 | 데드밴드 | real ÷ sim gain (sim이 더 크면 0) | 0 | `deadband_range` |
 
 real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)에 **더해지는** 값이라 차이만 넣는다.
-맞았는지는 그 env로 몰아보며(`./run-training.sh --drive --watch`) 또는 task의 확인 스크립트로 본다.
+맞았는지는 그 env로 학습 장면을 보며(`./run-training.sh --num_envs 16 --viz kit env.debug_vis=true`) 확인한다.
 
-### 3.4 학습
+### 3.4 학습 — Isaac Lab 공식 train.py · play.py
 
 ```bash
-./run-training.sh --watch --envs 16 --iterations 5               # 짧게 확인: 창 · 창 클릭 후 P = 스크린샷
-./run-training.sh --iterations 300                               # 본 학습 (창 없음, 512대, 약 30분)
-./run-training.sh --iterations 300 --uneven --snap 60            # + 낮은 턱 + 1분마다 화면 저장
-tensorboard --logdir artifacts/training                          # 진행 그래프 (다른 터미널)
-#   → artifacts/training/<시각>-rl_correct/ (policy.onnx · eval.json · ranges.json · checkpoint · TensorBoard)
+./run-training.sh --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
+./run-training.sh --max_iterations 300                                            # 본 학습 (창 없음, 512대, 약 30분)
+./run-training.sh --max_iterations 300 env.uneven=true env.slope_deg=5            # + 요철 · 경사 5°
+tensorboard --logdir logs/rsl_rl                                                  # 진행 그래프 (다른 터미널)
+#   → logs/rsl_rl/rl_correct/<시각>/ (model_<N>.pt · params/env.yaml · TensorBoard)
+./run-training.sh play --checkpoint logs/rsl_rl/rl_correct/<시각>/model_299.pt --num_envs 1
+#   → <시각>/exported/policy.onnx + policy.onnx.data (+ policy.pt) — 내보낸 뒤 재생이 계속 돈다, Ctrl+C로 끝
 ```
 
-- 실측 값(3.3)이 학습 env 랜덤 범위의 **중심**이다 (폭은 유지). `ranges.json`에 이번 학습의 범위가 남는다.
-- 창 없이 돌면서 보고 싶으면 `--snap 60`: 60초마다 `<결과>/snaps/<시각>.png` + `<결과>/latest.png`(최신으로 덮어씀).
-  `eog <결과>/latest.png`로 열어 두면 바뀔 때 다시 그린다. 렌더가 켜져 학습이 ~20% 느려진다 (32대 5.2→6.2 s/iter).
-  P 키 스크린샷은 `--watch`(창)에서만.
-- 바닥: Isaac Lab 지형(8 m 칸 격자: 평평 · 경사 피라미드 0~`--slope`° · `--uneven` 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1(events) (`--no-friction`으로 마찰 랜덤 끔).
-  경사 **기본 켜짐** (0~3°, `--slope 0`이면 없음).
-- 자이로 영점 오차: **기본 켜짐** — 에피소드마다 ±0.05 rad/s 고정값을 w_gyro에 더함 (정책이 엔코더와 비교해 영점을 무시하게).
-  `--gyro-bias 0.1`로 폭 변경 · `0`이면 끔. 실기기 11-02의 −0.257은 고장 수준 — 학습으로 덮지 말고 OpenCR 재부팅(가만히)으로 고친다.
-- 끝나면 sim Before/After를 자동으로 돈다(같은 env·seed, 정책 끔/켬) → `eval.json`:
-  `improve_pct.rms_w`가 + 면 sim에서 회전 추종이 좋아짐 · `onnx_max_abs_diff` ≈ 0 이면 배포 파일 = 평가한 정책.
-- `--iterations` 1회 = envs×64스텝 수집 + PPO 업데이트 (512대 ≈ 5.5 s). 자세히: [training/README.md](training/README.md).
+- task 이름 `Beebot-WheelDrift` (`training/rl_correction_wheel_drift/__init__.py` gym.register). `./run-training.sh -h`에 옵션 · 덮어쓰기.
+- 실측 값(3.3)이 학습 env 랜덤 범위의 **중심**이다 (폭은 유지). 실제로 쓴 값은 `params/env.yaml`.
+- 바닥: Isaac Lab 지형(8 m 칸: 평평 · 경사 0~`env.slope_deg`°(기본 3) · `env.uneven=true`면 요철 턱 1~3 cm) + env마다 바퀴 마찰 랜덤 0.7~1.1 (`env.events=null`로 끔).
+- 자이로 영점 오차: **기본 켜짐** — 에피소드마다 ±0.05 rad/s (`env.gyro_bias=0.1` · `0`이면 끔). 실기기 −0.257 같은 큰 값은 OpenCR 재부팅(가만히)으로 고친다.
+- 체크포인트는 50회마다 — 끝에서 망가져도 이전 `model_<N>.pt`를 `play`로 내보내면 된다.
+- `policy.onnx` 출력은 신경망 그대로 [-1, 1]. 로봇 corrector가 `clamp × action_scale`(0.10 · 0.60)을 한다 — **`.onnx.data`도 같이 복사**.
 
-### 3.4b 정책 몰아보기 — 실기기 전에
+### 3.4b 정책 보기 — 실기기 전에
 
 ```bash
-./run-training.sh --drive --watch --uneven --policy artifacts/real/policy.onnx   # 학습 env(실측 맞춤) + C = 정책 켬/끔
-./run-calibration.sh sensor-sync-sim --watch --policy artifacts/real/policy.onnx  # 순수 sim에서 같은 네모 (참고용 — 휨이 거의 없다)
+./run-training.sh play --checkpoint logs/rsl_rl/rl_correct/<시각>/model_299.pt --num_envs 16 --viz kit env.debug_vis=true   # 학습 env에서 정책 재생
+./run-calibration.sh sensor-sync-sim --watch --policy logs/rsl_rl/rl_correct/<시각>/exported/policy.onnx   # 순수 sim 네모 (참고용 — 휨이 거의 없다)
 ```
 
 - 학습 env는 실측 값이 들어간 sim이라 정책 효과가 보인다. 순수 sim(calibration)은 거의 안 휘어서 보정할 게 없다.
@@ -159,18 +155,16 @@ tensorboard --logdir artifacts/training                          # 진행 그래
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
 ./run-world.sh --cmd training.rl_correction_wheel_drift.command:TeleopCommand --speed 0.26 --turn 1.82   # 학습 때 받는 랜덤 명령
 ./run-world.sh -h
-# 학습 env 그대로 + 정책 켬/끔 (C 키): 행동이 보정량이라 학습 쪽 운전 모드로
-./run-training.sh --drive --watch --uneven --policy artifacts/real/policy_30.onnx
 ```
 
-- 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 원점 · **F 카메라를 로봇 쪽으로** · 창 닫으면 끝 (학습 --drive는 + C 정책 켬/끔)
+- 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 원점 · **F 카메라를 로봇 쪽으로** · 창 닫으면 끝
 - 카메라는 고정하지 않는다 — 마우스 휠 줌 · 오른쪽 드래그 회전 · 가운데 드래그 이동. 로봇이 화면 밖으로 가면 F.
 - `--env`는 행동이 [v, w] 명령인 env(`BaseEnv` 계열). 터미널에 0.5 s마다 명령 / 엔코더 / 자이로.
 
 ### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
 
 ```bash
-cp artifacts/training/<시각>-rl_correct/policy.onnx artifacts/real/policy.onnx   # isaac/ 에서 — 본 학습(300회) 결과, eval.json 개선 + 확인 후
+cp logs/rsl_rl/rl_correct/<시각>/exported/policy.onnx* artifacts/real/   # isaac/ 에서 — policy.onnx + policy.onnx.data 둘 다
 # 로봇: 베이스 · MANUAL (3.1과 같음) · 출발 위치·방향을 A와 B에서 같게
 cd ../ros2_ws
 ./rl-only.sh label:=ab output:=artifacts/real/ab.csv          # 터미널 A — RL 노드 + 기록 (바이패스로 시작 = A)
@@ -191,7 +185,8 @@ cd ../ros2_ws
 - **`ONNX loaded`가 떠야** 정책이 들어간 것. `./policy.sh status`로 enable·경로 확인.
 - 실수했던 것 (2026-11-02): ① 정책을 `ros2_ws/artifacts/real/`에 복사하고 `isaac/artifacts/real/`을 가리킴 → B도 보정 없이 달림(A/A).
   지금은 `policy.sh`가 없는 파일을 **거부**하고, `report.py`가 "켬인데 실제로는 바이패스" 구간을 경고한다.
-  ② `--watch` 5회 짧은 시험 정책을 올림 → 거의 학습 안 됨(sim 개선 ±1%) → 실기기에서 오히려 나빠짐. 본 학습 결과를 쓴다.
+  ② 5회 짧은 시험 정책을 올림 → 거의 학습 안 됨 → 실기기에서 오히려 나빠짐. 본 학습 결과를 쓴다.
+  ③ 2026-11-03 이전 `policy.onnx`(우리 exporter)는 출력에 스케일이 들어 있다 — 지금 corrector에 쓰면 보정이 0.1배로 작아진다. play로 다시 내보낸 걸 쓴다.
 - **A/B 전에 OpenCR를 가만히 둔 채 켠다** — 부팅 2초 동안 자이로 영점을 잡는다. 움직이면 정지 중에도 w_gyro ≠ 0
   (11-02 ab.csv: −0.257 rad/s) → 정책 입력이 오염돼 B가 엉뚱하게 돈다. report 표의 '자이로 정지 바이어스'가 노랗고 경고가 뜨면 재기록.
 - 볼 것 (report 맨 위 표, B vs A가 초록이면 좋아짐): **궤적오차 · 끝점 오차 · 정상상태 RMS** B < A · B 보정량 ≠ 0 (정책이 일함).

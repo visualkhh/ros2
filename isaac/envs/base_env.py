@@ -43,6 +43,9 @@ class BaseEnv(DirectRLEnv):
 
     # ------------------------------------------------------------------ 장면
     def _setup_scene(self):
+        from robots.urdf_to_usd import robot_usd
+
+        robot_usd(self.cfg.robot)   # URDF → USD (바뀌었을 때만) — Isaac 앱이 뜬 지금 (cfg엔 경로만 있다)
         self.robot = Articulation(self.cfg.robot_cfg)
         self.scene.articulations["robot"] = self.robot
         bind_wheel_materials(self.scene.stage, "/World/envs/env_0/Robot", self.cfg.wheel_friction, self.cfg.caster_friction)

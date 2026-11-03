@@ -55,6 +55,12 @@ class RlCorrectEnv(BaseEnv):
 
 
     # ------------------------------------------------------------------ 화면 표시 (--watch · --snap)
+    def _setup_scene(self):
+        from training.rl_correction_wheel_drift.env_cfg import make_terrain
+
+        self.cfg.terrain = make_terrain(self.cfg.slope_deg, self.cfg.uneven)   # cfg 덮어쓰기(env.slope_deg=…)가 반영되게 여기서
+        super()._setup_scene()
+
     def vis_path(self):
         """노란 점 = 명령이 바뀐 순간의 자세에서 그 명령대로 유지 시간 동안 갈 길 (막대는 BaseEnv)."""
         if not hasattr(self, "t_change"):

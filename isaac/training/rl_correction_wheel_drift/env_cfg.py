@@ -63,9 +63,9 @@ class RlCorrectEnvCfg(BaseEnvCfg):
     state_space = 0
 
 
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=2048, env_spacing=3.0, replicate_physics=True)
-    terrain: TerrainImporterCfg = make_terrain(0.0, False)   # train.py가 --slope/--uneven으로 다시 만듦
-    events: EventCfg | None = None                          # train.py가 --friction(기본)이면 EventCfg()
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=512, env_spacing=3.0, replicate_physics=True)   # --num_envs
+    terrain: TerrainImporterCfg = make_terrain(3.0, False)   # env가 장면 만들 때 slope_deg · uneven으로 다시 만든다
+    events: EventCfg | None = EventCfg()                    # env마다 바퀴 마찰 랜덤 — 끄려면 env.events=null
 
     # 정책 출력 [-1, 1] → 보정량 (ONNX export도 같은 값으로 곱해 물리값을 낸다)
     action_scale = (0.10, 0.60)  # [m/s, rad/s]
@@ -90,8 +90,9 @@ class RlCorrectEnvCfg(BaseEnvCfg):
     gyro_bias = 0.05
 
     # 바닥은 make_terrain · 바퀴 마찰 랜덤은 EventCfg · 바퀴/캐스터 기본 마찰은 BaseEnvCfg
-    slope_deg = 0.0    # 기록용 (ranges.json) — 실제 바닥은 terrain
-    uneven = False
+    # 지형 — 공식 학습 스크립트에서 env.slope_deg=5 env.uneven=true 로 바꾼다 (env가 장면 만들 때 make_terrain)
+    slope_deg = 3.0    # 경사 칸 0~DEG° (0 = 없음)
+    uneven = False     # 요철 칸 (턱 1~3 cm)
 
     # 명령: hold_range 초마다 바뀜 (텔레오퍼 키 · 부드러운 곡선 · 정지)
     hold_range = (0.5, 2.0)

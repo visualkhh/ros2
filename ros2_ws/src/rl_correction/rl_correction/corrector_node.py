@@ -3,7 +3,8 @@
 두 모드를 지원한다 (ONNX 입력 차원으로 자동 판별):
 
   track (obs 6)
-    [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change] -> ONNX -> [dV,dW]
+    [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change] -> ONNX -> [-1, 1] 행동 -> clamp × action_scale -> [dV,dW]
+    (Isaac Lab play.py가 내보낸 policy.onnx = 신경망 출력 그대로 — 스케일은 여기서. 2026-11-03 이전 파일은 스케일이 들어 있어 쓰지 말 것)
     /cmd_vel_in -> 보정 -> /cmd_vel_out
 
   goal (obs 10)
@@ -46,6 +47,11 @@ def wrap_to_pi(a: float) -> float:
 def yaw_of(q) -> float:
     return math.atan2(2.0 * (q.w * q.z + q.x * q.y),
                       1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+
+
+def scale_action(out, scale_lin: float, scale_ang: float) -> tuple[float, float]:
+    """정책 출력 [-1, 1] → 물리 보정량 [dV m/s, dW rad/s] (학습 env와 같은 clamp × action_scale)."""
+    return (max(-1.0, min(1.0, float(out[0]))) * scale_lin, max(-1.0, min(1.0, float(out[1]))) * scale_ang)
 
 
 def correct(cmd, delta, max_lin, max_ang):
@@ -181,7 +187,8 @@ class RlCorrector(Node):
                    min(now - self.changed_at, T_CHANGE_MAX)]
             if len(obs) == self.obs_dim:
                 out = self.session.run(None, {self.in_name: np.array([obs], dtype=np.float32)})[0][0]
-                delta = (float(out[0]), float(out[1]))
+                delta = scale_action(out, self.get_parameter('action_scale_lin').value,
+                                     self.get_parameter('action_scale_ang').value)
             else:
                 self.get_logger().warning(
                     f'obs dim {len(obs)} != model {self.obs_dim}: passthrough',

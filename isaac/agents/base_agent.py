@@ -4,7 +4,7 @@ task마다 맞춰야 하는 값은 비워 둔다 (MISSING — task agent.py가 �
   num_steps_per_env · max_iterations · experiment_name
   policy: init_noise_std · actor_hidden_dims · critic_hidden_dims
   algorithm: learning_rate · entropy_coef
-task는 `policy = POLICY.replace(...)` · `algorithm = PPO.replace(...)`로 채운다. 빠지면 check()가 학습 전에 멈춘다.
+task는 `policy = POLICY.replace(...)` · `algorithm = PPO.replace(...)`로 채운다. 빠지면 task cfg가 만들어질 때 check()가 멈춘다.
 """
 from dataclasses import MISSING
 
@@ -30,7 +30,7 @@ PPO = RslRlPpoAlgorithmCfg(
 )
 
 
-# task agent.py가 꼭 채워야 하는 값 (train.py가 학습 전에 check()로 확인)
+# task agent.py가 꼭 채워야 하는 값 (task cfg가 만들어질 때 check()로 확인)
 REQUIRED = ("experiment_name", "num_steps_per_env", "max_iterations",
             "policy.init_noise_std", "policy.actor_hidden_dims", "policy.critic_hidden_dims",
             "algorithm.learning_rate", "algorithm.entropy_coef")
@@ -54,3 +54,7 @@ class BaseAgentCfg(RslRlOnPolicyRunnerCfg):
     logger = "tensorboard"
     policy = POLICY
     algorithm = PPO
+
+    def __post_init__(self):
+        if type(self) is not BaseAgentCfg:   # task cfg가 만들어질 때 (공식 학습 스크립트가 만든다)
+            check(self)

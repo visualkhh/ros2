@@ -1,7 +1,7 @@
 """beebot — TurtleBot3 Waffle Pi 개조 (상판 제거 · LDS-03 1층 앞). 로봇 설정 한 파일.
 
   숫자 (바퀴 · 모터 · 마찰)  표준 라이브러리만 — 리포트 · 실기기 측정 · dummy도 이 파일을 읽는다
-  ROBOT_CFG                 Isaac Lab ArticulationCfg (ANYMAL_C_CFG 관례) — 처음 쓸 때 만든다 (USD 변환에 Isaac 앱 필요)
+  ROBOT_CFG                 Isaac Lab ArticulationCfg (ANYMAL_C_CFG 관례) — 처음 쓸 때 만든다 (USD 경로만, 변환은 env가)
 
 모양 · 질량 · 관절은 urdf/robot.urdf.xacro → usd/ (robots.urdf_to_usd). 마찰 · 모터는 URDF에 없어서 여기서 넣는다.
 숫자는 ROS 쪽과 같아야 한다 (바꾸면 양쪽 같이): ros2_ws/src/tb3_bringup/config/robot.yaml (바퀴) ·
@@ -34,11 +34,11 @@ def _robot_cfg():
     from isaaclab.assets import ArticulationCfg
     from isaaclab.sim.spawners.from_files import UsdFileCfg
 
-    from robots.urdf_to_usd import robot_usd
+    from robots.urdf_to_usd import usd_path
 
     return ArticulationCfg(
         prim_path="/World/Robot",
-        spawn=UsdFileCfg(usd_path=robot_usd(os.path.dirname(os.path.abspath(__file__)))),   # 이 폴더 — 복사해 가도 그대로
+        spawn=UsdFileCfg(usd_path=usd_path(os.path.dirname(os.path.abspath(__file__)))),   # 이 폴더 (변환은 env가 장면 만들 때)
         init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 0.01)),
         actuators={
             "wheels": ImplicitActuatorCfg(
