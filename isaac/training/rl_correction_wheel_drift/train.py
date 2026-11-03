@@ -5,7 +5,7 @@ Usage (isaac/ 에서):
   (= ./isaaclab.sh -p -m training rl_correction_wheel_drift [옵션...])
 기본은 headless. `--watch` = `--visualizer kit` (창 + 랜덤 범위 창, 읽기만, P 키 → 스크린샷).
 512 env는 느리니 `--watch --envs 16` 권장. 바퀴 마찰 랜덤(env마다)은 기본으로 켜짐, 끄려면 `--no-friction`. 바닥 = Isaac Lab 지형 (`--slope` 경사 · `--uneven` 요철).
-실기기 맞춤 값(바퀴 gain · 지연 · τ)은 rl_correct_env_cfg.py에 박혀 있다 (측정 → 숫자 → sensor-sync-sim으로 확인).
+실기기 맞춤 값(바퀴 gain · 지연 · τ)은 env_cfg.py에 박혀 있다 (측정 → 숫자 → sensor-sync-sim으로 확인).
 Eval: 학습이 끝나면 같은 env·같은 seed로 정책 끔(보정 0) / 켬(policy.onnx와 같은 그래프)을 비교 → eval.json.
 결과: isaac/artifacts/training/<시각>-<exp-name>/ (checkpoint·policy.onnx·eval.json·ranges.json·TensorBoard·스크린샷).
 """
@@ -60,14 +60,14 @@ class WheelDriftTrain(Train):
         from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
         from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
-        from training.rl_correction_wheel_drift.agents.rsl_rl_ppo_cfg import Tb3PPORunnerCfg  # noqa: E402
-        from training.rl_correction_wheel_drift.rl_correct_env import RlCorrectEnv  # noqa: E402
-        from training.rl_correction_wheel_drift.rl_correct_env_cfg import RlCorrectEnvCfg  # noqa: E402
+        from training.rl_correction_wheel_drift.agent import RlCorrectAgentCfg  # noqa: E402
+        from training.rl_correction_wheel_drift.env import RlCorrectEnv  # noqa: E402
+        from training.rl_correction_wheel_drift.env_cfg import RlCorrectEnvCfg  # noqa: E402
 
         args, log_dir = self.args, str(self.run_dir)
         env_cfg = RlCorrectEnvCfg()
         env_cfg.scene.num_envs = 1 if args.drive else args.envs
-        from training.rl_correction_wheel_drift.rl_correct_env_cfg import EventCfg, make_terrain  # noqa: E402
+        from training.rl_correction_wheel_drift.env_cfg import EventCfg, make_terrain  # noqa: E402
 
         env_cfg.events = EventCfg() if args.friction else None
         env_cfg.slope_deg, env_cfg.uneven = args.slope, args.uneven
@@ -77,7 +77,7 @@ class WheelDriftTrain(Train):
         self.add_snap_visualizer(env_cfg)
         # 창·스냅샷이 있을 때만 명령/실제 막대 + 목표 경로 표시 (headless 학습엔 영향 없음)
         env_cfg.debug_vis = bool(self.watch or getattr(args, "snap", None))
-        # 이번 학습의 랜덤 범위 기록 (실기기 맞춤 값은 rl_correct_env_cfg.py에 박혀 있다)
+        # 이번 학습의 랜덤 범위 기록 (실기기 맞춤 값은 env_cfg.py에 박혀 있다)
         ranges = {k: list(getattr(env_cfg, k)) for k in RANGE_KEYS} | {k: getattr(env_cfg, k) for k in EXTRA_KEYS}
         print(f"[train] ranges {ranges}")
         (self.run_dir / "ranges.json").write_text(json.dumps(ranges, indent=2, ensure_ascii=False) + "\n")
@@ -85,9 +85,8 @@ class WheelDriftTrain(Train):
         if args.drive:
             return self.drive(RlCorrectEnv, env_cfg)
 
-        agent_cfg = Tb3PPORunnerCfg()
+        agent_cfg = RlCorrectAgentCfg()
         agent_cfg.experiment_name = args.exp_name
-        agent_cfg.logger = "tensorboard"
         agent_cfg.log_dir = log_dir
         if args.iterations:
             agent_cfg.max_iterations = args.iterations

@@ -20,7 +20,7 @@ from isaaclab.utils.math import quat_from_euler_xyz
 from envs.base_env import bind_wheel_materials
 from envs.base_env_cfg import GROUND_FRICTION, OBSTACLE_FRICTION
 from robots.beebot.config import CASTER_FRICTION, ROBOT_CFG, WHEEL_FRICTION
-from envs.rooms.rooms_env import spawn_rooms
+from envs.rooms.env import spawn_rooms
 from envs.base_env import ROBOT_Z
 
 

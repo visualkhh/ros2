@@ -39,6 +39,7 @@ isaac/
 │   ├── default/              DefaultEnv — 아무것도 없는 기본 환경 (새 환경은 이걸 복사해 시작)
 │   ├── rooms/                RoomsEnv — 벽 + 장애물 방 여러 개
 │   ├── drive.py              운전 창 (./run-world.sh) — 로봇 · env · 명령 선택
+├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── robots/beebot/config.py   로봇 정의 한 곳 ROBOT_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트
@@ -104,7 +105,7 @@ cd isaac
 ### 3.3 RL 쪽 env에 숫자 넣기 — real − sim 차이
 
 calibration은 측정만 한다. sim을 real처럼 만드는 건 **각 RL task의 env cfg**가 한다 (task마다 자기 env를 만들고 값을 바꿔가며 맞춘다).
-지금 task(`training/rl_correction_wheel_drift/rl_correct_env_cfg.py`)에 넣은 값 (2026-11-02):
+지금 task(`training/rl_correction_wheel_drift/env_cfg.py`)에 넣은 값 (2026-11-02):
 
 | 값 | 계산 | 2026-11-02 | 학습 cfg |
 |---|---|---|---|
@@ -153,7 +154,7 @@ tensorboard --logdir artifacts/training                          # 진행 그래
 ```bash
 ./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + beebot
 ./run-world.sh --robot <robot>                       # 다른 로봇: robots/ 아래 이름 또는 로봇 디렉토리 경로
-./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/<name>_env.py · <name>_env_cfg.py)
+./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/env.py · env_cfg.py)
 ./run-world.sh --env rooms                          # 방 + 장애물 (N = 다음 방) · envs/ 밖 env는 MOD:CLASS
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
 ./run-world.sh -h

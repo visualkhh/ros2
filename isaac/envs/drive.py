@@ -25,19 +25,19 @@ def load(spec: str):
 
 
 def env_names() -> list[str]:
-    """envs/ 아래 환경 이름 = <이름>/<이름>_env.py가 있는 폴더."""
-    return sorted(d for d in os.listdir(ENVS_DIR) if os.path.isfile(os.path.join(ENVS_DIR, d, f"{d}_env.py")))
+    """envs/ 아래 환경 이름 = env.py가 있는 폴더."""
+    return sorted(d for d in os.listdir(ENVS_DIR) if os.path.isfile(os.path.join(ENVS_DIR, d, "env.py")))
 
 
 def env_specs(env: str, env_cfg: str | None) -> tuple[str, str]:
     """--env (envs/ 이름 또는 MOD:CLASS) · --env-cfg (없으면 규칙으로) → ('mod:Env', 'mod:EnvCfg').
 
-    이름 규칙 (Isaac Lab task 폴더): envs/<name>/<name>_env.py · <Name>Env  +  <name>_env_cfg.py · <Name>EnvCfg
+    이름 규칙: envs/<name>/env.py · <Name>Env  +  envs/<name>/env_cfg.py · <Name>EnvCfg
     MOD:CLASS만 주면 cfg는 같은 자리의 '<mod>_cfg:<Class>Cfg'로 추측한다.
     """
     if env in env_names():
         camel = "".join(w.capitalize() for w in env.split("_"))
-        return f"envs.{env}.{env}_env:{camel}Env", env_cfg or f"envs.{env}.{env}_env_cfg:{camel}EnvCfg"
+        return f"envs.{env}.env:{camel}Env", env_cfg or f"envs.{env}.env_cfg:{camel}EnvCfg"
     if ":" not in env and "." not in env:
         raise SystemExit(f"--env 없음: {env} (envs/에 있는 것: {', '.join(env_names())} · 아니면 MOD:CLASS)")
     mod, _, cls = env.partition(":") if ":" in env else env.rpartition(".")
@@ -48,7 +48,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="키보드 운전 (로봇 · 환경 선택)")
     p.add_argument("--robot", default=None, help="로봇 = robots/ 아래 이름 또는 로봇 디렉토리 (urdf/ · meshes/ · config.py). 기본: env cfg의 로봇 (beebot)")
     p.add_argument("--env", default="default", help="환경: envs/ 아래 이름 (default …) 또는 MOD:CLASS")
-    p.add_argument("--env-cfg", default=None, help="환경 설정 MOD:CLASS (없으면 --env 규칙으로: <name>_env_cfg:<Name>EnvCfg)")
+    p.add_argument("--env-cfg", default=None, help="환경 설정 MOD:CLASS (없으면 --env 규칙으로: envs/<name>/env_cfg.py <Name>EnvCfg)")
     p.add_argument("--cmd", default="keyboard", help="명령: keyboard(직접 운전) · square(네모 54 s, 노란 점 = 목표) · MOD:CLASS")
     p.add_argument("--speed", type=float, default=0.15, help="전진 [m/s]")
     p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")

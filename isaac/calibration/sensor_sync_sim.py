@@ -66,10 +66,10 @@ def _run(args, app, cmd, sess, out):
     import numpy as np
     import torch
 
-    from envs.default.default_env import DefaultEnv
-    from envs.default.default_env_cfg import DefaultEnvCfg
-    from envs.rooms.rooms_env import RoomsEnv
-    from envs.rooms.rooms_env_cfg import RoomsEnvCfg
+    from envs.default.env import DefaultEnv
+    from envs.default.env_cfg import DefaultEnvCfg
+    from envs.rooms.env import RoomsEnv
+    from envs.rooms.env_cfg import RoomsEnvCfg
 
     headless = "kit" not in (getattr(args, "visualizer", None) or [])
     if args.room > 0:   # 방 1개 (측정은 빈 바닥 권장)

@@ -4,7 +4,7 @@ from __future__ import annotations
 from isaaclab.utils import configclass
 
 from envs.base_env_cfg import OBSTACLE_FRICTION
-from envs.default.default_env_cfg import DefaultEnvCfg
+from envs.default.env_cfg import DefaultEnvCfg
 
 
 @configclass

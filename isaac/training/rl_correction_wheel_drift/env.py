@@ -16,13 +16,12 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
+from training.rl_correction_wheel_drift import command
 from robots.beebot import config as beebot
 
 if TYPE_CHECKING:
-    from training.rl_correction_wheel_drift.rl_correct_env_cfg import RlCorrectEnvCfg
+    from training.rl_correction_wheel_drift.env_cfg import RlCorrectEnvCfg
 
-# 텔레오퍼 키 → (전후, 회전) 방향 (tool/cli/op/bus.py TELEOP_MOVES와 같음)
-TELEOP_MOVES = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1, 1))
 
 
 
@@ -74,21 +73,8 @@ class RlCorrectEnv(BaseEnv):
 
     # ------------------------------------------------------------------ 명령
     def _new_commands(self, ids: torch.Tensor):
-        k, dev = len(ids), self.device
-        u = torch.rand(k, device=dev)
-        speed = sample_uniform(0.10, beebot.MAX_LIN, (k,), dev)
-        turn = sample_uniform(0.40, beebot.MAX_ANG, (k,), dev)
-        moves = torch.tensor(TELEOP_MOVES, dtype=torch.float32, device=dev)[torch.randint(0, len(TELEOP_MOVES), (k,), device=dev)]
-        # 텔레오퍼: 사선은 설정 속도 + 반경 DIAG_RADIUS 원호, 제자리 회전은 회전 속도
-        v = moves[:, 0] * speed
-        w = torch.where(moves[:, 0] != 0, moves[:, 1] * speed / beebot.DIAG_RADIUS, moves[:, 1] * turn)
-        smooth = (u >= self.cfg.p_teleop) & (u < self.cfg.p_teleop + self.cfg.p_smooth)
-        v = torch.where(smooth, sample_uniform(0.0, beebot.MAX_LIN, (k,), dev), v)
-        w = torch.where(smooth, sample_uniform(-1.0, 1.0, (k,), dev), w)
-        stop = u >= self.cfg.p_teleop + self.cfg.p_smooth
-        v, w = v * (~stop), w * (~stop)
-        self.cmd[ids] = torch.stack([v, w], dim=-1)
-        self.hold[ids] = sample_uniform(*self.cfg.hold_range, (k,), dev)
+        """명령 새로 뽑기 (command.py) — 유지 시간 · 명령이 바뀐 뒤 시간(관측 t_change)도 같이."""
+        self.cmd[ids], self.hold[ids] = command.sample(len(ids), self.cfg, self.device)
         self.hold_total[ids] = self.hold[ids]
         self.t_change[ids] = 0.0
 

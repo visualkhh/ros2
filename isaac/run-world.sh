@@ -7,7 +7,7 @@
 #               config.py(바퀴 숫자 · ROBOT_CFG) · meshes/)
 #               기본: env cfg의 로봇 (beebot). 바퀴 관절 이름은 wheel_left/right_joint여야 함
 #   --env       환경: envs/ 아래 이름 (기본 default — 아무것도 없는 평평한 바닥) · 없는 이름이면 MOD:CLASS로 직접
-#               이름 규칙: envs/<name>/<name>_env.py <Name>Env + <name>_env_cfg.py <Name>EnvCfg (Isaac Lab task 폴더)
+#               이름 규칙: envs/<name>/env.py <Name>Env + envs/<name>/env_cfg.py <Name>EnvCfg
 #   --env-cfg   환경 설정 MOD:CLASS — 안 주면 --env 규칙으로 (MOD:CLASS면 <mod>_cfg:<Class>Cfg로 추측)
 #               행동이 [v, w] 명령인 env면 된다 (BaseEnv 계열: envs/default · envs/rooms)
 #   --cmd       명령 (commands/): keyboard = 직접 운전 (기본) · square = 네모 54 s (노란 점 = 목표 경로, calibration 측정과 같은 명령)

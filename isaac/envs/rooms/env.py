@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import isaaclab.sim as sim_utils
 
-from envs.default.default_env import DefaultEnv
+from envs.default.env import DefaultEnv
 
 FREE_RADIUS = 0.75      # 방 가운데 로봇 자리 — 장애물 금지
 WALL_H, WALL_T = 1.1, 0.05

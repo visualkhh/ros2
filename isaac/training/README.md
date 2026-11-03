@@ -26,7 +26,7 @@ training/
 ```
 
 - task = `train.py`가 있는 폴더. `Train.main()`(베이스로 호출)은 그 폴더의 `train.main(argv)`로 넘기기만 한다.
-- 새 task는 자기 폴더에 env(`<name>_env.py`)·cfg(`<name>_env_cfg.py`)·`agents/`(Isaac Lab 구조)·URDF를 따로 둘 수 있다. 로봇은 `robots/<이름>/` 폴더(urdf/ · meshes/ · config.py)로 두고 env cfg에서 `robots.use(cfg, "<이름>")`.
+- 새 task는 자기 폴더에 `env.py`·`env_cfg.py`·`command.py`(명령)·`agent.py`(학습자 설정, `../agents/base_agent.py` 상속)·URDF를 따로 둘 수 있다. 로봇은 `robots/<이름>/` 폴더(urdf/ · meshes/ · config.py)로 두고 env cfg에서 `robots.use(cfg, "<이름>")`.
 - 새 task는 `train.py`에서 `Train`을 상속해 `add_args` / `before_launch` / `run`만 구현하고
   `def main(argv=None): return MyTrain.main(argv)`를 둔다. 결과 폴더는 `self.run_dir`.
 - 실기기 맞춤 값(calibration 측정의 real − sim 차이)은 task의 env cfg에 숫자로 넣는다 (task마다 자기 env).
@@ -69,7 +69,7 @@ tensorboard --logdir artifacts/training
 | 노란 점 | **목표 경로** — 랜덤 명령이 바뀐 순간의 자세에서 그 명령대로 유지 시간(0.5~2 s) 동안 갈 길 (env마다 12점) |
 
 로봇이 노란 점에서 벗어나는 만큼이 드리프트다. 학습이 될수록 줄어야 한다. 정지 명령인 env는 경로를 안 그린다.
-구현: `rl_correct_env.py`의 `_set_debug_vis_impl` / `_debug_vis_callback` (Isaac Lab `DirectRLEnv` 훅) +
+구현: `env.py`의 `_set_debug_vis_impl` / `_debug_vis_callback` (Isaac Lab `DirectRLEnv` 훅) +
 `calibration/command_markers.py` (calibration sim과 공용).
 
 ### 직접 운전 (학습 env)
@@ -88,7 +88,7 @@ tensorboard --logdir artifacts/training
 RL이 보정 자체를 대체하지는 못한다. wheel radius/sep 스케일, 바닥 슬립, 캐스터 마찰은
 odom만으로 관측이 안 되므로 sim plant를 먼저 맞춘다 (`calibration/`).
 
-## PPO (`agents/rsl_rl_ppo_cfg.py`)
+## PPO (`../agents/base_agent.py` 공통 · task `agent.py`)
 
 - 512 envs (기본), 20 Hz 정책 주기, `num_steps_per_env = 64`, `max_iterations = 300`
 - actor/critic 64×64, lr `3e-4`, gamma `0.99`, lambda `0.95`, entropy `0.005`, clip `0.2`
