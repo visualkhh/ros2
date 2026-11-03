@@ -27,7 +27,7 @@ training/
 ```
 
 - task = `train.py`가 있는 폴더. `Train.main()`(베이스로 호출)은 그 폴더의 `train.main(argv)`로 넘기기만 한다.
-- 새 task는 자기 폴더에 env(`<name>_env.py`)·cfg(`<name>_env_cfg.py`)·`agents/`(Isaac Lab 구조)·URDF를 따로 둘 수 있다. 로봇은 env cfg에서 `robot_spec.robot_usd("training/<task>/urdf/robot.xacro", "<task>")`(메시는 `<xacro 폴더>/meshes`).
+- 새 task는 자기 폴더에 env(`<name>_env.py`)·cfg(`<name>_env_cfg.py`)·`agents/`(Isaac Lab 구조)·URDF를 따로 둘 수 있다. 로봇은 env cfg에서 `robots/beebot/spec.robot_usd("training/<task>/urdf/robot.xacro", "<task>")`(메시는 `<xacro 폴더>/meshes`).
 - 새 task는 `train.py`에서 `Train`을 상속해 `add_args` / `before_launch` / `run`만 구현하고
   `def main(argv=None): return MyTrain.main(argv)`를 둔다. 결과 폴더는 `self.run_dir`.
 - 보정값(`--fit`) 해석은 task가 한다 (env cfg가 task마다 다르다).
@@ -90,7 +90,7 @@ tensorboard --logdir artifacts/training
 
 ## 보정값과 RL의 관계
 
-- 바닥/바퀴/캐스터 **마찰**은 `assets/tb3_waffle_pi.py` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env마다 바퀴 마찰 랜덤 (events).
+- 바닥/바퀴/캐스터 **마찰**은 `robots/beebot/robot_cfg.py` 기본값 (숨은 보정 파일은 안 읽는다). 기본은 env마다 바퀴 마찰 랜덤 (events).
 - 바퀴 **τ·gain·지연·데드밴드**는 env가 에피소드마다 랜덤으로 뽑는다.
   `--fit`을 주면 그 범위의 **중심을 real fit 값**으로 옮긴다 (폭은 그대로).
 - RL은 그 위의 **잔차**(좌우 비대칭, 슬립, 드리프트)를 학습한다.

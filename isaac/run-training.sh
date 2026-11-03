@@ -16,7 +16,7 @@
 #   --iterations N     학습 반복 (기본 300). 1회 = envs × 64스텝 수집 + PPO 업데이트 (512대 ≈ 5.5 s/회, 300회 ≈ 30분)
 #   --envs N           동시에 학습하는 로봇 수 (기본 512 · 창 볼 땐 16~32)
 #   --fit R,S          real/fit.json,sim/fit.json → 차이를 바퀴 τ·gain·지연(·데드밴드) 랜덤 범위의 중심으로 (폭 유지).
-#                      S는 --fit 없이 잰 raw sim, 학습과 같은 물리(robot_spec.PHYSICS_HZ · ActuatorParam)로 잰 것 — 자동 확인은 없다.
+#                      S는 --fit 없이 잰 raw sim, 학습과 같은 물리(envs/rates.py PHYSICS_HZ · ActuatorParam)로 잰 것 — 자동 확인은 없다.
 #                      1개면 real 값 그대로 (학습 env를 이상적 모터로 보는 것 — 보통은 2개)
 #   --latency CSV      rl-only Before 기록(경로 rl, enable:=false) → RL 경로 왕복 지연을 명령/관측 지연 범위에. PC·Pi 시계가 안 맞으면 거부
 #   --friction / --no-friction   env마다 바퀴 마찰 랜덤 0.7~1.1 (Isaac Lab events, 기본 켜짐)

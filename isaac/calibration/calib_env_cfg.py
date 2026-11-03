@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from isaaclab.utils import configclass
 
-from assets.tb3_waffle_pi import OBSTACLE_FRICTION
+from envs.base_env_cfg import OBSTACLE_FRICTION
 from envs.base_env_cfg import BaseEnvCfg
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from urdf.robot_spec import CONTROL_HZ
+from envs.rates import CONTROL_HZ
 
 
 def wheel_of(fit: dict) -> dict:

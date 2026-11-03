@@ -59,8 +59,8 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
 from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
-from urdf import robot_spec as spec  # noqa: E402
-from assets.tb3_waffle_pi import wheel_targets  # noqa: E402
+from robots.beebot import spec  # noqa: E402
+from envs.base_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
 FRAME_DT = 1 / 60.0

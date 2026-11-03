@@ -103,7 +103,7 @@ cd /home/pank/workspaces/visualkhh/source/ros2/isaac
   ```
   obs = [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]   (6개)
   action = [dV, dW]  →  corrected = cmd + action × (0.10 m/s, 0.60 rad/s)
-  → 바퀴 rad/s → 물리 24스텝(480 Hz, `robot_spec.PHYSICS_HZ`) → reward
+  → 바퀴 rad/s → 물리 24스텝(480 Hz, `envs/rates.py PHYSICS_HZ`) → reward
   ```
 - 키:
   - `1`/`0` action `[0,0]` (보정 없음)

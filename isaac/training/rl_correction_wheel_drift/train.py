@@ -69,7 +69,7 @@ def rl_latency(path) -> dict:
     if not (0.0 <= age < 1.0) or not (0.0 <= proc < 1.0):
         raise ValueError(f"지연이 이상함 (관측 나이 {age}, 처리 {proc} s) — PC·Pi 시계 동기(chrony) 확인, "
                          f"경로 rl · rl-only로 기록한 CSV인지 확인")
-    from urdf.robot_spec import CONTROL_HZ
+    from envs.rates import CONTROL_HZ
     dt = 1.0 / CONTROL_HZ   # 정책 주기
     return {"source": str(Path(path).resolve()), "obs_age_ms": round(age * 1000, 1),
             "proc_ms": round(proc * 1000, 1), "obs_delay_steps": int(round(age / dt)),

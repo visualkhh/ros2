@@ -17,8 +17,8 @@
 
 | 차이 | 어디에 | 파일 |
 |---|---|---|
-| 몸통·바퀴 질량, 관성, 무게중심 | **URDF** (정본) → USD 재생성 | `isaac/urdf/beebot/urdf.xacro` · `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro` |
-| 바퀴 반지름·간격, 라이다 높이, 링크 위치 | **URDF** + `robot_spec.py` 값 | 위 URDF · `isaac/urdf/robot_spec.py` |
+| 몸통·바퀴 질량, 관성, 무게중심 | **URDF** (정본) → USD 재생성 | `isaac/robots/beebot/urdf.xacro` · `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro` |
+| 바퀴 반지름·간격, 라이다 높이, 링크 위치 | **URDF** + `robots/beebot/spec.py` 값 | 위 URDF · `isaac/robots/beebot/spec.py` |
 | 바닥·장애물·바퀴 마찰, 반발 | Isaac Lab **physics material** (Python) | `calibration/parameter/` → `calibration/scene/DefaultScene.py`가 적용 |
 | 모터 τ(1차 지연), gain, 데드밴드 | **parameter** (Python) | `calibration/parameter/WheelLag.py` · `artifacts/sim_calib_<condition>.json` |
 | 명령/관측 지연 (WiFi) | **parameter / env cfg** (Python) | `WheelParam.delay_steps` · `rl_correct_env_cfg.py` |

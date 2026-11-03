@@ -3,7 +3,7 @@
 S4(센서)·S5(주행)에서 **무엇을 재서 무엇과 비교할지** 미리 못 박는다. 각 가설은 실기기에서 잴 수 있어야 하고, 합격/실패가 숫자로 나와야 한다.
 
 - 작성: 2026-10-30
-- 값의 출처: `urdf/beebot/urdf.xacro` · `urdf/robot_spec.py` · `ros2_ws/src/tb3_bringup/config/robot.yaml` · `tool/config`
+- 값의 출처: `robots/beebot/urdf.xacro` · `robots/beebot/spec.py` · `ros2_ws/src/tb3_bringup/config/robot.yaml` · `tool/config`
 - **TODO** = 아직 실측 안 함. S4/S5에서 채운다.
 
 ## H1 — 기하·질량
@@ -17,7 +17,7 @@ S4(센서)·S5(주행)에서 **무엇을 재서 무엇과 비교할지** 미리 
 | 라이다 높이 | 0.022 m | 줄자 | ±3 mm |
 | 몸통 외곽 | x −0.197~+0.069 · y ±0.139 | 줄자 | ±5 mm |
 
-측정: `isaac/urdf/check_same.sh`로 ROS/Isaac URDF가 같은지 먼저 확인. 무게는 배터리·라이다 포함 실제 주행 상태로.
+측정: `isaac/robots/check_same.sh`로 ROS/Isaac URDF가 같은지 먼저 확인. 무게는 배터리·라이다 포함 실제 주행 상태로.
 
 ## H2 — 바퀴 명령 → 속도 (기구학)
 
@@ -85,8 +85,8 @@ w_enc = r·(wr − wl)/sep
 
 | 값 | 출처 |
 |---|---|
-| 바퀴 반지름 0.033 · 간격 0.287 · 최대 8 rad/s | `robot_spec.py` · `opencr_driver.wheel_speeds` |
-| 최대 0.26 m/s · 1.82 rad/s | `robot_spec.py` · `cmd_manager` |
+| 바퀴 반지름 0.033 · 간격 0.287 · 최대 8 rad/s | `robots/beebot/spec.py` · `opencr_driver.wheel_speeds` |
+| 최대 0.26 m/s · 1.82 rad/s | `robots/beebot/spec.py` · `cmd_manager` |
 | 제어 20 Hz | `cmd_manager` |
 | 스캔 높이 0.022 m | URDF `lidar_z` |
 | 몸통 1.4 kg (근사) | URDF `inertial` |

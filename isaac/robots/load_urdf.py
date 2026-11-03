@@ -1,7 +1,7 @@
 """URDF headless load check: xacro -> URDF -> USD -> spawn -> step 200 frames.
 
 Usage (Lab venv):
-  ./isaaclab.sh -p isaac/urdf/load_urdf.py
+  ./isaaclab.sh -p isaac/robots/load_urdf.py
 Prints joint/link list + base height (should stay ~0.01, not fall).
 """
 import sys
@@ -21,11 +21,11 @@ from isaaclab.sim import SimulationCfg  # noqa: E402
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, UsdFileCfg, spawn_ground_plane  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
-from urdf.robot_spec import robot_usd  # noqa: E402
+from robots.usd import robot_usd  # noqa: E402
 
 
 def main():
-    usd_path = robot_usd()
+    usd_path = robot_usd("beebot")
     print(f"[urdf] usd -> {usd_path}")
 
     sim_cfg = SimulationCfg(dt=1 / 120)

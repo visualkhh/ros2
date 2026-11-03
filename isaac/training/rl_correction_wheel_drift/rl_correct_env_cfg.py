@@ -11,7 +11,7 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
 from isaaclab.utils import configclass
 
-from assets.tb3_waffle_pi import GROUND_FRICTION
+from envs.base_env_cfg import GROUND_FRICTION
 from envs.base_env_cfg import BaseEnvCfg
 
 from envs.base_env_cfg import GROUND as _GROUND  # noqa: E402

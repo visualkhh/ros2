@@ -14,9 +14,10 @@ from collections import deque
 from commands.square import SquareCommand
 from calibration.fit import load_fit, wheel_of
 from calibration.record import record, run_path
-from urdf import robot_spec as spec
+from envs import rates
+from robots.beebot import spec
 
-R, SEP, MAX_WHEEL, DT = spec.WHEEL_RADIUS, spec.WHEEL_SEP, spec.MAX_WHEEL, 1.0 / spec.CONTROL_HZ
+R, SEP, MAX_WHEEL, DT = spec.WHEEL_RADIUS, spec.WHEEL_SEP, spec.MAX_WHEEL, 1.0 / rates.CONTROL_HZ
 
 
 def _lag(state, target, tau):

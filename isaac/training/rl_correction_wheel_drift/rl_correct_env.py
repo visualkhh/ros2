@@ -16,7 +16,7 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
-from urdf import robot_spec as spec
+from robots.beebot import spec
 
 if TYPE_CHECKING:
     from training.rl_correction_wheel_drift.rl_correct_env_cfg import RlCorrectEnvCfg

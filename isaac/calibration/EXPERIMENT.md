@@ -307,7 +307,7 @@ CSV 열:
 | 차이 | 고칠 곳 |
 |---|---|
 | 바퀴 스케일/부호 (`wl`, `wr`) | `robot.yaml` `left_dir/right_dir` · 펌웨어 ID/방향 · URDF 바퀴 위치 |
-| `v_enc`/`w_enc` 스케일 | `wheel_radius` · `wheel_separation` (real: `robot.yaml`, sim: `robot_spec.py`/URDF) |
+| `v_enc`/`w_enc` 스케일 | `wheel_radius` · `wheel_separation` (real: `robot.yaml`, sim: `robots/beebot/spec.py`/URDF) |
 | sim이 바닥에서만 미끄러짐/틀어짐 | `calibration/parameter/`의 마찰 (또는 `sim_calib_floor.json`) |
 | real만 느림 (t90 큼) | real은 그대로. sim `WheelLag`의 `tau`/`delay` |
 | `w_gyro` 부호 반대 | IMU 축/부호 (real: driver/firmware/URDF; sim: `root_ang_vel_b`) |

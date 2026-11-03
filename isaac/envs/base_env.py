@@ -21,9 +21,6 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
 
-from assets.tb3_waffle_pi import bind_wheel_materials, wheel_targets
-from urdf import robot_spec as spec
-
 if TYPE_CHECKING:
     from envs.base_env_cfg import BaseEnvCfg
 
@@ -38,8 +35,8 @@ class BaseEnv(DirectRLEnv):
         self._wheels, _ = self.robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
         n, dev = self.num_envs, self.device
         self.policy_dt = self.cfg.sim.dt * self.cfg.decimation
-        self.r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
-        self.sep = torch.tensor([spec.WHEEL_SEP], device=dev)
+        self.r = torch.tensor([self.cfg.wheel_radius], device=dev)
+        self.sep = torch.tensor([self.cfg.wheel_sep], device=dev)
         self.cmd = torch.zeros(n, 2, device=dev)       # 이번 스텝 명령 [v, w]
         self.target = torch.zeros(n, 2, device=dev)    # 바퀴 속도 목표 [rad/s]
         self.path_w = None                             # 목표 경로 점 (m, 3) — 화면용, 스크립트가 넣음
@@ -63,7 +60,7 @@ class BaseEnv(DirectRLEnv):
 
     # ------------------------------------------------------------------ 로봇 식 (드라이버와 같음)
     def wheel_speeds(self, v: torch.Tensor, w: torch.Tensor, r=None, sep=None) -> torch.Tensor:
-        return wheel_targets(v, w, self.r if r is None else r, self.sep if sep is None else sep, spec.MAX_WHEEL)
+        return wheel_targets(v, w, self.r if r is None else r, self.sep if sep is None else sep, self.cfg.max_wheel)
 
     def encoders(self, r=None, sep=None) -> tuple[torch.Tensor, torch.Tensor]:
         """/odom v · w = 바퀴 rad/s를 기준 반지름 · 간격으로 (드라이버 식). (n,) 둘."""
@@ -169,3 +166,39 @@ class BaseEnv(DirectRLEnv):
         v, w = self.true_twist()
         self.markers.update(d.root_pos_w.torch, self.markers.yaw_of(d.root_quat_w.torch),
                             self.cmd[:, 0], self.cmd[:, 1], v, w, self.vis_path())
+
+
+def wheel_targets(v, w, r, sep, max_wheel):
+    """Twist → (좌, 우) 바퀴 rad/s. 한 바퀴라도 max_wheel을 넘으면 두 바퀴를 같은 비율로 (= opencr_driver.wheel_speeds)."""
+    import torch
+
+    wl = (v - w * sep / 2.0) / r
+    wr = (v + w * sep / 2.0) / r
+    wheels = torch.stack([wl, wr], dim=-1)
+    peak = wheels.abs().max(dim=-1, keepdim=True).values
+    return wheels * torch.clamp(max_wheel / (peak + 1e-9), max=1.0)
+
+
+def bind_wheel_materials(stage, robot_root: str, wheel, caster) -> None:
+    """바퀴 · 캐스터 충돌체에 마찰 재질 (robot_root 아래 전부 — 복제 전 env_0에 붙이면 복제로 퍼진다).
+
+    URDF importer는 generic RigidBodyAPI만 넣는다 → PhysX 센서 뷰가 요구하는 PhysxRigidBodyAPI도 붙인다.
+    """
+    import isaaclab.sim as sim_utils
+    from pxr import PhysxSchema, UsdPhysics
+
+    for name, fr, mode in (("wheel", wheel, "average"), ("caster", caster, "min")):
+        mat = sim_utils.RigidBodyMaterialCfg(static_friction=fr[0], dynamic_friction=fr[1],
+                                             restitution=0.0, friction_combine_mode=mode)
+        mat.func(f"/World/Materials/{name}", mat)
+    for prim in stage.Traverse():
+        path = str(prim.GetPath())
+        if not path.startswith(robot_root):
+            continue
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI) and not prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
+            PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
+        if prim.HasAPI(UsdPhysics.CollisionAPI):
+            for name in ("wheel", "caster"):
+                if name in path:
+                    sim_utils.bind_physics_material(path, f"/World/Materials/{name}")
+                    break

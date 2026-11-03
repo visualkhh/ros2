@@ -16,7 +16,7 @@ training/rl_correction_wheel_drift/
 └── README.md
 ```
 
-공용: `../../urdf/robot_spec.py` · `../onnx/onnx_export.py` · `../../calibration/` (`--fit`)
+공용: `../../robots/beebot/spec.py` · `../onnx/onnx_export.py` · `../../calibration/` (`--fit`)
 
 ## 환경
 

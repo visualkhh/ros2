@@ -19,7 +19,7 @@ from isaaclab.app import AppLauncher
 from commands.square import SquareCommand
 from calibration.fit import describe, load_fit, wheel_of
 from calibration.record import ISAAC, record, run_path
-from urdf import robot_spec as spec
+from robots.beebot import spec
 
 TAG = "02-sim"
 

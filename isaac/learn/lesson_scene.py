@@ -17,7 +17,9 @@ from isaaclab.sim.spawners.from_files import GroundPlaneCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.math import quat_from_euler_xyz
 
-from assets.tb3_waffle_pi import GROUND_FRICTION, OBSTACLE_FRICTION, TB3_CFG, bind_wheel_materials
+from envs.base_env import bind_wheel_materials
+from envs.base_env_cfg import GROUND_FRICTION, OBSTACLE_FRICTION
+from robots.beebot.robot_cfg import CASTER_FRICTION, ROBOT_CFG, WHEEL_FRICTION
 from calibration.calib_env import spawn_rooms
 from envs.base_env import ROBOT_Z
 
@@ -28,7 +30,7 @@ class TB3SceneCfg(InteractiveSceneCfg):
         static_friction=GROUND_FRICTION[0], dynamic_friction=GROUND_FRICTION[1], restitution=0.0,
         friction_combine_mode="average")))
     light = AssetBaseCfg(prim_path="/World/light", spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(0.95, 0.95, 0.95)))
-    robot = TB3_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
 
 def rooms(count: int, size: float, seed: int = 0) -> list[dict]:
@@ -38,7 +40,7 @@ def rooms(count: int, size: float, seed: int = 0) -> list[dict]:
 
 def ready(sim, scene, steps: int = 120) -> float:
     """바퀴 재질 → sim.reset → 스폰 높이에서 떨어져 서게 (렌더는 마지막만). 반환: 몸체 높이 [m]."""
-    bind_wheel_materials(scene.stage, "/World/envs/env_0/Robot")
+    bind_wheel_materials(scene.stage, "/World/envs/env_0/Robot", WHEEL_FRICTION, CASTER_FRICTION)
     sim.reset()
     scene.reset()
     dt = sim.get_physics_dt()

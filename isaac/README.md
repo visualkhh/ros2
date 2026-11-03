@@ -32,13 +32,13 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-training.sh           학습 실행기 (IsaacLab, 기본 headless)
-├── run-world.sh              직접 운전 — 로봇(--usd-dir) · 환경(--env --env-cfg) 골라서 (기본 envs/default)
+├── run-world.sh              직접 운전 — 로봇(--robot) · 환경(--env --env-cfg) 골라서 (기본 envs/default)
 ├── envs/                     환경 바탕 — 모든 env가 상속
 │   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
 │   ├── default/              DefaultEnv — 아무것도 없는 기본 환경 (새 환경은 이걸 복사해 시작)
 │   ├── drive.py              운전 창 (./run-world.sh) — 로봇 · env · 명령 선택
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
-├── assets/tb3_waffle_pi.py   로봇 정의 한 곳 TB3_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
+├── robots/beebot/robot_cfg.py   로봇 정의 한 곳 ROBOT_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트       → calibration/README.md
 │   ├── calib_env.py · calib_env_cfg.py   Isaac Lab Direct env (로봇 1대 · 바퀴 모델 · 방+장애물)
 │   ├── sensor_sync_sim.py · sensor_sync_real.py · dummy_sensor.py · random_world.py   실행 스크립트
@@ -48,16 +48,17 @@ isaac/
 │   ├── trainer.py            실행기 + task 공통 베이스 (task 찾기 · --watch · 결과 폴더 · P 키 스크린샷)
 │   ├── onnx/onnx_export.py   actor → ONNX
 │   └── rl_correction_wheel_drift/   task: env · PPO 설정 · train.py · fit_panel(보정값 창)
-├── urdf/                     학습용 URDF(ROS용과 같은 내용 — urdf/check_same.sh) · robot_spec.py(로봇 숫자 한 곳)
+├── robots/                   로봇마다 폴더 (Isaac Lab isaaclab_assets/robots 관례) · usd.py 변환 · check_same.sh(ROS URDF와 같은지)
+│   └── beebot/               urdf.xacro · meshes/ · usd/(변환물, git 제외) · spec.py(바퀴 숫자) · robot_cfg.py(ROBOT_CFG · 모터 · 마찰)
 ├── learn/                    Isaac 개념 실습 L1~L5
 ├── artifacts/                산출물 (git 제외) — calibration/ · training/ · real/
 ├── requirements.txt · setup_venv.sh   실기기·리포트용 .venv (sim/학습은 IsaacLab venv)
 ```
 
-로봇 숫자(`urdf/robot_spec.py`): 바퀴 반지름 0.033 m · 간격 0.287 m · 최대 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 정책 20 Hz · 물리 480 Hz.
-USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd()` → `urdf/<robot>/usd/`, git 제외).
-따로 변환만: `$ISAACLAB_DIR/isaaclab.sh -p urdf/convert_urdf.py`.
-다른 로봇: `urdf/<이름>/`에 `urdf.xacro` + `meshes/`를 두고 `robot_usd("<이름>")` — 인자 없이 쓰면 우리 로봇(`beebot`).
+로봇 숫자(`robots/beebot/spec.py`): 바퀴 반지름 0.033 m · 간격 0.287 m · 최대 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s. 주기(`envs/rates.py`): 정책 20 Hz · 물리 480 Hz.
+USD는 URDF · 메시가 바뀌면 자동으로 다시 변환된다 (`robots/usd.py` `robot_usd()` → `robots/<robot>/usd/`, git 제외).
+따로 변환만: `$ISAACLAB_DIR/isaaclab.sh -p robots/convert_urdf.py`.
+다른 로봇: `robots/<이름>/`에 `urdf.xacro` + `meshes/` + `spec.py` + `robot_cfg.py`(`ROBOT_CFG`)를 두고 `./run-world.sh --robot <이름>` (코드에선 `robots.use(env_cfg, "<이름>")`).
 측정 경로를 바꾸려면 `commands/square.py`(또는 BaseCommand를 상속한 새 명령), calibration 장면은 `calibration/calib_env_cfg.py` · `calib_env.py`를 고친다.
 
 ## 3. 절차 (2026-11-02 실제로 돈 순서)
@@ -130,7 +131,7 @@ tensorboard --logdir artifacts/training                           # 진행 그�
 
 - **`--fit`은 꼭 준다.** 3.2의 sim은 지연 0 — 실기기 지연 0.1 s는 `--fit`이 학습 env 모터 모델(바퀴 τ·gain·지연 랜덤 범위)의
   **중심**으로 넣어야 들어간다 (폭은 유지). 궤적 그림이 비슷해 보여도 지연은 그림에 안 보인다.
-- `--fit`의 sim은 학습과 **같은 물리 설정**(`robot_spec.PHYSICS_HZ`)으로 잰 raw여야 한다.
+- `--fit`의 sim은 학습과 **같은 물리 설정**(`envs/rates.py PHYSICS_HZ`)으로 잰 raw여야 한다.
 - 창 없이 돌면서 보고 싶으면 `--snap 60`: 60초마다 `<결과>/snaps/<시각>.png` + `<결과>/latest.png`(최신으로 덮어씀).
   `eog <결과>/latest.png`로 열어 두면 바뀔 때 다시 그린다. 렌더가 켜져 학습이 ~20% 느려진다 (32대 5.2→6.2 s/iter).
   P 키 스크린샷은 `--watch`(창)에서만.
@@ -167,7 +168,7 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 
 ```bash
 ./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + beebot
-./run-world.sh --usd-dir urdf/<robot>                # 다른 로봇 (urdf/<robot>/urdf.xacro → USD, 또는 USD 폴더/파일)
+./run-world.sh --robot <robot>                       # 다른 로봇 (robots/<robot>/)
 ./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
 ./run-world.sh -h
@@ -219,10 +220,10 @@ cd ../ros2_ws
 
 1. **볼 캐스터 마찰** (2026-11-02 고침): calibration sim이 캐스터 마찰 0을 바닥과 `average`로 합쳐 0.4로 끌림 →
    바퀴가 명령의 87~95%만 냄(사각형 37 cm 어긋남). 학습 env처럼 `min` → gain ≈ 1.
-2. **물리 480 Hz** (2026-11-02, `urdf/robot_spec.py` `PHYSICS_HZ`): 120 Hz는 제자리 회전 때 바퀴가 붙었다 미끄러져 떨림.
+2. **물리 480 Hz** (2026-11-02, `robots/beebot/spec.py` `PHYSICS_HZ`): 120 Hz는 제자리 회전 때 바퀴가 붙었다 미끄러져 떨림.
    정상 회전 구간 바퀴 속도 표준편차 120 Hz 0.62 · 240 Hz 0.15 · 360 Hz 0.11 · **480 Hz 0.027** · real 0.018 rad/s.
    solver 반복(16/4)·바퀴 마찰 0.6은 거의 효과 없음. calibration sim · 랜덤 월드 · 학습 env가 같은 값을 쓴다.
-3. **damping/effort는 고정** (`assets/tb3_waffle_pi.py` WHEEL_DAMPING 50) — 바꿔도 sim 응답이 안 변해서 calibration 변수에서 뺐다.
+3. **damping/effort는 고정** (`robots/beebot/robot_cfg.py` WHEEL_DAMPING 50) — 바꿔도 sim 응답이 안 변해서 calibration 변수에서 뺐다.
 4. **남은 차이**: 회전 때 몸체가 바퀴보다 덜 돎 — real 자이로/명령 0.950 vs 엔코더 0.995 (5%), sim 0.956 vs 1.017.
    학습 env의 바퀴 간격 오차 랜덤 범위(±8%)가 덮는다.
 5. **데드밴드** — 측정 경로에 저속 구간이 없어 fit의 0은 "못 잼". 학습은 기본 범위(0~0.3) 사용.
