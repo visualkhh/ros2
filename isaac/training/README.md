@@ -31,16 +31,16 @@ training/
 ```
 
 새 task: 폴더를 만들고 위 파일들을 둔다 (이름 고정 — `robot_cfg.py` · `usda/robot.usda`) (`__init__.py`의 등록 이름이 `--task` 값).
-로봇 = task 폴더의 `robot_cfg.py` + `usda/robot.usda` (`robots.DEFAULT`). 다른 로봇: `./run-training.sh env.robot=<이름|폴더>`. 그 로봇의 `robot_cfg.py`가 바퀴 숫자와 **실측 응답**(`RESPONSE_*`)을 채우고, task는 그 주변 랜덤 폭만 갖는다.
+로봇 = task 폴더의 `robot_cfg.py` + `usda/robot.usda` (`robots.DEFAULT`). 다른 로봇: `./run-training.sh rl_correction_waypoint env.robot=<이름|폴더>`. 그 로봇의 `robot_cfg.py`가 바퀴 숫자와 **실측 응답**(`RESPONSE_*`)을 채우고, task는 그 주변 랜덤 폭만 갖는다.
 `__init__.py`는 Isaac 앱보다 먼저 import되므로 등록은 문자열 위치만 적는다.
 
 ## 실행 (`../run-training.sh` — 공식 스크립트를 우리 task로)
 
 ```bash
 cd isaac
-./run-training.sh --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
-./run-training.sh --max_iterations 500 env.uneven=true                             # 본 학습 (창 없음, 512대)
-./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # 재생 + ONNX 내보내기 (Ctrl+C)
+./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
+./run-training.sh rl_correction_waypoint --max_iterations 500 env.uneven=true                             # 본 학습 (창 없음, 512대)
+./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # 재생 + ONNX 내보내기 (Ctrl+C)
 tensorboard --logdir logs/rsl_rl
 ./run-training.sh -h                                                               # 자주 쓰는 옵션 · cfg 덮어쓰기
 ```

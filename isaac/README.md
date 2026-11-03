@@ -31,7 +31,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 ```text
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
-├── run-training.sh           학습 · 재생 — Isaac Lab 공식 train.py · play.py를 우리 task로 (logs/rsl_rl/)
+├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py, logs/rsl_rl/)
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh <이름|디렉토리>)
 ├── run-world.sh              world 보기 — ./run-world.sh <task> [--calibration] [--command=keyboard]
 ├── envs/                     환경 바탕 — 모든 env가 상속
@@ -124,17 +124,17 @@ calibration은 측정만 한다. 잰 차이는 **로봇 설정**(`robot_cfg.py`�
 | 데드밴드 | real ÷ sim gain (sim이 더 크면 0) | 0 | `RESPONSE_DEADBAND` |
 
 real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)에 **더해지는** 값이라 차이만 넣는다.
-맞았는지는 그 env로 학습 장면을 보며(`./run-training.sh --num_envs 16 --viz kit env.debug_vis=true`) 확인한다.
+맞았는지는 그 env로 학습 장면을 보며(`./run-training.sh rl_correction_waypoint --num_envs 16 --viz kit env.debug_vis=true`) 확인한다.
 
 ### 3.4 학습 — Isaac Lab 공식 train.py · play.py
 
 ```bash
-./run-training.sh --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
-./run-training.sh --max_iterations 500                                            # 본 학습 (창 없음, 512대)
-./run-training.sh --max_iterations 500 env.uneven=true env.slope_deg=5            # + 요철 · 경사 5°
+./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
+./run-training.sh rl_correction_waypoint --max_iterations 500                                            # 본 학습 (창 없음, 512대)
+./run-training.sh rl_correction_waypoint --max_iterations 500 env.uneven=true env.slope_deg=5            # + 요철 · 경사 5°
 tensorboard --logdir logs/rsl_rl                                                  # 진행 그래프 (다른 터미널)
 #   → logs/rsl_rl/rl_waypoint/<시각>/ (model_<N>.pt · params/env.yaml · TensorBoard)
-./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1
+./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1
 #   → <시각>/exported/policy.onnx + policy.onnx.data (+ policy.pt) — 내보낸 뒤 재생이 계속 돈다, Ctrl+C로 끝
 ```
 
@@ -149,7 +149,7 @@ tensorboard --logdir logs/rsl_rl                                                
 ### 3.4b 정책 보기 — 실기기 전에
 
 ```bash
-./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true   # 학습 env에서 정책 재생
+./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true   # 학습 env에서 정책 재생
 ```
 
 - 학습 env는 실측 값이 들어간 sim이라 정책 효과가 보인다 (노란 선 = 웨이포인트 경로).

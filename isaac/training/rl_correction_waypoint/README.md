@@ -43,9 +43,9 @@ training/rl_correction_waypoint/
 
 ```bash
 cd isaac
-./run-training.sh --max_iterations 500                                   # 기본 task = RlCorrectionWaypoint (창 없음, 512대)
-./run-training.sh --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 창 (노란 점 = 웨이포인트 경로)
-./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true
+./run-training.sh rl_correction_waypoint --max_iterations 500                                   # task 폴더 → gym RlCorrectionWaypoint (창 없음, 512대)
+./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 창 (노란 점 = 웨이포인트 경로)
+./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true
 tensorboard --logdir logs/rsl_rl          # Metrics/cross_track (경로 이탈 평균) · Metrics/waypoints_done (평균 도착 수)
 ```
 
@@ -97,8 +97,8 @@ cd isaac
 
 ```bash
 # 1) 학습 → 재생으로 ONNX 내보내기 (PC isaac/)
-./run-training.sh --max_iterations 500
-./run-training.sh play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # → <시각>/exported/policy.onnx (+ .onnx.data)
+./run-training.sh rl_correction_waypoint --max_iterations 500
+./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # → <시각>/exported/policy.onnx (+ .onnx.data)
 # 2) 로봇 쪽은 calibration과 같게: base start · route rl (MANUAL)
 ```
 
