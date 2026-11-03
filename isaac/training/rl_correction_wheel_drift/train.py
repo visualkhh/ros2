@@ -114,11 +114,22 @@ class WheelDriftTrain(Train):
                             help="에피소드마다 자이로 영점 오차 ±RAD_S 랜덤 (기본: cfg 0.05, 0 = 끔)")
         parser.add_argument("--fit", default=None,
                             help="real/fit.json,sim/fit.json → 차이를 바퀴 랜덤 범위 중심으로 (1개면 real 값 그대로)")
+        parser.add_argument("--drive", action="store_true",
+                            help="학습 대신 키보드로 직접 운전 (학습 env 그대로 · 창 · W/A/S/D · C 정책 켬/끔 · R 리셋) — world.sh")
+        parser.add_argument("--policy", default=None, metavar="ONNX",
+                            help="--drive에서 보정에 쓸 정책 (C 키로 켬/끔, 기본 켬)")
+        parser.add_argument("--speed", type=float, default=0.15, help="--drive 전진 [m/s] (Shift = 0.3배)")
+        parser.add_argument("--turn", type=float, default=1.0, help="--drive 회전 [rad/s]")
+        parser.add_argument("--size", type=float, default=8.0, help="--drive 바닥판 한 변 [m] (학습은 3 m, 판 밖은 떨어짐)")
         parser.add_argument("--latency", default=None,
                             help="rl-only Before CSV (경로 rl, enable:=false) → RL 경로 지연을 명령·관측 지연 범위에")
 
     @classmethod
     def before_launch(cls, args, parser):
+        if args.policy and not Path(args.policy).is_file():
+            parser.error(f"--policy 파일 없음: {args.policy}")
+        if args.drive and "kit" not in (args.visualizer or []):
+            parser.error("--drive는 창이 필요 — --watch를 같이 (world.sh가 붙여 줌)")
         # sim 띄우기 전에 fit부터 읽어서 잘못된 경로면 바로 실패
         args.base_fit = None
         if args.fit:
@@ -142,7 +153,9 @@ class WheelDriftTrain(Train):
 
         args, base_fit, lat, log_dir = self.args, self.args.base_fit, self.args.latency_info, str(self.run_dir)
         env_cfg = RlCorrectEnvCfg()
-        env_cfg.scene.num_envs = args.envs
+        env_cfg.scene.num_envs = 1 if args.drive else args.envs
+        if args.drive:
+            env_cfg.scene.env_spacing = args.size   # 바닥판 한 변 ≈ spacing — 학습(3 m)보다 넓게 (판 밖은 낭떠러지)
         env_cfg.randomize_friction = args.friction
         env_cfg.friction_patch_count = args.patch_count
         env_cfg.slope_deg = args.slope
@@ -165,6 +178,9 @@ class WheelDriftTrain(Train):
                 {"source": base_fit and base_fit["source"],
                  "fit": base_fit and {k: v for k, v in base_fit.items() if k != "source"},
                  "latency": lat, "ranges": ranges}, indent=2, ensure_ascii=False) + "\n")
+
+        if args.drive:
+            return self.drive(RlCorrectEnv, env_cfg)
 
         agent_cfg = Tb3PPORunnerCfg()
         agent_cfg.experiment_name = args.exp_name
@@ -196,6 +212,82 @@ class WheelDriftTrain(Train):
             result = self.evaluate(env.unwrapped, runner.alg._raw_actor, env_cfg.action_scale, path)
         (self.run_dir / "eval.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
         env.close()
+
+    def drive(self, env_cls, env_cfg) -> None:
+        """학습 env(기울기·패치·요철·바퀴 랜덤 그대로, 로봇 1대)를 키보드로 운전. 랜덤 명령 대신 키 입력이 명령.
+
+        정책은 ros2 corrector와 같은 규칙: 관측 6개 → ONNX 보정량(물리값) → env가 [-1,1]로 받아 scale 곱함 · 정지 명령엔 0.
+        """
+        import time
+
+        import carb.input
+        import omni.appwindow
+        import omni.kit.app
+        import torch
+        from isaaclab_visualizers.kit import KitVisualizerCfg
+
+        args = self.args
+        env_cfg.episode_length_s = 1e6   # 시간 초과 리셋 없음 (R 키로만)
+        env_cfg.sim.visualizer_cfgs = [KitVisualizerCfg(origin_type="asset", origin_track_path="robot",
+                                                        eye=(-1.2, -1.2, 1.0), lookat=(0.0, 0.0, 0.0))]   # 로봇 따라감
+        raw = env_cls(env_cfg)
+        self.env = raw
+        sess = None
+        if args.policy:
+            import onnxruntime as ort
+            sess = ort.InferenceSession(args.policy, providers=["CPUExecutionProvider"])
+        use_policy = sess is not None
+        # 키 상태 폴링 (calibration/world/DefaultWorld.py Keyboard와 같은 방식 — 그 파일은 스크립트라 import 안 함)
+        inp, kbd = carb.input.acquire_input_interface(), omni.appwindow.get_default_app_window().get_keyboard()
+        names = ("W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "LEFT_SHIFT", "RIGHT_SHIFT", "X", "C", "R")
+        keymap = {n: getattr(carb.input.KeyboardInput, n) for n in names}
+
+        def pressed() -> set:
+            return {n for n, key in keymap.items() if inp.get_keyboard_button_flags(kbd, key) & (1 << 3)}
+
+        def held(keys, *names_):
+            return any(n in keys for n in names_)
+
+        obs, _ = raw.reset()
+        last_cmd, prev_keys, t_print = None, set(), 0.0
+        print("[drive] W/A/S/D(↑←↓→) 주행 · Shift 느리게 · X 정지 · C 정책 켬/끔 · R 리셋(새 바닥 랜덤) · 창 닫으면 끝", flush=True)
+        print(f"[drive] 정책 {'켬 ' + args.policy if use_policy else '없음 (바이패스)'}", flush=True)
+        app = omni.kit.app.get_app()
+        while app.is_running():
+            t0 = time.monotonic()
+            keys = pressed()
+            new = keys - prev_keys
+            prev_keys = keys
+            if "C" in new and sess is not None:
+                use_policy = not use_policy
+                print(f"[drive] 정책 {'켬' if use_policy else '끔 (바이패스)'}", flush=True)
+            if "R" in new:
+                obs, _ = raw.reset()
+            k = 0.3 if held(keys, "LEFT_SHIFT", "RIGHT_SHIFT") else 1.0
+            v = args.speed * k * (held(keys, "W", "UP") - held(keys, "S", "DOWN"))
+            w = args.turn * k * (held(keys, "A", "LEFT") - held(keys, "D", "RIGHT"))
+            if "X" in keys:
+                v = w = 0.0
+            cmd = (v, w)
+            raw.cmd[:] = torch.tensor(cmd, device=raw.device)
+            raw.hold[:] = 1e9            # env가 랜덤 명령으로 바꾸지 않게
+            raw.hold_total[:] = 2.0      # 노란 점 = 지금 명령대로 2 s 갈 길
+            if cmd != last_cmd:
+                raw.t_change[:] = 0.0    # 관측 t_change (학습 때와 같은 뜻)
+                last_cmd = cmd
+            act = torch.zeros((1, 2), device=raw.device)
+            if use_policy:
+                d = sess.run(None, {"obs": obs["policy"][:1].detach().cpu().numpy().astype("float32")})[0]
+                act = (torch.as_tensor(d, device=raw.device) / raw.scale).clamp(-1.0, 1.0)
+            obs, *_ = raw.step(act)
+            if t0 - t_print > 0.5 and (v or w):   # 움직일 때만
+                t_print = t0
+                vt, wt = raw._true_twist()
+                dl = raw.delta[0].tolist()
+                print(f"[drive] 명령 v {v:+.2f} w {w:+.2f} | 실제 v {float(vt[0]):+.3f} w {float(wt[0]):+.3f} | "
+                      f"보정 Δv {dl[0]:+.3f} Δw {dl[1]:+.3f} | 정책 {'켬' if use_policy else '끔'}", flush=True)
+            time.sleep(max(0.0, raw.policy_dt - (time.monotonic() - t0)))   # 실시간 (정책 주기 50 ms)
+        raw.close()
 
     def evaluate(self, raw, actor, action_scale, onnx_path, episodes: int = 3, seed: int = 7) -> dict:
         """sim Before/After — 같은 env·같은 seed(같은 랜덤화·명령)로 정책 끔(보정 0) / 켬.

@@ -159,6 +159,19 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 - 옵션 전체 · 화면 · sim play 자세히: [calibration/README.md](calibration/README.md) "sensor-sync-sim — 옵션 · 화면 · sim play"
   · 학습 화면: [training/README.md](training/README.md) "화면" · `./run-calibration.sh -h` · `./run-training.sh -h`
 
+### 3.4c 직접 운전 — `world.sh`
+
+```bash
+./world.sh --fit $FIT --uneven --policy artifacts/real/policy_30.onnx   # 학습 env 그대로 (로봇 1대, 카메라가 따라감)
+./world.sh random --fit $FIT                                            # 랜덤 방 + 평평한 바닥 (= run-calibration.sh random-world)
+./world.sh -h                                                           # 옵션 전체
+```
+
+- 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · **C 정책 켬/끔** · R 리셋(train: 새 랜덤 바닥·바퀴) · 창 닫으면 끝
+- train = 학습 env(기울기 · 마찰 패치 · `--uneven` 요철 · 바퀴 gain/τ/지연 · 자이로 영점 오차) + 랜덤 명령 대신 키 입력.
+  바닥판 `--size 8` m (판 밖은 떨어짐 → R). 터미널에 0.5 s마다 명령 / 실제 v·w / 보정 Δv·Δw.
+- 정책 켬/끔을 같은 바닥에서 번갈아 몰아보면 보정이 무엇을 하는지 눈으로 보인다 (노란 점 = 지금 명령대로 2 s 갈 길).
+
 ### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
 
 ```bash
