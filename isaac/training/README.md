@@ -137,3 +137,8 @@ ssh pak@pak.local 'cd ~/ros2/tool && ./run-cli route direct'   # PC corrector: C
 ## 평가 (track)
 
 - `v_enc`, `w_enc` RMS · `w_gyro` RMS · 직진/회전 bias
+
+### env 상속
+
+task env는 `../envs/base_env.py`의 `BaseEnv`(로봇 · 지형 · 복제 · 재질 · 드라이버 식 `wheel_speeds`/`encoders` · 리셋 · 화면 막대)를
+상속하고 자기 규칙(명령 · 관측 · 보상 · 랜덤)만 넣는다. cfg도 `BaseEnvCfg` 상속. calibration env도 같은 바탕이다.

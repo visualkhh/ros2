@@ -3,22 +3,18 @@ from __future__ import annotations
 
 import math
 
-import isaaclab.sim as sim_utils
 import isaaclab.terrains as terrain_gen
-from isaaclab.assets import ArticulationCfg
-from isaaclab.envs import DirectRLEnvCfg, mdp
+from isaaclab.envs import mdp
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
-from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
 
-from urdf import robot_spec as spec
-from assets.tb3_waffle_pi import CASTER_FRICTION, GROUND_FRICTION, TB3_CFG, WHEEL_FRICTION
+from assets.tb3_waffle_pi import GROUND_FRICTION
+from envs.base_env_cfg import BaseEnvCfg
 
-_GROUND = sim_utils.RigidBodyMaterialCfg(static_friction=GROUND_FRICTION[0], dynamic_friction=GROUND_FRICTION[1],
-                                         restitution=0.0, friction_combine_mode="average")
+from envs.base_env_cfg import GROUND as _GROUND  # noqa: E402
 
 
 def make_terrain(slope_deg: float, uneven: bool) -> TerrainImporterCfg:
@@ -55,20 +51,18 @@ class EventCfg:
         func=mdp.randomize_rigid_body_material, mode="startup",
         params={"asset_cfg": SceneEntityCfg("robot", body_names="wheel_.*_link"),
                 "static_friction_range": (0.7, 1.1), "dynamic_friction_range": (0.7, 1.1),
-                "restitution_range": (0.0, 0.0), "num_buckets": 64, "make_consistent": True})               # calibration sim과 같은 바퀴 모터 (fit 차이를 그대로 쓰려면 같아야 함)
+                "restitution_range": (0.0, 0.0), "num_buckets": 64, "make_consistent": True})
 
 
 @configclass
-class RlCorrectEnvCfg(DirectRLEnvCfg):
-    decimation = round(spec.PHYSICS_HZ / spec.CONTROL_HZ)  # 480 Hz 물리 -> 20 Hz 정책 (= cmd_manager)
+class RlCorrectEnvCfg(BaseEnvCfg):
+    """기본 세상(BaseEnvCfg: 로봇 · 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤 · 관측 6 / 행동 2."""
     episode_length_s = 10.0
+    random_yaw = True
     action_space = 2       # [dV, dW]  (ONNX 출력은 action_scale 곱한 물리값)
     observation_space = 6  # [v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]
     state_space = 0
 
-    sim: SimulationCfg = SimulationCfg(dt=1 / spec.PHYSICS_HZ, render_interval=decimation)
-
-    robot_cfg: ArticulationCfg = TB3_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")   # 로봇 정의는 assets 한 곳
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=2048, env_spacing=3.0, replicate_physics=True)
     terrain: TerrainImporterCfg = make_terrain(0.0, False)   # train.py가 --slope/--uneven으로 다시 만듦
@@ -93,10 +87,8 @@ class RlCorrectEnvCfg(DirectRLEnvCfg):
     # 정책이 w_enc와 비교해 영점을 무시하도록. 11-02 실기기 −0.257은 부팅 중 움직인 고장 — OpenCR 재부팅으로 고친다.
     gyro_bias = 0.05
 
-    # 바퀴/캐스터 마찰 기본값 (바닥은 make_terrain · 바퀴 랜덤은 EventCfg)
-    ground_friction = GROUND_FRICTION
-    wheel_friction = WHEEL_FRICTION
-    caster_friction = CASTER_FRICTION
+    # 바닥은 make_terrain · 바퀴 마찰 랜덤은 EventCfg · 바퀴/캐스터 기본 마찰은 BaseEnvCfg
+    ground_friction = GROUND_FRICTION   # FitPanel 표시용
     slope_deg = 0.0    # 기록용 (base-fit.json) — 실제 바닥은 terrain
     uneven = False
 

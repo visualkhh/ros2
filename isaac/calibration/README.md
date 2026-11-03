@@ -25,7 +25,7 @@ Isaac Lab 관례: env + env_cfg(Direct, 학습과 같은 구조) · 실행 스�
 
 ```
 calibration/
-├── calib_env_cfg.py         CalibEnvCfg (로봇 1대 · 평평 바닥 · 바퀴 모델 WheelModelCfg · 랜덤 없음) · RoomsEnvCfg (방 8개)
+├── calib_env_cfg.py         CalibEnvCfg(BaseEnvCfg: ../envs/) (로봇 1대 · 평평 바닥 · 바퀴 모델 WheelModelCfg · 랜덤 없음) · RoomsEnvCfg (방 8개)
 ├── calib_env.py             CalibEnv(DirectRLEnv) — [v, w] → 지연 → gain → 데드밴드 → τ → 바퀴 · 관측 v_enc/w_enc/w_gyro · 방+장애물
 ├── sensor_sync_sim.py       sim 측정 스크립트 (run-calibration.sh sensor-sync-sim)
 ├── sensor_sync_real.py      real 측정 스크립트 (ROS, run-calibration.sh sensor-sync-real)

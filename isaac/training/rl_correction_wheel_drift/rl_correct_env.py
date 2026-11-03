@@ -8,19 +8,14 @@
 """
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import torch
 
-import isaaclab.sim as sim_utils
-from isaaclab import cloner
-from isaaclab.assets import Articulation
-from isaaclab.envs import DirectRLEnv
-from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
+from isaaclab.utils.math import sample_uniform
 
-from assets.tb3_waffle_pi import bind_wheel_materials, wheel_targets
+from envs.base_env import BaseEnv
 from urdf import robot_spec as spec
 
 if TYPE_CHECKING:
@@ -31,16 +26,13 @@ TELEOP_MOVES = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1
 
 
 
-class RlCorrectEnv(DirectRLEnv):
+class RlCorrectEnv(BaseEnv):
     cfg: RlCorrectEnvCfg
 
     def __init__(self, cfg: RlCorrectEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
-        self._wheels, _ = self.robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
         n, dev = self.num_envs, self.device
-        self.policy_dt = self.cfg.sim.dt * self.cfg.decimation
         self.scale = torch.tensor(self.cfg.action_scale, device=dev)
-        self.cmd = torch.zeros(n, 2, device=dev)
         self.hold = torch.zeros(n, device=dev)
         self.hold_total = torch.zeros(n, device=dev)       # 이번 명령의 유지 시간 (목표 경로 그림용)
         self.t_change = torch.zeros(n, device=dev)
@@ -63,49 +55,22 @@ class RlCorrectEnv(DirectRLEnv):
 
 
     # ------------------------------------------------------------------ 화면 표시 (--watch · --snap)
-    def _set_debug_vis_impl(self, debug_vis: bool):
-        """명령(초록) · 실제(파랑) 막대 + 목표 경로(노란 점). cfg.debug_vis가 켜졌을 때만 (train.py가 창 볼 때 켬)."""
-        if debug_vis and getattr(self, "cmd_markers", None) is None:
-            from calibration.command_markers import CommandMarkers
-            self.cmd_markers = CommandMarkers()
-            self._vis_start = torch.zeros(self.num_envs, 4, device=self.device)   # 명령이 바뀐 순간 (x, y, z, yaw)
+    def vis_path(self):
+        """노란 점 = 명령이 바뀐 순간의 자세에서 그 명령대로 유지 시간 동안 갈 길 (막대는 BaseEnv)."""
+        if not hasattr(self, "t_change"):
+            return None
+        if getattr(self, "_vis_start", None) is None:
+            self._vis_start = torch.zeros(self.num_envs, 4, device=self.device)   # (x, y, z, yaw)
             self._vis_t_prev = torch.full((self.num_envs,), 1e9, device=self.device)
-        if getattr(self, "cmd_markers", None) is not None:
-            self.cmd_markers.set_visible(debug_vis)
-
-    def _debug_vis_callback(self, event):
-        if not hasattr(self, "t_change"):   # 부모 __init__ 도중엔 아직 없음
-            return
-        pos = self.robot.data.root_pos_w.torch
-        yaw = self.cmd_markers.yaw_of(self.robot.data.root_quat_w.torch)
-        v, w = self._true_twist()
-        changed = self.t_change < self._vis_t_prev      # 명령이 바뀐(또는 리셋된) env — 그 순간 자세를 시작점으로
+        d = self.robot.data
+        pos, yaw = d.root_pos_w.torch, self.markers.yaw_of(d.root_quat_w.torch)
+        changed = self.t_change < self._vis_t_prev      # 명령이 바뀐(또는 리셋된) env
         self._vis_start[changed] = torch.cat([pos[changed], yaw[changed, None]], dim=-1)
         self._vis_t_prev = self.t_change.clone()
         moving = self.cmd.abs().sum(dim=-1) > 0
-        path = None
-        if moving.any():
-            path = self.cmd_markers.arc(self._vis_start[moving], self.cmd[moving, 0], self.cmd[moving, 1],
-                                        self.hold_total[moving])
-        self.cmd_markers.update(pos, yaw, self.cmd[:, 0], self.cmd[:, 1], v, w, path)
-
-    def _setup_scene(self):
-        # Isaac Lab anymal_c_direct와 같은 순서: 로봇 → 지형 → 복제 → env끼리 충돌 끔
-        self.robot = Articulation(self.cfg.robot_cfg)
-        self.scene.articulations["robot"] = self.robot
-        bind_wheel_materials(self.scene.stage, "/World/envs/env_0/Robot", self.cfg.wheel_friction, self.cfg.caster_friction)
-        self.cfg.terrain.num_envs = self.scene.cfg.num_envs
-        self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
-        self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
-        src, dest = "/World/envs/env_0", "/World/envs/env_{}"
-        pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
-        plan = cloner.clone_plan_from_env_0(src, dest, self.scene.num_envs, self.device, pos,
-                                            global_paths=(self.cfg.terrain.prim_path,))
-        cloner.replicate(plan, stage=self.scene.stage)
-        if "physx" in self.scene.physics_backend:
-            self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
-        light_cfg = sim_utils.DistantLightCfg(intensity=2000.0, color=(1.0, 1.0, 1.0))
-        light_cfg.func("/World/Light", light_cfg)
+        if not moving.any():
+            return None
+        return self.markers.arc(self._vis_start[moving], self.cmd[moving, 0], self.cmd[moving, 1], self.hold_total[moving])
 
     # ------------------------------------------------------------------ 명령
     def _new_commands(self, ids: torch.Tensor):
@@ -143,7 +108,7 @@ class RlCorrectEnv(DirectRLEnv):
         self.cmd_buf = torch.roll(self.cmd_buf, 1, dims=1)
         self.cmd_buf[:, 0] = out
         applied = self.cmd_buf[self._rows, self.cmd_delay]
-        wheels = wheel_targets(applied[:, 0], applied[:, 1], self.r_nom, self.sep_nom, spec.MAX_WHEEL)
+        wheels = self.wheel_speeds(applied[:, 0], applied[:, 1], self.r_nom, self.sep_nom)
         wheels = wheels * self.gain
         self.wheel_cmd = torch.where(wheels.abs() < self.deadband, torch.zeros_like(wheels), wheels)
 
@@ -153,17 +118,9 @@ class RlCorrectEnv(DirectRLEnv):
         self.robot.set_joint_velocity_target(self.wheel_target, joint_ids=self._wheels)
 
     # ------------------------------------------------------------------ 관측·보상
-    def _true_twist(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # 몸체 기준 속도 (Lab 6.1 쿼터니언은 xyzw — 손으로 풀지 않고 _b 값을 씀)
-        v = self.robot.data.root_lin_vel_b.torch[:, 0]
-        w = self.robot.data.root_ang_vel_b.torch[:, 2]
-        return torch.nan_to_num(v), torch.nan_to_num(w)
-
     def _get_observations(self) -> dict:
-        jv = torch.nan_to_num(self.robot.data.joint_vel.torch[:, self._wheels])
-        v_enc = self.r_nom * (jv[:, 0] + jv[:, 1]) / 2.0          # 드라이버 /odom과 같은 식 (기준값)
-        w_enc = self.r_nom * (jv[:, 1] - jv[:, 0]) / self.sep_nom
-        _, w_true = self._true_twist()
+        v_enc, w_enc = self.encoders(self.r_nom, self.sep_nom)   # 드라이버 /odom과 같은 식 (env마다 기준값 오차)
+        _, w_true = self.true_twist()
         sens = torch.stack([v_enc + torch.randn_like(v_enc) * self.cfg.enc_noise,
                             w_enc + torch.randn_like(w_enc) * self.cfg.enc_noise,
                             w_true + self.gyro_bias + torch.randn_like(w_true) * self.cfg.gyro_noise], dim=-1)
@@ -174,32 +131,20 @@ class RlCorrectEnv(DirectRLEnv):
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
-        v, w = self._true_twist()
+        v, w = self.true_twist()
         err = (self.cmd[:, 0] - v).abs() + self.cfg.ang_weight * (self.cmd[:, 1] - w).abs()
         act = (self.delta ** 2).sum(dim=-1)
         jerk = ((self.delta - self.prev_delta) ** 2).sum(dim=-1)
         self.extras.setdefault("log", {})["Metrics/track_err"] = err.mean().item()
         return -err - self.cfg.action_penalty * act - self.cfg.smooth_penalty * jerk
 
-    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        time_out = self.episode_length_buf >= self.max_episode_length
-        return torch.zeros_like(time_out), time_out
-
     # ------------------------------------------------------------------ 리셋
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
             env_ids = self.robot._ALL_INDICES
-        super()._reset_idx(env_ids)
+        super()._reset_idx(env_ids)   # 지형 칸 가운데 · 방향 랜덤 (cfg.random_yaw) · 바퀴 0
         ids = env_ids if isinstance(env_ids, torch.Tensor) else torch.as_tensor(env_ids, device=self.device)
         n, dev, c = len(ids), self.device, self.cfg
-        root = self.robot.data.default_root_state.torch[ids].clone()
-        root[:, :3] += self._terrain.env_origins[ids]   # 지형 칸 가운데 (경사 칸이면 높이 포함)
-        yaw = sample_uniform(-math.pi, math.pi, (n,), dev)
-        root[:, 3:7] = quat_from_euler_xyz(torch.zeros_like(yaw), torch.zeros_like(yaw), yaw)
-        self.robot.write_root_pose_to_sim(root[:, :7], ids)
-        self.robot.write_root_velocity_to_sim(torch.zeros(n, 6, device=dev), ids)
-        zeros = torch.zeros(n, len(self._wheels), device=dev)
-        self.robot.write_joint_state_to_sim(zeros, zeros, self._wheels, ids)
 
         self.tau[ids] = sample_uniform(*c.tau_range, (n, 2), dev)
         self.gain[ids] = sample_uniform(*c.gain_range, (n, 2), dev) * torch.tensor(c.gain_center, device=dev)

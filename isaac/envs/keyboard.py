@@ -1,4 +1,4 @@
-"""Isaac 창 키보드 상태 폴링 (carb.input). 창이 있을 때만 — AppLauncher 뒤에 import. random_world · 학습 --drive 공용."""
+"""Isaac 창 키보드 상태 폴링 (carb.input). 창이 있을 때만 — AppLauncher 뒤에 import. envs.drive · random_world · 학습 --drive 공용."""
 from __future__ import annotations
 
 import carb.input

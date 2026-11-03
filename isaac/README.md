@@ -33,6 +33,10 @@ isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-training.sh           학습 실행기 (IsaacLab, 기본 headless)
 ├── run-world.sh              직접 운전 (학습 env 그대로 · random = calibration 방)
+├── envs/                     환경 바탕 — 모든 env가 상속
+│   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
+│   ├── default/              DefaultEnv — 아무것도 없는 기본 환경 (새 환경은 이걸 복사해 시작)
+│   ├── drive.py              키보드 운전 (./run-world.sh empty) · keyboard.py 키 폴링 (공용)
 ├── assets/tb3_waffle_pi.py   로봇 정의 한 곳 TB3_CFG (USD · 바퀴 모터 · 마찰 · 드라이버 바퀴 식) — 학습·calibration·learn 공유
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트       → calibration/README.md
 │   ├── calib_env.py · calib_env_cfg.py   Isaac Lab Direct env (로봇 1대 · 바퀴 모델 · 방+장애물)

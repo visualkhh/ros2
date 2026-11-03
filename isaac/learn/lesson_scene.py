@@ -18,7 +18,8 @@ from isaaclab.utils import configclass
 from isaaclab.utils.math import quat_from_euler_xyz
 
 from assets.tb3_waffle_pi import GROUND_FRICTION, OBSTACLE_FRICTION, TB3_CFG, bind_wheel_materials
-from calibration.calib_env import ROBOT_Z, spawn_rooms
+from calibration.calib_env import spawn_rooms
+from envs.base_env import ROBOT_Z
 
 
 @configclass

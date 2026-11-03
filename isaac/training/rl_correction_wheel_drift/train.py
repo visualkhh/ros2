@@ -227,7 +227,7 @@ class WheelDriftTrain(Train):
             import onnxruntime as ort
             sess = ort.InferenceSession(args.policy, providers=["CPUExecutionProvider"])
         use_policy = sess is not None
-        from calibration import keyboard as kb   # 키 상태 폴링 (random-world와 공용)
+        from envs import keyboard as kb   # 키 상태 폴링 (random-world와 공용)
 
         obs, _ = raw.reset()
         last_cmd, prev_keys, t_print = None, set(), 0.0
@@ -259,7 +259,7 @@ class WheelDriftTrain(Train):
             obs, *_ = raw.step(act)
             if t0 - t_print > 0.5 and (v or w):   # 움직일 때만
                 t_print = t0
-                vt, wt = raw._true_twist()
+                vt, wt = raw.true_twist()
                 dl = raw.delta[0].tolist()
                 print(f"[drive] 명령 v {v:+.2f} w {w:+.2f} | 실제 v {float(vt[0]):+.3f} w {float(wt[0]):+.3f} | "
                       f"보정 Δv {dl[0]:+.3f} Δw {dl[1]:+.3f} | 정책 {'켬' if use_policy else '끔'}", flush=True)
@@ -292,7 +292,7 @@ class WheelDriftTrain(Train):
                     with torch.no_grad():
                         act = (policy(obs["policy"]) / raw.scale).clamp(-1.0, 1.0) if use_policy else zero
                     obs, *_ = raw.step(act)
-                    v, w = raw._true_twist()
+                    v, w = raw.true_twist()
                     moving = raw.cmd.abs().sum(dim=-1) > 0
                     sv += float(((raw.cmd[:, 0] - v) ** 2)[moving].sum())
                     sw += float(((raw.cmd[:, 1] - w) ** 2)[moving].sum())

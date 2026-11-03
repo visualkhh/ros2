@@ -18,7 +18,7 @@ TAG = "random-world"
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="random-world: 랜덤 방 + 로봇 키보드 주행")
-    p.add_argument("--rooms", type=int, default=8, help="미리 만들 방 수 (N으로 순간이동)")
+    p.add_argument("--rooms", type=int, default=8, help="미리 만들 방 수 (N으로 순간이동, 0 = 빈 바닥 = 기본 세상)")
     p.add_argument("--seed", type=int, default=None, help="랜덤 시드 (없으면 매번 새로)")
     p.add_argument("--size-min", type=float, default=3.5, help="방 최소 한 변 [m]")
     p.add_argument("--size-max", type=float, default=6.0, help="방 최대 한 변 [m]")
@@ -59,17 +59,19 @@ def _run(args, app, base_fit):
     rooms, idx = env.rooms, 0
 
     def go(i):
-        env.place(rooms[i]["origin"])
-        env.look_at(rooms[i]["origin"])
-        rm = rooms[i]
-        print(f"[{TAG}] seed {cfg.room_seed} · 방 {i + 1}/{len(rooms)} · {rm['size']:.1f} m · 장애물 {rm['obstacles']}개")
+        origin = rooms[i]["origin"] if rooms else (0.0, 0.0, 0.0)
+        env.place(origin)
+        env.look_at(origin)
+        if rooms:
+            rm = rooms[i]
+            print(f"[{TAG}] seed {cfg.room_seed} · 방 {i + 1}/{len(rooms)} · {rm['size']:.1f} m · 장애물 {rm['obstacles']}개")
 
     go(idx)
     print(f"[{TAG}] wheel: {describe(cfg.wheel.to_dict())}")
     print(f"[{TAG}] W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 리셋 · N 다음 방 · C 보정값 창")
     kb = hud = None
     if not headless:
-        from calibration import keyboard as kb
+        from envs import keyboard as kb
         try:
             hud = CalibHUD(env, base_fit)
         except Exception as exc:

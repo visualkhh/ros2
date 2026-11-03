@@ -1,8 +1,7 @@
-"""calibration env — 로봇 1대에 [v, w] 명령을 넣고 엔코더 · 자이로를 읽는다 (Isaac Lab Direct 관례).
+"""calibration env — 기본 세상(BaseEnv) + 바퀴 모델 + 방·장애물. [v, w] 명령을 넣고 엔코더 · 자이로를 읽는다.
 
-한 스텝(20 Hz): 명령 → [지연] → 바퀴 rad/s (드라이버 식) → 좌/우 gain → 데드밴드 → 1차 지연 τ → 바퀴 속도 목표 → 물리 24회
-관측 = 드라이버가 내는 값: v_enc · w_enc (/odom, 기준 반지름·간격) · w_gyro (/imu = 몸체 각속도).
-학습이 아니라 측정용이라 보상 0 · 종료 없음. 기록·명령 경로는 스크립트(sensor_sync_sim · random_world)가 한다.
+한 스텝(20 Hz): 명령 → [지연] → 바퀴 rad/s (드라이버 식) → 좌/우 gain → 데드밴드 → 1차 지연 τ → 바퀴 속도 목표 → 물리 24회.
+측정용이라 보상 0 · 종료 없음 (BaseEnv 그대로). 기록 · 명령 경로는 스크립트(sensor_sync_sim · random_world)가 한다.
 """
 from __future__ import annotations
 
@@ -14,53 +13,27 @@ from typing import TYPE_CHECKING
 import torch
 
 import isaaclab.sim as sim_utils
-from isaaclab import cloner
-from isaaclab.assets import Articulation
-from isaaclab.envs import DirectRLEnv
-from isaaclab.utils.math import quat_from_euler_xyz
 
-from assets.tb3_waffle_pi import bind_wheel_materials, wheel_targets
-from urdf import robot_spec as spec
+from envs.base_env import BaseEnv
 
 if TYPE_CHECKING:
     from calibration.calib_env_cfg import CalibEnvCfg
 
-ROBOT_Z = 0.03          # 스폰 높이 [m] — 떨어져서 바퀴·캐스터로 선다
 FREE_RADIUS = 0.75      # 방 가운데 로봇 자리 — 장애물 금지
 WALL_H, WALL_T = 1.1, 0.05
 PALETTE = ((0.75, 0.15, 0.12), (0.12, 0.55, 0.20), (0.15, 0.30, 0.75),
            (0.75, 0.55, 0.10), (0.45, 0.20, 0.60), (0.20, 0.60, 0.65))
 
 
-class CalibEnv(DirectRLEnv):
+class CalibEnv(BaseEnv):
     cfg: CalibEnvCfg
 
     def __init__(self, cfg: CalibEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
-        self._wheels, _ = self.robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
-        dev = self.device
-        self.policy_dt = self.cfg.sim.dt * self.cfg.decimation
-        self.r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
-        self.sep = torch.tensor([spec.WHEEL_SEP], device=dev)
-        self.cmd = torch.zeros(1, 2, device=dev)
-        self.target = torch.zeros(1, 2, device=dev)   # 바퀴 속도 목표 [rad/s] (바퀴 모델 출력)
-        self.path_w = None                            # 목표 경로 점 (m, 3) — 스크립트가 넣음 (화면용)
         self.reset_wheel_model()
 
-    # ------------------------------------------------------------------ 장면
     def _setup_scene(self):
-        self.robot = Articulation(self.cfg.robot_cfg)
-        self.scene.articulations["robot"] = self.robot
-        bind_wheel_materials(self.scene.stage, "/World/envs/env_0/Robot")
-        self.cfg.terrain.num_envs = self.scene.cfg.num_envs
-        self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
-        self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
-        pos = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing, device=self.device)[0]
-        plan = cloner.clone_plan_from_env_0("/World/envs/env_0", "/World/envs/env_{}", self.scene.num_envs,
-                                            self.device, pos, global_paths=(self.cfg.terrain.prim_path,))
-        cloner.replicate(plan, stage=self.scene.stage)
-        light = sim_utils.DistantLightCfg(intensity=3000.0, color=(0.95, 0.95, 0.95))
-        light.func("/World/light", light, translation=(2.0, -2.0, 4.0))
+        super()._setup_scene()
         self.rooms = spawn_rooms(self.cfg)
 
     # ------------------------------------------------------------------ 바퀴 모델
@@ -77,7 +50,7 @@ class CalibEnv(DirectRLEnv):
         self._buf = torch.roll(self._buf, 1, dims=0)
         self._buf[0] = self.cmd[0]
         v, wz = self._buf[-1]
-        wheels = wheel_targets(v[None], wz[None], self.r, self.sep, spec.MAX_WHEEL)
+        wheels = self.wheel_speeds(v[None], wz[None])
         wheels = wheels * wheels.new_tensor([w.gain_l, w.gain_r])
         if w.deadband > 0:
             wheels = torch.where(wheels.abs() < w.deadband, torch.zeros_like(wheels), wheels)
@@ -87,69 +60,14 @@ class CalibEnv(DirectRLEnv):
             self._lag = self._lag + (1.0 - math.exp(-self.policy_dt / w.tau_s)) * (wheels - self._lag)
         self.target = self._lag
 
-    def _apply_action(self) -> None:
-        self.robot.set_joint_velocity_target(self.target, joint_ids=self._wheels)
-
-    # ------------------------------------------------------------------ 관측
-    def sense(self) -> dict:
-        """드라이버와 같은 식 — 바퀴 rad/s · 각도, /odom v·w (기준 반지름·간격), /imu w (몸체 각속도)."""
-        d = self.robot.data
-        jv = d.joint_vel.torch[0, self._wheels].tolist()
-        jp = d.joint_pos.torch[0, self._wheels].tolist()
-        return {"jv": jv, "jp": jp,
-                "v_enc": spec.WHEEL_RADIUS * (jv[0] + jv[1]) / 2.0,
-                "w_enc": spec.WHEEL_RADIUS * (jv[1] - jv[0]) / spec.WHEEL_SEP,
-                "w_gyro": d.root_ang_vel_b.torch[0, 2].item()}
-
-    def _get_observations(self) -> dict:
-        s = self.sense()
-        return {"policy": torch.tensor([[s["v_enc"], s["w_enc"], s["w_gyro"]]], device=self.device)}
-
-    def _get_rewards(self) -> torch.Tensor:
-        return torch.zeros(self.num_envs, device=self.device)
-
-    def _get_dones(self):
-        no = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-        return no, no
-
     # ------------------------------------------------------------------ 리셋 · 이동
     def _reset_idx(self, env_ids: Sequence[int] | None):
         super()._reset_idx(env_ids)
         self.place((0.0, 0.0, 0.0))
 
-    def place(self, origin, yaw: float = 0.0):
-        """로봇을 origin(월드)으로 순간이동 — 속도 · 바퀴 상태 · 바퀴 모델 0."""
-        dev = self.device
-        root = self.robot.data.default_root_state.torch[:1].clone()
-        root[:, 0], root[:, 1], root[:, 2] = origin[0], origin[1], ROBOT_Z
-        zero = torch.zeros(1, device=dev)
-        root[:, 3:7] = quat_from_euler_xyz(zero, zero, torch.tensor([yaw], device=dev))
-        self.robot.write_root_pose_to_sim(root[:, :7])
-        self.robot.write_root_velocity_to_sim(torch.zeros(1, 6, device=dev))
-        z = torch.zeros(1, len(self._wheels), device=dev) if hasattr(self, "_wheels") else None
-        if z is not None:
-            self.robot.write_joint_state_to_sim(z, z, self._wheels)
-            self.reset_wheel_model()
-            self.target = torch.zeros(1, 2, device=dev)
-
-    def look_at(self, origin):
-        self.sim.set_camera_view(eye=(origin[0] + 1.8, origin[1] - 1.8, 1.55), target=(origin[0], origin[1], 0.15))
-
-    # ------------------------------------------------------------------ 화면 (debug_vis)
-    def _set_debug_vis_impl(self, debug_vis: bool):
-        if debug_vis and getattr(self, "markers", None) is None:
-            from calibration.command_markers import CommandMarkers
-            self.markers = CommandMarkers()
-        if getattr(self, "markers", None) is not None:
-            self.markers.set_visible(debug_vis)
-
-    def _debug_vis_callback(self, event):
-        if not hasattr(self, "cmd"):   # 부모 __init__ 도중
-            return
-        d = self.robot.data
-        yaw = self.markers.yaw_of(d.root_quat_w.torch)
-        self.markers.update(d.root_pos_w.torch, yaw, self.cmd[:, 0], self.cmd[:, 1],
-                            d.root_lin_vel_b.torch[:, 0], d.root_ang_vel_b.torch[:, 2], self.path_w)
+    def place(self, origin, yaw: float = 0.0, i: int = 0) -> None:
+        super().place(origin, yaw, i)
+        self.reset_wheel_model()
 
 
 # ---------------------------------------------------------------------- 방 + 장애물
