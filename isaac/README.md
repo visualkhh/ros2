@@ -42,8 +42,8 @@ isaac/
 ├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트
-│   ├── sensor_sync_sim.py · sensor_sync_real.py · dummy_sensor.py   측정 스크립트 (sim = 순수 envs/default)
-│   ├── record.py             측정 기록 (명령 = commands/square) → raw.csv · fit.json(측정 결과) · report.png
+│   ├── sensor_sync.py        SensorSync — 측정 공통 (명령 BaseCommand 주입 · --cmd square|MOD:CLASS · CSV · fit · report)
+│   ├── sensor_sync_sim.py · sensor_sync_real.py · sensor_sync_dummy.py   SensorSyncSim(env.step) · Real(/cmd_manual_vel) · Dummy(가짜 모터)
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름

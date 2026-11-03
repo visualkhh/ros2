@@ -1,4 +1,4 @@
-"""sim 측정 — 사각형 명령을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
+"""sim 측정 — 명령(기본 사각형)을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
 
   ./run-calibration.sh sensor-sync-sim --viz none                  # 순수 sim 측정 → real과 비교해 차이를 구한다
 창(--watch): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로. 기록 후 창 닫을 때까지 같은 경로 반복.
@@ -13,17 +13,40 @@ import time
 
 from isaaclab.app import AppLauncher
 
-from commands.square import SquareCommand
-from calibration.record import ISAAC, record, run_path
+from calibration.sensor_sync import ISAAC, SensorSync, add_command_args, make_command, run_path
 
 TAG = "02-sim"
 
 
+class SensorSyncSim(SensorSync):
+    """명령 → env.step([[v, w]]) (보정 없음) · 읽기 env.sense() — /odom은 드라이버처럼 엔코더 적분."""
+
+    tag = TAG
+
+    def __init__(self, cmd, env, label: str = "sim_sensor_floor"):
+        import torch
+
+        super().__init__(cmd, env.policy_dt)
+        self.torch, self.env, self.label = torch, env, label
+        self.out, self.odom = (0.0, 0.0), [0.0, 0.0, 0.0]
+
+    def send(self, v, w):
+        self.out = (v, w)   # 보정 없음 — 측정은 순수 sim
+        self.env.step(self.torch.tensor([[v, w]], device=self.env.device))
+
+    def collect(self, t, v, w):
+        s, o, dt = self.env.sense(), self.odom, self.dt
+        o[2] += s["w_enc"] * dt
+        o[0] += s["v_enc"] * math.cos(o[2]) * dt
+        o[1] += s["v_enc"] * math.sin(o[2]) * dt
+        # sim은 단일 시계 — 메시지 시각 = 기록 시각
+        return [round(t, 3), v, w, *self.out, *o, s["v_enc"], s["w_enc"], s["w_gyro"], *s["jv"], *s["jp"], self.label,
+                t, t, t, t]
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="sim 측정 (calibration env)")
-    p.add_argument("--speed", type=float, default=0.15, help="기준 전진 [m/s] (변마다 1.0/0.67/1.33/0.8배)")
-    p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")
-    p.add_argument("--side", type=float, default=0.5, help="사각형 한 변 [m]")
+    add_command_args(p)
     p.add_argument("--room", type=float, default=0.0, help="방 크기 [m] (0 = 장애물 없는 빈 바닥, 측정은 0 권장)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=None, help="정확한 raw.csv 경로 (isaac/ 기준 상대경로 가능)")
@@ -33,7 +56,7 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     # sim 띄우기 전에 실패하게
-    cmd = SquareCommand(args.speed, args.turn, args.side)
+    cmd = make_command(args)
     out = args.out and (args.out if os.path.isabs(args.out) else str(ISAAC / args.out))
     out = out or run_path(args.label or TAG)
 
@@ -67,44 +90,25 @@ def _run(args, app, cmd, out):
     cfg.debug_vis = not headless
     env = env_cls(cfg)
     env.reset()
-    dt = env.policy_dt
     zero = torch.zeros(1, 2, device=env.device)
     for _ in range(10):   # 0.5 s — 스폰 높이에서 떨어져 바퀴·캐스터로 서게
         env.step(zero)
     p0 = env.robot.data.root_pos_w.torch[0]
-    if not headless:
-        env.set_path(cmd.path())   # 노란 점 = 사각형을 로봇 시작 자세로
-    label = args.label or "sim_sensor_floor"
-    mode = "순수 sim (보정 없음)"
-    print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {label} · {mode} · "
+    if not headless and cmd.path():
+        env.set_path(cmd.path())   # 노란 점 = 목표 경로를 로봇 시작 자세로
+    sync = SensorSyncSim(cmd, env, args.label or "sim_sensor_floor")
+    print(f"[{TAG}] 높이 {float(p0[2]):.3f} m · {sync.label} · 순수 sim (보정 없음) · "
           f"{'room %.1f m' % args.room if args.room > 0 else 'empty floor'}")
-    print(f"[{TAG}] square: side={args.side:.2f} m · {cmd.total:.1f}s · speeds {cmd.speeds_text()} m/s")
-
-    st = {"out": (0.0, 0.0), "odom": [0.0, 0.0, 0.0]}
-
-    def send(v, w):
-        st["out"] = (v, w)   # 보정 없음 — 측정은 순수 sim
-        env.step(torch.tensor([[v, w]], device=env.device))
-
-    def collect(t, v, w):
-        s = env.sense()
-        o = st["odom"]   # 드라이버 /odom처럼 엔코더 적분
-        o[2] += s["w_enc"] * dt
-        o[0] += s["v_enc"] * math.cos(o[2]) * dt
-        o[1] += s["v_enc"] * math.sin(o[2]) * dt
-        # sim은 단일 시계 — 메시지 시각 = 기록 시각
-        return [round(t, 3), v, w, *st["out"], *o, s["v_enc"], s["w_enc"], s["w_gyro"], *s["jv"], *s["jp"], label,
-                t, t, t, t]
-
-    record(TAG, send, collect, cmd, out, dt)
+    print(f"[{TAG}] {args.cmd}: side={args.side:.2f} m · {cmd.total:.1f}s · speeds {getattr(cmd, 'speeds_text', lambda: '-')()} m/s")
+    sync.run(out)
 
     if args.watch and not headless:
         print(f"[{TAG}] WATCH — 창 닫을 때까지 반복")
         k = 0
         while app.is_running():
-            send(*cmd((k * dt) % cmd.total))
+            sync.send(*cmd((k * sync.dt) % cmd.total))
             k += 1
-            time.sleep(dt)
+            time.sleep(sync.dt)
     env.close()
 
 

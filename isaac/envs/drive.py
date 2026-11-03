@@ -12,7 +12,7 @@ import time
 
 from isaaclab.app import AppLauncher
 
-CMDS = {"keyboard": "commands.keyboard:KeyboardCommand", "square": "commands.square:SquareCommand"}
+from commands import command_class
 
 
 ENVS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +71,7 @@ def main(argv=None) -> int:
         cfg = load(cfg_spec)(robot=args.robot) if args.robot else load(cfg_spec)()
         cfg.sim.device = args.device
         print(f"[drive] env {env_spec} · cfg {cfg_spec} · 로봇 {cfg.robot_cfg.spawn.usd_path}", flush=True)
-        cmd = load(CMDS.get(args.cmd, args.cmd))(speed=args.speed, turn=args.turn)
+        cmd = command_class(args.cmd)(speed=args.speed, turn=args.turn)
         env = load(env_spec)(cfg)
         env.reset()
         env.look_at((0.0, 0.0, 0.0))

@@ -178,7 +178,7 @@ def fit_v(rows, t, fit):
     """좌/우 바퀴 모델 → 차동기구학으로 몸체 선속도 v 예측. (wl+wr)·r/2."""
     import robots  # noqa: E402
     _rc = robots.load()
-    WHEEL_RADIUS, = _rc.WHEEL_RADIUS
+    WHEEL_RADIUS = _rc.WHEEL_RADIUS
     pl, pr = fit_wheels(rows, t, fit)
     return [WHEEL_RADIUS * (a + b) / 2.0 for a, b in zip(pl, pr)]
 

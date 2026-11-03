@@ -1,15 +1,22 @@
-"""측정 1회 기록 — sim · real · dummy 공용 (CSV 한 줄 모양 · 구간 표 · fit.json · report.png).
+"""SensorSync — 측정 1회 공통 (sim · real · dummy). 명령(BaseCommand)은 밖에서 주입, 어디로 보내고 무엇을 읽는지는 하위 클래스.
 
-send(v, w)와 collect(t, v, w) → 행 을 받아 같은 명령 경로를 돈다. 런타임(Isaac / ROS / stdlib)이 달라도 기록 형식은 같다.
+  SensorSyncSim (sensor_sync_sim.py)     env.step([[v, w]])        — Isaac
+  SensorSyncReal (sensor_sync_real.py)   /cmd_manual_vel publish   — ROS
+  SensorSyncDummy (sensor_sync_dummy.py) 가짜 모터 계산            — 표준 라이브러리만
+런타임이 달라도 기록 형식(CSV 한 줄 · 구간 표 · fit.json · report.png)은 같다. 이 파일은 표준 라이브러리만.
 """
 from __future__ import annotations
 
 import csv
+import inspect
 import json
+import math
 import os
 import re
 from datetime import datetime
 from pathlib import Path
+
+from commands import CMDS, command_class
 
 
 ISAAC = Path(__file__).resolve().parents[1]
@@ -26,21 +33,60 @@ def run_path(name: str) -> str:
     return str(RUNS_DIR / f"{datetime.now():%Y%m%d_%H%M%S}-{name}" / "raw.csv")
 
 
-def record(tag: str, send, collect, cmd, out: str, dt: float, pace=None) -> list:
-    """명령 경로(commands.BaseCommand, 끝이 있는 것 — 보통 SquareCommand)를 dt마다 send → (pace) → collect. out에 CSV + 구간 표 + fit.json + report.png. rows 반환.
+def add_command_args(p) -> None:
+    """--cmd · --speed · --turn · --side (세 측정 스크립트 공통)."""
+    p.add_argument("--cmd", default="square", help=f"명령: {' · '.join(CMDS)} 또는 MOD:CLASS (BaseCommand, 끝이 있는 것). "
+                                                  "fit · 구간 표는 segs가 있는 명령(square)만")
+    p.add_argument("--speed", type=float, default=0.15, help="기준 전진 [m/s] (square: 변마다 1.0/0.67/1.33/0.8배)")
+    p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")
+    p.add_argument("--side", type=float, default=0.5, help="사각형 한 변 [m] (side를 받는 명령만)")
 
-    pace(k, t): real의 wall-clock 맞추기 (sim은 물리 스텝이 시계라 없음).
-    """
-    segs = getattr(cmd, "segs", [])
-    print(f"[{tag}] {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
-    rows = []
-    for k in range(int(round(cmd.total / dt))):
-        t = k * dt
-        v, w = cmd(t)
-        send(v, w)
-        if pace is not None:
-            pace(k, t)
-        rows.append(collect(t, v, w))
+
+def make_command(args):
+    """add_command_args 옵션 → 명령 객체. 끝이 없는 명령(keyboard 등)은 측정 불가 → SystemExit."""
+    cls = command_class(args.cmd)
+    kw = {"side": args.side} if "side" in inspect.signature(cls).parameters else {}
+    cmd = cls(speed=args.speed, turn=args.turn, **kw)
+    if not math.isfinite(cmd.total):
+        raise SystemExit(f"--cmd {args.cmd}: 끝이 없는 명령은 측정에 못 씀 (total = inf)")
+    return cmd
+
+
+class SensorSync:
+    """명령(BaseCommand, 끝이 있는 것)을 dt마다 send → pace → collect. run()이 CSV + 구간 표 + fit.json + report.png."""
+
+    tag = "sync"
+
+    def __init__(self, cmd, dt: float):
+        self.cmd, self.dt = cmd, dt
+
+    def send(self, v: float, w: float) -> None:
+        """명령을 보낸다 (sim env · ROS topic · 가짜 모터)."""
+        raise NotImplementedError
+
+    def collect(self, t: float, v: float, w: float) -> list:
+        """CSV 한 줄 (CSV_HEADER 순서)."""
+        raise NotImplementedError
+
+    def pace(self, k: int, t: float) -> None:
+        """real만 — 벽시계 맞추기 (sim은 물리 스텝이 시계, dummy는 계산만)."""
+
+    def run(self, out: str) -> list:
+        tag, cmd, dt = self.tag, self.cmd, self.dt
+        segs = getattr(cmd, "segs", [])
+        print(f"[{tag}] {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
+        rows = []
+        for k in range(int(round(cmd.total / dt))):
+            t = k * dt
+            v, w = cmd(t)
+            self.send(v, w)
+            self.pace(k, t)
+            rows.append(self.collect(t, v, w))
+        _save(tag, segs, rows, out)
+        return rows
+
+
+def _save(tag: str, segs, rows, out: str) -> None:
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", newline="") as f:
         cw = csv.writer(f)
@@ -60,7 +106,6 @@ def record(tag: str, send, collect, cmd, out: str, dt: float, pace=None) -> list
         write_report_png(out, fit=fit)
     except Exception as exc:
         print(f"[{tag}] report.png/fit.json 스킵 ({exc})")
-    return rows
 
 
 def _write_json(path: str, doc: dict) -> None:
