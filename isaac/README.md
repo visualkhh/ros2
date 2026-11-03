@@ -170,7 +170,8 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 ```bash
 ./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + beebot
 ./run-world.sh --robot <robot>                       # 다른 로봇 (robots/<robot>/)
-./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물
+./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/<name>_env.py · <name>_env_cfg.py)
+./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물  (envs/ 밖은 MOD:CLASS)
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
 ./run-world.sh -h
 # 학습 env 그대로 + 정책 켬/끔 (C 키): 행동이 보정량이라 학습 쪽 운전 모드로

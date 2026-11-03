@@ -1,12 +1,13 @@
 #!/bin/bash
 # 로봇을 직접 몰아보는 창 — 로봇(USD)과 환경(env · env cfg)을 골라서 띄운다 (envs/drive.py).
 #
-#   ./run-world.sh [--robot NAME] [--env MOD:CLASS] [--env-cfg MOD:CLASS] [--cmd keyboard|square|MOD:CLASS] [--speed 0.15] [--turn 1.0]
+#   ./run-world.sh [--robot NAME] [--env NAME|MOD:CLASS] [--env-cfg MOD:CLASS] [--cmd keyboard|square|MOD:CLASS] [--speed 0.15] [--turn 1.0]
 #
 #   --robot     로봇 = robots/<이름>/ (urdf/robot.urdf.xacro → usd/ 자동 변환 · config.py ROBOT_CFG · spec.py 바퀴 숫자)
 #               기본: env cfg의 로봇 (beebot). 바퀴 관절 이름은 wheel_left/right_joint여야 함
-#   --env       환경 클래스   (기본 envs.default.default_env:DefaultEnv — 아무것도 없는 평평한 바닥)
-#   --env-cfg   환경 설정 클래스 (기본 envs.default.default_env_cfg:DefaultEnvCfg)
+#   --env       환경: envs/ 아래 이름 (기본 default — 아무것도 없는 평평한 바닥) · 없는 이름이면 MOD:CLASS로 직접
+#               이름 규칙: envs/<name>/<name>_env.py <Name>Env + <name>_env_cfg.py <Name>EnvCfg (Isaac Lab task 폴더)
+#   --env-cfg   환경 설정 MOD:CLASS — 안 주면 --env 규칙으로 (MOD:CLASS면 <mod>_cfg:<Class>Cfg로 추측)
 #               행동이 [v, w] 명령인 env면 된다 (BaseEnv 계열: DefaultEnv · calibration CalibEnv)
 #   --cmd       명령 (commands/): keyboard = 직접 운전 (기본) · square = 네모 54 s (노란 점 = 목표 경로, calibration 측정과 같은 명령)
 #               · MOD:CLASS = commands.base_command.BaseCommand 상속 클래스 (생성자 speed=, turn=)
