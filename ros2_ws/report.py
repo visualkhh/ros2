@@ -456,9 +456,8 @@ def report(paths: list[Path], out: Path, show: bool) -> Path:
         if k not in ("temp", "lat"):
             a.axhline(0, color="k", lw=0.6)
         a.tick_params(labelsize=8)
-    ax["lin"].legend(loc="upper right", fontsize=8)
-    if "lat" in ax:
-        ax["lat"].legend(loc="upper right", fontsize=7)
+    for k, a in ax.items():   # 패널마다 범례 (회색 = A, 파랑 = B)
+        a.legend(loc="upper right", fontsize=7 if k in ("lat", "temp") else 8)
     for k in pairs[-1]:
         ax[k].set_xlabel("구간 시작부터 시간 [s]")
 
