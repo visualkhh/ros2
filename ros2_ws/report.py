@@ -400,8 +400,8 @@ def report(paths: list[Path], out: Path, show: bool) -> Path:
         # ---- 궤적: 실측 실선 · 명령 100% 점선 (같은 색)
         sx, sy = true_path(rows, bias)
         cx, cy = integrate(rows, zip(col("lin_raw"), col("ang_raw")))
-        ax_path.plot(cx, cy, color=c, ls=":", lw=1.4, alpha=0.8)
-        ax_path.plot(sx, sy, color=c, lw=2.0, label=f"{name} — 실측: 거리 엔코더 · 방향 자이로 (점선 = 명령대로 갔다면)")
+        ax_path.plot(cx, cy, color=c, ls=":", lw=1.4, alpha=0.8, label=f"{name} — 점선: 목표 (명령대로 갔다면)")
+        ax_path.plot(sx, sy, color=c, lw=2.0, label=f"{name} — 실선: 실측 (거리 엔코더 · 방향 자이로)")
         fx, fy = finite(sx), finite(sy)
         if fx:
             ax_path.plot(fx[-1], fy[-1], "o", color=c, ms=7, mec="k")
@@ -440,7 +440,7 @@ def report(paths: list[Path], out: Path, show: bool) -> Path:
     ax_path.set_aspect("equal", adjustable="datalim")
     ax_path.set_xlabel("x [m] (구간 시작 방향 = +x)")
     ax_path.set_ylabel("y [m]")
-    ax_path.plot(0, 0, "k*", ms=12, label="시작 (모든 구간)")
+    ax_path.plot(0, 0, "k*", ms=12, label="★ 시작 (모든 구간) · ● 끝")
     ax_path.set_title("주행 궤적 — ●끝 · 실선과 점선이 가까울수록 명령대로 감", fontsize=11, loc="left")
     ax_path.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0), fontsize=9)
 
