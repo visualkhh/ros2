@@ -49,6 +49,38 @@ cd isaac
 tensorboard --logdir logs/rsl_rl          # Metrics/cross_track (경로 이탈 평균) · Metrics/waypoints_done (평균 도착 수)
 ```
 
+## calibration (학습 전에 먼저) — sim · real에 같은 네모를 넣고 차이를 `robot_cfg.py` `RESPONSE_*`에
+
+```bash
+cd isaac
+./run-calibration.sh rl_correction_waypoint --robot=sim                  # sim (창 없음 · 보려면 --viz)
+./run-calibration.sh rl_correction_waypoint --robot=real --check-only    # real: 안 움직이고 상태만 → "check-only — 준비됨"
+./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor   # real 측정 (약 54 s)
+#   → artifacts/calibration/<시각>-<label>/{raw.csv, fit.json, report.png}
+```
+
+### real 준비 순서 (`거부: MANUAL 아님 (state=None)`이면 1~3이 안 된 것)
+
+`state=None` = PC가 로봇의 `/state_control`을 못 받음 → Pi에서 베이스(tb-only: 드라이버 · cmd_manager · state_manager)가 안 떠 있거나
+네트워크(DDS)가 안 닿음. 로봇이 꺼져 있으면 아무것도 안 된다.
+
+1. **로봇 켜기**: Raspberry Pi 전원 + 부팅 기다리기 (1~2분). OpenCR(모터 보드)은 로봇을 가만히 둔 채 켠다 (IMU 영점).
+   PC에서 닿는지: `ping pak.local` (안 되면 같은 Wi-Fi인지)
+2. **베이스 켜기** — Pi에서 직접 또는 PC에서 (PC의 run-cli는 켜기/끄기를 SSH로 Pi에 넘긴다). 2 · 3의 run-cli는 어느 쪽이든 같다:
+   ```bash
+   # Pi에서:  ssh pak@pak.local  →  cd /home/pak/ros2/tool
+   # PC에서:  cd ~/workspaces/visualkhh/source/ros2/tool
+   ./run-cli base start          # 바퀴 · odom · 라이다 (tb-only)
+   ./run-cli status              # 로봇 수신 · odom 확인
+   ```
+3. **제어 MANUAL · 경로 direct** (`rl-only.sh`는 띄우지 않는다 — 명령이 PC 보정을 거치지 않게):
+   ```bash
+   ./run-cli control manual
+   ./run-cli route direct
+   ```
+4. **check-only** → `준비됨`이 나오면 로봇 주변 1 m 비우고 측정. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 중간에 잡지 말 것.
+5. 끝나면 베이스는 그대로 둬도 된다 (끄기: `./run-cli base stop`).
+
 ## 실기기
 
 - corrector goal 모드(`ros2_ws/src/rl_correction`)가 같은 관측 · 기본 제어기 · 스케일을 쓴다. `goal_mode=absolute`(기본)로

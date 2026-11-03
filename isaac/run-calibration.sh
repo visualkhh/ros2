@@ -19,7 +19,7 @@
 #   공통   --label NAME (폴더 <시각>-NAME · CSV label) · --out PATH (정확한 raw.csv, label보다 우선)
 #          --side 0.5 --speed 0.15 --turn 1.0 (사각형 한 변 [m] · 기준 전진 [m/s] · 회전 [rad/s]) · --cmd square|MOD:CLASS (명령 바꾸기)
 #
-#   sim    순수 sim (IsaacLab — 보정 없음) · --viz none|kit (안 주면 kit) · --watch (기록 후 창 닫을 때까지 반복)
+#   sim    순수 sim (IsaacLab — 보정 없음) · 창은 기본 끔 · --viz (= kit) 또는 --viz X로 켬 · --watch (기록 후 창 닫을 때까지 반복)
 #          창: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로 — 벗어나는 만큼이 드리프트
 #   real   실기기 (PC · .venv · ROS 환경/peers 자동, ROS_DOMAIN_ID=25) · --check-only (안 움직이고 상태만) · --rate 20
 #          준비: 로봇 베이스 켜기 · MANUAL · 경로 direct (rl-only 안 띄움) · OpenCR는 가만히 둔 채 켜기 · 주변 1 m 비우기
@@ -28,7 +28,8 @@
 #   both   sim + real을 같은 경로로 한 번에 → 비교 그림 · --label real_floor --side --speed --turn --show
 #          → artifacts/calibration/<시각>-calibrate/{sim,real}/{raw.csv,fit.json,report.png} · compare.png · sim_calib.json
 #
-#   ./run-calibration.sh rl_correction_waypoint --robot=sim --viz none
+#   ./run-calibration.sh rl_correction_waypoint --robot=sim            # 창 없음
+#   ./run-calibration.sh rl_correction_waypoint --robot=sim --viz      # 창으로 보면서
 #   ./run-calibration.sh rl_correction_waypoint --robot=real --check-only
 #   ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
 #   ./run-calibration.sh rl_correction_waypoint --robot=dummy --gain-l 0.96 --gain-r 1.02
@@ -49,13 +50,19 @@ usage() {
   sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
 }
 
-# sim: 창 옵션이 없으면 --viz kit
+# 창은 기본 끔 (headless) — --viz만 쓰면 --viz kit, --viz X · --viz=X는 그대로
+viz_args() {
+  VIZ_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--viz" || "$1" == "--visualizer" ]] && [[ $# -eq 1 || "$2" == -* ]]; then VIZ_ARGS+=("$1" kit)
+    else VIZ_ARGS+=("$1"); fi
+    shift
+  done
+}
+
 sim() {
-  local args=("$@")
-  if [[ " ${args[*]} " != *" --viz "* && " ${args[*]} " != *" --visualizer "* ]]; then
-    args+=(--viz kit)
-  fi
-  exec "$ISAACLAB/isaaclab.sh" -p "${args[@]}"
+  viz_args "$@"
+  exec "$ISAACLAB/isaaclab.sh" -p "${VIZ_ARGS[@]}"
 }
 
 ros_env() {
@@ -116,7 +123,7 @@ case "$ROBOT" in
     mkdir -p "$RUN"
     COMMON=(--side "$SIDE" --speed "$SPEED" --turn "$TURN" ${COMMON_EXTRA[@]+"${COMMON_EXTRA[@]}"})
     echo "[calibrate] sim + real 시작 → $RUN"
-    "$0" "$TASK" --robot=sim --viz none "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
+    "$0" "$TASK" --robot=sim "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
       --out "$RUN/sim/raw.csv" > "$RUN/sim.log" 2>&1 &
     SIM_PID=$!
     set +e

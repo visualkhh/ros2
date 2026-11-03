@@ -45,22 +45,24 @@ def main(argv=None) -> int:
         cmd_spec = args.command or f"training.{name}.calibration.command:CalibrationCommand"
     else:
         env_spec, cfg_spec, cmd_spec = f"training.{name}.env:{camel}Env", f"training.{name}.env_cfg:{camel}EnvCfg", None
-    if "kit" not in (args.visualizer or []):
-        args.visualizer = ["kit"]   # 창이 있어야 한다 (키보드 · 화면)
+    shown = bool(args.visualizer) and args.visualizer != ["none"]   # 기본 headless — 창은 --viz
+    if args.command == "keyboard" and "kit" not in (args.visualizer or []):
+        raise SystemExit("--command=keyboard는 창이 있어야 함 — --viz 를 붙이세요")
     app = AppLauncher(args).app
+    running = app.is_running if shown else (lambda: True)   # 창 없으면 Ctrl+C까지 (headless는 is_running이 False)
     try:
         cfg = load(cfg_spec)()
         cfg.robot = tdir   # 로봇 = task 폴더
         cfg.scene.num_envs = 1
         cfg.sim.device = args.device
-        cfg.debug_vis = True
+        cfg.debug_vis = shown
         env = load(env_spec)(cfg)
         print(f"[drive] {args.task} · env {env_spec} · 명령 {cmd_spec or f'training.{name}.command (랜덤 웨이포인트)'} · "
               f"로봇 {cfg.robot_cfg.spawn.usd_path}", flush=True)
         if vw:
-            _drive(app, env, command_class(cmd_spec)(speed=args.speed, turn=args.turn))
+            _drive(running, env, command_class(cmd_spec)(speed=args.speed, turn=args.turn))
         else:
-            _task(app, env)
+            _task(running, env)
         env.close()
     except BaseException:
         import traceback
@@ -72,7 +74,9 @@ def main(argv=None) -> int:
 
 
 def _keys(env, prev):
-    """눌린 키 중 새로 눌린 것 + F(카메라) 처리."""
+    """눌린 키 중 새로 눌린 것 + F(카메라) 처리. 창이 없으면 키도 없다."""
+    if not env.cfg.debug_vis:
+        return set(), prev
     from commands import keyboard as kb
 
     keys = kb.pressed()
@@ -82,7 +86,7 @@ def _keys(env, prev):
     return new, keys
 
 
-def _task(app, env) -> None:
+def _task(running, env) -> None:
     """task env 그대로 — 행동 0 (정책 보정 없음) = 기본 제어기만으로 웨이포인트. 에피소드가 끝나면 env가 새 웨이포인트로 리셋."""
     import torch
 
@@ -91,7 +95,7 @@ def _task(app, env) -> None:
     zero = torch.zeros(env.num_envs, env.cfg.action_space, device=env.device)
     print("[drive] 노란 점 = 웨이포인트 경로 · 보정 0 · R 새 에피소드 · F 카메라 · 창 닫으면 끝", flush=True)
     prev = set()
-    while app.is_running():
+    while running():
         t = time.monotonic()
         new, prev = _keys(env, prev)
         if "R" in new:
@@ -100,7 +104,7 @@ def _task(app, env) -> None:
         time.sleep(max(0.0, env.step_dt - (time.monotonic() - t)))   # 실시간
 
 
-def _drive(app, env, cmd) -> None:
+def _drive(running, env, cmd) -> None:
     """[v, w] 명령(BaseCommand)으로 직접 — keyboard · CalibrationCommand(네모) 등."""
     import torch
 
@@ -114,7 +118,7 @@ def _drive(app, env, cmd) -> None:
     print(f"[drive] 명령 {type(cmd).__name__} · W/A/S/D(keyboard) · R 원점 + 처음부터 · F 카메라 · 마우스 휠 줌 · 창 닫으면 끝",
           flush=True)
     prev, t_print, ended = set(), 0.0, False
-    while app.is_running():
+    while running():
         t = time.monotonic()
         new, prev = _keys(env, prev)
         if "R" in new:

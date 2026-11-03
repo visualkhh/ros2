@@ -1,7 +1,7 @@
 """calibration 실행기 (공식 train.py 역할) — ./run-calibration.sh <task> --robot=sim|real|dummy [옵션...].
 
 training/<task>/calibration/ 명령 · env와 그 task 폴더의 로봇(sim_robot.py · real_robot.py)으로 한 번 측정 → raw.csv · fit.json · report.png.
-  sim    SimRobot (task 폴더 sim_robot.py) + CalibrationEnv — Isaac venv · --viz none|kit · --watch (기록 후 창 닫을 때까지 반복)
+  sim    SimRobot (task 폴더 sim_robot.py) + CalibrationEnv — Isaac venv · 창 기본 끔, --viz로 켬 · --watch (기록 후 창 닫을 때까지 반복)
   real   RealRobot (task 폴더 real_robot.py) — ROS .venv · 준비: Pi base + cmd_manager MANUAL · --check-only (안 움직임)
   dummy  DummyRobot (task 폴더 dummy_robot.py) — 표준 라이브러리만 (가짜 모터: --gain-l --gain-r --tau --delay --deadband --slip --noise)
 출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-sim · 02-real · dummy) · --out으로 정확한 경로.

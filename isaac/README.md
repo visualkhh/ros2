@@ -98,7 +98,7 @@ cd isaac
 ### 3.2 sim 측정 — 같은 명령, 순수 sim (envs/default, 보정 없음)
 
 ```bash
-./run-calibration.sh rl_correction_waypoint --robot=sim --viz none --label sim
+./run-calibration.sh rl_correction_waypoint --robot=sim --label sim          # 창 없음 (보려면 --viz)
 ./run-calibration.sh plot-compare artifacts/calibration/<시각>-sim/raw.csv artifacts/calibration/<real>/raw.csv
 ```
 
