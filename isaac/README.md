@@ -50,9 +50,9 @@ isaac/
 ```
 
 로봇 숫자(`urdf/robot_spec.py`): 바퀴 반지름 0.033 m · 간격 0.287 m · 최대 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s · 정책 20 Hz · 물리 480 Hz.
-USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd()`, `urdf/usd/` git 제외).
+USD는 실행할 때마다 URDF에서 자동 변환된다 (`robot_spec.robot_usd()` → `urdf/<robot>/usd/`, git 제외).
 따로 변환만: `$ISAACLAB_DIR/isaaclab.sh -p urdf/convert_urdf.py`.
-다른 로봇(새 task): `robot_usd("training/<task>/urdf/robot.xacro", "<task>")` — 인자 없이 쓰면 우리 로봇.
+다른 로봇: `urdf/<이름>/`에 `urdf.xacro` + `meshes/`를 두고 `robot_usd("<이름>")` — 인자 없이 쓰면 우리 로봇(`beebot`).
 측정 경로를 바꾸려면 `calibration/profile.py`, calibration 장면은 `calibration/calib_env_cfg.py` · `calib_env.py`를 고친다.
 
 ## 3. 절차 (2026-11-02 실제로 돈 순서)

@@ -3,7 +3,7 @@ export/**/*.onnx
 export/**/*.pt
 logs/
 checkpoints/
-/urdf/usd/*
+/urdf/*/usd/
 __pycache__/
 /export/
 /artifacts/
