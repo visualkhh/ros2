@@ -34,7 +34,7 @@
 
 | 항목 | v2 |
 |---|---|
-| 로봇 | **우리 URDF** `isaac/robots/beebot/urdf.xacro` (ROS용과 같은 내용 — `isaac/robots/check_same.sh`) → USD (`robots/beebot/spec.robot_usd()`가 변환). 바퀴만 |
+| 로봇 | **우리 URDF** `isaac/robots/beebot/urdf/robot.urdf.xacro` (ROS용과 같은 내용 — `isaac/robots/check_same.sh`) → USD (`robots/urdf_to_usd.py`가 변환). 바퀴만 |
 | 제어 주기 | **20 Hz** (cmd_manager와 같게). 물리 **480 Hz** · decimation 24 (`envs/rates.py PHYSICS_HZ` — 120/240 Hz는 제자리 회전 때 바퀴가 떨림) |
 | 지연 | 명령·관측 각각 0~4 스텝(0~200 ms) 에피소드마다 무작위 (WiFi 왕복) |
 | 모터 모델 | 바퀴별 1차 지연(τ 0.05~0.25 s) · 좌우 이득 비대칭 ±10% · 데드밴드 0~0.3 rad/s · 바퀴 8 rad/s 포화(두 바퀴 같은 비율, 드라이버와 동일) |
@@ -45,7 +45,7 @@
 | reward | `-(|v_cmd - v_true| + 0.5·|w_cmd - w_true|) - 0.01·|Δ|² - 0.05·|Δ_t - Δ_(t-1)|` (진짜 속도로 채점 — 학습 중엔 정답을 앎. 마지막 항 = 출렁임 방지) |
 | 종료 | 10 s |
 
-- 한계값·주기·지연 범위는 **한 파일**(`isaac/tasks/common/robots/beebot/spec.py`)에 두고 학습 환경·문서가 같이 씀. ROS 노드 기본값도 같은 값(0.26/1.82)으로.
+- 한계값·주기·지연 범위는 **한 파일**(`isaac/robots/beebot/config.py` · `isaac/envs/rates.py`)에 두고 학습 환경·문서가 같이 씀. ROS 노드 기본값도 같은 값(0.26/1.82)으로.
 
 ## 4. 평가 (Before / After)
 
@@ -62,7 +62,7 @@
 ## 6. 할 일 (순서)
 
 1. ✅ 펌웨어 `I` 줄 · 드라이버 `/imu` — **2026-10-30 업로드 완료**, `/imu` 20 Hz 확인 (정지: gz≈0, az≈9.98)
-2. ✅ `robots/beebot/spec.py` · 우리 URDF → USD (캐스터 충돌·마찰 0, 몸체 질량 추가)
+2. ✅ `robots/beebot/config.py` · 우리 URDF → USD (캐스터 충돌·마찰 0, 몸체 질량 추가)
 3. ✅ v2 환경 + 물리 스모크 + 60회 학습 (트래킹 오차 0.128 → 0.090) + ONNX
 4. ✅ ROS `corrector` v2 (obs 6 · 0.26/1.82 · 정지 명령 보정 0) · eval_recorder enc/gyro 열 · `compare_csv.py` — ☐ 스크립트 주행 패턴
 5. ☐ 본학습(300회) → export v2 → Before/After 실측 → 결과를 issue-tracking에

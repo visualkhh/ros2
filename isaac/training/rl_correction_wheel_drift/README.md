@@ -16,7 +16,7 @@ training/rl_correction_wheel_drift/
 └── README.md
 ```
 
-공용: `../../robots/beebot/spec.py` · `../onnx/onnx_export.py` · `../../calibration/` (측정 — 실측 값은 `rl_correct_env_cfg.py`에 숫자)
+공용: `../../robots/beebot/config.py` · `../onnx/onnx_export.py` · `../../calibration/` (측정 — 실측 값은 `rl_correct_env_cfg.py`에 숫자)
 
 ## 환경
 

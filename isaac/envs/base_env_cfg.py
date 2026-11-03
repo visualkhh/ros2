@@ -14,7 +14,7 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 
 from envs.rates import CONTROL_HZ, PHYSICS_HZ
-from robots.beebot import spec
+from robots.beebot import config as beebot
 from robots.beebot.config import CASTER_FRICTION, ROBOT_CFG, WHEEL_FRICTION
 
 GROUND_FRICTION = (0.8, 0.7)     # 바닥 (static, dynamic) — 로봇이 아니라 세상 쪽
@@ -35,9 +35,9 @@ class BaseEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1, env_spacing=2.0, replicate_physics=True)
     robot_cfg: ArticulationCfg = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     # 로봇 숫자 (드라이버 식) — robots.use()가 로봇에 맞게 바꾼다
-    wheel_radius = spec.WHEEL_RADIUS
-    wheel_sep = spec.WHEEL_SEP
-    max_wheel = spec.MAX_WHEEL
+    wheel_radius = beebot.WHEEL_RADIUS
+    wheel_sep = beebot.WHEEL_SEP
+    max_wheel = beebot.MAX_WHEEL
     terrain: TerrainImporterCfg = TerrainImporterCfg(prim_path="/World/ground", terrain_type="plane", physics_material=GROUND)
     wheel_friction = WHEEL_FRICTION
     caster_friction = CASTER_FRICTION

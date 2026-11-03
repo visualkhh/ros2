@@ -62,7 +62,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
 from isaaclab.scene import InteractiveScene  # noqa: E402
 from envs import rates  # noqa: E402
-from robots.beebot import spec  # noqa: E402
+from robots.beebot import config as beebot  # noqa: E402
 from envs.base_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -103,8 +103,8 @@ class ToyEnv:
         self.sim = sim
         self.wheel_ids = wheel_ids
         self.dev = self.robot.device
-        self.r = torch.tensor([spec.WHEEL_RADIUS], device=self.dev)
-        self.sep = torch.tensor([spec.WHEEL_SEP], device=self.dev)
+        self.r = torch.tensor([beebot.WHEEL_RADIUS], device=self.dev)
+        self.sep = torch.tensor([beebot.WHEEL_SEP], device=self.dev)
         self.t = 0.0
         self.t_change = 0.0
         self.next_change = 2.0
@@ -120,8 +120,8 @@ class ToyEnv:
 
     def _obs(self):
         jv = self.robot.data.joint_vel.torch[0, self.wheel_ids].tolist()
-        v_enc = spec.WHEEL_RADIUS * (jv[0] + jv[1]) / 2.0
-        w_enc = spec.WHEEL_RADIUS * (jv[1] - jv[0]) / spec.WHEEL_SEP
+        v_enc = beebot.WHEEL_RADIUS * (jv[0] + jv[1]) / 2.0
+        w_enc = beebot.WHEEL_RADIUS * (jv[1] - jv[0]) / beebot.WHEEL_SEP
         w_gyro = self.robot.data.root_ang_vel_b.torch[0, 2].item()
         return [self.cmd[0], self.cmd[1], v_enc, w_enc, w_gyro, min(self.t_change, 2.0)]
 
@@ -139,10 +139,10 @@ class ToyEnv:
         action = action.clamp(-1.0, 1.0)
         moving = abs(self.cmd[0]) + abs(self.cmd[1]) > 1e-6
         d = action * torch.tensor(ACTION_SCALE, device=self.dev) if moving else torch.zeros(2, device=self.dev)
-        v = max(-spec.MAX_LIN, min(spec.MAX_LIN, self.cmd[0] + d[0].item()))
-        w = max(-spec.MAX_ANG, min(spec.MAX_ANG, self.cmd[1] + d[1].item()))
+        v = max(-beebot.MAX_LIN, min(beebot.MAX_LIN, self.cmd[0] + d[0].item()))
+        w = max(-beebot.MAX_ANG, min(beebot.MAX_ANG, self.cmd[1] + d[1].item()))
         wheels = wheel_targets(torch.tensor([v], device=self.dev), torch.tensor([w], device=self.dev),
-                               self.r, self.sep, spec.MAX_WHEEL)
+                               self.r, self.sep, beebot.MAX_WHEEL)
         self.robot.set_joint_velocity_target(wheels, joint_ids=self.wheel_ids)
         self.scene.write_data_to_sim()
         for _ in range(SUBSTEPS):

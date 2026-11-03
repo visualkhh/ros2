@@ -59,7 +59,7 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
 from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
-from robots.beebot import spec  # noqa: E402
+from robots.beebot import config as beebot  # noqa: E402
 from envs.base_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -164,8 +164,8 @@ def main():
     print("[l3] settle done", flush=True)
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
-    r = torch.tensor([spec.WHEEL_RADIUS], device=dev)
-    sep = torch.tensor([spec.WHEEL_SEP], device=dev)
+    r = torch.tensor([beebot.WHEEL_RADIUS], device=dev)
+    sep = torch.tensor([beebot.WHEEL_SEP], device=dev)
     print("[l3] IMU + 360° LiDAR 준비")
     print(f"[l3] IMU  prim=.../base_link/imu_link (URDF fixed joint {IMU_POS})")
     if lidar is not None:

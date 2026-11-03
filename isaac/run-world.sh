@@ -4,7 +4,7 @@
 #   ./run-world.sh [--robot NAME|DIR] [--env NAME|MOD:CLASS] [--env-cfg MOD:CLASS] [--cmd keyboard|square|MOD:CLASS] [--speed 0.15] [--turn 1.0]
 #
 #   --robot     로봇 = robots/ 아래 이름 또는 로봇 디렉토리 경로 (같은 모양: urdf/robot.urdf.xacro → usd/ 자동 변환 ·
-#               config.py ROBOT_CFG · spec.py 바퀴 숫자 · meshes/)
+#               config.py(바퀴 숫자 · ROBOT_CFG) · meshes/)
 #               기본: env cfg의 로봇 (beebot). 바퀴 관절 이름은 wheel_left/right_joint여야 함
 #   --env       환경: envs/ 아래 이름 (기본 default — 아무것도 없는 평평한 바닥) · 없는 이름이면 MOD:CLASS로 직접
 #               이름 규칙: envs/<name>/<name>_env.py <Name>Env + <name>_env_cfg.py <Name>EnvCfg (Isaac Lab task 폴더)

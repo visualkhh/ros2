@@ -27,7 +27,7 @@ training/
 ```
 
 - task = `train.py`가 있는 폴더. `Train.main()`(베이스로 호출)은 그 폴더의 `train.main(argv)`로 넘기기만 한다.
-- 새 task는 자기 폴더에 env(`<name>_env.py`)·cfg(`<name>_env_cfg.py`)·`agents/`(Isaac Lab 구조)·URDF를 따로 둘 수 있다. 로봇은 env cfg에서 `robots/beebot/spec.robot_usd("training/<task>/urdf/robot.xacro", "<task>")`(메시는 `<xacro 폴더>/meshes`).
+- 새 task는 자기 폴더에 env(`<name>_env.py`)·cfg(`<name>_env_cfg.py`)·`agents/`(Isaac Lab 구조)·URDF를 따로 둘 수 있다. 로봇은 `robots/<이름>/` 폴더(urdf/ · meshes/ · config.py)로 두고 env cfg에서 `robots.use(cfg, "<이름>")`.
 - 새 task는 `train.py`에서 `Train`을 상속해 `add_args` / `before_launch` / `run`만 구현하고
   `def main(argv=None): return MyTrain.main(argv)`를 둔다. 결과 폴더는 `self.run_dir`.
 - 실기기 맞춤 값(calibration 측정의 real − sim 차이)은 task의 env cfg에 숫자로 넣는다 (task마다 자기 env).

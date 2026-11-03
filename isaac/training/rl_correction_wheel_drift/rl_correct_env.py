@@ -16,7 +16,7 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
-from robots.beebot import spec
+from robots.beebot import config as beebot
 
 if TYPE_CHECKING:
     from training.rl_correction_wheel_drift.rl_correct_env_cfg import RlCorrectEnvCfg
@@ -45,8 +45,8 @@ class RlCorrectEnv(BaseEnv):
         self.gain = torch.ones(n, 2, device=dev)
         self.deadband = torch.zeros(n, 1, device=dev)
         self.gyro_bias = torch.zeros(n, device=dev)        # 자이로 영점 오차 [rad/s] (에피소드 동안 고정)
-        self.r_nom = torch.full((n,), spec.WHEEL_RADIUS, device=dev)
-        self.sep_nom = torch.full((n,), spec.WHEEL_SEP, device=dev)
+        self.r_nom = torch.full((n,), beebot.WHEEL_RADIUS, device=dev)
+        self.sep_nom = torch.full((n,), beebot.WHEEL_SEP, device=dev)
         self.cmd_delay = torch.zeros(n, dtype=torch.long, device=dev)
         self.obs_delay = torch.zeros(n, dtype=torch.long, device=dev)
         self.cmd_buf = torch.zeros(n, self.cfg.cmd_delay_steps[1] + 1, 2, device=dev)
@@ -76,14 +76,14 @@ class RlCorrectEnv(BaseEnv):
     def _new_commands(self, ids: torch.Tensor):
         k, dev = len(ids), self.device
         u = torch.rand(k, device=dev)
-        speed = sample_uniform(0.10, spec.MAX_LIN, (k,), dev)
-        turn = sample_uniform(0.40, spec.MAX_ANG, (k,), dev)
+        speed = sample_uniform(0.10, beebot.MAX_LIN, (k,), dev)
+        turn = sample_uniform(0.40, beebot.MAX_ANG, (k,), dev)
         moves = torch.tensor(TELEOP_MOVES, dtype=torch.float32, device=dev)[torch.randint(0, len(TELEOP_MOVES), (k,), device=dev)]
         # 텔레오퍼: 사선은 설정 속도 + 반경 DIAG_RADIUS 원호, 제자리 회전은 회전 속도
         v = moves[:, 0] * speed
-        w = torch.where(moves[:, 0] != 0, moves[:, 1] * speed / spec.DIAG_RADIUS, moves[:, 1] * turn)
+        w = torch.where(moves[:, 0] != 0, moves[:, 1] * speed / beebot.DIAG_RADIUS, moves[:, 1] * turn)
         smooth = (u >= self.cfg.p_teleop) & (u < self.cfg.p_teleop + self.cfg.p_smooth)
-        v = torch.where(smooth, sample_uniform(0.0, spec.MAX_LIN, (k,), dev), v)
+        v = torch.where(smooth, sample_uniform(0.0, beebot.MAX_LIN, (k,), dev), v)
         w = torch.where(smooth, sample_uniform(-1.0, 1.0, (k,), dev), w)
         stop = u >= self.cfg.p_teleop + self.cfg.p_smooth
         v, w = v * (~stop), w * (~stop)
@@ -103,8 +103,8 @@ class RlCorrectEnv(BaseEnv):
         moving = (self.cmd.abs().sum(dim=-1, keepdim=True) > 0).float()
         self.delta = actions.clamp(-1.0, 1.0) * self.scale * moving  # 정지 명령엔 보정 0 (ROS corrector와 같은 규칙 — 제자리 기어감 방지)
         out = self.cmd + self.delta
-        out = torch.stack([out[:, 0].clamp(-spec.MAX_LIN, spec.MAX_LIN),
-                           out[:, 1].clamp(-spec.MAX_ANG, spec.MAX_ANG)], dim=-1)
+        out = torch.stack([out[:, 0].clamp(-beebot.MAX_LIN, beebot.MAX_LIN),
+                           out[:, 1].clamp(-beebot.MAX_ANG, beebot.MAX_ANG)], dim=-1)
         self.cmd_buf = torch.roll(self.cmd_buf, 1, dims=1)
         self.cmd_buf[:, 0] = out
         applied = self.cmd_buf[self._rows, self.cmd_delay]
@@ -149,8 +149,8 @@ class RlCorrectEnv(BaseEnv):
         self.tau[ids] = sample_uniform(*c.tau_range, (n, 2), dev)
         self.gain[ids] = sample_uniform(*c.gain_range, (n, 2), dev) * torch.tensor(c.gain_center, device=dev)
         self.deadband[ids] = sample_uniform(*c.deadband_range, (n, 1), dev)
-        self.r_nom[ids] = spec.WHEEL_RADIUS * (1 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (n,), dev))
-        self.sep_nom[ids] = spec.WHEEL_SEP * (1 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (n,), dev))
+        self.r_nom[ids] = beebot.WHEEL_RADIUS * (1 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (n,), dev))
+        self.sep_nom[ids] = beebot.WHEEL_SEP * (1 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (n,), dev))
         self.gyro_bias[ids] = sample_uniform(-c.gyro_bias, c.gyro_bias, (n,), dev)
         self.cmd_delay[ids] = torch.randint(c.cmd_delay_steps[0], c.cmd_delay_steps[1] + 1, (n,), device=dev)
         self.obs_delay[ids] = torch.randint(c.obs_delay_steps[0], c.obs_delay_steps[1] + 1, (n,), device=dev)

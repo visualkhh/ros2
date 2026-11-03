@@ -13,9 +13,9 @@ from collections import deque
 from commands.square import SquareCommand
 from calibration.record import record, run_path
 from envs import rates
-from robots.beebot import spec
+from robots.beebot import config as beebot
 
-R, SEP, MAX_WHEEL, DT = spec.WHEEL_RADIUS, spec.WHEEL_SEP, spec.MAX_WHEEL, 1.0 / rates.CONTROL_HZ
+R, SEP, MAX_WHEEL, DT = beebot.WHEEL_RADIUS, beebot.WHEEL_SEP, beebot.MAX_WHEEL, 1.0 / rates.CONTROL_HZ
 
 
 def _lag(state, target, tau):

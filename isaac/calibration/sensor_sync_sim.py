@@ -17,7 +17,7 @@ from isaaclab.app import AppLauncher
 
 from commands.square import SquareCommand
 from calibration.record import ISAAC, record, run_path
-from robots.beebot import spec
+from robots.beebot import config as beebot
 
 TAG = "02-sim"
 
@@ -106,8 +106,8 @@ def _run(args, app, cmd, sess, out):
             s = env.sense()
             obs = np.array([[v, w, s["v_enc"], s["w_enc"], s["w_gyro"], min(st["t"] - st["changed"], 2.0)]], np.float32)
             dv, dw = sess.run(None, {sess.get_inputs()[0].name: obs})[0][0]
-            lo = max(-spec.MAX_LIN, min(spec.MAX_LIN, v + float(dv)))
-            ao = max(-spec.MAX_ANG, min(spec.MAX_ANG, w + float(dw)))
+            lo = max(-beebot.MAX_LIN, min(beebot.MAX_LIN, v + float(dv)))
+            ao = max(-beebot.MAX_ANG, min(beebot.MAX_ANG, w + float(dw)))
         st["out"] = (lo, ao)
         env.step(torch.tensor([[lo, ao]], device=env.device))
         st["t"] += dt
