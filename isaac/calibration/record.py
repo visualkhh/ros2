@@ -15,6 +15,8 @@ from pathlib import Path
 
 from commands import CMDS, command_class
 
+CALIBRATION_CMD = "calibration.command:CalibrationCommand"   # calibration/command.py
+
 
 ISAAC = Path(__file__).resolve().parents[1]
 RUNS_DIR = ISAAC / "artifacts" / "calibration"
@@ -32,8 +34,8 @@ def run_path(name: str) -> str:
 
 def add_command_args(p) -> None:
     """--cmd · --speed · --turn · --side (세 측정 스크립트 공통)."""
-    p.add_argument("--cmd", default="square", help=f"명령: {' · '.join(CMDS)} 또는 MOD:CLASS (BaseCommand, 끝이 있는 것). "
-                                                  "fit · 구간 표는 segs가 있는 명령(square)만")
+    p.add_argument("--cmd", default=CALIBRATION_CMD, help=f"명령 (기본 {CALIBRATION_CMD}): {' · '.join(CMDS)} 또는 MOD:CLASS "
+                                                         "(BaseCommand, 끝이 있는 것). fit · 구간 표는 segs가 있는 명령(square 계열)만")
     p.add_argument("--speed", type=float, default=0.15, help="기준 전진 [m/s] (square: 변마다 1.0/0.67/1.33/0.8배)")
     p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")
     p.add_argument("--side", type=float, default=0.5, help="사각형 한 변 [m] (side를 받는 명령만)")

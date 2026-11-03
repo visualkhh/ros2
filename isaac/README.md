@@ -42,6 +42,7 @@ isaac/
 ├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트
+│   ├── command.py            CalibrationCommand(SquareCommand) — 측정 명령 (네모, --cmd 기본)
 │   ├── record.py             record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
 │   ├── sim_robot.py · real_robot.py · dummy_robot.py   ./run-calibration.sh sim|real|dummy — SimRobot · RealRobot · DummyRobot을 만들어 record()
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
