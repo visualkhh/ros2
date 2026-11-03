@@ -82,16 +82,20 @@ cd ../ros2_ws && colcon build --packages-select rl_correction rl_eval tb3_bringu
 ### 3.1 real 측정 — 실기기 사각형
 
 ```bash
-# 로봇: 베이스 · MANUAL · 직결 (Pi에서 또는 PC tool로)
-./tool/run-cli base start  &&  ./tool/run-cli control manual  &&  ./tool/run-cli route direct
-# PC
+# 로봇: 베이스 (Pi에서 또는 PC tool로)
+./tool/run-cli base start
+# PC: RL 노드 바이패스 (보정 없이 통과 — 정책을 쓸 때와 같은 경로 · 같은 PC 왕복 지연)
+cd ros2_ws && ./rl-only.sh label:=calib        # enable:=true 금지
+# MANUAL · 경로 rl
+./tool/run-cli control manual  &&  ./tool/run-cli route rl
 cd isaac
 ./run-calibration.sh rl_correction_waypoint --robot=real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
 ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
 #   → artifacts/calibration/<시각>-real_floor/{raw.csv, fit.json, report.png}   (--label 없으면 <시각>-02-real)
 ```
 
-- 로봇 주변 1 m 비우기. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 약 54초. 중간에 잡지 말 것. `rl-only.sh`는 띄우지 않는다 (직결).
+- 로봇 주변 1 m 비우기. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 약 54초. 중간에 잡지 말 것. 자세한 순서: `training/rl_correction_waypoint/README.md` calibration 절.
+- 2026-11-02 측정은 직결(`route direct`)이었다 — rl 경로로 다시 재면 PC 왕복만큼 지연이 늘 수 있다 (`RESPONSE_DELAY_STEPS`).
 - `fit.json` = 측정 결과 (gain 좌/우 · 지연 · τ · 데드밴드). 2026-11-02(`20261102_140931-02-real`): gain 0.9943/0.9951 · 지연 2스텝(0.1 s) · τ 0.046 s.
   τ는 20 Hz 기록의 한계값 · 데드밴드 0은 "못 잼"(저속 구간 없음).
 
