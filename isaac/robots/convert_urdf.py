@@ -1,7 +1,7 @@
 """URDF → USD만 생성 (Isaac 앱 headless, 장면은 안 띄움).
 
 실행:
-  cd isaac && $ISAACLAB_DIR/isaaclab.sh -p robots/convert_urdf.py [robot]    # robot = robots/ 아래 폴더 이름 (기본 beebot)
+  ./run-usd.sh [robot]   (= isaaclab.sh -p robots/convert_urdf.py [robot])    # robot = robots/ 아래 폴더 이름 (기본 beebot)
 
 출력: isaac/robots/<robot>/usd/<robot>/<robot>.usda (기본 beebot)
   (학습 · calibration · learn도 시작할 때 같은 함수를 자동 호출한다)

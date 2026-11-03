@@ -32,6 +32,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-training.sh           학습 실행기 (IsaacLab, 기본 headless)
+├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh [robot], 기본 beebot)
 ├── run-world.sh              직접 운전 — 로봇(--robot) · 환경(--env --env-cfg) 골라서 (기본 envs/default)
 ├── envs/                     환경 바탕 — 모든 env가 상속
 │   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
@@ -57,7 +58,7 @@ isaac/
 
 로봇 숫자(`robots/beebot/spec.py`): 바퀴 반지름 0.033 m · 간격 0.287 m · 최대 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s. 주기(`envs/rates.py`): 정책 20 Hz · 물리 480 Hz.
 USD는 URDF · 메시가 바뀌면 자동으로 다시 변환된다 (`robots/urdf_to_usd.py` `robot_usd()` → `robots/<robot>/usd/`, git 제외).
-따로 변환만: `$ISAACLAB_DIR/isaaclab.sh -p robots/convert_urdf.py`.
+따로 변환만: `./run-usd.sh [robot]` (Isaac Sim을 창 없이 켜서 변환 — 변환기가 Isaac Sim 안에 있다).
 다른 로봇: `robots/<이름>/`에 `urdf/robot.urdf.xacro` + `meshes/` + `spec.py` + `config.py`(`ROBOT_CFG`)를 두고 `./run-world.sh --robot <이름>` (코드에선 `robots.use(env_cfg, "<이름>")`).
 측정 경로를 바꾸려면 `commands/square.py`(또는 BaseCommand를 상속한 새 명령), calibration 장면은 `calibration/calib_env_cfg.py` · `calib_env.py`를 고친다.
 
