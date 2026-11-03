@@ -1,7 +1,7 @@
 """기본 세상 설정 — 로봇 1대 · 평평한 바닥 · 조명 · 480 Hz 물리 / 20 Hz 명령. 아무 규칙 없음 (보상 0 · 종료 없음).
 
 task cfg가 상속해서 바꾸는 것: scene.num_envs · terrain(지형) · 관측/행동 크기 · 자기 랜덤 범위.
-로봇은 이름(`robot`)만 — cfg가 만들어질 때 robots/<이름>/config.py로 채운다 (robot_cfg · 바퀴 숫자 · 마찰).
+로봇은 이름(`robot`)만 — cfg가 만들어질 때 그 로봇 폴더의 robot_cfg.py로 채운다 (robot_cfg · 바퀴 숫자 · 마찰).
 다른 로봇: `XxxEnvCfg(robot="<이름 또는 폴더>")` · ./run-world.sh --robot. 기본 로봇 이름은 robots.DEFAULT 한 곳.
 """
 from __future__ import annotations
@@ -40,7 +40,7 @@ class BaseEnvCfg(DirectRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(dt=1 / PHYSICS_HZ, render_interval=decimation)
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1, env_spacing=2.0, replicate_physics=True)
     terrain: TerrainImporterCfg = TerrainImporterCfg(prim_path="/World/ground", terrain_type="plane", physics_material=GROUND)
-    # 로봇 — 이름(또는 폴더 경로)만 정하면 __post_init__이 robots/<이름>/config.py에서 아래를 채운다
+    # 로봇 — 이름(또는 폴더 경로)만 정하면 __post_init__이 그 폴더의 robot_cfg.py에서 아래를 채운다
     robot: str = robots.DEFAULT
     robot_prim_path: str = "{ENV_REGEX_NS}/Robot"
     robot_cfg: ArticulationCfg = MISSING         # USD · 바퀴 모터

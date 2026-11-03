@@ -13,9 +13,10 @@ from collections import deque
 from commands.square import SquareCommand
 from calibration.record import record, run_path
 CONTROL_HZ = 20.0   # 기록 주기 (= envs/base_env_cfg.py CONTROL_HZ — Isaac 없이 돌아서 따로, 바꾸면 같이)
-from robots.beebot import config as beebot
+import robots
+robot_cfg = robots.load()
 
-R, SEP, MAX_WHEEL, DT = beebot.WHEEL_RADIUS, beebot.WHEEL_SEP, beebot.MAX_WHEEL, 1.0 / CONTROL_HZ
+R, SEP, MAX_WHEEL, DT = robot_cfg.WHEEL_RADIUS, robot_cfg.WHEEL_SEP, robot_cfg.MAX_WHEEL, 1.0 / CONTROL_HZ
 
 
 def _lag(state, target, tau):

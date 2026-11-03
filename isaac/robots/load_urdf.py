@@ -1,7 +1,7 @@
 """URDF headless load check: xacro -> URDF -> USD -> spawn -> step 200 frames.
 
 Usage (Lab venv):
-  ./isaaclab.sh -p isaac/robots/load_urdf.py
+  ./isaaclab.sh -p isaac/robots/load_urdf.py <robots/ 아래 이름 | URDF 폴더>
 Prints joint/link list + base height (should stay ~0.01, not fall).
 """
 import sys
@@ -9,6 +9,8 @@ from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
+ROBOT = sys.argv[1] if len(sys.argv) > 1 else sys.exit("사용: load_urdf.py <robots/ 아래 이름 | URDF 폴더>")
+sys.argv = sys.argv[:1]
 app_launcher = AppLauncher(headless=True)
 from isaaclab.sim import SimulationContext  # noqa: E402
 
@@ -25,7 +27,7 @@ from robots.urdf_to_usd import robot_usd  # noqa: E402
 
 
 def main():
-    usd_path = robot_usd("beebot")
+    usd_path = robot_usd(ROBOT)
     print(f"[urdf] usd -> {usd_path}")
 
     sim_cfg = SimulationCfg(dt=1 / 120)

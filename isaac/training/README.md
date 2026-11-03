@@ -16,14 +16,16 @@ calibration/ 측정 (real · 순수 sim)  →  task env cfg에 차이를 숫자�
 training/
 ├── __init__.py                 register() — training/ 아래 task 폴더를 import (각 __init__.py의 gym.register)
 └── rl_correction_waypoint/     랜덤 웨이포인트를 이탈 없이 — task 이름 RlCorrectionWaypoint
-    ├── __init__.py             gym.register — 로봇마다 이름 하나
-    ├── env.py · env_cfg.py     RlCorrectionWaypointEnv(BaseEnv) · RlCorrectionWaypointEnvCfg(BaseEnvCfg — 로봇과 상관없음, 실측 중심은 로봇 config)
+    ├── __init__.py             gym.register
+    ├── env.py · env_cfg.py     RlCorrectionWaypointEnv(BaseEnv) · RlCorrectionWaypointEnvCfg(BaseEnvCfg — 로봇과 상관없음, 실측 중심은 robot_cfg.py)
     ├── command.py              RlCorrectionWaypointCommand — env마다 랜덤 웨이포인트
-    └── agent.py                RlCorrectionWaypointAgentCfg(BaseAgentCfg) — PPO 값
+    ├── agent.py                RlCorrectionWaypointAgentCfg(BaseAgentCfg) — PPO 값
+    ├── robot_cfg.py            로봇: ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 RESPONSE_*
+    └── usda/robot.usda         로봇 USD (외부 제공, 변환 없이 그대로)
 ```
 
-새 task: 폴더를 만들고 위 다섯 파일을 둔다 (`__init__.py`의 등록 이름이 `--task` 값).
-로봇은 task와 따로: `./run-training.sh env.robot=<이름|폴더>` (기본 `robots.DEFAULT`). 그 로봇의 `config.py`가 바퀴 숫자와 **실측 응답**(`RESPONSE_*`)을 채우고, task는 그 주변 랜덤 폭만 갖는다.
+새 task: 폴더를 만들고 위 파일들을 둔다 (이름 고정 — `robot_cfg.py` · `usda/robot.usda`) (`__init__.py`의 등록 이름이 `--task` 값).
+로봇 = task 폴더의 `robot_cfg.py` + `usda/robot.usda` (`robots.DEFAULT`). 다른 로봇: `./run-training.sh env.robot=<이름|폴더>`. 그 로봇의 `robot_cfg.py`가 바퀴 숫자와 **실측 응답**(`RESPONSE_*`)을 채우고, task는 그 주변 랜덤 폭만 갖는다.
 `__init__.py`는 Isaac 앱보다 먼저 import되므로 등록은 문자열 위치만 적는다.
 
 ## 실행 (`../run-training.sh` — 공식 스크립트를 우리 task로)
@@ -57,6 +59,6 @@ tensorboard --logdir logs/rsl_rl
 ## 보정값과 RL의 관계
 
 - 바퀴 **τ·gain·지연·데드밴드**는 env가 에피소드마다 랜덤으로 뽑는다. 범위의 **중심 = 실측 값**
-  (calibration의 real − sim 차이를 로봇 `config.py` `RESPONSE_*`에 숫자로, task는 폭만).
-- 바닥 마찰은 `envs/base_env_cfg.py`, 바퀴 · 캐스터 마찰은 `robots/beebot/config.py` (+ env마다 바퀴 마찰 랜덤 events).
+  (calibration의 real − sim 차이를 `robot_cfg.py` `RESPONSE_*`에 숫자로, task는 폭만).
+- 바닥 마찰은 `envs/base_env_cfg.py`, 바퀴 · 캐스터 마찰은 `robot_cfg.py` (+ env마다 바퀴 마찰 랜덤 events).
 - RL은 그 위의 **잔차**(좌우 비대칭, 슬립, 드리프트)를 학습한다.

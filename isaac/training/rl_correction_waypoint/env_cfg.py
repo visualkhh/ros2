@@ -57,7 +57,7 @@ class EventCfg:
 class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
     """기본 세상(BaseEnvCfg: 480/20 Hz) + 로봇 수천 대 · 지형 · 바퀴 랜덤. 관측 10 / 행동 2.
 
-    로봇은 BaseEnvCfg.robot (기본 robots.DEFAULT · 바꾸기: env.robot=<이름|폴더>) — 그 로봇의 config.py가
+    로봇은 BaseEnvCfg.robot (기본 robots.DEFAULT = 이 폴더 · 바꾸기: env.robot=<이름|폴더>) — 그 로봇의 robot_cfg.py가
     바퀴 숫자 · 실측 응답(RESPONSE_*)을 채운다. 실측 응답이 랜덤 범위의 중심, 여기는 폭만.
     로봇 corrector goal 모드와 같은 약속: 관측 [gx, gy, px, py, yaw, v_enc, w_enc, w_gyro, prev_a0, prev_a1]
     (시작 자세 기준, 위치·방향 = 엔코더 거리 + 자이로 방향 적분) · 기본 제어기 식 · 행동 [-1, 1] × action_scale.
@@ -88,7 +88,7 @@ class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
     # 정책 출력 [-1, 1] → 보정량 (로봇 corrector의 action_scale_lin/ang과 같아야 한다)
     action_scale = (0.10, 0.60)    # [m/s, rad/s]
 
-    # 에피소드마다 무작위 — 중심 = 로봇 실측 응답 (robots/<robot>/config.py RESPONSE_*), 여기는 폭만
+    # 에피소드마다 무작위 — 중심 = 로봇 실측 응답 (robot_cfg.py RESPONSE_*), 여기는 폭만
     tau_width = 0.10               # [s] τ = 실측 ± 이만큼 (최소 tau_min)
     tau_min = 0.01
     gain_range = (0.90, 1.10)      # 바퀴별 이득 — 실측 좌/우 gain에 곱함

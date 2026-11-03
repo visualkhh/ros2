@@ -56,7 +56,8 @@ from isaaclab.sim import SimulationCfg, SimulationContext  # noqa: E402
 from isaaclab.utils import configclass  # noqa: E402
 
 from learn.lesson_scene import TB3SceneCfg, place, ready, rooms  # noqa: E402
-from robots.beebot import config as beebot  # noqa: E402
+import robots  # noqa: E402
+robot_cfg = robots.load()   # 기본 로봇의 robot_cfg.py
 from envs.base_env import wheel_targets  # noqa: E402
 
 DT = 1 / 120.0
@@ -92,8 +93,8 @@ def main():
     n = scene.num_envs
     wheel_ids, _ = robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
     dev = robot.device
-    r = torch.tensor([beebot.WHEEL_RADIUS], device=dev)
-    sep = torch.tensor([beebot.WHEEL_SEP], device=dev)
+    r = torch.tensor([robot_cfg.WHEEL_RADIUS], device=dev)
+    sep = torch.tensor([robot_cfg.WHEEL_SEP], device=dev)
     v = torch.zeros(n, device=dev)
     w = torch.zeros(n, device=dev)
     print(f"[l5] envs={n} · spacing={args_cli.spacing} m · scene.env_origins={tuple(scene.env_origins[0].tolist())}")
@@ -135,7 +136,7 @@ def main():
                 v[:] = 0.0; w[:] = 0.0
                 print("[l5] reset")
 
-        wheels = wheel_targets(v, w, r, sep, beebot.MAX_WHEEL)
+        wheels = wheel_targets(v, w, r, sep, robot_cfg.MAX_WHEEL)
         robot.set_joint_velocity_target(wheels, joint_ids=wheel_ids)
         scene.write_data_to_sim()
         sim.step(render=False)

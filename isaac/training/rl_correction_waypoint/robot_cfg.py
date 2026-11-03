@@ -1,9 +1,9 @@
-"""beebot — TurtleBot3 Waffle Pi 개조 (상판 제거 · LDS-03 1층 앞). 로봇 설정 한 파일.
+"""이 task의 로봇 설정. 모양 · 질량 · 관절은 usda/robot.usda (외부 제공 — 그대로 씀).
 
   숫자 (바퀴 · 모터 · 마찰)  표준 라이브러리만 — 리포트 · 실기기 측정 · dummy도 이 파일을 읽는다
-  ROBOT_CFG                 Isaac Lab ArticulationCfg (ANYMAL_C_CFG 관례) — 처음 쓸 때 만든다 (USD 경로만, 변환은 env가)
+  ROBOT_CFG                 Isaac Lab ArticulationCfg (ANYMAL_C_CFG 관례) — 처음 쓸 때 만든다 → usda/robot.usda
 
-모양 · 질량 · 관절은 urdf/robot.urdf.xacro → usd/ (robots.urdf_to_usd). 마찰 · 모터는 URDF에 없어서 여기서 넣는다.
+마찰 · 모터는 여기서 넣는다. USD 관절 이름 wheel_left_joint · wheel_right_joint.
 숫자는 ROS 쪽과 같아야 한다 (바꾸면 양쪽 같이): ros2_ws/src/tb3_bringup/config/robot.yaml (바퀴) ·
 opencr_driver.wheel_speeds (8 rad/s 비례 축소) · rl_correction corrector (max_lin/max_ang).
 """
@@ -13,7 +13,7 @@ import os
 
 # 바퀴 · 속도 (드라이버 식)
 WHEEL_RADIUS = 0.033   # [m]
-WHEEL_SEP = 0.287      # [m] (드라이버 기준값. URDF 바퀴 y ±0.144)
+WHEEL_SEP = 0.287      # [m] (드라이버 기준값)
 MAX_LIN = 0.26         # [m/s]
 MAX_ANG = 1.82         # [rad/s]
 MAX_WHEEL = 8.0        # [rad/s] 펌웨어 VEL_LIMIT_RAD_S · 드라이버 max_wheel_speed
@@ -41,11 +41,9 @@ def _robot_cfg():
     from isaaclab.assets import ArticulationCfg
     from isaaclab.sim.spawners.from_files import UsdFileCfg
 
-    from robots.urdf_to_usd import usd_path
-
     return ArticulationCfg(
         prim_path="/World/Robot",
-        spawn=UsdFileCfg(usd_path=usd_path(os.path.dirname(os.path.abspath(__file__)))),   # 이 폴더 (변환은 env가 장면 만들 때)
+        spawn=UsdFileCfg(usd_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "usda", "robot.usda")),
         init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 0.01)),
         actuators={
             "wheels": ImplicitActuatorCfg(
@@ -58,8 +56,6 @@ def _robot_cfg():
 
 def __getattr__(name: str):
     """ROBOT_CFG는 처음 쓸 때 만든다 (import만으로는 isaaclab · USD 변환을 안 함)."""
-    if name in ("ROBOT_CFG", "BEEBOT_CFG"):
-        cfg = globals().setdefault("ROBOT_CFG", _robot_cfg())
-        globals()["BEEBOT_CFG"] = cfg
-        return cfg
+    if name == "ROBOT_CFG":
+        return globals().setdefault("ROBOT_CFG", _robot_cfg())
     raise AttributeError(name)

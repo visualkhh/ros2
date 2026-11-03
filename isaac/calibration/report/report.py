@@ -137,7 +137,9 @@ def fit_wheels(rows, t, fit):
     v/w 명령 → (지연) → 차동기구학 → 8 rad/s 비례 축소 → gain → deadband → 1차지연.
     (학습 env 바퀴 모델 · wheel_targets와 같은 순서)
     """
-    from robots.beebot.config import MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP  # noqa: E402
+    import robots  # noqa: E402
+    _rc = robots.load()
+    MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP = _rc.MAX_WHEEL, _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
     dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
     gl = _gain(fit, "wheel_gain_l")
@@ -174,14 +176,18 @@ def fit_wheels(rows, t, fit):
 
 def fit_v(rows, t, fit):
     """좌/우 바퀴 모델 → 차동기구학으로 몸체 선속도 v 예측. (wl+wr)·r/2."""
-    from robots.beebot.config import WHEEL_RADIUS  # noqa: E402
+    import robots  # noqa: E402
+    _rc = robots.load()
+    WHEEL_RADIUS, = _rc.WHEEL_RADIUS
     pl, pr = fit_wheels(rows, t, fit)
     return [WHEEL_RADIUS * (a + b) / 2.0 for a, b in zip(pl, pr)]
 
 
 def fit_ang(rows, t, fit):
     """좌/우 바퀴 모델 → 차동기구학으로 각속도 w 예측. (wr − wl)·r/sep."""
-    from robots.beebot.config import WHEEL_RADIUS, WHEEL_SEP  # noqa: E402 (compare 전용, lazy)
+    import robots  # noqa: E402
+    _rc = robots.load()
+    WHEEL_RADIUS, WHEEL_SEP = _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
     pl, pr = fit_wheels(rows, t, fit)
     return [(r_ - l_) * WHEEL_RADIUS / WHEEL_SEP for l_, r_ in zip(pl, pr)]
 
@@ -243,7 +249,9 @@ def corrected_path(rows, t, fit):
     fit model(빨강)은 실제를 재현하는 모델이고, 이건 그 gain을 역으로 보상했을 때
     실제(파랑)가 이상(초록) 쪽으로 얼마나 붙는지를 보여준다. 지연/tau는 남는다.
     """
-    from robots.beebot.config import MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP  # noqa: E402
+    import robots  # noqa: E402
+    _rc = robots.load()
+    MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP = _rc.MAX_WHEEL, _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
     dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
     gl = _gain(fit, "wheel_gain_l")
@@ -438,7 +446,9 @@ def fit_wheel(real):
       샘플의 중앙값이다.
     - 단륜·저속·고부하 구간은 진단값(`speed_fit`, `power`, sat)으로 함께 남긴다.
     """
-    from robots.beebot.config import MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP  # noqa: E402
+    import robots  # noqa: E402
+    _rc = robots.load()
+    MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP = _rc.MAX_WHEEL, _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
 
     def wheel_cmds(r):
         wl = (r["lin_raw"] - r["ang_raw"] * WHEEL_SEP / 2.0) / WHEEL_RADIUS

@@ -46,7 +46,7 @@ def env_specs(env: str, env_cfg: str | None) -> tuple[str, str]:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="키보드 운전 (로봇 · 환경 선택)")
-    p.add_argument("--robot", default=None, help="로봇 = robots/ 아래 이름 또는 로봇 디렉토리 (urdf/ · meshes/ · config.py). 기본: robots.DEFAULT")
+    p.add_argument("--robot", default=None, help="로봇 = robot_cfg.py가 있는 폴더 (robots/ 아래면 이름만). 기본: robots.DEFAULT")
     p.add_argument("--env", default="default", help="환경: envs/ 아래 이름 (default …) 또는 MOD:CLASS")
     p.add_argument("--env-cfg", default=None, help="환경 설정 MOD:CLASS (없으면 --env 규칙으로: envs/<name>/env_cfg.py <Name>EnvCfg)")
     p.add_argument("--cmd", default="keyboard", help="명령: keyboard(직접 운전) · square(네모 54 s, 노란 점 = 목표) · MOD:CLASS")

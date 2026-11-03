@@ -1,50 +1,52 @@
-"""로봇마다 폴더: robots/<robot>/{urdf/robot.urdf.xacro, meshes/, usd/(변환물, git 제외), config.py}.
+"""로봇 폴더 = robot_cfg.py + USD. 정해진 모양 두 가지:
 
-  config.py     바퀴 숫자 · 모터 · 마찰 (표준 라이브러리로 읽힘) + ROBOT_CFG (Isaac Lab, 처음 쓸 때 만듦)
-우리 로봇 = beebot (TurtleBot3 Waffle Pi 개조). 다른 로봇: `use(env_cfg, "<이름>" 또는 "<디렉토리>")` · ./run-world.sh --robot <이름|디렉토리>
+  training/<task>/{robot_cfg.py, usda/robot.usda}       외부에서 받은 USD 그대로 (변환 없음) — 기본 로봇
+  robots/<이름>/{robot_cfg.py, urdf/robot.urdf.xacro, meshes/}  URDF → usd/<이름>/<이름>.usda 변환 (robots.urdf_to_usd)
+  robot_cfg.py  바퀴 숫자 · 모터 · 마찰 · 실측 응답 (표준 라이브러리로 읽힘) + ROBOT_CFG (Isaac Lab, 처음 쓸 때 만듦)
+다른 로봇: `use(env_cfg, "<이름>" 또는 "<디렉토리>")` · ./run-world.sh --robot <이름|디렉토리>
 """
 from __future__ import annotations
 
-import importlib
 import os
 
 ROBOTS_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT = "beebot"
+DEFAULT = os.path.join(os.path.dirname(ROBOTS_DIR), "training", "rl_correction_waypoint")   # 기본 로봇 = 이 task의 로봇
+SETTINGS = "robot_cfg.py"
 
 
 def names() -> list[str]:
-    return sorted(d for d in os.listdir(ROBOTS_DIR) if os.path.isfile(os.path.join(ROBOTS_DIR, d, "config.py")))
+    return sorted(d for d in os.listdir(ROBOTS_DIR) if os.path.isfile(os.path.join(ROBOTS_DIR, d, SETTINGS)))
 
 
 def robot_dir(robot: str) -> str:
-    """이름(robots/<이름>) 또는 디렉토리 경로 → 로봇 폴더 절대경로. config.py가 없으면 SystemExit."""
+    """이름(robots/<이름>) 또는 디렉토리 경로 → 로봇 폴더 절대경로. robot_cfg.py가 없으면 SystemExit."""
     d = robot if (os.sep in robot or robot.startswith(".")) else os.path.join(ROBOTS_DIR, robot)
     d = os.path.abspath(d)
-    if not os.path.isfile(os.path.join(d, "config.py")):
-        raise SystemExit(f"로봇 없음: {robot} (config.py가 있는 폴더 — robots/에 있는 것: {', '.join(names())})")
+    if not os.path.isfile(os.path.join(d, SETTINGS)):
+        raise SystemExit(f"로봇 없음: {robot} ({SETTINGS}가 있는 폴더 — 기본 {DEFAULT} · robots/에 있는 것: {', '.join(names()) or '없음'})")
     return d
 
 
-def _module(path: str, name: str):
+def load(robot: str = DEFAULT):
+    """로봇의 robot_cfg.py 모듈 (표준 라이브러리만 — 바퀴 숫자 등을 읽을 때). 같은 폴더는 한 번만 읽는다."""
     import importlib.util
+    import sys
 
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    path = os.path.join(robot_dir(robot), SETTINGS)
+    name = "robot_cfg_" + path.replace(os.sep, "_").replace(".", "_")
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        sys.modules[name] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sys.modules[name])
+    return sys.modules[name]
 
 
 def use(env_cfg, robot: str) -> None:
-    """env cfg의 로봇을 바꾼다 — robot = 이름(robots/<이름>) 또는 디렉토리 경로 (같은 모양: urdf/ · meshes/ · config.py).
+    """env cfg의 로봇을 바꾼다 — robot = 이름(robots/<이름>) 또는 디렉토리 경로 (robot_cfg.py가 있는 폴더).
 
-    ROBOT_CFG(prim 경로는 env 것 유지) · 바퀴 숫자 · 바퀴/캐스터 마찰 — 전부 그 폴더의 config.py.
+    ROBOT_CFG(prim 경로는 env 것 유지) · 바퀴 숫자 · 실측 응답 · 바퀴/캐스터 마찰 — 전부 그 폴더의 robot_cfg.py.
     """
-    d = robot_dir(robot)
-    if os.path.dirname(d) == ROBOTS_DIR:   # robots/ 안 = 패키지로
-        cfg = importlib.import_module(f"robots.{os.path.basename(d)}.config")
-    else:                                   # 밖 = 파일 경로로
-        tag = "robot_" + os.path.basename(d)
-        cfg = _module(os.path.join(d, "config.py"), tag + "_config")
+    cfg = load(robot)
     env_cfg.robot_cfg = cfg.ROBOT_CFG.replace(prim_path=env_cfg.robot_prim_path)
     env_cfg.wheel_radius, env_cfg.wheel_sep, env_cfg.max_wheel = cfg.WHEEL_RADIUS, cfg.WHEEL_SEP, cfg.MAX_WHEEL
     env_cfg.max_lin, env_cfg.max_ang, env_cfg.diag_radius = cfg.MAX_LIN, cfg.MAX_ANG, cfg.DIAG_RADIUS

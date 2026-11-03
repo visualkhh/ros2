@@ -1,7 +1,7 @@
 #!/bin/bash
 # 로봇 URDF → USD 변환만 (Isaac Sim을 창 없이 잠깐 켜서 — 변환기가 Isaac Sim 안에 있다).
 #
-#   ./run-usd.sh [robot]      robot = robots/ 아래 이름 또는 로봇 디렉토리 경로 (기본 beebot)
+#   ./run-usd.sh [robot]      robot = robots/ 아래 이름 또는 로봇 디렉토리 경로 (필수)
 #
 # 입력: <로봇 폴더>/urdf/robot.urdf.xacro + meshes/
 # 출력: <로봇 폴더>/usd/<이름>/<이름>.usda (robots/ 안이면 git 제외)
@@ -15,7 +15,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
   sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
   exit 0
 fi
-robot="${1:-}"
+robot="${1:?사용: ./run-usd.sh <robots/ 아래 이름 | URDF 폴더>}"
 [[ "$robot" == */* ]] && robot=$(realpath -m "$robot")   # 경로는 지금 폴더 기준 → 절대경로 (아래에서 isaac/로 cd)
 dir="$robot"; [[ "$robot" != /* ]] && dir="$ISAAC/robots/$robot"
 if [[ -n "$robot" && ! -f "$dir/urdf/robot.urdf.xacro" ]]; then
