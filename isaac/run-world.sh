@@ -1,9 +1,10 @@
 #!/bin/bash
 # 로봇을 직접 몰아보는 창 — 로봇(USD)과 환경(env · env cfg)을 골라서 띄운다 (envs/drive.py).
 #
-#   ./run-world.sh [--robot NAME] [--env NAME|MOD:CLASS] [--env-cfg MOD:CLASS] [--cmd keyboard|square|MOD:CLASS] [--speed 0.15] [--turn 1.0]
+#   ./run-world.sh [--robot NAME|DIR] [--env NAME|MOD:CLASS] [--env-cfg MOD:CLASS] [--cmd keyboard|square|MOD:CLASS] [--speed 0.15] [--turn 1.0]
 #
-#   --robot     로봇 = robots/<이름>/ (urdf/robot.urdf.xacro → usd/ 자동 변환 · config.py ROBOT_CFG · spec.py 바퀴 숫자)
+#   --robot     로봇 = robots/ 아래 이름 또는 로봇 디렉토리 경로 (같은 모양: urdf/robot.urdf.xacro → usd/ 자동 변환 ·
+#               config.py ROBOT_CFG · spec.py 바퀴 숫자 · meshes/)
 #               기본: env cfg의 로봇 (beebot). 바퀴 관절 이름은 wheel_left/right_joint여야 함
 #   --env       환경: envs/ 아래 이름 (기본 default — 아무것도 없는 평평한 바닥) · 없는 이름이면 MOD:CLASS로 직접
 #               이름 규칙: envs/<name>/<name>_env.py <Name>Env + <name>_env_cfg.py <Name>EnvCfg (Isaac Lab task 폴더)
@@ -19,6 +20,7 @@
 #
 #   ./run-world.sh
 #   ./run-world.sh --robot beebot
+#   ./run-world.sh --robot ~/my_robots/beebot2              # robots/ 밖의 로봇 폴더
 #   ./run-world.sh --cmd square                                  # 로봇이 혼자 네모 — 드리프트를 노란 점과 비교
 #   ./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물
 set -euo pipefail
@@ -29,5 +31,10 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
   sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
   exit 0
 fi
+args=()   # --robot 경로는 지금 폴더 기준 → 절대경로로 (아래에서 isaac/로 cd 하므로)
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--robot" && "${2:-}" == */* ]]; then args+=(--robot "$(realpath -m "$2")"); shift 2
+  else args+=("$1"); shift; fi
+done
 cd "$ISAAC"   # 상대경로 기준 = isaac/
-exec "$ISAACLAB/isaaclab.sh" -p -m envs.drive "$@"
+exec "$ISAACLAB/isaaclab.sh" -p -m envs.drive ${args[@]+"${args[@]}"}

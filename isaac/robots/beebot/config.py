@@ -6,6 +6,8 @@ USD 변환에 Isaac 앱이 필요 — AppLauncher 뒤에 import.
 """
 from __future__ import annotations
 
+import os
+
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.sim.spawners.from_files import UsdFileCfg
@@ -23,7 +25,7 @@ CASTER_FRICTION = (0.0, 0.0)   # 캐스터는 min 결합 — average면 바닥 �
 
 ROBOT_CFG = ArticulationCfg(
     prim_path="/World/Robot",
-    spawn=UsdFileCfg(usd_path=robot_usd("beebot")),
+    spawn=UsdFileCfg(usd_path=robot_usd(os.path.dirname(os.path.abspath(__file__)))),   # 이 폴더 — 복사해 가도 그대로
     init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 0.01)),
     actuators={
         "wheels": ImplicitActuatorCfg(

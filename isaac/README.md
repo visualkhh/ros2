@@ -32,7 +32,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-training.sh           학습 실행기 (IsaacLab, 기본 headless)
-├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh [robot], 기본 beebot)
+├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh [이름|디렉토리], 기본 beebot)
 ├── run-world.sh              직접 운전 — 로봇(--robot) · 환경(--env --env-cfg) 골라서 (기본 envs/default)
 ├── envs/                     환경 바탕 — 모든 env가 상속
 │   ├── base_env.py · base_env_cfg.py   BaseEnv (로봇 1대 · 평평 바닥 · 480/20 Hz · 드라이버 식 · 리셋 · 화면 막대)
@@ -169,7 +169,7 @@ FIT=artifacts/calibration/<real>/fit.json,artifacts/calibration/<시각>-sim/fit
 
 ```bash
 ./run-world.sh                                       # 기본 환경 envs/default (아무것도 없는 평평한 바닥) + beebot
-./run-world.sh --robot <robot>                       # 다른 로봇 (robots/<robot>/)
+./run-world.sh --robot <robot>                       # 다른 로봇: robots/ 아래 이름 또는 로봇 디렉토리 경로
 ./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/<name>_env.py · <name>_env_cfg.py)
 ./run-world.sh --env calibration.calib_env:CalibEnv --env-cfg calibration.calib_env_cfg:RoomsEnvCfg   # 방 + 장애물  (envs/ 밖은 MOD:CLASS)
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)

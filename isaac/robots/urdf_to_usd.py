@@ -18,7 +18,8 @@ def robot_usd(robot: str) -> str:
     import glob
     import shutil
 
-    robot_dir = os.path.join(ROBOTS_DIR, robot)
+    robot_dir = os.path.abspath(robot if os.sep in robot else os.path.join(ROBOTS_DIR, robot))   # 이름 또는 폴더 경로
+    robot = os.path.basename(robot_dir)
     xacro_path, out_dir = os.path.join(robot_dir, "urdf", "robot.urdf.xacro"), os.path.join(robot_dir, "usd")
     if not os.path.isfile(xacro_path):
         raise FileNotFoundError(f"로봇 URDF 없음: {xacro_path}")

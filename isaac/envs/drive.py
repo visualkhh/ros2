@@ -46,7 +46,7 @@ def env_specs(env: str, env_cfg: str | None) -> tuple[str, str]:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="키보드 운전 (로봇 · 환경 선택)")
-    p.add_argument("--robot", default=None, help="로봇 = robots/<이름> (config.py · spec.py · urdf/robot.urdf.xacro). 기본: env cfg의 로봇 (beebot)")
+    p.add_argument("--robot", default=None, help="로봇 = robots/ 아래 이름 또는 로봇 디렉토리 (urdf/ · meshes/ · config.py · spec.py). 기본: env cfg의 로봇 (beebot)")
     p.add_argument("--env", default="default", help="환경: envs/ 아래 이름 (default …) 또는 MOD:CLASS")
     p.add_argument("--env-cfg", default=None, help="환경 설정 MOD:CLASS (없으면 --env 규칙으로: <name>_env_cfg:<Name>EnvCfg)")
     p.add_argument("--cmd", default="keyboard", help="명령: keyboard(직접 운전) · square(네모 54 s, 노란 점 = 목표) · MOD:CLASS")
@@ -58,8 +58,8 @@ def main(argv=None) -> int:
 
     env_spec, cfg_spec = env_specs(args.env, args.env_cfg)   # sim 띄우기 전에 이름 확인
 
-    if args.robot and args.robot not in robots.names():   # sim 띄우기 전에 실패하게
-        p.error(f"--robot 없음: {args.robot} (있는 것: {', '.join(robots.names())})")
+    if args.robot:
+        robots.robot_dir(args.robot)   # sim 띄우기 전에 실패하게
     if "kit" not in (args.visualizer or []):
         args.visualizer = ["kit"]   # 키보드는 창이 있어야 한다
     app = AppLauncher(args).app
