@@ -5,7 +5,7 @@ from agents.base_agent import POLICY, PPO, BaseAgentCfg
 
 
 @configclass
-class RlCorrectAgentCfg(BaseAgentCfg):
+class RlCorrectionWheelDriftAgentCfg(BaseAgentCfg):
     experiment_name = "rl_correct"
     num_steps_per_env = 64       # 1회 학습에 env마다 모으는 스텝 (20 Hz → 3.2 s)
     max_iterations = 300         # 기본 학습 횟수 (run-training.sh --max_iterations로 바꿈)

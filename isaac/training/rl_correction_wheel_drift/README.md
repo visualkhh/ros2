@@ -11,7 +11,7 @@ training/rl_correction_wheel_drift/
 ├── env_cfg.py                  RlCorrectionWheelDriftEnvCfg (obs 6 · action 2 · 랜덤 범위 · 지형 · 바퀴 마찰 · robot=beebot + 실측 중심)
 ├── env.py                      환경 RlCorrectionWheelDriftEnv(BaseEnv) — 모터 모델 · 관측 · 보상 · 리셋
 ├── command.py                  TeleopCommand(BaseCommand) — 0.5~2 s마다 텔레오퍼 키 · 곡선 · 정지 (학습: sample(k) · 한 대: __call__)
-├── agent.py                    학습자 설정 RlCorrectAgentCfg(../../agents/base_agent.py BaseAgentCfg) — 이 task 값
+├── agent.py                    학습자 설정 RlCorrectionWheelDriftAgentCfg(../../agents/base_agent.py BaseAgentCfg) — 이 task 값
 ├── __init__.py                 gym.register("Beebot-WheelDrift") — 공식 train.py · play.py가 이 이름으로 찾음
 └── README.md
 ```

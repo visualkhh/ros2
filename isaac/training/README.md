@@ -19,7 +19,7 @@ training/
     ├── __init__.py             gym.register — 로봇마다 이름 하나 (Beebot-WheelDrift)
     ├── env.py · env_cfg.py     RlCorrectionWheelDriftEnv(BaseEnv) · RlCorrectionWheelDriftEnvCfg(BaseEnvCfg — robot=beebot + 실측 중심)
     ├── command.py              TeleopCommand(BaseCommand) — 학습 명령
-    └── agent.py                RlCorrectAgentCfg(BaseAgentCfg) — PPO 값
+    └── agent.py                RlCorrectionWheelDriftAgentCfg(BaseAgentCfg) — PPO 값
 ```
 
 새 task: 폴더를 만들고 위 다섯 파일을 둔다 (`__init__.py`의 등록 이름이 `--task` 값).

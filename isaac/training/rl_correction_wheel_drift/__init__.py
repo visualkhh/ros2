@@ -16,6 +16,6 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.env_cfg:RlCorrectionWheelDriftEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{__name__}.agent:RlCorrectAgentCfg",
+        "rsl_rl_cfg_entry_point": f"{__name__}.agent:RlCorrectionWheelDriftAgentCfg",
     },
 )
