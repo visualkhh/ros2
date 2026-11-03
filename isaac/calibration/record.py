@@ -1,4 +1,4 @@
-"""sysid (system identification) 1회 — record(robot, cmd, out): 명령(excitation, 보통 SquareCommand)을 로봇(RobotInterface)에 흘려보내며 기록.
+"""calibration 측정 1회 (system identification) — record(robot, cmd, out): 명령(excitation, 보통 SquareCommand)을 로봇(RobotInterface)에 흘려보내며 기록.
 
 로봇이 sim · real · dummy 어느 것이든 기록 형식(CSV 한 줄 · 구간 표 · fit.json · report.png)은 같다. 이 파일은 표준 라이브러리만.
 """
@@ -49,7 +49,7 @@ def make_command(args):
     return cmd
 
 
-def record(robot, cmd, out: str, tag: str = "sysid", label: str = "") -> list:
+def record(robot, cmd, out: str, tag: str = "calibration", label: str = "") -> list:
     """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace → read. out에 CSV + 구간 표 + fit.json + report.png.
 
     CSV 한 줄 = 시각 · 보낸 명령 · robot.read() 상태 · label. 메시지 시각(t_*)이 없는 로봇(sim · dummy)은 기록 시각으로 채운다.

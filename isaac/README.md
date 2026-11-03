@@ -42,8 +42,8 @@ isaac/
 ├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── calibration/              sim/real 응답 측정 · fit · 비교 리포트
-│   ├── sysid.py              record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
-│   ├── sysid_sim.py · sysid_real.py · sysid_dummy.py   실행 진입점 — SimRobot · RealRobot · DummyRobot을 만들어 record()
+│   ├── record.py             record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
+│   ├── sim_robot.py · real_robot.py · dummy_robot.py   ./run-calibration.sh sim|real|dummy — SimRobot · RealRobot · DummyRobot을 만들어 record()
 │   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
@@ -85,8 +85,8 @@ cd ../ros2_ws && colcon build --packages-select rl_correction rl_eval tb3_bringu
 ./tool/run-cli base start  &&  ./tool/run-cli control manual  &&  ./tool/run-cli route direct
 # PC
 cd isaac
-./run-calibration.sh sensor-sync-real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
-./run-calibration.sh sensor-sync-real --label real_floor
+./run-calibration.sh real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
+./run-calibration.sh real --label real_floor
 #   → artifacts/calibration/<시각>-real_floor/{raw.csv, fit.json, report.png}   (--label 없으면 <시각>-02-real)
 ```
 
@@ -97,7 +97,7 @@ cd isaac
 ### 3.2 sim 측정 — 같은 명령, 순수 sim (envs/default, 보정 없음)
 
 ```bash
-./run-calibration.sh sensor-sync-sim --viz none --label sim
+./run-calibration.sh sim --viz none --label sim
 ./run-calibration.sh plot-compare artifacts/calibration/<시각>-sim/raw.csv artifacts/calibration/<real>/raw.csv
 ```
 
@@ -174,9 +174,9 @@ cd ../ros2_ws
 ./rl-only.sh label:=ab output:=artifacts/real/ab.csv          # 터미널 A — RL 노드 + 기록 (바이패스로 시작 = A)
 # 터미널 B
 ./route.sh rl                                                  # 바퀴 명령이 PC를 거치게 (corrector 없으면 거부)
-../isaac/run-calibration.sh sensor-sync-real --label A         # A: 같은 사각형, 보정 없음
+../isaac/run-calibration.sh real --label A         # A: 같은 사각형, 보정 없음
 ./policy.sh ../isaac/artifacts/real/policy.onnx                # 정책 켜기 (멈춰 있을 때) → 터미널 A에 'ONNX loaded' 확인
-../isaac/run-calibration.sh sensor-sync-real --label B         # B: 같은 사각형, 보정함
+../isaac/run-calibration.sh real --label B         # B: 같은 사각형, 보정함
 ./route.sh direct
 # 터미널 A: Ctrl+C
 ./report.py artifacts/real/ab.csv                              # → artifacts/real/report.png (A/B 구간별 지표)

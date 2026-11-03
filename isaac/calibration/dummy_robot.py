@@ -1,4 +1,4 @@
-"""sysid dummy — DummyRobot(robots/dummy_robot.py)로 Isaac/ROS 없이 calibration 흐름(기록 → fit.json → report)을 돌려볼 때. 표준 라이브러리만.
+"""calibration dummy — DummyRobot(robots/dummy_robot.py)로 Isaac/ROS 없이 calibration 흐름(기록 → fit.json → report)을 돌려볼 때. 표준 라이브러리만.
 
 plant: 지연 → 좌/우 gain → 데드밴드 → 1차 지연 + 잡음 · 회전 슬립.
   ./run-calibration.sh dummy --gain-l 0.96 --gain-r 1.02 --out artifacts/calibration/dummy_real/raw.csv   # → fit.json에 같은 gain이 나오면 OK
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 
-from calibration.sysid import add_command_args, make_command, record, run_path
+from calibration.record import add_command_args, make_command, record, run_path
 from robots.dummy_robot import DummyRobot
 
 

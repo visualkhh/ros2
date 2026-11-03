@@ -1,6 +1,6 @@
-"""sysid sim — SimRobot(robots/sim_robot.py)에 명령(기본 사각형)을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
+"""calibration sim — SimRobot(robots/sim_robot.py)에 명령(기본 사각형)을 기본 환경(envs/default: 순수 sim, 보정 없음)에 넣고 v_enc · w_enc · w_gyro를 기록 → raw.csv · fit.json · report.png.
 
-  ./run-calibration.sh sensor-sync-sim --viz none                  # 순수 sim 측정 → real과 비교해 차이를 구한다
+  ./run-calibration.sh sim --viz none                  # 순수 sim 측정 → real과 비교해 차이를 구한다
 창(--watch): 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로. 기록 후 창 닫을 때까지 같은 경로 반복.
 출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-sim) · --out으로 정확한 경로.
 """
@@ -12,7 +12,7 @@ import time
 
 from isaaclab.app import AppLauncher
 
-from calibration.sysid import ISAAC, add_command_args, make_command, record, run_path
+from calibration.record import ISAAC, add_command_args, make_command, record, run_path
 
 TAG = "02-sim"
 

@@ -14,7 +14,7 @@
 #
 # ─── commands ──────────────────────────────────────────────────────────────────
 #
-#   sensor-sync-sim    순수 sim에서 측정 (IsaacLab, envs/default — 보정 없음)
+#   sim                순수 sim에서 측정 (IsaacLab, envs/default — 보정 없음)
 #     --label NAME       폴더 이름 <시각>-NAME · CSV label (기본 02-sim / sim_sensor_floor)
 #     --out PATH         정확한 raw.csv 경로 (label보다 우선)
 #     --side 0.5 --speed 0.15 --turn 1.0    사각형 한 변 [m] · 기준 전진 [m/s] (변마다 1.0/0.67/1.33/0.8배) · 회전 [rad/s]
@@ -23,15 +23,15 @@
 #     --viz none|kit     창 끔/켬. 안 주면 kit (창 표시) — 기록만 할 땐 --viz none
 #     창: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로(사각형) — 벗어나는 만큼이 드리프트
 #
-#     ./run-calibration.sh sensor-sync-sim --viz none --label sim
+#     ./run-calibration.sh sim --viz none --label sim
 #     ./run-calibration.sh plot-compare artifacts/calibration/<sim>/raw.csv artifacts/calibration/<real>/raw.csv
 #
-#   sensor-sync-real   실기기에서 측정 (PC · .venv · ROS 환경/peers 자동, ROS_DOMAIN_ID=25)
+#   real               실기기에서 측정 (PC · .venv · ROS 환경/peers 자동, ROS_DOMAIN_ID=25)
 #     준비: 로봇 베이스 켜기 · MANUAL · 경로 direct (rl-only 안 띄움) · OpenCR는 가만히 둔 채 켜기 · 주변 1 m 비우기
 #     --check-only       움직이지 않고 상태만 확인 (state=MANUAL · odom 수신)
 #     --label NAME · --output PATH · --side --speed --turn (sim과 같은 기본값 → 같은 명령) · --rate 20
-#     ./run-calibration.sh sensor-sync-real --check-only
-#     ./run-calibration.sh sensor-sync-real --label real_floor
+#     ./run-calibration.sh real --check-only
+#     ./run-calibration.sh real --label real_floor
 #
 #   calibrate          sim + real을 같은 경로로 한 번에 기록 → 비교 그림
 #     --label real_floor --side --speed --turn --show
@@ -87,12 +87,12 @@ fi
 cd "$ISAAC"   # python -m calibration + 상대경로 기준
 CMD="$1"; shift
 case "$CMD" in
-  sensor-sync-sim)
-    sim -m calibration sensor-sync-sim "$@"
+  sim)
+    sim -m calibration sim "$@"
     ;;
-  sensor-sync-real)
+  real)
     ros_env
-    exec "$PY" -m calibration sensor-sync-real "$@"
+    exec "$PY" -m calibration real "$@"
     ;;
   plot-compare)
     exec "$PY" -m calibration.report.report "$@"
@@ -115,11 +115,11 @@ case "$CMD" in
     mkdir -p "$RUN"
     COMMON=(--side "$SIDE" --speed "$SPEED" --turn "$TURN" ${COMMON_EXTRA[@]+"${COMMON_EXTRA[@]}"})
     echo "[calibrate] sim + real 시작 → $RUN"
-    "$0" sensor-sync-sim --viz none "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
+    "$0" sim --viz none "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
       --out "$RUN/sim/raw.csv" > "$RUN/sim.log" 2>&1 &
     SIM_PID=$!
     set +e
-    "$0" sensor-sync-real "${COMMON[@]}" --label "$LABEL" \
+    "$0" real "${COMMON[@]}" --label "$LABEL" \
       --output "$RUN/real/raw.csv" > "$RUN/real.log" 2>&1
     REAL_RC=$?
     wait "$SIM_PID"; SIM_RC=$?

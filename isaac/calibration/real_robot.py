@@ -1,9 +1,9 @@
-"""sysid real (PC에서) — RealRobot(<기본 로봇 폴더>/real_robot.py)에 sim과 같은 명령을 로봇에 보내고 /odom · /imu · /joint_states를 기록 → raw.csv · fit.json · report.png.
+"""calibration real (PC에서) — RealRobot(<기본 로봇 폴더>/real_robot.py)에 sim과 같은 명령을 로봇에 보내고 /odom · /imu · /joint_states를 기록 → raw.csv · fit.json · report.png.
 
 준비: Pi base + cmd_manager, 제어 MANUAL (cd ~/ros2/tool && ./run-cli base start && ./run-cli mode manual) · 경로 direct
       PC: ROS 환경 · ROS_DOMAIN_ID=25 (run-calibration.sh가 맞춤)
-  ./run-calibration.sh sensor-sync-real --check-only     # 움직이지 않고 상태만
-  ./run-calibration.sh sensor-sync-real --label real_floor
+  ./run-calibration.sh real --check-only     # 움직이지 않고 상태만
+  ./run-calibration.sh real --label real_floor
 출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-real)
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ import argparse
 import os
 
 import robots
-from calibration.sysid import add_command_args, make_command, record, run_path
+from calibration.record import add_command_args, make_command, record, run_path
 
 TAG = "02-real"
 
