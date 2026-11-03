@@ -10,7 +10,7 @@
 training/rl_correction_wheel_drift/
 ├── env_cfg.py                  환경 설정 (obs 6 · action 2 · 랜덤 범위 · 실측 중심 · 지형 make_terrain · 바퀴 마찰 EventCfg)
 ├── env.py                      환경 RlCorrectEnv(BaseEnv) — 모터 모델 · 관측 · 보상 · 리셋
-├── command.py                  학습 명령 — 0.5~2 s마다 텔레오퍼 키 · 곡선 · 정지 (env마다)
+├── command.py                  TeleopCommand(BaseCommand) — 0.5~2 s마다 텔레오퍼 키 · 곡선 · 정지 (학습: sample(k) · 한 대: __call__)
 ├── agent.py                    학습자 설정 RlCorrectAgentCfg(../../agents/base_agent.py BaseAgentCfg) — 다른 값만
 ├── fit_panel.py                --watch 때 랜덤 범위/마찰 보기 창 (읽기만)
 ├── train.py                    WheelDriftTrain(../trainer.py Train 상속) — 학습 → 끝나면 ONNX export

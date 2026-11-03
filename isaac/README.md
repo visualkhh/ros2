@@ -157,6 +157,7 @@ tensorboard --logdir artifacts/training                          # 진행 그래
 ./run-world.sh --env default                        # envs/ 아래 이름 (envs/<name>/env.py · env_cfg.py)
 ./run-world.sh --env rooms                          # 방 + 장애물 (N = 다음 방) · envs/ 밖 env는 MOD:CLASS
 ./run-world.sh --cmd square                           # 로봇이 혼자 네모 (노란 점 = 목표 경로)
+./run-world.sh --cmd training.rl_correction_wheel_drift.command:TeleopCommand --speed 0.26 --turn 1.82   # 학습 때 받는 랜덤 명령
 ./run-world.sh -h
 # 학습 env 그대로 + 정책 켬/끔 (C 키): 행동이 보정량이라 학습 쪽 운전 모드로
 ./run-training.sh --drive --watch --uneven --policy artifacts/real/policy_30.onnx

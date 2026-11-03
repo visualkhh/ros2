@@ -22,6 +22,7 @@
 #   ./run-world.sh --robot beebot
 #   ./run-world.sh --robot ~/my_robots/beebot2              # robots/ 밖의 로봇 폴더
 #   ./run-world.sh --cmd square                                  # 로봇이 혼자 네모 — 드리프트를 노란 점과 비교
+#   ./run-world.sh --cmd training.rl_correction_wheel_drift.command:TeleopCommand --speed 0.26 --turn 1.82   # 학습 명령
 #   ./run-world.sh --env rooms                                   # 방 + 장애물 (N = 다음 방)
 set -euo pipefail
 ISAAC=$(cd "$(dirname "$0")" && pwd)

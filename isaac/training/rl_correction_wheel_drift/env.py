@@ -16,7 +16,7 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
-from training.rl_correction_wheel_drift import command
+from training.rl_correction_wheel_drift.command import TeleopCommand
 from robots.beebot import config as beebot
 
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ class RlCorrectEnv(BaseEnv):
     cfg: RlCorrectEnvCfg
 
     def __init__(self, cfg: RlCorrectEnvCfg, render_mode: str | None = None, **kwargs):
+        self.command = TeleopCommand(beebot.MAX_LIN, beebot.MAX_ANG, cfg.p_teleop, cfg.p_smooth, cfg.hold_range)
         super().__init__(cfg, render_mode, **kwargs)
         n, dev = self.num_envs, self.device
         self.scale = torch.tensor(self.cfg.action_scale, device=dev)
@@ -73,8 +74,8 @@ class RlCorrectEnv(BaseEnv):
 
     # ------------------------------------------------------------------ 명령
     def _new_commands(self, ids: torch.Tensor):
-        """명령 새로 뽑기 (command.py) — 유지 시간 · 명령이 바뀐 뒤 시간(관측 t_change)도 같이."""
-        self.cmd[ids], self.hold[ids] = command.sample(len(ids), self.cfg, self.device)
+        """명령 새로 뽑기 (command.py TeleopCommand) — 유지 시간 · 명령이 바뀐 뒤 시간(관측 t_change)도 같이."""
+        self.cmd[ids], self.hold[ids] = self.command.sample(len(ids), self.device)
         self.hold_total[ids] = self.hold[ids]
         self.t_change[ids] = 0.0
 
