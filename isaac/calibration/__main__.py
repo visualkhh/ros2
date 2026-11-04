@@ -113,6 +113,7 @@ def _args(mode: str, argv):
         AppLauncher.add_app_launcher_args(p)
     elif mode == "real":
         p.add_argument("--rate", type=float, default=20.0)
+        p.add_argument("--onnx", default=None, help="이 정책으로 corrector 보정 (A/B의 B) — 안 주면 바이패스 (A · calibration). route rl + rl-only 필요")
         p.add_argument("--check-only", action="store_true", help="상태만 확인 (로봇 안 움직임)")
     else:
         p.add_argument("--gain", type=float, default=0.99, help="모터 gain (1.0 = 이상)")
@@ -132,7 +133,10 @@ def _robot(mode: str, args, cmd):
     if mode == "real":
         import robots
 
-        return robots.load(task_dir(args), "real_robot").RealRobot(args.rate), None, None
+        onnx = os.path.abspath(args.onnx) if args.onnx else None   # corrector는 다른 폴더에서 돈다
+        if onnx and not os.path.isfile(onnx):
+            raise SystemExit(f"ONNX 없음: {onnx}")
+        return robots.load(task_dir(args), "real_robot").RealRobot(args.rate, onnx), None, None
     if mode == "dummy":
         import robots
 

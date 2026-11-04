@@ -122,6 +122,15 @@ python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_corre
   ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
   ```
 
+**같은 입력으로 A/B (실기기, run-calibration)** — 입력 = calibration 네모, 차이 = corrector 보정 켬/끔
+```bash
+./run-calibration.sh rl_correction_waypoint --robot real --label A                       # A: 바이패스 (--onnx 없음)
+./run-calibration.sh rl_correction_waypoint --robot real --onnx <policy.onnx> --label B  # B: 그 정책으로 보정
+```
+- 측정 직전에 RealRobot이 corrector를 설정한다 (`model_path` + `~/toggle`). 기록 칸 `rl_onnx` = 모델 파일 이름 · `bypass` · `direct`(corrector 없음).
+- 필요: Pi `route rl` + PC `./rl-only.sh`. `--onnx` 없이 corrector도 없으면(route direct) 보정 없이 그대로 측정.
+- **이 task 정책(웨이포인트, goal 모드)은 속도 입력(네모)을 보정하지 않는다** — 위 A/B는 track 모드 정책(관측 6)일 때 차이가 난다.
+
 **아직 없는 것**
 - **웨이포인트 송신기**: 도착하면 다음 `/rl_goal`을 보내는 쪽. 지금은 손으로 한 점씩.
 - **A = 보정 0인 기본 제어기**: goal 모드에서 toggle 끔(바이패스)은 nominal controller만 돈다 (보정 0 = 학습 env의 행동 0) — 같은 웨이포인트로 A/B 가능.
