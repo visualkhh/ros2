@@ -52,7 +52,7 @@ void RlNavController::configure(
   inner_ = loader_.createSharedInstance(inner);
   inner_->configure(parent, name + ".inner", tf, costmap_ros);
   load_model(model);
-  if (enable_ && !mlp_.loaded()) {
+  if (enable_ && !policy_.loaded()) {
     RCLCPP_WARN(logger_, "[%s] enable인데 정책 없음 — 바이패스로 (%s)", name.c_str(), inner.c_str());
     enable_ = false;
   }
@@ -73,7 +73,7 @@ void RlNavController::configure(
     [this](const std::shared_ptr<rmw_request_id_t>, const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
     std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
       std::lock_guard<std::mutex> lk(mtx_);
-      if (req->data && !mlp_.loaded()) {
+      if (req->data && !policy_.loaded()) {
         res->success = false;
         res->message = "정책 없음 (model_path) — 바이패스 그대로";
         return;
@@ -83,27 +83,28 @@ void RlNavController::configure(
       prev_a_[0] = prev_a_[1] = 0.0f;
       res->success = true;
       res->message = std::string("enable=") + (enable_ ? "true (정책)" : "false (바이패스)") +
-        " · model=" + (mlp_.loaded() ? "loaded" : "none");
+        " · model=" + (policy_.loaded() ? "loaded" : "none");
       RCLCPP_INFO(logger_, "[%s] toggle: %s", name_.c_str(), res->message.c_str());
     });
   RCLCPP_INFO(
     logger_, "[%s] RlNavController: inner=%s · model=%s · enable=%s · toggle: ~/%s/toggle",
-    name.c_str(), inner.c_str(), mlp_.loaded() ? model.c_str() : "(없음)", enable_ ? "true" : "false", name.c_str());
+    name.c_str(), inner.c_str(), policy_.loaded() ? model.c_str() : "(없음)", enable_ ? "true" : "false", name.c_str());
 }
 
 void RlNavController::load_model(const std::string & path)
 {
   if (path.empty()) {return;}
   try {
-    Mlp m;
+    rl_policy::OnnxPolicy m;
     m.load(path);
-    const uint32_t want = uint32_t(2 * lookahead_ + lidar_rays_ + 5);
+    const int64_t want = 2 * lookahead_ + lidar_rays_ + 5;
     if (m.inputs() != want || m.outputs() != 2) {
-      RCLCPP_ERROR(logger_, "정책 입력 %u · 출력 %u — 기대 %u · 2 (lookahead · lidar_rays 확인): %s",
-        m.inputs(), m.outputs(), want, path.c_str());
+      RCLCPP_ERROR(logger_, "정책 입력 %ld · 출력 %ld — 기대 %ld · 2 (lookahead · lidar_rays 확인): %s",
+        long(m.inputs()), long(m.outputs()), long(want), path.c_str());
       return;
     }
-    mlp_ = std::move(m);
+    policy_ = std::move(m);
+    RCLCPP_INFO(logger_, "ONNX loaded: %s (obs %ld → 2)", path.c_str(), long(want));
   } catch (const std::exception & e) {
     RCLCPP_ERROR(logger_, "%s", e.what());
   }
@@ -192,7 +193,7 @@ geometry_msgs::msg::TwistStamped RlNavController::computeVelocityCommands(
   double gyro;
   {
     std::lock_guard<std::mutex> lk(mtx_);
-    on = enable_ && mlp_.loaded();
+    on = enable_ && policy_.loaded();
     scan = scan_;
     gyro = gyro_seen_ ? gyro_z_ : velocity.angular.z;
   }
@@ -217,7 +218,7 @@ geometry_msgs::msg::TwistStamped RlNavController::computeVelocityCommands(
   obs.push_back(float(gyro / max_ang_));
   obs.push_back(prev_a_[0]);
   obs.push_back(prev_a_[1]);
-  const auto a = mlp_.forward(obs);
+  const auto a = policy_.run(obs);
   const float a0 = std::clamp(a[0], -1.0f, 1.0f), a1 = std::clamp(a[1], -1.0f, 1.0f);
   prev_a_[0] = a0;
   prev_a_[1] = a1;

@@ -137,7 +137,7 @@ controller_server:
       # 켬/끔: ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"  (기본 false = MPPI)
       plugin: "rl_nav_controller::RlNavController"
       enable: false                # 시작 때 정책 적용 (false = MPPI 그대로)
-      model_path: ""               # policy.mlp (isaac/training/rl_maze/export_mlp.py로 policy.onnx에서) — 비우면 늘 MPPI
+      model_path: ""               # policy.onnx (play로 내보낸 것, 옆에 .onnx.data) — 비우면 늘 MPPI
       inner_plugin: "nav2_mppi_controller::MPPIController"
       max_lin: 0.26                # 정책 [v, w] 스케일 = 학습 env (robot_cfg.py MAX_LIN · MAX_ANG)
       max_ang: 1.82

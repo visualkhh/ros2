@@ -4,12 +4,11 @@
 #   ./rl-only.sh [enable:=false] [label:=이름] [model:=<정책.onnx>] [output:=<저장.csv>] [launch 인자...]
 #
 #   ./rl-only.sh enable:=false label:=before      # 보정 없이 통과 (Before · calibration 측정)
-#   ./rl-only.sh label:=after                     # 정책 보정 (After, 기본 켬) — 기본 모델 isaac/artifacts/real/policy.onnx (없으면 통과)
+#   ./rl-only.sh label:=after model:=<정책.onnx>  # 정책 보정 (After, 기본 켬) — model 없이 띄우면 그냥 통과
 #   ./rl-only.sh model:=<isaac>/artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx   (play로 내보낸 것 — .onnx.data 같이)
 #
-# 기본 경로:
-#   model:=   isaac/artifacts/real/policy.onnx    쓸 정책을 여기에 복사해 두면 된다 (입력 6차원 → track 자동)
-#   output:=  ros2_ws/artifacts/real/raw.csv       고정 파일 — 실행마다 덮어쓴다 (남기려면 output:=로 다른 이름)
+# 노드만 띄운다 — model:=은 그대로 corrector에 (로드 결과는 corrector 로그: ONNX loaded / passthrough / ONNX load failed)
+#   output:=  ros2_ws/artifacts/real/raw.csv       기본 — 실행마다 덮어쓴다 (남기려면 output:=로 다른 이름)
 #   label은 CSV의 label 칸 (기본 rl)
 #
 # - output CSV (eval_recorder, 입력 1개 = 1줄, 줄마다 바로 디스크로): 입력(lin/ang_raw) · 그 입력의 보정 출력(lin/ang_out)
@@ -17,7 +16,7 @@
 #   · 모터 온도 · 배터리 · 상태(control/rl/estop) · 진단 · 메시지 시각(지연). 칸 설명: src/rl_eval/rl_eval/eval_recorder.py
 # - 그림: ./report.py (→ CSV 옆 report.png)
 # - 실행 중 정책 교체(한 번에 A/B): ./policy.sh <정책.onnx> | off — 기록의 rl_policy 칸으로 구간이 나뉜다
-# - 기본 enable 켬(ONNX 적용). 모델이 없으면 그냥 통과. enable:=true를 직접 줬는데 모델이 없으면 시작하지 않는다.
+# - 기본 enable 켬(ONNX 적용). 모델이 없으면 그냥 통과.
 # - 실행 중 켬/끔: ros2 service call /rl_corrector/toggle std_srvs/srv/SetBool "{data: false}" (또는 ./policy.sh off|on)
 # - 상대경로는 지금 위치 기준 → 절대경로로 바꿔 넘긴다. 저장 폴더는 없으면 만든다.
 # - 로봇(Pi)은 RL 경로여야 한다: ./run-cli route rl (끝나면 route direct). ROS_DOMAIN_ID=25.
@@ -69,31 +68,22 @@ if [[ "$MODE" == bg ]]; then
   printf '%s\n' "$@" > "$ARGSF"
 fi
 
-MODEL_DEFAULT="$REPO/isaac/artifacts/real/policy.onnx"
 OUTPUT_DEFAULT="$WS/artifacts/real/raw.csv"
 abs() { [[ "$1" == /* ]] && echo "$1" || echo "$PWD/$1"; }
-args=() output="" model="" enable=true explicit=false label=rl
+args=() output="" model="" enable=true label=rl
 for a in "$@"; do
   case "$a" in
     output:=*) output="$(abs "${a#output:=}")"; continue ;;
     model:=*)  model="$(abs "${a#model:=}")";   continue ;;
     label:=*)  label="${a#label:=}" ;;
-    enable:=true) enable=true explicit=true ;;
     enable:=false) enable=false ;;
   esac
   args+=("$a")
 done
 output="${output:-$OUTPUT_DEFAULT}"
-if [[ -z "$model" && -f "$MODEL_DEFAULT" ]]; then
-  model="$MODEL_DEFAULT"
-fi
-if [[ "$explicit" == true ]]; then
-  [[ -n "$model" ]] || { echo "enable:=true인데 모델 없음 — $MODEL_DEFAULT 에 두거나 model:=<정책.onnx>" >&2; exit 2; }
-fi
-[[ -z "$model" || -f "$model" ]] || { echo "ONNX 없음: $model" >&2; exit 2; }
 args+=("output:=$output")
 [[ -n "$model" ]] && args+=("model:=$model")
-[[ -f "$WS/install/setup.bash" ]] || { echo "먼저 빌드: cd $WS && colcon build --packages-select rl_correction rl_eval tb3_bringup" >&2; exit 2; }
+[[ -f "$WS/install/setup.bash" ]] || { echo "먼저 빌드: cd $WS && colcon build --packages-select rl_policy rl_correction rl_eval tb3_bringup" >&2; exit 2; }
 mkdir -p "$(dirname "$output")"
 
 source "/opt/ros/${ROS_DISTRO_NAME:-lyrical}/setup.bash"

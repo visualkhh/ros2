@@ -45,7 +45,7 @@ $ISAACLAB_DIR/isaaclab.sh -p training/rl_maze/maze_grid.py        # 미로 USD�
 `ros2_ws/src/rl_nav_controller` — nav2 `FollowPath` 플러그인. 안에 MPPI를 품고 toggle 끔(기본) = MPPI · 켬 = 이 정책.
 ```bash
 ./run-training.sh rl_maze --play --checkpoint artifacts/rl_maze/training/<시각>/model_N.pt --num_envs 1
-$ISAACLAB_DIR/isaaclab.sh -p training/rl_maze/export_mlp.py artifacts/rl_maze/training/<시각>/exported/policy.onnx   # → policy.mlp
+#   → exported/policy.onnx (+ .onnx.data) → nav2_params FollowPath.model_path
 ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"
 ```
 

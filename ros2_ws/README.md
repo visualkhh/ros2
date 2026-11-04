@@ -68,9 +68,9 @@ colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_ev
 ```bash
 ./base-only.sh                     # Pi — = ros2 launch tb3_bringup tb-only.launch.py
 ./base-only.sh lidar:=false        # 라이다 없이
-./rl-only.sh enable:=true label:=after   # PC — RL 노드 + 기록 (모델 isaac/artifacts/real/policy.onnx → ros2_ws/artifacts/real/raw.csv)
+./rl-only.sh label:=after model:=<정책.onnx>   # PC — RL 노드 + 기록 (→ ros2_ws/artifacts/real/raw.csv) · model 없으면 통과
 ./route.sh rl | direct | status    # 바퀴 경로 전환 (= tool/run-cli route, rl_corrector 없으면 거부)
-./policy.sh <정책.onnx> | off | on | status   # 실행 중 정책 교체 — 한 번 실행에 A/B (= ros2 param set /rl_corrector ...)
+./policy.sh <정책.onnx> | off | on | status   # 실행 중 정책 교체 · 켬/끔 — 한 번 실행에 A/B (= /rl_corrector/toggle · model_path)
 ./rl-only.sh start|stop|restart|status|log [인자...]   # 백그라운드로 켜고 끄기 (ONNX 바꾸고 restart) — 서브명령 없이 쓰면 앞에서 돔
 ```
 
@@ -109,7 +109,8 @@ ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx 
 - `enable:=false`는 보정 없이 통과 — WiFi 왕복 지연까지 같은 조건으로 "Before"를 잽니다.
 - RL on인데 rl-only가 없거나 WiFi가 끊기면 0.3초 뒤 정지 (cmd_manager 안전).
 - 정책 v2 입력은 `/odom`(엔코더) · **`/imu`(OpenCR 자이로 — 펌웨어 `I` 줄)** · 명령. 설계: [documents/isaac/task-spec.md](../documents/isaac/task-spec.md).
-- **PC에 `onnxruntime` 필요** (rl-only가 PC에서 돎): `pip install --break-system-packages onnxruntime`. 없으면 경고 후 그냥 통과(보정 0).
+- corrector는 C++ + **ONNX Runtime C++** (`rl_policy` 패키지): 한 번 `sudo apt install ros-lyrical-onnxruntime-vendor` →
+  `colcon build --packages-select rl_policy rl_correction rl_eval tb3_bringup`. `policy.onnx` 옆에 `policy.onnx.data`가 같이 있어야 한다.
 
 비교 (같은 패턴을 두 번 달린 CSV):
 
@@ -131,6 +132,6 @@ ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx 
 Pi에서 직접 추론할 경우 (탑재 전 체크):
 
 ```bash
-python3 src/rl_eval/benchmark_onnx.py model.onnx --iters 1000   # 평균 50 ms 이하 권장 (10-20 Hz 루프)
-pip install --break-system-packages onnxruntime                  # Pi에는 torch 설치 금지 (무거움)
+python3 src/rl_eval/benchmark_onnx.py model.onnx --iters 1000   # 평균 50 ms 이하 권장 (10-20 Hz 루프 · Python onnxruntime 필요)
+sudo apt install ros-lyrical-onnxruntime-vendor                  # corrector · rl_nav_controller (C++)는 이것만
 ```

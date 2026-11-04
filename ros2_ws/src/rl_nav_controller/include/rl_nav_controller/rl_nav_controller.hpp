@@ -1,4 +1,4 @@
-// RlNavController — nav2 controller 플러그인. 학습한 주행 정책(isaac/training/rl_maze, policy.mlp)으로 경로를 따라간다.
+// RlNavController — nav2 controller 플러그인. 학습한 주행 정책(isaac/training/rl_maze, policy.onnx — ONNX Runtime)으로 경로를 따라간다.
 // ~/toggle (std_srvs/SetBool): false(기본) = 안에 품은 기본 controller(MPPI 등) 그대로 · true = 정책.
 #pragma once
 
@@ -14,7 +14,7 @@
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "pluginlib/class_loader.hpp"
-#include "rl_nav_controller/mlp.hpp"
+#include "rl_policy/onnx_policy.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "std_srvs/srv/set_bool.hpp"
@@ -55,7 +55,7 @@ private:
 
   pluginlib::ClassLoader<nav2_core::Controller> loader_{"nav2_core", "nav2_core::Controller"};
   nav2_core::Controller::Ptr inner_;   // 바이패스 때 쓰는 기본 controller
-  Mlp mlp_;
+  rl_policy::OnnxPolicy policy_;
 
   nav2::ServiceServer<std_srvs::srv::SetBool>::SharedPtr toggle_srv_;
   nav2::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
