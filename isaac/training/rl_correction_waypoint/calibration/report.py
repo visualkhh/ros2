@@ -18,8 +18,6 @@
 calib: 모든 전진 구간(변마다 속도 다름)에서 gain/t10/tau를 뽑아 중앙값을 쓰고,
        속도별 값은 JSON `speed_fit`에 같이 저장한다.
 """
-import argparse
-import csv
 import json
 import math
 import sys
@@ -62,6 +60,7 @@ HERE = Path(__file__).resolve().parent
 ISAAC = HERE.parents[2]          # .../isaac (HERE = isaac/training/<task>/calibration)
 OUT_DIR = ISAAC / "artifacts" / HERE.parent.name / "calibration"   # 비교 그림 기본 위치 (out을 안 줬을 때)
 sys.path.insert(0, str(ISAAC))
+from reports.base_report import BaseReport  # noqa: E402
 
 def _robot_cfg():
     """이 task 폴더의 robot_cfg.py (바퀴 숫자)."""
@@ -75,16 +74,7 @@ def _robot_cfg():
 CONTROL_HZ = 20.0   # 기록 · 정책 주기 (= envs/base_env_cfg.py CONTROL_HZ — Isaac 없이 돌아서 따로, 바꾸면 같이)
 
 
-def load(path: str):
-    rows = []
-    for r in csv.DictReader(open(path)):
-        rows.append({k: (v if k == "label" else float(v)) for k, v in r.items()})
-    if not rows:
-        raise SystemExit(f"빈 CSV: {path}")
-    t0 = rows[0]["t"]
-    for r in rows:
-        r["t"] -= t0
-    return rows
+load = BaseReport.load   # raw.csv → 줄 dict (reports/base_report.py)
 
 
 def rms(xs):
@@ -631,7 +621,7 @@ def run_label(path: str) -> str:
     return tag_of(path)
 
 
-def compare(sim_path: str, real_path: str, out=None, show: bool = False):
+def compare_png(sim_path: str, real_path: str, out=None, show: bool = False):
     sim, real = load(sim_path), load(real_path)
     ms, mr = metrics(sim), metrics(real)
     fit = fit_wheel(real)
@@ -808,29 +798,6 @@ def compare(sim_path: str, real_path: str, out=None, show: bool = False):
     return {"metrics": (ms, mr), "fit": fit, "out": str(out)}
 
 
-def _csv(path: str) -> str:
-    """측정 폴더 또는 CSV 경로 → raw.csv 경로."""
-    p = Path(path)
-    p = p / "raw.csv" if p.is_dir() else p
-    if not p.is_file():
-        raise SystemExit(f"raw.csv 없음: {p}")
-    return str(p)
-
-
-def single(csv_path: str) -> dict | None:
-    """폴더 하나 → fit.json · report.png (같은 폴더)."""
-    fit = fit_wheel(load(csv_path))
-    run_dir = Path(csv_path).parent
-    if fit is None:
-        print(f"[fit] {run_dir.name}: 스킵 (전진 구간 없음)")
-    else:
-        (run_dir / "fit.json").write_text(json.dumps({"source": Path(csv_path).name, "fit": fit}, indent=2, ensure_ascii=False) + "\n")
-        print(f"[fit] {run_dir.name}: gain L/R={fit['wheel_gain_l']}/{fit['wheel_gain_r']} delay={fit['wheel_delay_steps']} "
-              f"tau={fit['wheel_tau_s']} db={fit['wheel_deadband']} → {run_dir / 'fit.json'}")
-    write_report_png(csv_path, fit=fit)
-    return fit
-
-
 def response(sim: dict, real: dict) -> None:
     """robot_cfg.py RESPONSE_* = real − sim 차이 (gain은 ÷). 복사해서 붙이면 된다."""
     g = (round(real["wheel_gain_l"] / sim["wheel_gain_l"], 4), round(real["wheel_gain_r"] / sim["wheel_gain_r"], 4))
@@ -845,23 +812,29 @@ def response(sim: dict, real: dict) -> None:
     print(f"RESPONSE_DEADBAND = {db}   # real 문턱 ÷ sim gain (real이 더 크지 않으면 0)")
 
 
-def main(argv=None):
-    p = argparse.ArgumentParser(description="calibration 보고서 — 측정 폴더 1개(단건) 또는 2개(sim real 비교 + robot_cfg 값)")
-    p.add_argument("run", nargs="+", help="측정 폴더(…/calibration/<시각>_<label>/) 또는 raw.csv — 2개면 sim real 순서")
-    p.add_argument("--out", default=None, help="비교 그림 (기본 <real 폴더>/compare.png)")
-    p.add_argument("--show", action="store_true", help="저장 후 창으로 띄우기")
-    args = p.parse_args(argv)
-    if len(args.run) == 1:
-        single(_csv(args.run[0]))
-    elif len(args.run) == 2:
-        sim_csv, real_csv = _csv(args.run[0]), _csv(args.run[1])
-        sim_fit, real_fit = single(sim_csv), single(real_csv)
-        compare(sim_csv, real_csv, args.out or str(Path(real_csv).parent / "compare.png"), show=args.show)
+class CalibrationReport(BaseReport):
+    """calibration 보고서 — 폴더 1개: fit.json · report.png · 2개(sim real): + compare.png(real 폴더) · robot_cfg.py RESPONSE_* 값"""
+
+    def single(self, run_dir):
+        """폴더 하나 → fit.json · report.png (같은 폴더)."""
+        csv_path = str(run_dir / "raw.csv")
+        fit = fit_wheel(load(csv_path))
+        if fit is None:
+            print(f"[fit] {run_dir.name}: 스킵 (전진 구간 없음)")
+        else:
+            (run_dir / "fit.json").write_text(json.dumps({"source": "raw.csv", "fit": fit}, indent=2, ensure_ascii=False) + "\n")
+            print(f"[fit] {run_dir.name}: gain L/R={fit['wheel_gain_l']}/{fit['wheel_gain_r']} delay={fit['wheel_delay_steps']} "
+                  f"tau={fit['wheel_tau_s']} db={fit['wheel_deadband']} → {run_dir / 'fit.json'}")
+        write_report_png(csv_path, fit=fit)
+        return fit
+
+    def compare(self, a, b, out=None, show=False):
+        """a = sim · b = real → 둘 다 single + compare.png(b 폴더) + RESPONSE_* 출력."""
+        sim_fit, real_fit = self.single(a), self.single(b)
+        compare_png(str(a / "raw.csv"), str(b / "raw.csv"), out or str(b / "compare.png"), show=show)
         if sim_fit and real_fit:
             response(sim_fit, real_fit)
-    else:
-        p.error("측정 폴더 1개(단건) 또는 2개(sim real) 지정")
 
 
 if __name__ == "__main__":
-    main()
+    CalibrationReport().main()
