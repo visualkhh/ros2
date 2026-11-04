@@ -23,10 +23,10 @@ class DummyRobot(RobotInterface):
         self.gain_lr, self.tau, self.noise, self.slip, self.deadband = gain_lr, tau, noise, slip, deadband
         self.rng = random.Random(seed)
         self.buf = deque([(0.0, 0.0)] * (delay + 1), maxlen=delay + 1)
-        self.plant, self.odom, self.out = (0.0, 0.0), [0.0, 0.0, 0.0], (0.0, 0.0)
+        self.plant, self.odom, self.out, self.k = (0.0, 0.0), [0.0, 0.0, 0.0], (0.0, 0.0), 0
 
     def write(self, v, w):
-        self.out = (v, w)
+        self.out, self.k = (v, w), self.k + 1
         wl, wr = (v - w * self.sep / 2.0) / self.r, (v + w * self.sep / 2.0) / self.r
         k = min(1.0, self.max_wheel / max(abs(wl), abs(wr), 1e-9))
         self.buf.append((wl * k, wr * k))
@@ -45,4 +45,5 @@ class DummyRobot(RobotInterface):
         o[1] += v_enc * math.sin(o[2]) * dt
         return {"lin_out": self.out[0], "ang_out": self.out[1], "odom_x": o[0], "odom_y": o[1], "odom_yaw": o[2],
                 "v_enc": v_enc, "w_enc": w_enc, "w_gyro": w_gyro,
-                "wheel_l_vel": sl, "wheel_r_vel": sr, "wheel_l_pos": 0.0, "wheel_r_pos": 0.0}
+                "wheel_l_vel": sl, "wheel_r_vel": sr, "wheel_l_pos": 0.0, "wheel_r_pos": 0.0,
+                **dict.fromkeys(("t_ros", "t_odom", "t_imu", "t_joint"), (self.k - 1) * dt)}   # 가짜 — 메시지 시각 = 계산 시각

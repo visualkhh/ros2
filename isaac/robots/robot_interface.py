@@ -8,10 +8,10 @@ ros2_control hardware_interface의 read() · write()와 같은 역할. 명령 �
 """
 from __future__ import annotations
 
-STATE_KEYS = ("lin_out", "ang_out", "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro",
-              "wheel_l_vel", "wheel_r_vel", "wheel_l_pos", "wheel_r_pos")
-"""read()가 돌려주는 값. lin_out · ang_out = 실제로 나간 명령 [m/s · rad/s] · odom = 엔코더 적분 자세 · v_enc · w_enc = 엔코더 속도 ·
-w_gyro [rad/s] · wheel_* = 바퀴 각속도 [rad/s] · 각도 [rad]. real은 메시지 시각 t_ros · t_odom · t_imu · t_joint [s]도 준다."""
+# read()가 돌려주는 dict의 키가 곧 calibration CSV 열이다 (로봇마다 다를 수 있음). 지금 로봇들(차동 구동)은
+#   lin_out · ang_out (실제로 나간 명령 [m/s · rad/s]) · odom_x · odom_y · odom_yaw (엔코더 적분 자세) · v_enc · w_enc (엔코더 속도)
+#   · w_gyro [rad/s] · wheel_l/r_vel [rad/s] · wheel_l/r_pos [rad] · t_ros · t_odom · t_imu · t_joint (메시지 시각 [s], sim · dummy는 자기 시각)
+# calibration report(fit · 그림)는 이 이름들을 쓴다 — 없는 열은 건너뛴다.
 
 
 class RobotInterface:
@@ -40,5 +40,5 @@ class RobotInterface:
         """k번째 스텝이 끝날 때까지 기다림 — real만 (sim은 물리 스텝이 시계, dummy는 계산만)."""
 
     def read(self) -> dict:
-        """지금 상태 {STATE_KEYS} (+ real은 t_*)."""
+        """지금 상태 dict (키 = CSV 열 — 위 주석)."""
         raise NotImplementedError

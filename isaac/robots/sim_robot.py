@@ -14,10 +14,10 @@ class SimRobot(RobotInterface):
 
         super().__init__(env.policy_dt)
         self.torch, self.env = torch, env
-        self.out, self.odom = (0.0, 0.0), [0.0, 0.0, 0.0]
+        self.out, self.odom, self.k = (0.0, 0.0), [0.0, 0.0, 0.0], 0
 
     def write(self, v, w):
-        self.out = (v, w)
+        self.out, self.k = (v, w), self.k + 1
         self.env.step(self.torch.tensor([[v, w]], device=self.env.device))
 
     def close(self):
@@ -31,4 +31,5 @@ class SimRobot(RobotInterface):
         (wl, wr), (pl, pr) = s["jv"], s["jp"]
         return {"lin_out": self.out[0], "ang_out": self.out[1], "odom_x": o[0], "odom_y": o[1], "odom_yaw": o[2],
                 "v_enc": s["v_enc"], "w_enc": s["w_enc"], "w_gyro": s["w_gyro"],
-                "wheel_l_vel": wl, "wheel_r_vel": wr, "wheel_l_pos": pl, "wheel_r_pos": pr}
+                "wheel_l_vel": wl, "wheel_r_vel": wr, "wheel_l_pos": pl, "wheel_r_pos": pr,
+                **dict.fromkeys(("t_ros", "t_odom", "t_imu", "t_joint"), (self.k - 1) * dt)}   # sim은 시계 하나 — 메시지 시각 = sim 시각
