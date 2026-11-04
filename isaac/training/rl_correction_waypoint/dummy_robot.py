@@ -31,8 +31,10 @@ class DummyRobot(RobotInterface):
         wl, wr = (v - w * self.sep / 2.0) / self.r, (v + w * self.sep / 2.0) / self.r
         k = min(1.0, self.max_wheel / max(abs(wl), abs(wr), 1e-9))
         self.buf.append((wl * k, wr * k))
+        if self.rows is not None:   # 측정 중 — 이 스텝 상태를 쌓는다
+            self.rows.append(self._state())
 
-    def read(self):
+    def _state(self):
         (wl, wr), (gl, gr), dt = self.buf[0], self.gain_lr, self.dt
         tl, tr = [0.0 if abs(x) < self.deadband else x for x in (wl * gl, wr * gr)]
         a = 1.0 - math.exp(-dt / self.tau) if self.tau > 1e-9 else 1.0
@@ -44,7 +46,9 @@ class DummyRobot(RobotInterface):
         o[2] += w_enc * dt
         o[0] += v_enc * math.cos(o[2]) * dt
         o[1] += v_enc * math.sin(o[2]) * dt
-        return {"lin_out": self.out[0], "ang_out": self.out[1], "odom_x": o[0], "odom_y": o[1], "odom_yaw": o[2],
+        t = (self.k - 1) * dt
+        return {"t": round(t, 3), "lin_raw": self.out[0], "ang_raw": self.out[1],
+                "lin_out": self.out[0], "ang_out": self.out[1], "odom_x": o[0], "odom_y": o[1], "odom_yaw": o[2],
                 "v_enc": v_enc, "w_enc": w_enc, "w_gyro": w_gyro,
                 "wheel_l_vel": sl, "wheel_r_vel": sr, "wheel_l_pos": 0.0, "wheel_r_pos": 0.0,
-                **dict.fromkeys(("t_ros", "t_odom", "t_imu", "t_joint"), (self.k - 1) * dt)}   # 가짜 — 메시지 시각 = 계산 시각
+                **dict.fromkeys(("t_ros", "t_odom", "t_imu", "t_joint"), t)}   # 가짜 — 메시지 시각 = 계산 시각

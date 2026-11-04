@@ -20,7 +20,6 @@ from commands import CMDS, command_class
 ISAAC = Path(__file__).resolve().parents[1]
 ARTIFACTS = ISAAC / "artifacts"   # artifacts/<task>/{calibration, training, logs}/<시각>_<label>
 STAMP = "%Y-%m-%d_%H-%M-%S"        # Isaac Lab 학습 폴더와 같은 시각 형식
-CSV_HEAD = ["t", "lin_raw", "ang_raw"]   # 기록 시각 · 보낸 명령 — 나머지 열은 robot.read()가 돌려주는 키 그대로 (+ label 맨 뒤)
 
 
 def run_path(task: str, name: str) -> str:
@@ -64,21 +63,20 @@ def make_command(args):
 
 
 def record(robot, cmd, out: str, tag: str = "calibration", label: str = "") -> list:
-    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace → read. out에 CSV + 구간 표 + fit.json + report.png.
+    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace. 끝나면 robot.data() → out에 CSV + 구간 표 + fit.json + report.png.
 
-    CSV 한 줄 = 시각 · 보낸 명령 · robot.read() 상태(키 = 열, 로봇마다 다를 수 있음) · label. 입출력은 로봇이 정한다.
+    로봇이 측정 중에 스스로 쌓은 기록(robot.data(), 키 = CSV 열 — 로봇마다 다를 수 있음)에 label만 붙여 저장한다.
     """
     dt = robot.dt
     segs = getattr(cmd, "segs", [])
     print(f"[{tag}] {type(robot).__name__} · {type(cmd).__name__}: {len(segs)} segs · {cmd.total:.1f}s")
-    rows = []
     robot.start()
     for k in range(int(round(cmd.total / dt))):
         t = k * dt
         v, w = cmd(t)
         robot.write(v, w)
         robot.pace(k)
-        rows.append({"t": round(t, 3), "lin_raw": v, "ang_raw": w, **robot.read(), "label": label})
+    rows = [{**r, "label": label} for r in robot.data()]
     _save(tag, segs, rows, out)
     return rows
 
@@ -123,7 +121,7 @@ def _average(rows, t0: float, t1: float, skip: float = 0.0):
 def print_segments(tag: str, segs, rows, out: str) -> None:
     """구간별 전진/회전 표 — sim · real 같은 형식."""
     if not rows or not all(k in rows[0] for k in SEG_KEYS):
-        print(f"[{tag}] 구간 표 스킵 (read()에 {', '.join(SEG_KEYS)} 없음) → {out}")
+        print(f"[{tag}] 구간 표 스킵 (기록에 {', '.join(SEG_KEYS)} 없음) → {out}")
         return
     for name in ("left", "right"):
         for i, move in enumerate([s for s in segs if s[4] == f"move_{name}"], 1):

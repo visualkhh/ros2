@@ -1,7 +1,8 @@
 """RealRobot — 이 로봇의 실기기 (ROS 2). PC에서 Pi의 base · cmd_manager에 붙는다. rclpy.init() 뒤에 만든다.
 
   write  /cmd_manual_vel (Twist) — cmd_manager가 MANUAL일 때 모터로
-  read   /odom · /imu · /joint_states (wheel_left_joint · wheel_right_joint) · /cmd_vel_base (실제로 나간 명령)
+  기록   /odom · /imu · /joint_states (wheel_left_joint · wheel_right_joint) · /cmd_vel_base (실제로 나간 명령) —
+         측정 중 스텝마다 pace() 끝에 최신 값을 한 줄 쌓는다
   state  /state_control (MANUAL 등)
 """
 from __future__ import annotations
@@ -58,6 +59,7 @@ class RealRobot(RobotInterface):
         self.pub = node.create_publisher(Twist, "/cmd_manual_vel", 10)
 
     def write(self, v, w):
+        self.sent = (float(v), float(w))
         msg = self.Twist()
         msg.linear.x, msg.angular.z = float(v), float(w)
         self.pub.publish(msg)
@@ -90,14 +92,18 @@ class RealRobot(RobotInterface):
             self.rclpy.spin_once(self.node, timeout_sec=0.1)
 
     def start(self):
+        super().start()
         self.t0 = time.monotonic()   # pace 기준 (벽시계)
 
     def pace(self, k):
+        """k번째 스텝 끝까지 ROS 메시지를 받으며 기다린 뒤, 측정 중이면 그때의 최신 값을 쌓는다."""
         nxt = self.t0 + (k + 1) / self.rate
         while time.monotonic() < nxt:
             self.rclpy.spin_once(self.node, timeout_sec=min(0.01, max(0.0, nxt - time.monotonic())))
+        if self.rows is not None:
+            self.rows.append({"t": round(k / self.rate, 3), "lin_raw": self.sent[0], "ang_raw": self.sent[1], **self._state()})
 
-    def read(self):
+    def _state(self):
         s, o = self.s, self.s["odom"]
         pp, q = o.pose.pose.position, o.pose.pose.orientation
         yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
