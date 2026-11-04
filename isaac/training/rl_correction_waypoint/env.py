@@ -18,6 +18,7 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
+from training.rl_correction_waypoint.markers import MarkersMixin
 from training.rl_correction_waypoint.command import RlCorrectionWaypointCommand
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ def wrap(a: torch.Tensor) -> torch.Tensor:
     return torch.atan2(torch.sin(a), torch.cos(a))
 
 
-class RlCorrectionWaypointEnv(BaseEnv):
+class RlCorrectionWaypointEnv(MarkersMixin, BaseEnv):
     cfg: RlCorrectionWaypointEnvCfg
 
     def __init__(self, cfg: RlCorrectionWaypointEnvCfg, render_mode: str | None = None, **kwargs):

@@ -5,7 +5,7 @@
 - `wheel_speeds(v, w)`: Twist → 좌/우 rad/s (8 rad/s 넘으면 비례 축소 = opencr_driver)
 - `encoders(r, sep)` · `true_twist()` · `sense(i)`: /odom v·w (엔코더) · 몸체 실제 속도 · env i 한 줄
 - `_reset_idx` / `place`: 지형 칸 가운데에 세우기 (cfg.random_yaw면 방향 랜덤) · 순간이동
-- 화면(debug_vis): 명령/실제 막대 + `path_w` 목표 경로
+- 화면(debug_vis)은 각 task env가 (training/<task>/markers.py MarkersMixin)
 """
 from __future__ import annotations
 
@@ -39,7 +39,6 @@ class BaseEnv(DirectRLEnv):
         self.sep = torch.tensor([self.cfg.wheel_sep], device=dev)
         self.cmd = torch.zeros(n, 2, device=dev)       # 이번 스텝 명령 [v, w]
         self.target = torch.zeros(n, 2, device=dev)    # 바퀴 속도 목표 [rad/s]
-        self.path_w = None                             # 목표 경로 점 (m, 3) — 화면용, 스크립트가 넣음
 
     # ------------------------------------------------------------------ 장면
     def _setup_scene(self):
@@ -138,43 +137,8 @@ class BaseEnv(DirectRLEnv):
         self.robot.write_joint_state_to_sim(z, z, self._wheels, ids)
         self.target[ids] = 0.0
 
-    def set_path(self, xy, i: int = 0) -> None:
-        """목표 경로(명령의 path(): 시작 자세 기준 [(x 앞, y 왼쪽)])를 env i 로봇의 지금 자세로 옮겨 노란 점으로. None이면 끔."""
-        if not xy:
-            self.path_w = None
-            return
-        d = self.robot.data
-        p0, q = d.root_pos_w.torch[i].tolist(), d.root_quat_w.torch[i].tolist()   # xyzw
-        yaw = math.atan2(2 * (q[3] * q[2] + q[0] * q[1]), 1 - 2 * (q[1] ** 2 + q[2] ** 2))
-        pts = []
-        for (x0, y0), (x1, y1) in zip(xy, xy[1:]):   # 3 cm 간격 점
-            k = max(1, int(math.hypot(x1 - x0, y1 - y0) / 0.03))
-            pts += [(x0 + (x1 - x0) * j / k, y0 + (y1 - y0) * j / k) for j in range(k)]
-        c, s = math.cos(yaw), math.sin(yaw)
-        self.path_w = torch.tensor([[p0[0] + c * x - s * y, p0[1] + s * x + c * y, p0[2]] for x, y in pts], device=self.device)
-
     def look_at(self, origin) -> None:
         self.sim.set_camera_view(eye=(origin[0] + 1.8, origin[1] - 1.8, 1.55), target=(origin[0], origin[1], 0.15))
-
-    # ------------------------------------------------------------------ 화면 (debug_vis)
-    def _set_debug_vis_impl(self, debug_vis: bool):
-        if debug_vis and getattr(self, "markers", None) is None:
-            from calibration.command_markers import CommandMarkers
-            self.markers = CommandMarkers()
-        if getattr(self, "markers", None) is not None:
-            self.markers.set_visible(debug_vis)
-
-    def vis_path(self):
-        """노란 점 — 기본은 스크립트가 넣은 path_w. task가 덮어씀 (학습: 명령대로 갈 원호)."""
-        return self.path_w
-
-    def _debug_vis_callback(self, event):
-        if not hasattr(self, "path_w"):   # 부모 __init__ 도중
-            return
-        d = self.robot.data
-        v, w = self.true_twist()
-        self.markers.update(d.root_pos_w.torch, self.markers.yaw_of(d.root_quat_w.torch),
-                            self.cmd[:, 0], self.cmd[:, 1], v, w, self.vis_path())
 
 
 def wheel_targets(v, w, r, sep, max_wheel):
