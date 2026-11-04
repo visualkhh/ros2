@@ -1,24 +1,26 @@
 diff --git a/map_merge/CMakeLists.txt b/map_merge/CMakeLists.txt
-index 702b4e1..eb86e81 100644
+index 702b4e1..a5b8f56 100644
 --- a/map_merge/CMakeLists.txt
 +++ b/map_merge/CMakeLists.txt
-@@ -17,6 +17,7 @@ endif()
+@@ -98,8 +98,19 @@ target_link_libraries(combine_grids ${rclcpp_LIBRARIES} ${OpenCV_LIBS})
+ target_link_libraries(map_merge combine_grids)
+ # target_link_libraries(map_merge)
  
- # find dependencies
- find_package(ament_cmake REQUIRED)
-+find_package(ament_cmake_target_dependencies REQUIRED)
- find_package(rclcpp REQUIRED)
- find_package(geometry_msgs REQUIRED)
- find_package(image_geometry REQUIRED)
-diff --git a/map_merge/package.xml b/map_merge/package.xml
-index a60e0a7..80245d0 100644
---- a/map_merge/package.xml
-+++ b/map_merge/package.xml
-@@ -12,6 +12,7 @@
-   <license>BSD</license>
+-ament_target_dependencies(map_merge ${DEPENDENCIES})
+-ament_target_dependencies(combine_grids ${DEPENDENCIES})
++# ament_target_dependencies() was removed from ament_cmake 2.8.5+ (Lyrical).
++# Expand the same dependency targets explicitly with modern CMake instead.
++set(MODERN_DEPENDENCIES "")
++foreach(_dep ${DEPENDENCIES})
++  if(_dep STREQUAL "OpenCV")
++    list(APPEND MODERN_DEPENDENCIES ${OpenCV_LIBS})
++  else()
++    list(APPEND MODERN_DEPENDENCIES ${${_dep}_TARGETS})
++  endif()
++endforeach()
++
++target_link_libraries(map_merge ${MODERN_DEPENDENCIES})
++target_link_libraries(combine_grids ${MODERN_DEPENDENCIES})
  
-   <buildtool_depend>ament_cmake</buildtool_depend>
-+  <buildtool_depend>ament_cmake_target_dependencies</buildtool_depend>
- 
-   <test_depend>ament_lint_auto</test_depend>
-   <test_depend>ament_lint_common</test_depend>
+ install(
+   TARGETS combine_grids
