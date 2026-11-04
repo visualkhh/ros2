@@ -175,10 +175,14 @@ class RlMazeEnv(BaseEnv):
         self.markers.draw(self, self.vis_path())
 
     def vis_path(self):
-        """노란 점 = env 0의 남은 웨이포인트 (지금 목표부터 끝까지)."""
+        """노란 점선 = 로봇마다 지금 위치 → 앞 웨이포인트 lookahead개를 잇는 선 (정책이 보는 웨이포인트 그대로)."""
         if not hasattr(self, "wps"):
             return None
-        i0, n = int(self.wp_idx[0]), int(self.wp_n[0])
-        pts = self.wps[0, i0:n]
-        z = torch.full((len(pts), 1), 0.02, device=self.device)
-        return torch.cat([pts, z], dim=-1)
+        n, k = self.num_envs, self.cfg.lookahead
+        idx = (self.wp_idx[:, None] + torch.arange(k, device=self.device)[None]).clamp(max=self.wps.shape[1] - 1)
+        ahead = self.wps[self._rows[:, None], idx]                                         # [n, K, 2]
+        pts = torch.cat([self.robot.data.root_pos_w.torch[:, None, :2], ahead], dim=1)    # [n, K+1, 2] 로봇부터
+        t = torch.linspace(0.0, 1.0, 7, device=self.device)[:-1]                          # 선분마다 6점
+        seg = pts[:, :-1, None] + (pts[:, 1:, None] - pts[:, :-1, None]) * t[None, None, :, None]   # [n, K, 6, 2]
+        seg = torch.cat([seg.reshape(n, -1, 2), ahead[:, -1:]], dim=1).reshape(-1, 2)
+        return torch.cat([seg, torch.full((len(seg), 1), 0.02, device=self.device)], dim=-1)

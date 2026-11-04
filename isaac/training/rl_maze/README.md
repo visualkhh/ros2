@@ -36,7 +36,7 @@ training/rl_maze/
 cd isaac
 $ISAACLAB_DIR/isaaclab.sh -p training/rl_maze/maze_grid.py        # 미로 USD가 바뀌었을 때만 (grid.npz · paths.npz 다시)
 ./run-training.sh rl_maze --max_iterations 1000
-./run-training.sh rl_maze --num_envs 16 --viz env.debug_vis=true   # 보기 (노란 점 = env 0의 남은 웨이포인트)
+./run-training.sh rl_maze --num_envs 16 --viz env.debug_vis=true   # 보기 (노란 점선 = 로봇마다 → 앞 웨이포인트 5개)
 ./run-calibration.sh rl_maze --robot sim                            # 같은 로봇 calibration (복사본)
 ```
 
