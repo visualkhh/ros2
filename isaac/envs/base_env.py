@@ -41,6 +41,9 @@ class BaseEnv(DirectRLEnv):
                                                         eye=cfg.snap_eye, lookat=cfg.snap_lookat)]
         super().__init__(cfg, render_mode, **kwargs)
         self._snap_at = 0.0
+        import time
+
+        self._snap_t0 = time.time()
         self._wheels, _ = self.robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
         n, dev = self.num_envs, self.device
         self.policy_dt = self.cfg.sim.dt * self.cfg.decimation
@@ -172,8 +175,26 @@ class BaseEnv(DirectRLEnv):
                 self._snapshot()
         return out
 
+    def _snap_run_dir(self) -> str:
+        import glob
+        import os
+        import time
+
+        if getattr(self, "_snap_run", None):
+            return self._snap_run
+        root, label = self.cfg.snap_dir, self.cfg.snap_label
+        t0 = getattr(self, "_snap_t0", time.time())
+        runs = [d for d in glob.glob(os.path.join(root, f"*_{label}" if label else "*")) if os.path.isdir(d)
+                and os.path.getmtime(d) >= t0 - 120]   # 이번 실행 (env 만든 뒤 2분 안쪽에 생긴 폴더)
+        if runs:
+            self._snap_run = max(runs, key=os.path.getmtime)
+            return self._snap_run
+        return root
+
     def _snapshot(self) -> None:
-        """지금 화면 → snap_dir/<시각>.png + latest.png (Kit visualizer의 render_rgb_array)."""
+        """지금 화면 → <학습 폴더>/snap/<시각>.png + <학습 폴더>/latest.png (Kit visualizer의 render_rgb_array).
+        학습 폴더 = snap_dir(…/training) 안에서 이번 실행이 만든 *_<snap_label> 폴더 (train.py가 시작할 때 이름을 정해서 여기서 찾음).
+        못 찾으면 snap_dir 바로 아래."""
         import os
         import shutil
         from datetime import datetime
@@ -188,10 +209,11 @@ class BaseEnv(DirectRLEnv):
                     continue
                 from PIL import Image
 
-                os.makedirs(self.cfg.snap_dir, exist_ok=True)
-                path = os.path.join(self.cfg.snap_dir, f"{datetime.now():%Y-%m-%d_%H-%M-%S}.png")
+                run = self._snap_run_dir()
+                os.makedirs(os.path.join(run, "snap"), exist_ok=True)
+                path = os.path.join(run, "snap", f"{datetime.now():%Y-%m-%d_%H-%M-%S}.png")
                 Image.fromarray(rgb).save(path)
-                shutil.copyfile(path, os.path.join(self.cfg.snap_dir, "latest.png"))
+                shutil.copyfile(path, os.path.join(run, "latest.png"))
                 return
             except Exception as exc:   # 스크린샷 실패로 학습이 멈추면 안 된다
                 print(f"[snap] 실패: {exc}", flush=True)

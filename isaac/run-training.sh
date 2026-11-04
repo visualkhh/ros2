@@ -11,7 +11,7 @@
 #   (공식 스크립트의 logs/rsl_rl/<experiment_name>에 agent.experiment_name=<절대경로>를 넘겨 여기로)
 # 터미널 출력: artifacts/<task>/logs/<시각>_<label>_{training|play}.log (화면에도 그대로)
 #   --label NAME          폴더 이름 <시각>_NAME (= 공식 --run_name, 기본 = task 이름)
-#   --snap SEC            SEC초마다 화면 저장 → artifacts/<task>/logs/<시각>_<label>_snaps/<시각>.png + latest.png(덮어씀)
+#   --snap SEC            SEC초마다 화면 저장 → artifacts/<task>/training/<시각>_<label>/snap/<시각>.png + latest.png(덮어씀)
 #                         창 없이도 됨 (창이 없으면 화면 없는 Kit visualizer를 붙임, 학습이 느려짐)
 #
 # ─── 자주 쓰는 공식 옵션 ───────────────────────────────────────
@@ -78,8 +78,7 @@ REST+=(--run_name "$LABEL")
 viz_args ${REST[@]+"${REST[@]}"}; args=(${VIZ_ARGS[@]+"${VIZ_ARGS[@]}"})
 STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 if [[ -n "$SNAP" ]]; then
-  SNAP_DIR="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL}_snaps"
-  args+=("env.snap_s=$SNAP" "env.snap_dir=$SNAP_DIR")
+  args+=("env.snap_s=$SNAP" "env.snap_dir=$ISAAC/artifacts/$TASK/training" "env.snap_label=$LABEL")   # 그 실행의 학습 폴더 안
   # 캡처하려면 렌더 확장(replicator)이 켜진 Kit 설정 — 공식 train.py는 --video 때만 켜므로 --experience로 직접
   if [[ " ${args[*]} " == *" --viz "* || " ${args[*]} " == *" --visualizer "* ]]; then kit=isaaclab.python.rendering.kit
   else kit=isaaclab.python.headless.rendering.kit; fi

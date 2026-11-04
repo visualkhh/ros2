@@ -47,7 +47,7 @@ cd isaac
 ./run-training.sh rl_correction_waypoint --max_iterations 500                                   # task 폴더 → gym RlCorrectionWaypoint (창 없음, 512대)
 ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 창 (노란 점 = 웨이포인트 경로)
 ./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true
-./run-training.sh rl_correction_waypoint --max_iterations 500 --label v1 --snap 60   # 60초마다 화면 → logs/<시각>_v1_snaps/ + latest.png
+./run-training.sh rl_correction_waypoint --max_iterations 500 --label v1 --snap 60   # 60초마다 화면 → training/<시각>_v1/snap/ + latest.png
 tensorboard --logdir artifacts/rl_correction_waypoint/training          # Metrics/cross_track (경로 이탈 평균) · Metrics/waypoints_done (평균 도착 수)
 ```
 
