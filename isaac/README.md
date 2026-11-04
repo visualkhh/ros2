@@ -82,7 +82,7 @@ cd ../ros2_ws && colcon build --packages-select rl_correction rl_eval tb3_bringu
 # 로봇: 베이스 (Pi에서 또는 PC tool로)
 ./tool/run-cli base start
 # PC: RL 노드 바이패스 (보정 없이 통과 — 정책을 쓸 때와 같은 경로 · 같은 PC 왕복 지연)
-cd ros2_ws && ./rl-only.sh label:=calib        # enable:=true 금지
+cd ros2_ws && ./rl-only.sh enable:=false label:=calib   # 바이패스 필수 (기본은 정책 켬)
 # MANUAL · 경로 rl
 ./tool/run-cli control manual  &&  ./tool/run-cli route rl
 cd isaac

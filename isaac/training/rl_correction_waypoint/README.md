@@ -80,7 +80,7 @@ python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_corre
 3. **PC에서 RL 노드를 바이패스로** (보정 없이 통과 — 실제로 정책을 쓸 때와 같은 경로 · 같은 PC 왕복 지연을 재려고):
    ```bash
    cd ~/workspaces/visualkhh/source/ros2/ros2_ws
-   ./rl-only.sh label:=calib     # enable:=true 금지 (정책 보정이 섞인다) — 켜졌는지: ./policy.sh status
+   ./rl-only.sh enable:=false label:=calib   # 바이패스 필수 (기본은 정책 켬 — 보정이 섞인다) · 확인: ./policy.sh status
    ```
 4. **제어 MANUAL · 경로 rl** (run-cli, Pi든 PC든):
    ```bash
@@ -111,9 +111,9 @@ python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_corre
 | 방법 | 명령 | 언제 |
 |---|---|---|
 | rl-only를 정책으로 띄움 | `./rl-only.sh enable:=true label:=after model:=../isaac/artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx` | 처음부터 B만 |
-| 띄운 채 파라미터로 전환 | `./policy.sh <정책.onnx>` (켬) · `./policy.sh off` (바이패스) · `./policy.sh status` | **한 번 실행 안에서 A/B** (같은 배터리 · 바닥) |
+| 띄운 채 켬/끔 | `ros2 service call /rl_corrector/toggle std_srvs/srv/SetBool "{data: false}"` (바이패스) · `"{data: true}"` (ONNX) — = `./policy.sh off` · `on` · 모델 교체 `./policy.sh <정책.onnx>` | **한 번 실행 안에서 A/B** (같은 배터리 · 바닥) |
 
-- `policy.sh` = `ros2 param set /rl_corrector model_path · enable` — 다시 띄울 필요 없음, 다음 명령부터 적용. 기록 CSV의 `rl_policy` 칸으로 A/B 구간이 나뉜다 → `./report.py`.
+- 기본은 켬(ONNX 적용). toggle = corrector의 `~/toggle` 서비스(nav2 collision_monitor와 같은 `std_srvs/SetBool`) — 다시 띄울 필요 없음, 다음 명령부터 적용. 기록 CSV의 `rl_policy` 칸으로 A/B 구간이 나뉜다 → `./report.py`.
 - `policy.onnx.data`(가중치)가 `policy.onnx` 옆에 같이 있어야 한다. 로드 결과는 rl-only 로그의 `ONNX loaded: … mode=goal`.
 - 이 정책은 관측 10차원이라 corrector가 **goal 모드**로 뜬다 — 키보드 · 네모(`/cmd_manual_vel`) 명령을 보정하는 게 아니라,
   `/rl_goal`(Point, 시작 자세 기준 x · y [m])을 받아 기본 제어기 + 보정으로 그 점까지 간다. 끝: `/rl_goal_stop`.
@@ -122,7 +122,6 @@ python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_corre
   ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
   ```
 
-**아직 없는 것 (A/B를 제대로 하려면 필요)**
+**아직 없는 것**
 - **웨이포인트 송신기**: 도착하면 다음 `/rl_goal`을 보내는 쪽. 지금은 손으로 한 점씩.
-- **A = 보정 0인 기본 제어기**: goal 모드에서 `policy.sh off`(enable false)는 바이패스가 아니라 **정지**다 (기본 제어기도 안 돈다).
-  그래서 지금은 같은 웨이포인트로 "정책 없음 vs 정책" 비교가 안 된다 — corrector에 보정 0 모드가 있어야 한다.
+- **A = 보정 0인 기본 제어기**: goal 모드에서 toggle 끔(바이패스)은 nominal controller만 돈다 (보정 0 = 학습 env의 행동 0) — 같은 웨이포인트로 A/B 가능.

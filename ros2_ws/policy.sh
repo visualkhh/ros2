@@ -40,8 +40,8 @@ source "$REPO/tool/peers.sh"
 
 param() { ros2 param set "$NODE" "$1" "$2" || { echo "실패 — rl-only.sh가 떠 있나? (노드 $NODE)" >&2; exit 1; }; }
 case "$1" in
-  off)    param enable false; echo "[policy] 바이패스 (enable false)" ;;
-  on)     param enable true;  echo "[policy] 켬 (enable true)" ;;
+  off|on) d=false; [[ "$1" == on ]] && d=true   # = corrector ~/toggle 서비스 (nav2 collision_monitor toggle 방식)
+          ros2 service call "$NODE/toggle" std_srvs/srv/SetBool "{data: $d}" | tail -1 || { echo "실패 — rl-only.sh가 떠 있나? (노드 $NODE)" >&2; exit 1; } ;;
   status) ros2 param get "$NODE" enable && ros2 param get "$NODE" model_path || exit 1 ;;
   *)
     model="$1"; [[ "$model" == /* ]] || model="$PWD/$model"

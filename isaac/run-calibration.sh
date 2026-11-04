@@ -22,7 +22,7 @@
 #   sim    순수 sim (IsaacLab — 보정 없음) · 창은 기본 끔 · --viz (= kit) 또는 --viz X로 켬 · --watch (기록 후 창 닫을 때까지 반복)
 #          창: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로 — 벗어나는 만큼이 드리프트
 #   real   실기기 (PC · .venv · ROS 환경/peers 자동, ROS_DOMAIN_ID=25) · --check-only (안 움직이고 상태만) · --rate 20
-#          준비: 로봇 베이스 켜기 · PC rl-only.sh 바이패스 (enable:=true 금지) · MANUAL · route rl · 주변 1 m 비우기
+#          준비: 로봇 베이스 켜기 · PC rl-only.sh enable:=false (바이패스, 기본은 정책 켬) · MANUAL · route rl · 주변 1 m 비우기
 #          (순서: training/<task>/README.md calibration 절)
 #   dummy  가짜 로봇 (Isaac/ROS 없이 흐름 확인) · --gain/--gain-l/--gain-r --tau --delay --deadband --slip --noise --seed
 #          → fit.json에 넣은 값이 나오면 파이프라인 OK

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # rl-only — PC에서 RL 노드(corrector + eval_recorder)만 띄운다. = ros2 launch tb3_bringup rl-only.launch.py
 #
-#   ./rl-only.sh [enable:=true] [label:=이름] [model:=<정책.onnx>] [output:=<저장.csv>] [launch 인자...]
+#   ./rl-only.sh [enable:=false] [label:=이름] [model:=<정책.onnx>] [output:=<저장.csv>] [launch 인자...]
 #
-#   ./rl-only.sh label:=before                    # 보정 없이 통과 (Before)
-#   ./rl-only.sh enable:=true label:=after        # 정책 보정 (After) — 기본 모델 isaac/artifacts/real/policy.onnx
-#   ./rl-only.sh enable:=true model:=<isaac>/artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx   (play로 내보낸 것 — .onnx.data 같이)
+#   ./rl-only.sh enable:=false label:=before      # 보정 없이 통과 (Before · calibration 측정)
+#   ./rl-only.sh label:=after                     # 정책 보정 (After, 기본 켬) — 기본 모델 isaac/artifacts/real/policy.onnx (없으면 통과)
+#   ./rl-only.sh model:=<isaac>/artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx   (play로 내보낸 것 — .onnx.data 같이)
 #
 # 기본 경로:
 #   model:=   isaac/artifacts/real/policy.onnx    쓸 정책을 여기에 복사해 두면 된다 (입력 6차원 → track 자동)
@@ -17,7 +17,8 @@
 #   · 모터 온도 · 배터리 · 상태(control/rl/estop) · 진단 · 메시지 시각(지연). 칸 설명: src/rl_eval/rl_eval/eval_recorder.py
 # - 그림: ./report.py (→ CSV 옆 report.png)
 # - 실행 중 정책 교체(한 번에 A/B): ./policy.sh <정책.onnx> | off — 기록의 rl_policy 칸으로 구간이 나뉜다
-# - enable:=true인데 모델 파일이 없으면 시작하지 않는다. enable 없이(통과)는 모델 없어도 된다.
+# - 기본 enable 켬(ONNX 적용). 모델이 없으면 그냥 통과. enable:=true를 직접 줬는데 모델이 없으면 시작하지 않는다.
+# - 실행 중 켬/끔: ros2 service call /rl_corrector/toggle std_srvs/srv/SetBool "{data: false}" (또는 ./policy.sh off|on)
 # - 상대경로는 지금 위치 기준 → 절대경로로 바꿔 넘긴다. 저장 폴더는 없으면 만든다.
 # - 로봇(Pi)은 RL 경로여야 한다: ./run-cli route rl (끝나면 route direct). ROS_DOMAIN_ID=25.
 #
@@ -71,13 +72,14 @@ fi
 MODEL_DEFAULT="$REPO/isaac/artifacts/real/policy.onnx"
 OUTPUT_DEFAULT="$WS/artifacts/real/raw.csv"
 abs() { [[ "$1" == /* ]] && echo "$1" || echo "$PWD/$1"; }
-args=() output="" model="" enable=false label=rl
+args=() output="" model="" enable=true explicit=false label=rl
 for a in "$@"; do
   case "$a" in
     output:=*) output="$(abs "${a#output:=}")"; continue ;;
     model:=*)  model="$(abs "${a#model:=}")";   continue ;;
     label:=*)  label="${a#label:=}" ;;
-    enable:=true) enable=true ;;
+    enable:=true) enable=true explicit=true ;;
+    enable:=false) enable=false ;;
   esac
   args+=("$a")
 done
@@ -85,7 +87,7 @@ output="${output:-$OUTPUT_DEFAULT}"
 if [[ -z "$model" && -f "$MODEL_DEFAULT" ]]; then
   model="$MODEL_DEFAULT"
 fi
-if [[ "$enable" == true ]]; then
+if [[ "$explicit" == true ]]; then
   [[ -n "$model" ]] || { echo "enable:=true인데 모델 없음 — $MODEL_DEFAULT 에 두거나 model:=<정책.onnx>" >&2; exit 2; }
 fi
 [[ -z "$model" || -f "$model" ]] || { echo "ONNX 없음: $model" >&2; exit 2; }

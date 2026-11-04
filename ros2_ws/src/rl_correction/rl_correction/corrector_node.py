@@ -17,10 +17,13 @@
 
 공통:
   /odom twist·pose, /imu angular z 사용. zero 명령은 zero 출력.
-  No model / dim mismatch -> track은 passthrough, goal은 정지.
+  바이패스 (enable false · 모델 없음): track = 입력 그대로 통과 · goal = nominal controller만 (보정 0, A/B의 A).
+  goal dim mismatch -> 정지.
 
-실행 중 전환 (ROS 파라미터 — 한 번 실행에 A/B):
-  ros2 param set /rl_corrector enable false|true      입력마다 다시 읽음 (false = 바이패스)
+ONNX 적용 켬/끔 (한 번 실행에 A/B) — 기본 켬 (enable true):
+  ros2 service call /rl_corrector/toggle std_srvs/srv/SetBool "{data: false}"   # 바이패스 (nav2 collision_monitor toggle과 같은 방식)
+  ros2 service call /rl_corrector/toggle std_srvs/srv/SetBool "{data: true}"    # ONNX 적용
+  ros2 param set /rl_corrector enable false|true      같은 값 (toggle이 이 파라미터를 바꾼다)
   ros2 param set /rl_corrector model_path <onnx>      즉시 다시 로드. 없는 경로·빈 값이면 바이패스
   (ros2_ws/policy.sh 가 이걸 감싼다)
 """
@@ -33,8 +36,10 @@ from geometry_msgs.msg import Point, Twist
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Empty, Float32MultiArray
+from std_srvs.srv import SetBool
 
 T_CHANGE_MAX = 2.0   # [s] same clip as the sim
 CHANGE_EPS = 1e-3    # command counts as changed above this
@@ -63,7 +68,7 @@ def correct(cmd, delta, max_lin, max_ang):
 class RlCorrector(Node):
     def __init__(self):
         super().__init__('rl_corrector')
-        self.declare_parameter('enable', False)
+        self.declare_parameter('enable', True)   # ONNX 적용 (false = 바이패스) — ~/toggle 서비스로도
         self.declare_parameter('model_path', '')
         self.declare_parameter('mode', 'auto')  # auto | track | goal
         self.declare_parameter('goal_mode', 'absolute')  # absolute (웨이포인트, 학습과 같음) | relative
@@ -104,6 +109,16 @@ class RlCorrector(Node):
         self.pub = self.create_publisher(Twist, 'cmd_vel_out', 10)
         self.pub_dbg = self.create_publisher(Float32MultiArray, 'rl_debug', 10)
         self.create_timer(0.05, self.tick_goal)
+        self.create_service(SetBool, '~/toggle', self.cb_toggle)
+
+    def cb_toggle(self, req, res):
+        """ONNX 적용 켬(true) / 끔(false = 바이패스). enable 파라미터를 바꾼다."""
+        self.set_parameters([Parameter('enable', value=bool(req.data))])
+        res.success = True
+        res.message = (f"enable={bool(req.data)} · model={'loaded' if self.session is not None else 'none (bypass)'}"
+                       f" · mode={self.mode}")
+        self.get_logger().info(f'toggle: {res.message}')
+        return res
 
     def _on_params(self, params):
         """model_path가 바뀌면 바로 다시 로드 (실패해도 노드는 살아서 바이패스)."""
@@ -237,9 +252,6 @@ class RlCorrector(Node):
     def tick_goal(self):
         if self.mode != 'goal' or not self.goal_active:
             return
-        if not self.get_parameter('enable').value or self.session is None:
-            self.pub.publish(Twist())
-            return
         if not self.odom_seen or self.start_pose is None or self.goal is None:
             self.pub.publish(Twist())
             return
@@ -251,18 +263,20 @@ class RlCorrector(Node):
         herr = wrap_to_pi(math.atan2(ey, ex) - yaw)
         v, w = self._goal_cmd(dist, herr)
 
-        obs = [gx, gy, px, py, yaw, self.v_enc, self.w_enc, self.w_gyro,
-               self.prev_action[0], self.prev_action[1]]
-        if len(obs) != self.obs_dim:
-            self.get_logger().warning(
-                f'obs dim {len(obs)} != model {self.obs_dim}: stop', throttle_duration_sec=5.0)
-            self.pub.publish(Twist())
-            return
-
-        out = self.session.run(None, {self.in_name: np.array([obs], dtype=np.float32)})[0][0]
-        delta = scale_action(out, self.get_parameter('action_scale_lin').value,
-                             self.get_parameter('action_scale_ang').value)
-        self.prev_action = (max(-1.0, min(1.0, float(out[0]))), max(-1.0, min(1.0, float(out[1]))))
+        if self.get_parameter('enable').value and self.session is not None:   # ONNX 보정
+            obs = [gx, gy, px, py, yaw, self.v_enc, self.w_enc, self.w_gyro,
+                   self.prev_action[0], self.prev_action[1]]
+            if len(obs) != self.obs_dim:
+                self.get_logger().warning(
+                    f'obs dim {len(obs)} != model {self.obs_dim}: stop', throttle_duration_sec=5.0)
+                self.pub.publish(Twist())
+                return
+            out = self.session.run(None, {self.in_name: np.array([obs], dtype=np.float32)})[0][0]
+            delta = scale_action(out, self.get_parameter('action_scale_lin').value,
+                                 self.get_parameter('action_scale_ang').value)
+            self.prev_action = (max(-1.0, min(1.0, float(out[0]))), max(-1.0, min(1.0, float(out[1]))))
+        else:   # 바이패스 — nominal controller만 (보정 0, 학습 env의 행동 0과 같음)
+            delta, self.prev_action = (0.0, 0.0), (0.0, 0.0)
 
         lin, ang = correct((v, w), delta, self.get_parameter('max_lin').value,
                            self.get_parameter('max_ang').value)

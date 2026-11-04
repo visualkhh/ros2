@@ -1,6 +1,6 @@
 """rl-only — PC용: RL 노드(corrector + eval)만 띄운다 (로봇 노드 없음).
 
-  ros2 launch tb3_bringup rl-only.launch.py                                   # passthrough (enable:=false)
+  ros2 launch tb3_bringup rl-only.launch.py enable:=false                     # passthrough (바이패스)
   ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx
   ros2 launch tb3_bringup rl-only.launch.py label:=after output:=/tmp/after.csv
 
@@ -16,7 +16,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     arg = LaunchConfiguration
     return LaunchDescription([
-        DeclareLaunchArgument('enable', default_value='false', description='false면 그대로 통과'),
+        DeclareLaunchArgument('enable', default_value='true', description='ONNX 적용 (모델이 없으면 어차피 통과) · false = 바이패스 · 실행 중: /rl_corrector/toggle'),
         DeclareLaunchArgument('model', default_value='', description='ONNX 정책 경로'),
         DeclareLaunchArgument('mode', default_value='auto', description='auto | track | goal'),
         DeclareLaunchArgument('goal_mode', default_value='relative', description='relative | absolute'),
