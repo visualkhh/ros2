@@ -62,8 +62,6 @@ class BaseEnv(DirectRLEnv):
         robots.use(self.cfg, self.cfg.robot)   # 덮어쓰기(env.robot=…)가 반영되게 여기서 한 번 더
         robot_usd(self.cfg.robot)   # URDF → USD (바뀌었을 때만) — Isaac 앱이 뜬 지금 (cfg엔 경로만 있다)
         self.robot = Articulation(self.cfg.robot_cfg)
-        # URDF 변환 USD의 화면 형상(body 등)은 instanceable — Fabric이 instance엔 링크 움직임을 안 넘겨 화면이 생성 자리에 언다 (복제 전에 풂)
-        sim_utils.make_uninstanceable("/World/envs/env_0/Robot")
         self.scene.articulations["robot"] = self.robot
         bind_wheel_materials(self.scene.stage, "/World/envs/env_0/Robot", self.cfg.wheel_friction, self.cfg.caster_friction)
         self.cfg.terrain = self.ground_cfg()   # 배경 — env가 정함 (cfg 덮어쓰기가 반영되게 장면 만들 때)
