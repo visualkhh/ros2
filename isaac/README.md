@@ -31,6 +31,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 ```text
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
+├── run-real-ab.sh            실기기 A/B — ./run-real-ab.sh <task> --onnx <policy.onnx> (A 바이패스 → B 정책 → training/<task>/report.py)
 ├── run-make-onnx.sh          체크포인트 → ONNX: ./run-make-onnx.sh <model_N.pt> [--quantize] (tools/onnx_tool.py · play 창 없이, 스스로 끝남)
 ├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py → artifacts/<task>/training/)
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh <이름|디렉토리>)
@@ -168,42 +169,24 @@ tensorboard --logdir artifacts/rl_correction_waypoint/training                  
 - 카메라는 고정하지 않는다 — 마우스 휠 줌 · 오른쪽 드래그 회전 · 가운데 드래그 이동. 로봇이 화면 밖으로 가면 F.
 - `--env`는 행동이 [v, w] 명령인 env(`BaseEnv` 계열). 터미널에 0.5 s마다 명령 / 엔코더 / 자이로.
 
-### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
+### 3.5 실기기 A/B — 같은 명령, 보정 끔(A) · 켬(B)
 
 ```bash
-cp artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx* artifacts/real/   # isaac/ 에서 — policy.onnx + policy.onnx.data 둘 다
-# 로봇: 베이스 · MANUAL (3.1과 같음) · 출발 위치·방향을 A와 B에서 같게
-cd ../ros2_ws
-./rl-only.sh label:=ab output:=artifacts/real/ab.csv          # 터미널 A — RL 노드 + 기록 (바이패스로 시작 = A)
-# 터미널 B
-./route.sh rl                                                  # 바퀴 명령이 PC를 거치게 (corrector 없으면 거부)
-../isaac/run-calibration.sh rl_correction_waypoint --robot real --label A         # A: 같은 사각형, 보정 없음
-./policy.sh ../isaac/artifacts/real/policy.onnx                # 정책 켜기 (멈춰 있을 때) → 터미널 A에 'ONNX loaded' 확인
-../isaac/run-calibration.sh rl_correction_waypoint --robot real --label B         # B: 같은 사각형, 보정함
-./route.sh direct
-# 터미널 A: Ctrl+C
-./report.py artifacts/real/ab.csv                              # → artifacts/real/report.png (A/B 구간별 지표)
+# 준비 = 3.1과 같음: Pi 베이스 · MANUAL · route rl · PC ../ros2_ws/rl-only.sh (corrector)
+./run-make-onnx.sh artifacts/rl_correction_waypoint/training/<시각>/model_499.pt        # → exported/policy.onnx (+ .onnx.data)
+./run-real-ab.sh rl_correction_waypoint --onnx artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx
+#   A (corrector 바이패스) → 로봇을 출발 자리로 돌려놓고 Enter → B (그 정책) → 보고서
+#   → artifacts/rl_correction_waypoint/ab/<시각>_ab/{A,B}/raw.csv · compare.png
+python3 training/rl_correction_waypoint/report.py <A 폴더> <B 폴더>                       # 보고서만 다시
 ```
 
-- `rl-only.sh`는 **끝나지 않고 계속 돈다** — 아래 명령은 **다른 터미널(B)**에서. 한 터미널에 다 붙여 넣으면 첫 줄에서 멈춘 것처럼 보인다.
-  터미널 하나로 하려면 백그라운드: `./rl-only.sh start label:=ab output:=…` → 주행 … → `./rl-only.sh stop`.
-  ONNX를 바꿔 다시 켤 땐 `./rl-only.sh restart enable:=true output:=<새 이름>.csv` (인자 없이 restart면 지난 인자 그대로 — output 덮어씀).
-  `status`(켜짐·인자·모델 로드) · `log`(로그 따라 보기).
-- **`ONNX loaded`가 떠야** 정책이 들어간 것. `./policy.sh status`로 enable·경로 확인.
-- 실수했던 것 (2026-11-02): ① 정책을 `ros2_ws/artifacts/real/`에 복사하고 `isaac/artifacts/real/`을 가리킴 → B도 보정 없이 달림(A/A).
-  지금은 `policy.sh`가 없는 파일을 **거부**하고, `report.py`가 "켬인데 실제로는 바이패스" 구간을 경고한다.
-  ② 5회 짧은 시험 정책을 올림 → 거의 학습 안 됨 → 실기기에서 오히려 나빠짐. 본 학습 결과를 쓴다.
-  ③ 2026-11-03 이전 `policy.onnx`(우리 exporter)는 출력에 스케일이 들어 있다 — 지금 corrector에 쓰면 보정이 0.1배로 작아진다. play로 다시 내보낸 걸 쓴다.
-- **A/B 전에 OpenCR를 가만히 둔 채 켠다** — 부팅 2초 동안 자이로 영점을 잡는다. 움직이면 정지 중에도 w_gyro ≠ 0
-  (11-02 ab.csv: −0.257 rad/s) → 정책 입력이 오염돼 B가 엉뚱하게 돈다. report 표의 '자이로 정지 바이어스'가 노랗고 경고가 뜨면 재기록.
-- 볼 것 (report 맨 위 표, B vs A가 초록이면 좋아짐): **궤적오차 · 끝점 오차 · 정상상태 RMS** B < A · B 보정량 ≠ 0 (정책이 일함).
-  A와 B는 시작 자리·방향을 (0,0,0)·t=0으로 맞춰 겹쳐 그린다. '전체 RMS'는 계단 지연(≈0.1 s)이 대부분이라 참고만. 합격 기준은 task-spec.
-- `policy.sh <onnx> | off | on | status`: 실행 중 정책 교체(바로 다시 로드). 없는 경로는 거부 · 바이패스는 `off`. 기록의 `rl_policy` 칸으로 report가 구간을 나눈다.
-- 따로 기록해도 된다: `rl-only.sh label:=before output:=…/before.csv` → 주행 → Ctrl+C → `rl-only.sh enable:=true label:=after output:=…/after.csv`
-  → 주행 → `report.py before.csv after.csv`. 한 번 실행(A/B)이 배터리·바닥이 같아 더 공정하다.
-- 기록(입력 1개 = 1줄): 입력 · 보정 출력 · 정책 원출력 · 드라이버 명령 · odom · 엔코더 · 바퀴 속도/전류 · IMU · 모터 온도 · 배터리 · 상태 · 메시지 시각.
-- 정책 입출력: ONNX `obs [1, 6]` → `actions [1, 2]` (물리 보정량). 정지 명령엔 보정 0.
-- RL 경로에서 PC 응답이 0.3초 끊기면 로봇 정지 (cmd_manager 안전) — WiFi가 약하면 주행 중 멈출 수 있다.
+- 측정 실행기(`calibration/__main__.py`)와 task의 calibration 명령(네모)을 그대로 쓴다. A/B 차이는 corrector 보정 하나 —
+  RealRobot이 측정 직전에 `/rl_corrector/set_parameters`(model_path) · `/rl_corrector/toggle`을 직접 바꾼다 (A = 모델 내림 + 끔 · B = 그 ONNX + 켬).
+- 보고서 지표 (작을수록 좋음): 경로 오차 · 끝점 오차 · 직진 중 휨 — 궤적은 거리 = 엔코더 · 방향 = 자이로 (odom 궤적은 휘어도 직선이라 안 씀).
+  B 보정량이 0이면 경고 (정책이 일을 안 함).
+- **웨이포인트 정책(goal 모드)은 속도 입력(네모)을 보정하지 않는다** — 이 A/B로 차이를 보려면 track 모드 정책(관측 6)이 필요하다.
+- OpenCR는 로봇을 가만히 둔 채 켠다 (부팅 때 자이로 영점). 정지 중에도 자이로가 0이 아니면 정책 입력이 오염된다.
+- maze 정책(nav2 controller)의 A/B는 nav2 `/controller_server/FollowPath/toggle`로 같은 목표를 두 번 — 이 스크립트 범위 밖.
 
 ## 4. sim 물리 — 고친 것 · 남은 것
 
