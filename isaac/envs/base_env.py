@@ -62,6 +62,8 @@ class BaseEnv(DirectRLEnv):
         robots.use(self.cfg, self.cfg.robot)   # 덮어쓰기(env.robot=…)가 반영되게 여기서 한 번 더
         robot_usd(self.cfg.robot)   # URDF → USD (바뀌었을 때만) — Isaac 앱이 뜬 지금 (cfg엔 경로만 있다)
         self.robot = Articulation(self.cfg.robot_cfg)
+        # URDF 변환 USD의 화면 형상(body 등)은 instanceable — Fabric이 instance엔 링크 움직임을 안 넘겨 화면이 생성 자리에 언다 (복제 전에 풂)
+        sim_utils.make_uninstanceable("/World/envs/env_0/Robot")
         self.scene.articulations["robot"] = self.robot
         bind_wheel_materials(self.scene.stage, "/World/envs/env_0/Robot", self.cfg.wheel_friction, self.cfg.caster_friction)
         self.cfg.terrain = self.ground_cfg()   # 배경 — env가 정함 (cfg 덮어쓰기가 반영되게 장면 만들 때)
@@ -199,6 +201,7 @@ class BaseEnv(DirectRLEnv):
         import shutil
         from datetime import datetime
 
+        self._robot_to_fabric()
         for viz in getattr(self.sim, "_visualizers", None) or []:
             fn = getattr(viz, "render_rgb_array", None)
             if fn is None:
@@ -218,6 +221,48 @@ class BaseEnv(DirectRLEnv):
             except Exception as exc:   # 스크린샷 실패로 학습이 멈추면 안 된다
                 print(f"[snap] 실패: {exc}", flush=True)
                 return
+
+    def _robot_to_fabric(self) -> None:
+        """로봇 몸체(몸통 · 바퀴 …)의 물리 자세 → 화면(Fabric worldMatrix). 이 PhysX 판은 관절 로봇 자세를 Fabric에 안 써서
+        물리는 도는데 화면은 생성 자리에 언다 (Fabric worldMatrix가 생성 값 그대로인 것 확인) — 찍기 전에 직접 쓴다.
+        형상 prim 하나 = 자기가 붙은 몸체의 지금 자세 × 생성 때 그 몸체에서 떨어진 만큼.
+        shortcut: 찍을 때만 (창 --viz는 여전히 얼어 보임) — Isaac Lab/PhysX가 고치면 지운다."""
+        import torch
+        import usdrt
+        from isaaclab.utils.math import matrix_from_quat
+        from pxr import Usd, UsdUtils
+
+        W = "omni:fabric:worldMatrix"
+        to_t = lambda m: torch.tensor([[m[i][j] for j in range(4)] for i in range(4)], dtype=torch.float64)  # noqa: E731
+        if not hasattr(self, "_fab"):
+            rs = usdrt.Usd.Stage.Attach(UsdUtils.StageCache.Get().GetId(self.scene.stage).ToLongInt())
+            names = set(self.robot.body_names)
+            attrs, rel, idx = [], [], []   # 형상 prim의 worldMatrix · 몸체에서 떨어진 행렬 · (env, 몸체 번호)
+            for e in range(self.num_envs):
+                root = self.scene.stage.GetPrimAtPath(f"/World/envs/env_{e}/Robot")
+                bodies = {p.GetPath(): self.robot.body_names.index(p.GetName()) for p in Usd.PrimRange(root) if p.GetName() in names}
+                for prim in Usd.PrimRange(root):
+                    b = prim
+                    while b.IsValid() and b != root and b.GetPath() not in bodies:
+                        b = b.GetParent()
+                    a = rs.GetPrimAtPath(str(prim.GetPath())).GetAttribute(W)
+                    if b.GetPath() not in bodies or not a.IsValid():
+                        continue
+                    w0b = to_t(rs.GetPrimAtPath(str(b.GetPath())).GetAttribute(W).Get())
+                    attrs.append(a)
+                    rel.append(to_t(a.Get()) @ torch.linalg.inv(w0b))   # Gf는 행벡터 — world = local × parent
+                    idx.append((e, bodies[b.GetPath()]))
+            self._fab = (attrs, torch.stack(rel), torch.tensor(idx))
+            print(f"[snap] 로봇 형상 {len(attrs)}개를 물리 자세로 그림", flush=True)
+        attrs, rel, idx = self._fab
+        if not attrs:
+            return
+        wb = torch.zeros(len(attrs), 4, 4, dtype=torch.float64)
+        wb[:, :3, :3] = matrix_from_quat(self.robot.data.body_quat_w[idx[:, 0], idx[:, 1]]).double().cpu().transpose(1, 2)
+        wb[:, 3, :3] = self.robot.data.body_pos_w[idx[:, 0], idx[:, 1]].double().cpu()
+        wb[:, 3, 3] = 1.0
+        for a, m in zip(attrs, (rel @ wb).tolist()):
+            a.Set(usdrt.Gf.Matrix4d(*[v for row in m for v in row]))
 
     # ------------------------------------------------------------------ 화면 (cfg.debug_vis일 때만 불린다) — task env가 구현
     def debug_vis_setup(self, visible: bool) -> None:
