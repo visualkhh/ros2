@@ -4,8 +4,8 @@
   기록   /odom · /imu · /joint_states (wheel_left_joint · wheel_right_joint) · /cmd_vel_base (실제로 나간 명령) —
          측정 중 스텝마다 pace() 끝에 최신 값을 한 줄 쌓는다
   state  /state_control (MANUAL 등)
-  onnx   PC rl_corrector (route rl일 때 명령이 거쳐 감): onnx 경로를 주면 그 모델 + 적용(B), 안 주면 바이패스(A · calibration)
-         — /rl_corrector/set_parameters(model_path) · /rl_corrector/toggle(SetBool). corrector가 없으면(route direct) 그대로 진행
+  onnx   PC rl_corrector (route rl일 때 명령이 거쳐 감): onnx 경로 → model_path = 경로 + toggle on (B)
+         · 없음 → model_path = "" (모델 내림) + toggle off (A · calibration). corrector가 없으면(route direct) 그대로 진행
 """
 from __future__ import annotations
 
@@ -92,17 +92,16 @@ class RealRobot(RobotInterface):
         return fut.result()
 
     def _set_correction(self) -> str | None:
-        """onnx 있으면 그 모델로 corrector 적용(B), 없으면 바이패스(A). 결과를 기록 칸 rl_onnx로."""
+        """onnx 있으면 corrector model_path = onnx + toggle on (B) · 없으면 model_path = "" + toggle off (A). 결과를 기록 칸 rl_onnx로."""
         from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
         from rcl_interfaces.srv import SetParameters
         from std_srvs.srv import SetBool
 
-        if self.onnx:
-            val = ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=self.onnx)
-            r = self._call(SetParameters, "/rl_corrector/set_parameters",
-                           SetParameters.Request(parameters=[Parameter(name="model_path", value=val)]))
-            if r is None:
-                return "rl_corrector 없음 — PC에서 ./rl-only.sh 띄우고 Pi route rl (--onnx는 corrector가 있어야)"
+        val = ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=self.onnx or "")   # 없으면 모델 내림
+        r = self._call(SetParameters, "/rl_corrector/set_parameters",
+                       SetParameters.Request(parameters=[Parameter(name="model_path", value=val)]))
+        if r is None and self.onnx:
+            return "rl_corrector 없음 — PC에서 ./rl-only.sh 띄우고 Pi route rl (--onnx는 corrector가 있어야)"
         r = self._call(SetBool, "/rl_corrector/toggle", SetBool.Request(data=bool(self.onnx)))
         if r is None:
             self.tag = "direct"

@@ -131,6 +131,7 @@ class RlCorrector(Node):
     def _load_model(self, path: str):
         self.session, self.in_name, self.obs_dim = None, None, 0   # 실패·빈 경로 = 바이패스
         if not path:
+            self.mode = 'track'   # 모델 내림 — 입력 그대로 통과
             self.get_logger().info('No model_path: passthrough mode')
             return
         try:
