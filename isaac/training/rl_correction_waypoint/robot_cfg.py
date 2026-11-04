@@ -19,7 +19,7 @@ MAX_ANG = 1.82         # [rad/s]
 MAX_WHEEL = 8.0        # [rad/s] 펌웨어 VEL_LIMIT_RAD_S · 드라이버 max_wheel_speed
 DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tool/cli/op/bus.py DIAG_RADIUS)
 
-# 실측 바퀴 응답 — sim raw 대비 차이 (2026-11-03: isaac/artifacts/calibration/20261103_203442-real_floor − 20261103_202220-sim_aa,
+# 실측 바퀴 응답 — sim raw 대비 차이 (2026-11-03: isaac/artifacts/rl_correction_waypoint/calibration/2026-11-03_20-34-42_real_floor − …_20-22-20_sim_aa,
 # real은 route rl + rl-only 바이패스 = 정책을 쓸 때와 같은 경로). 이전 값(2026-11-02, route direct): gain 0.9927/0.9938 · 지연 2.
 # calibration으로 다시 재면 여기를 고친다. 학습 task는 이 값을 랜덤 범위의 중심으로 쓴다 (robots.use가 env cfg에 채움).
 RESPONSE_GAIN_LR = (0.9937, 0.9931)   # 좌/우 바퀴 gain (real ÷ sim: 0.9947/1.0010 · 0.9943/1.0012)

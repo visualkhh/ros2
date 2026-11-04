@@ -116,7 +116,7 @@ calibration은 측정만 한다. 잰 차이는 **로봇 설정**(`robot_cfg.py`�
 학습 task는 그 값을 랜덤 범위의 **중심**으로 쓰고 폭만 자기가 정한다 (`env.robot=`으로 로봇을 바꾸면 그 로봇 값이 따라온다).
 기본 로봇(`training/rl_correction_waypoint/robot_cfg.py`)에 넣은 값 (2026-11-03, real = route rl + rl-only 바이패스):
 
-| 값 | 계산 | 2026-11-03 (`20261103_203442-real_floor` vs `20261103_202220-sim_aa`) | `robot_cfg.py` |
+| 값 | 계산 | 2026-11-03 (`artifacts/rl_correction_waypoint/calibration/2026-11-03_20-34-42_real_floor` vs `…_20-22-20_sim_aa`) | `robot_cfg.py` |
 |---|---|---|---|
 | 좌/우 gain | real ÷ sim | 0.9947/1.0010 · 0.9943/1.0012 = 0.9937 / 0.9931 | `RESPONSE_GAIN_LR` |
 | 명령 지연 | real − sim | 3 − 0 = +3 스텝 (real 0.173 s, PC 왕복 포함 — direct였던 11-02는 +2) | `RESPONSE_DELAY_STEPS` |
