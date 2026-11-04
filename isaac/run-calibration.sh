@@ -9,7 +9,7 @@
 #   차이는 training/<task>/robot_cfg.py RESPONSE_*에 숫자로 → 학습 env가 그 값 중심으로 랜덤. 자세히: README.md 3장.
 #   로봇 = 그 task 폴더: sim → sim_robot.py(+ calibration/env.py) · real → real_robot.py · dummy → dummy_robot.py
 #
-# 결과 폴더: artifacts/<task>/calibration/<시각>_<label>/raw.csv  (fit.json · report.png는 report.py가)
+# 결과 폴더: artifacts/<task>/calibration/<시각>_<label>/ → raw.csv + (측정 뒤 자동) report.py → fit.json · report.png
 # 터미널 출력: artifacts/<task>/logs/<시각>_<label>_calibration.log (화면에도 그대로)
 #   raw.csv  = 20 Hz 기록 (명령 · 보정 출력 · odom · 엔코더 · 자이로 · 바퀴 rad/s · 메시지 시각)
 #   fit.json = 응답 fit (gain 좌/우 · 지연 · τ · 데드밴드 · 구간별 speed_fit)
@@ -66,7 +66,7 @@ viz_args() {
 
 sim() {
   viz_args "$@"
-  exec "$ISAACLAB/isaaclab.sh" -p "${VIZ_ARGS[@]}"
+  "$ISAACLAB/isaaclab.sh" -p "${VIZ_ARGS[@]}"
 }
 
 ros_env() {
@@ -95,22 +95,39 @@ while [[ $# -gt 0 ]]; do
 done
 set -- ${REST[@]+"${REST[@]}"}
 LABEL_ARG=$(printf '%s\n' "$@" | sed -n '/^--label=/{s/^--label=//p;q}; /^--label$/{n;p;q}')
+OUT_ARG=$(printf '%s\n' "$@" | sed -n '/^--\(out\|output\)=/{s/^--[a-z]*=//p;q}; /^--\(out\|output\)$/{n;p;q}')
+STAMP=$(date +%Y-%m-%d_%H-%M-%S)
+declare -A TAG=([sim]=02-sim [real]=02-real [dummy]=dummy)
+if [[ -n "${TAG[$ROBOT]:-}" && -z "$OUT_ARG" ]]; then   # 결과 폴더를 여기서 정해 넘긴다 — 측정 뒤 report를 그 폴더로
+  OUT_ARG="artifacts/$TASK/calibration/${STAMP}_${LABEL_ARG:-${TAG[$ROBOT]}}/raw.csv"
+  set -- "$@" --out "$OUT_ARG"
+fi
 if [[ -n "$ROBOT" && -d "$ISAAC/training/$TASK" && " $* " != *" --help "* && " $* " != *" -h "* ]]; then
   mkdir -p "$ISAAC/artifacts/$TASK/logs"
-  LOG="$ISAAC/artifacts/$TASK/logs/$(date +%Y-%m-%d_%H-%M-%S)_${LABEL_ARG:-$ROBOT}_calibration.log"
+  LOG="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL_ARG:-$ROBOT}_calibration.log"
   exec > >(tee -a "$LOG") 2>&1   # 화면 + 파일
   echo "[log] $LOG"
 fi
+report() {   # 측정이 끝나면 그 폴더로 task의 report.py (fit.json · report.png) — --robot both 안쪽 실행은 끝에 한 번에
+  local rc=$1
+  if [[ $rc -eq 0 && -f "$OUT_ARG" && -z "${CALIB_NO_REPORT:-}" ]]; then
+    "$PY" "$ISAAC/training/$TASK/calibration/report.py" "$(dirname "$OUT_ARG")" 2>&1 | grep -v "UserWarning\|warnings.warn" || true
+  fi
+  exit "$rc"
+}
 case "$ROBOT" in
   sim)
-    sim -m calibration "$TASK" --robot sim "$@"
+    set +e; sim -m calibration "$TASK" --robot sim "$@"; rc=$?; set -e
+    report $rc
     ;;
   real)
     ros_env
-    exec "$PY" -m calibration "$TASK" --robot real "$@"
+    set +e; "$PY" -m calibration "$TASK" --robot real "$@"; rc=$?; set -e
+    report $rc
     ;;
   dummy)
-    exec "$PY" -m calibration "$TASK" --robot dummy "$@"
+    set +e; "$PY" -m calibration "$TASK" --robot dummy "$@"; rc=$?; set -e
+    report $rc
     ;;
   both)
     LABEL=real_floor SIDE=0.5 SPEED=0.15 TURN=1.0
@@ -130,11 +147,11 @@ case "$ROBOT" in
     mkdir -p "$RUN"
     COMMON=(--side "$SIDE" --speed "$SPEED" --turn "$TURN" ${COMMON_EXTRA[@]+"${COMMON_EXTRA[@]}"})
     echo "[calibrate] sim + real 시작 → $RUN"
-    "$0" "$TASK" --robot sim "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
+    CALIB_NO_REPORT=1 "$0" "$TASK" --robot sim "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
       --out "$RUN/sim/raw.csv" > "$RUN/sim.log" 2>&1 &
     SIM_PID=$!
     set +e
-    "$0" "$TASK" --robot real "${COMMON[@]}" --label "$LABEL" \
+    CALIB_NO_REPORT=1 "$0" "$TASK" --robot real "${COMMON[@]}" --label "$LABEL" \
       --out "$RUN/real/raw.csv" > "$RUN/real.log" 2>&1
     REAL_RC=$?
     wait "$SIM_PID"; SIM_RC=$?

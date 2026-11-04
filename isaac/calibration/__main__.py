@@ -93,7 +93,6 @@ def _save(tag: str, rows, out: str) -> None:
         cw.writeheader()
         cw.writerows(rows)
     print(f"[{tag}] {len(rows)}줄 → {out}")
-    print(f"[{tag}] 분석: python3 training/<task>/calibration/report.py <sim 폴더> <real 폴더>  (fit.json · report.png · compare.png · robot_cfg 값)")
 
 
 MODES = ("sim", "real", "dummy")
