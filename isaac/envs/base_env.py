@@ -5,7 +5,7 @@
 - `wheel_speeds(v, w)`: Twist → 좌/우 rad/s (8 rad/s 넘으면 비례 축소 = opencr_driver)
 - `encoders(r, sep)` · `true_twist()` · `sense(i)`: /odom v·w (엔코더) · 몸체 실제 속도 · env i 한 줄
 - `_reset_idx` / `place`: 지형 칸 가운데에 세우기 (cfg.random_yaw면 방향 랜덤) · 순간이동
-- 화면(debug_vis)은 각 task env가 (training/<task>/markers.py MarkersMixin)
+- 화면(debug_vis): `debug_vis_setup` · `debug_vis_draw`만 선언 — 무엇을 그릴지는 task env가 구현
 """
 from __future__ import annotations
 
@@ -139,6 +139,20 @@ class BaseEnv(DirectRLEnv):
 
     def look_at(self, origin) -> None:
         self.sim.set_camera_view(eye=(origin[0] + 1.8, origin[1] - 1.8, 1.55), target=(origin[0], origin[1], 0.15))
+
+    # ------------------------------------------------------------------ 화면 (cfg.debug_vis일 때만 불린다) — task env가 구현
+    def debug_vis_setup(self, visible: bool) -> None:
+        """화면을 켜고 끌 때 — 마커 만들기 · 보이기/숨기기."""
+
+    def debug_vis_draw(self) -> None:
+        """매 프레임 — 마커 갱신."""
+
+    def _set_debug_vis_impl(self, debug_vis: bool):   # Isaac Lab 훅 → 위 두 메서드
+        self.debug_vis_setup(debug_vis)
+
+    def _debug_vis_callback(self, event):
+        if getattr(self, "cmd", None) is not None:   # 부모 __init__ 도중이면 아직 없음
+            self.debug_vis_draw()
 
 
 def wheel_targets(v, w, r, sep, max_wheel):

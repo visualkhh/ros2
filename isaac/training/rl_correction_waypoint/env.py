@@ -18,7 +18,7 @@ import torch
 from isaaclab.utils.math import sample_uniform
 
 from envs.base_env import BaseEnv
-from training.rl_correction_waypoint.markers import MarkersMixin
+from training.rl_correction_waypoint.markers import CommandMarkers
 from training.rl_correction_waypoint.command import RlCorrectionWaypointCommand
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ def wrap(a: torch.Tensor) -> torch.Tensor:
     return torch.atan2(torch.sin(a), torch.cos(a))
 
 
-class RlCorrectionWaypointEnv(MarkersMixin, BaseEnv):
+class RlCorrectionWaypointEnv(BaseEnv):
     cfg: RlCorrectionWaypointEnvCfg
 
     def __init__(self, cfg: RlCorrectionWaypointEnvCfg, render_mode: str | None = None, **kwargs):
@@ -289,7 +289,17 @@ class RlCorrectionWaypointEnv(MarkersMixin, BaseEnv):
                 print(f"[snap] 실패: {exc}", flush=True)
                 return
 
-    # ------------------------------------------------------------------ 화면 (env.debug_vis=true)
+
+    # ------------------------------------------------------------------ 화면 (cfg.debug_vis일 때 BaseEnv가 부른다)
+    def debug_vis_setup(self, visible: bool) -> None:
+        if visible and getattr(self, "markers", None) is None:
+            self.markers = CommandMarkers()
+        if getattr(self, "markers", None) is not None:
+            self.markers.set_visible(visible)
+
+    def debug_vis_draw(self) -> None:
+        self.markers.draw(self, self.vis_path())
+
     def vis_path(self):
         """노란 점 = 시작 → 웨이포인트들을 잇는 경로 (월드). 막대는 BaseEnv."""
         if not hasattr(self, "wps"):

@@ -6,7 +6,7 @@
   로봇이 노란 점에서 벗어나는 만큼이 드리프트다.
 
 Isaac Lab VisualizationMarkers를 쓴다 (센서 debug_vis와 같은 기능). 화살표 USD(Nucleus) 대신
-막대(Cuboid)·점(Sphere)이라 오프라인에서도 된다. 이 task의 env(학습) · calibration/env.py(측정 · run-world)가 MarkersMixin으로 쓴다.
+막대(Cuboid)·점(Sphere)이라 오프라인에서도 된다. 이 task의 env(학습) · calibration/env.py(측정 · run-world)가 debug_vis_setup · debug_vis_draw에서 쓴다.
 """
 from __future__ import annotations
 
@@ -93,40 +93,8 @@ class CommandMarkers:
         return pts.reshape(-1, 3)
 
 
-class MarkersMixin:
-    """task env에 붙이는 화면 (Isaac Lab direct task처럼 env가 _set_debug_vis_impl · _debug_vis_callback을 갖는다).
-    BaseEnv 앞에 상속: class XxxEnv(MarkersMixin, BaseEnv). 노란 점은 vis_path() — 기본은 set_path()로 넣은 경로."""
-
-    path_w = None   # 목표 경로 점 (m, 3)
-
-    def set_path(self, xy, i: int = 0) -> None:
-        """목표 경로(명령의 path(): 시작 자세 기준 [(x 앞, y 왼쪽)])를 env i 로봇의 지금 자세로 옮겨 노란 점으로. None이면 끔."""
-        if not xy:
-            self.path_w = None
-            return
-        d = self.robot.data
-        p0, q = d.root_pos_w.torch[i].tolist(), d.root_quat_w.torch[i].tolist()   # xyzw
-        yaw = math.atan2(2 * (q[3] * q[2] + q[0] * q[1]), 1 - 2 * (q[1] ** 2 + q[2] ** 2))
-        pts = []
-        for (x0, y0), (x1, y1) in zip(xy, xy[1:]):   # 3 cm 간격 점
-            k = max(1, int(math.hypot(x1 - x0, y1 - y0) / 0.03))
-            pts += [(x0 + (x1 - x0) * j / k, y0 + (y1 - y0) * j / k) for j in range(k)]
-        c, s = math.cos(yaw), math.sin(yaw)
-        self.path_w = torch.tensor([[p0[0] + c * x - s * y, p0[1] + s * x + c * y, p0[2]] for x, y in pts], device=self.device)
-
-    def vis_path(self):
-        return self.path_w
-
-    def _set_debug_vis_impl(self, debug_vis: bool):
-        if debug_vis and getattr(self, "markers", None) is None:
-            self.markers = CommandMarkers()
-        if getattr(self, "markers", None) is not None:
-            self.markers.set_visible(debug_vis)
-
-    def _debug_vis_callback(self, event):
-        if getattr(self, "cmd", None) is None:   # 부모 __init__ 도중
-            return
-        d = self.robot.data
-        v, w = self.true_twist()
-        self.markers.update(d.root_pos_w.torch, self.markers.yaw_of(d.root_quat_w.torch),
-                            self.cmd[:, 0], self.cmd[:, 1], v, w, self.vis_path())
+    def draw(self, env, path_w=None) -> None:
+        """env(BaseEnv)의 지금 명령 · 실제 속도 · path_w를 그린다 — task env의 debug_vis_draw()에서."""
+        d = env.robot.data
+        v, w = env.true_twist()
+        self.update(d.root_pos_w.torch, self.yaw_of(d.root_quat_w.torch), env.cmd[:, 0], env.cmd[:, 1], v, w, path_w)
