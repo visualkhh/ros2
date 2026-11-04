@@ -42,8 +42,6 @@ isaac/
 ├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
 ├── calibration/__main__.py   calibration 실행기 하나 (공식 train.py 역할) — ./run-calibration.sh <task> --robot=sim|real|dummy → raw.csv
-│   ├── record.py             record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
-│   └── __main__.py           실행기 하나 — ./run-calibration.sh <task> --robot=sim|real|dummy: 로봇 만들기 → ready() → 명령 루프 → raw.csv
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
 │   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent ·
