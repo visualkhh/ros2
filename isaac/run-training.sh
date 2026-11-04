@@ -11,6 +11,8 @@
 #   (공식 스크립트의 logs/rsl_rl/<experiment_name>에 agent.experiment_name=<절대경로>를 넘겨 여기로)
 # 터미널 출력: artifacts/<task>/logs/<시각>_<label>_{training|play}.log (화면에도 그대로)
 #   --label NAME          폴더 이름 <시각>_NAME (= 공식 --run_name)
+#   --snap SEC            SEC초마다 화면 저장 → artifacts/<task>/logs/<시각>_<label>_snaps/<시각>.png + latest.png(덮어씀)
+#                         창 없이도 됨 (창이 없으면 화면 없는 Kit visualizer를 붙임, 학습이 느려짐)
 #
 # ─── 자주 쓰는 공식 옵션 ───────────────────────────────────────
 #   --num_envs N          동시에 학습하는 로봇 수 (기본: env cfg 512 · 창 볼 땐 16~32)
@@ -59,21 +61,32 @@ if [[ ! -f "$ISAAC/training/$TASK/__init__.py" ]]; then
   exit 2
 fi
 GYM_ID=$(sed -E 's/(^|_)([a-z])/\U\2/g' <<< "$TASK")   # rl_correction_waypoint → RlCorrectionWaypoint
-action=train REST=() LABEL=""
+action=train REST=() LABEL="" SNAP=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --play) action=play; shift ;;
     --label=*) LABEL="${1#--label=}"; shift ;;
     --label) LABEL="${2:?--label 이름}"; shift 2 ;;
+    --snap=*) SNAP="${1#--snap=}"; shift ;;
+    --snap) SNAP="${2:?--snap 초}"; shift 2 ;;
     *) REST+=("$1"); shift ;;
   esac
 done
 [[ -n "$LABEL" ]] && REST+=(--run_name "$LABEL")
 [[ " ${REST[*]-} " == *" agent.experiment_name="* ]] || REST+=("agent.experiment_name=$ISAAC/artifacts/$TASK/training")   # 결과 폴더
 viz_args ${REST[@]+"${REST[@]}"}; args=(${VIZ_ARGS[@]+"${VIZ_ARGS[@]}"})
+STAMP=$(date +%Y-%m-%d_%H-%M-%S)
+if [[ -n "$SNAP" ]]; then
+  SNAP_DIR="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL:-run}_snaps"
+  args+=("env.snap_s=$SNAP" "env.snap_dir=$SNAP_DIR")
+  # 캡처하려면 렌더 확장(replicator)이 켜진 Kit 설정 — 공식 train.py는 --video 때만 켜므로 --experience로 직접
+  if [[ " ${args[*]} " == *" --viz "* || " ${args[*]} " == *" --visualizer "* ]]; then kit=isaaclab.python.rendering.kit
+  else kit=isaaclab.python.headless.rendering.kit; fi
+  [[ " ${args[*]} " == *" --experience "* ]] || args+=(--experience "$ISAACLAB/apps/$kit")
+fi
 if [[ " ${REST[*]-} " != *" --help "* && " ${REST[*]-} " != *" -h "* ]]; then
   mkdir -p "$ISAAC/artifacts/$TASK/logs"
-  LOG="$ISAAC/artifacts/$TASK/logs/$(date +%Y-%m-%d_%H-%M-%S)_${LABEL:-run}_${action/train/training}.log"
+  LOG="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL:-run}_${action/train/training}.log"
   exec > >(tee -a "$LOG") 2>&1   # 화면 + 파일
   echo "[log] $LOG"
 fi

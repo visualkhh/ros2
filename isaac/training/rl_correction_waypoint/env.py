@@ -32,7 +32,13 @@ class RlCorrectionWaypointEnv(BaseEnv):
     cfg: RlCorrectionWaypointEnvCfg
 
     def __init__(self, cfg: RlCorrectionWaypointEnvCfg, render_mode: str | None = None, **kwargs):
+        if cfg.snap_s > 0 and not cfg.sim.visualizer_cfgs:   # 창 없이 스크린샷: 화면 없는 Kit visualizer (env 0 근처를 비스듬히)
+            from isaaclab_visualizers.kit import KitVisualizerCfg
+
+            cfg.sim.visualizer_cfgs = [KitVisualizerCfg(headless=True, origin_type="env", origin_env_index=0,
+                                                        eye=(4.0, -4.0, 3.0), lookat=(1.0, 1.0, 0.0))]
         super().__init__(cfg, render_mode, **kwargs)
+        self._snap_at = 0.0
         c, n, dev = self.cfg, self.num_envs, self.device   # 로봇 숫자는 장면을 만들 때 cfg.robot으로 채워져 있다
         self.command = RlCorrectionWaypointCommand(c.num_waypoints, c.waypoint_dist, c.waypoint_turn)
         self.scale = torch.tensor(c.action_scale, device=dev)
@@ -245,6 +251,42 @@ class RlCorrectionWaypointEnv(BaseEnv):
                 cfg.func(path, cfg, translation=(ox + rad * math.cos(ang), oy + rad * math.sin(ang), oz - 0.004),
                          orientation=tuple(q.tolist()))
                 sim_utils.bind_physics_material(f"{path}/geometry/mesh", f"/World/Materials/patch_{name}")
+
+    def step(self, action):
+        out = super().step(action)
+        if self.cfg.snap_s > 0:
+            import time
+
+            now = time.monotonic()
+            if now - self._snap_at >= self.cfg.snap_s:
+                self._snap_at = now
+                self._snapshot()
+        return out
+
+    def _snapshot(self) -> None:
+        """지금 화면 → snap_dir/<시각>.png + latest.png (Kit visualizer의 render_rgb_array)."""
+        import os
+        import shutil
+        from datetime import datetime
+
+        for viz in getattr(self.sim, "_visualizers", None) or []:
+            fn = getattr(viz, "render_rgb_array", None)
+            if fn is None:
+                continue
+            try:
+                rgb = fn()
+                if rgb is None or not getattr(rgb, "size", 0) or int(rgb.max()) == 0:
+                    continue
+                from PIL import Image
+
+                os.makedirs(self.cfg.snap_dir, exist_ok=True)
+                path = os.path.join(self.cfg.snap_dir, f"{datetime.now():%Y-%m-%d_%H-%M-%S}.png")
+                Image.fromarray(rgb).save(path)
+                shutil.copyfile(path, os.path.join(self.cfg.snap_dir, "latest.png"))
+                return
+            except Exception as exc:   # 스크린샷 실패로 학습이 멈추면 안 된다
+                print(f"[snap] 실패: {exc}", flush=True)
+                return
 
     # ------------------------------------------------------------------ 화면 (env.debug_vis=true)
     def vis_path(self):
