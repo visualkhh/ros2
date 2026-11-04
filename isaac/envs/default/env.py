@@ -8,4 +8,5 @@ from envs.base_env import BaseEnv
 
 
 class DefaultEnv(BaseEnv):
-    pass
+    def ground_cfg(self):
+        return self.cfg.terrain   # BaseEnvCfg 기본 = 평면

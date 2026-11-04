@@ -9,7 +9,6 @@
 """
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -20,6 +19,7 @@ from isaaclab.utils.math import sample_uniform
 from envs.base_env import BaseEnv
 from training.rl_correction_waypoint.markers import CommandMarkers
 from training.rl_correction_waypoint.command import RlCorrectionWaypointCommand
+from training.rl_correction_waypoint.ground import make_terrain, spawn_friction_patches
 
 if TYPE_CHECKING:
     from training.rl_correction_waypoint.env_cfg import RlCorrectionWaypointEnvCfg
@@ -76,12 +76,12 @@ class RlCorrectionWaypointEnv(BaseEnv):
         self.sens_buf = torch.zeros(n, c.obs_delay_steps[1] + 1, 3, device=dev)
         self.seen = torch.zeros(n, 3, device=dev)           # 지연 거친 [v_enc, w_enc, w_gyro]
 
-    def _setup_scene(self):
-        from training.rl_correction_waypoint.env_cfg import make_terrain
+    # ------------------------------------------------------------------ 배경 (ground.py)
+    def ground_cfg(self):
+        return make_terrain(self.cfg.ground)
 
-        self.cfg.terrain = make_terrain(self.cfg.uneven)   # cfg 덮어쓰기(env.uneven=…)가 반영되게 여기서
-        super()._setup_scene()
-        self._spawn_friction_patches()
+    def ground_objects(self) -> None:
+        spawn_friction_patches(self, self.cfg.ground)
 
     # ------------------------------------------------------------------ 자세 · 목표
     def goal(self) -> torch.Tensor:
@@ -221,37 +221,6 @@ class RlCorrectionWaypointEnv(BaseEnv):
         self.seen[ids] = 0.0
         self.wheel_target[ids] = 0.0
         self.wheel_cmd[ids] = 0.0
-
-    def _spawn_friction_patches(self) -> None:
-        """마찰 패치 — env마다 출발점 둘레에 노랑(끈적) · 파랑(미끄럼) 얇은 판. 지형 prim 아래라 지형처럼 충돌 (지형 = 충돌 필터의 global).
-        판 두께 1 cm, 윗면이 바닥 +1 mm (바퀴가 그대로 지나간다). 배치는 seed 고정 (학습마다 같은 자리)."""
-        import random
-
-        import isaaclab.sim as sim_utils
-        from isaaclab.utils.math import quat_from_euler_xyz
-
-        c = self.cfg
-        if c.friction_patches <= 0:
-            return
-        root = f"{c.terrain.prim_path}/patches"
-        kinds = (("sticky", c.sticky_friction, (1.0, 0.8, 0.1)), ("slippery", c.slippery_friction, (0.2, 0.5, 1.0)))
-        for name, fr, _ in kinds:
-            mat = sim_utils.RigidBodyMaterialCfg(static_friction=fr[0], dynamic_friction=fr[1], restitution=0.0,
-                                                 friction_combine_mode="average")
-            mat.func(f"/World/Materials/patch_{name}", mat)
-        rng = random.Random(c.seed or 0)
-        for i, (ox, oy, oz) in enumerate(self._terrain.env_origins.tolist()):
-            for j in range(int(c.friction_patches)):
-                name, _, color = kinds[rng.random() < 0.5]
-                ang, rad = rng.uniform(0.0, 2.0 * math.pi), rng.uniform(*c.patch_radius)
-                cfg = sim_utils.CuboidCfg(size=(rng.uniform(*c.patch_size), rng.uniform(*c.patch_size), 0.01),
-                                          collision_props=sim_utils.CollisionPropertiesCfg(),
-                                          visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color, roughness=0.8))
-                q = quat_from_euler_xyz(torch.tensor(0.0), torch.tensor(0.0), torch.tensor(rng.uniform(0.0, math.pi)))
-                path = f"{root}/env_{i}_{j}"
-                cfg.func(path, cfg, translation=(ox + rad * math.cos(ang), oy + rad * math.sin(ang), oz - 0.004),
-                         orientation=tuple(q.tolist()))
-                sim_utils.bind_physics_material(f"{path}/geometry/mesh", f"/World/Materials/patch_{name}")
 
     def step(self, action):
         out = super().step(action)

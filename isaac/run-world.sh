@@ -6,7 +6,8 @@
 #   <task>          training/ 아래 task 폴더 이름 — 로봇도 그 폴더 (robot_cfg.py · usda/robot.usda)
 #                   기본: task env.py + command.py — 노란 점(랜덤 웨이포인트)을 기본 제어기가 따라감 (정책 보정 0) · R 새 에피소드
 #   --calibration   task의 calibration/ — CalibrationEnv + CalibrationCommand (네모 54 s, 노란 점 = 목표 경로)
-#   --command=NAME  명령만 바꿈 (task의 CalibrationEnv = 빈 바닥에서): keyboard (commands/keyboard.py 직접 운전) · square · MOD:CLASS
+#   --command=NAME  명령만 바꿈 — 학습 배경(요철 · 마찰 패치) 위에서: keyboard (commands/keyboard.py 직접 운전) · square · MOD:CLASS
+#                   (--calibration과 같이 쓰면 측정용 평면)
 #                   (--command keyboard처럼 띄어 써도 된다)
 #   --speed --turn  기준 전진 [m/s] · 회전 [rad/s] (keyboard: 키 하나 · 네모: 기준 속도)
 #   --viz           창 켜기 (기본 끔 = headless · --viz만 쓰면 kit · --viz X로 다른 visualizer). keyboard는 창이 있어야 함

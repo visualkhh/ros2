@@ -4,8 +4,9 @@ from __future__ import annotations
 from isaaclab.utils import configclass
 
 from envs.default.env_cfg import DefaultEnvCfg
+from training.rl_correction_waypoint.ground import PLANE, GroundCfg
 
 
 @configclass
 class CalibrationEnvCfg(DefaultEnvCfg):
-    pass
+    ground: GroundCfg = PLANE   # 측정은 평면 (순수 sim) — run-world --command는 학습 배경 GroundCfg()로 바꿔 씀

@@ -45,7 +45,7 @@ tensorboard --logdir artifacts/rl_correction_waypoint/training
 ./run-training.sh -h                                                               # 자주 쓰는 옵션 · cfg 덮어쓰기
 ```
 
-- cfg 덮어쓰기 (Hydra): `env.uneven=false`(평면만) · `env.events=null`(마찰 랜덤 끔) · `env.gyro_bias=0.1` ·
+- cfg 덮어쓰기 (Hydra): `env.ground.uneven=false`(평면만) · `env.events=null`(마찰 랜덤 끔) · `env.gyro_bias=0.1` ·
   `agent.algorithm.entropy_coef=0.0`. 실제로 쓴 값은 `logs/…/<시각>/params/env.yaml` · `agent.yaml`.
 - 결과: `artifacts/<task>/training/<시각>[_<label>]/` (터미널 출력은 `artifacts/<task>/logs/`) — `model_<N>.pt`(50회마다) · `params/` · TensorBoard.
   `play`를 하면 같은 폴더에 `exported/policy.onnx` + `policy.onnx.data`(가중치) + `policy.pt`.

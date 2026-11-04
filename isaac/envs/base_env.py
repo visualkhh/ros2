@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import math
+from abc import abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,7 @@ import torch
 import isaaclab.sim as sim_utils
 from isaaclab import cloner
 from isaaclab.assets import Articulation
+from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.envs import DirectRLEnv
 from isaaclab.utils.math import quat_from_euler_xyz, sample_uniform
 
@@ -51,6 +53,7 @@ class BaseEnv(DirectRLEnv):
         self.robot = Articulation(self.cfg.robot_cfg)
         self.scene.articulations["robot"] = self.robot
         bind_wheel_materials(self.scene.stage, "/World/envs/env_0/Robot", self.cfg.wheel_friction, self.cfg.caster_friction)
+        self.cfg.terrain = self.ground_cfg()   # 배경 — env가 정함 (cfg 덮어쓰기가 반영되게 장면 만들 때)
         self.cfg.terrain.num_envs = self.scene.cfg.num_envs
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
@@ -62,6 +65,15 @@ class BaseEnv(DirectRLEnv):
             self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
         light = sim_utils.DistantLightCfg(intensity=3000.0, color=(0.95, 0.95, 0.95))
         light.func("/World/light", light, translation=(2.0, -2.0, 4.0))
+        self.ground_objects()
+
+    # ------------------------------------------------------------------ 배경 — 구현은 env가
+    @abstractmethod
+    def ground_cfg(self) -> TerrainImporterCfg:
+        """지형 cfg (평면 · 지형 생성기 …). prim 경로는 /World/ground."""
+
+    def ground_objects(self) -> None:
+        """지형 위에 깔 것 (마찰 패치 등). 지형이 만들어진 뒤 불린다 — 지형 prim 아래에 두면 지형처럼 충돌. 기본 없음."""
 
     # ------------------------------------------------------------------ 로봇 식 (드라이버와 같음)
     def wheel_speeds(self, v: torch.Tensor, w: torch.Tensor, r=None, sep=None) -> torch.Tensor:

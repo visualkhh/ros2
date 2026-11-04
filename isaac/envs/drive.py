@@ -3,7 +3,8 @@
   <task>                  training/<task>/ — env.py + command.py (task env: 기본 제어기가 랜덤 웨이포인트를 따라감, 보정 0)
   --calibration           training/<task>/calibration/ — CalibrationEnv + CalibrationCommand (네모)
   --command=NAME          명령만 바꿈: keyboard (commands/keyboard.py 직접 운전) · square · MOD:CLASS (BaseCommand)
-                          [v, w] 명령이라 task env(보정 행동)가 아니라 그 task의 CalibrationEnv(빈 바닥)에서
+                          [v, w] 명령이라 task env(보정 행동)가 아니라 CalibrationEnv에서 — 배경은 학습과 같게 (ground.py)
+                          (--calibration과 같이 쓰면 측정용 평면)
 로봇 = task 폴더 (robot_cfg.py · usda/robot.usda). 키: W/A/S/D(keyboard) · R 처음부터 · F 카메라를 로봇 쪽으로 · 창 닫으면 끝
 """
 from __future__ import annotations
@@ -56,6 +57,8 @@ def main(argv=None) -> int:
         cfg.scene.num_envs = 1
         cfg.sim.device = args.device
         cfg.debug_vis = shown
+        if args.command is not None and not args.calibration:   # 직접 운전 = 학습 배경 위에서 (calibration은 평면)
+            cfg.ground = importlib.import_module(f"training.{name}.ground").GroundCfg()
         env = load(env_spec)(cfg)
         print(f"[drive] {args.task} · env {env_spec} · 명령 {cmd_spec or f'training.{name}.command (랜덤 웨이포인트)'} · "
               f"로봇 {cfg.robot_cfg.spawn.usd_path}", flush=True)

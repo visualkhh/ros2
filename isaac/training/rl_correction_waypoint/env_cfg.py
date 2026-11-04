@@ -1,37 +1,14 @@
 """rl_correction_waypoint 설정 — 랜덤 웨이포인트를 이탈 없이 따라가기 (기본 제어기 + 정책 보정). 로봇과 상관없음."""
 from __future__ import annotations
 
-import isaaclab.terrains as terrain_gen
 from isaaclab.envs import ViewerCfg, mdp
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
 from isaaclab.utils import configclass
 
 from envs.base_env_cfg import BaseEnvCfg
-
-from envs.base_env_cfg import GROUND as _GROUND  # noqa: E402
-
-
-def make_terrain(uneven: bool) -> TerrainImporterCfg:
-    """바닥 — Isaac Lab 지형 생성기 (anymal_c_direct Rough와 같은 방식). uneven이 꺼지면 평면.
-
-    8 m 칸을 격자로 깔고 칸마다 종류 랜덤 (curriculum 없음): 평평 · 요철(낮은 턱 1~3 cm). 언덕(경사)은 없다.
-    env는 칸 가운데(1 m 평평한 판)에서 출발 — 한 칸에 로봇 여럿이 겹쳐도 서로 충돌 안 함.
-    """
-    sub = {"flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2)}
-    if uneven:
-        sub["bumps"] = terrain_gen.HfDiscreteObstaclesTerrainCfg(
-            proportion=0.4, obstacle_height_mode="fixed", obstacle_width_range=(0.30, 0.55),
-            obstacle_height_range=(0.01, 0.03), num_obstacles=30, platform_width=1.0)
-    if len(sub) == 1:
-        return TerrainImporterCfg(prim_path="/World/ground", terrain_type="plane", physics_material=_GROUND)
-    gen = TerrainGeneratorCfg(size=(8.0, 8.0), border_width=4.0, num_rows=8, num_cols=8,
-                              horizontal_scale=0.05, vertical_scale=0.002, slope_threshold=0.75,
-                              color_scheme="height", sub_terrains=sub)
-    return TerrainImporterCfg(prim_path="/World/ground", terrain_type="generator", terrain_generator=gen,
-                              physics_material=_GROUND, visual_material=None)
+from training.rl_correction_waypoint.ground import GroundCfg
 
 
 @configclass
@@ -64,15 +41,8 @@ class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=512, env_spacing=3.0, replicate_physics=True)   # --num_envs
     viewer: ViewerCfg = ViewerCfg(eye=(2.0, -2.0, 1.5), lookat=(0.0, 0.0, 0.0), origin_type="env", env_index=0)   # 창: env 0 로봇 근처 (env마다 8 m 칸이라 멀리 흩어져 있다)
-    terrain: TerrainImporterCfg = make_terrain(True)   # env가 장면 만들 때 uneven으로 다시 만든다
     events: EventCfg | None = EventCfg()                    # env마다 바퀴 마찰 랜덤 — 끄려면 env.events=null
-    uneven = True                  # 평평 + 요철 칸 (턱 1~3 cm) · env.uneven=false = 평면만
-    # 마찰 패치 — env마다 출발점 둘레에 얇은 판 (노랑 = 끈적, 파랑 = 미끄럼). 바퀴와 평균 결합. env.friction_patches=0 = 끔
-    friction_patches = 8              # env마다 개수 (반은 끈적 · 반은 미끄럼, 랜덤)
-    patch_radius = (0.3, 3.0)         # [m] 출발점에서 거리 (웨이포인트 경로가 지나가는 범위)
-    patch_size = (0.4, 0.9)           # [m] 한 변
-    sticky_friction = (1.10, 0.90)    # (static, dynamic)
-    slippery_friction = (0.20, 0.15)
+    ground: GroundCfg = GroundCfg()   # 배경 (ground.py): 평평 + 요철 · 마찰 패치 — env.ground.uneven=false · env.ground.friction_patches=0
 
     # 스크린샷 — snap_s초마다 snap_dir/<시각>.png + snap_dir/latest.png(덮어씀). 0 = 끔. run-training.sh --snap SEC가 채운다
     snap_s = 0.0

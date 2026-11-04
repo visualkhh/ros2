@@ -9,11 +9,18 @@ import math
 import torch
 
 from envs.default.env import DefaultEnv
+from training.rl_correction_waypoint.ground import make_terrain, spawn_friction_patches
 from training.rl_correction_waypoint.markers import CommandMarkers
 
 
 class CalibrationEnv(DefaultEnv):
     path_w = None   # 노란 점 = 목표 경로 (m, 3) — set_path()
+
+    def ground_cfg(self):   # 배경 = cfg.ground (측정은 평면 · run-world 키보드는 학습 배경)
+        return make_terrain(self.cfg.ground)
+
+    def ground_objects(self) -> None:
+        spawn_friction_patches(self, self.cfg.ground)
 
     def start(self, path=None) -> float:
         """측정 시작 자세: reset → 0.5 s 정지 (스폰 높이에서 떨어져 바퀴 · 캐스터로 서게) → 노란 점 = 목표 경로. 높이 [m] 반환."""
