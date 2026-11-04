@@ -59,6 +59,12 @@ class BaseEnvCfg(DirectRLEnvCfg):
     caster_friction: tuple[float, float] = MISSING
     random_yaw = False          # 리셋 때 방향 랜덤 (학습) · False면 0
     debug_vis = False           # 창 볼 때 스크립트가 켬 — 명령(초록)/실제(파랑) 막대 + 목표 경로(노란 점, path_w)
+    # 스크린샷 — snap_s초마다 snap_dir/<시각>.png + snap_dir/latest.png(덮어씀). 0 = 끔. run-training.sh --snap SEC가 채운다
+    snap_s = 0.0
+    snap_dir = ""
+    snap_origin = "env"         # 창 없을 때 찍는 카메라: "env" = env 0 기준 · "world" = 월드 기준
+    snap_eye = (4.0, -4.0, 3.0)
+    snap_lookat = (1.0, 1.0, 0.0)
 
     def __post_init__(self):
         robots.use(self, self.robot)

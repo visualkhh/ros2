@@ -44,9 +44,6 @@ class RlCorrectionWaypointEnvCfg(BaseEnvCfg):
     events: EventCfg | None = EventCfg()                    # env마다 바퀴 마찰 랜덤 — 끄려면 env.events=null
     ground: GroundCfg = GroundCfg()   # 배경 (ground.py): 평평 + 요철 · 마찰 패치 — env.ground.uneven=false · env.ground.friction_patches=0
 
-    # 스크린샷 — snap_s초마다 snap_dir/<시각>.png + snap_dir/latest.png(덮어씀). 0 = 끔. run-training.sh --snap SEC가 채운다
-    snap_s = 0.0
-    snap_dir = ""
 
     # 웨이포인트 (command.py) — 시작 자세 기준, 앞 점에서 방향 turn_range만큼 꺾고 dist_range만큼
     num_waypoints = 4

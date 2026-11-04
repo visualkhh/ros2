@@ -6,6 +6,7 @@
 - `encoders(r, sep)` · `true_twist()` · `sense(i)`: /odom v·w (엔코더) · 몸체 실제 속도 · env i 한 줄
 - `_reset_idx` / `place`: 지형 칸 가운데에 세우기 (cfg.random_yaw면 방향 랜덤) · 순간이동
 - 화면(debug_vis): `debug_vis_setup` · `debug_vis_draw`만 선언 — 무엇을 그릴지는 task env가 구현
+- 스크린샷(`snap_s`): 창이 없으면 화면 없는 카메라를 붙여 snap_s초마다 snap_dir에 png + latest.png
 """
 from __future__ import annotations
 
@@ -33,7 +34,13 @@ class BaseEnv(DirectRLEnv):
     cfg: BaseEnvCfg
 
     def __init__(self, cfg: BaseEnvCfg, render_mode: str | None = None, **kwargs):
+        if cfg.snap_s > 0 and not cfg.sim.visualizer_cfgs:   # 창 없이 스크린샷: 화면 없는 Kit visualizer
+            from isaaclab_visualizers.kit import KitVisualizerCfg
+
+            cfg.sim.visualizer_cfgs = [KitVisualizerCfg(headless=True, origin_type=cfg.snap_origin, origin_env_index=0,
+                                                        eye=cfg.snap_eye, lookat=cfg.snap_lookat)]
         super().__init__(cfg, render_mode, **kwargs)
+        self._snap_at = 0.0
         self._wheels, _ = self.robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
         n, dev = self.num_envs, self.device
         self.policy_dt = self.cfg.sim.dt * self.cfg.decimation
@@ -152,6 +159,43 @@ class BaseEnv(DirectRLEnv):
 
     def look_at(self, origin) -> None:
         self.sim.set_camera_view(eye=(origin[0] + 1.8, origin[1] - 1.8, 1.55), target=(origin[0], origin[1], 0.15))
+
+    # ------------------------------------------------------------------ 스크린샷 (cfg.snap_s > 0 — run-training.sh --snap SEC)
+    def step(self, action):
+        out = super().step(action)
+        if self.cfg.snap_s > 0:
+            import time
+
+            now = time.monotonic()
+            if now - self._snap_at >= self.cfg.snap_s:
+                self._snap_at = now
+                self._snapshot()
+        return out
+
+    def _snapshot(self) -> None:
+        """지금 화면 → snap_dir/<시각>.png + latest.png (Kit visualizer의 render_rgb_array)."""
+        import os
+        import shutil
+        from datetime import datetime
+
+        for viz in getattr(self.sim, "_visualizers", None) or []:
+            fn = getattr(viz, "render_rgb_array", None)
+            if fn is None:
+                continue
+            try:
+                rgb = fn()
+                if rgb is None or not getattr(rgb, "size", 0) or int(rgb.max()) == 0:
+                    continue
+                from PIL import Image
+
+                os.makedirs(self.cfg.snap_dir, exist_ok=True)
+                path = os.path.join(self.cfg.snap_dir, f"{datetime.now():%Y-%m-%d_%H-%M-%S}.png")
+                Image.fromarray(rgb).save(path)
+                shutil.copyfile(path, os.path.join(self.cfg.snap_dir, "latest.png"))
+                return
+            except Exception as exc:   # 스크린샷 실패로 학습이 멈추면 안 된다
+                print(f"[snap] 실패: {exc}", flush=True)
+                return
 
     # ------------------------------------------------------------------ 화면 (cfg.debug_vis일 때만 불린다) — task env가 구현
     def debug_vis_setup(self, visible: bool) -> None:

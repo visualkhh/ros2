@@ -27,6 +27,7 @@ class RlMazeEnvCfg(BaseEnvCfg):
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=256, env_spacing=0.0, replicate_physics=True)   # 모두 같은 미로
     viewer: ViewerCfg = ViewerCfg(eye=(0.0, -5.0, 6.0), lookat=(0.0, 0.0, 0.0))   # 미로 전체
+    snap_origin, snap_eye, snap_lookat = "world", (0.0, -5.0, 6.0), (0.0, 0.0, 0.0)   # 스크린샷도 미로 전체
 
     # 웨이포인트 (command.py · maze_grid.py)
     lookahead = 5                  # 관측에 넣는 다음 웨이포인트 개수 (K)

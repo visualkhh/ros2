@@ -59,8 +59,13 @@ class RlMazeEnv(BaseEnv):
     def ground_objects(self) -> None:
         import isaaclab.sim as sim_utils
 
+        path = f"{self.cfg.terrain.prim_path}/maze"
         maze = sim_utils.UsdFileCfg(usd_path=MAZE_USD)
-        maze.func(f"{self.cfg.terrain.prim_path}/maze", maze)
+        maze.func(path, maze)
+        # MaterialX 재질 대신 단색 (RTX가 MaterialX를 컴파일하다 화면이 안 나옴) — 미로 전체에 덮어씀 (충돌 · 물리 재질은 그대로)
+        look = sim_utils.PreviewSurfaceCfg(diffuse_color=(0.23, 0.25, 0.34), roughness=0.6)
+        look.func("/World/Looks/maze_plain", look)
+        sim_utils.bind_visual_material(path, "/World/Looks/maze_plain", stronger_than_descendants=True)
 
     # ------------------------------------------------------------------ 자세 · 센서
     def pose(self) -> tuple[torch.Tensor, torch.Tensor]:
