@@ -805,7 +805,7 @@ def response(sim: dict, real: dict) -> None:
     tau = round(max(0.0, float(real["wheel_tau_s"]) - float(sim["wheel_tau_s"])), 4)
     sim_g = (sim["wheel_gain_l"] + sim["wheel_gain_r"]) / 2.0
     db = round(float(real["wheel_deadband"]) / sim_g, 4) if float(real["wheel_deadband"]) > float(sim["wheel_deadband"]) else 0.0
-    print("\n# training/rl_correction_waypoint/robot_cfg.py 에 붙여 넣기")
+    print(f"\n# training/{HERE.parent.name}/robot_cfg.py 에 붙여 넣기")
     print(f"RESPONSE_GAIN_LR = {g}   # real ÷ sim: {real['wheel_gain_l']}/{sim['wheel_gain_l']} · {real['wheel_gain_r']}/{sim['wheel_gain_r']}")
     print(f"RESPONSE_DELAY_STEPS = {delay}   # real − sim: {real['wheel_delay_steps']} − {sim['wheel_delay_steps']}")
     print(f"RESPONSE_TAU_S = {tau}   # real − sim: {real['wheel_tau_s']} − {sim['wheel_tau_s']} (음수면 0)")
