@@ -31,6 +31,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 ```text
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
+├── run-make-onnx.sh          체크포인트 → ONNX: ./run-make-onnx.sh <model_N.pt> [--quantize] (tools/onnx_tool.py · play 창 없이, 스스로 끝남)
 ├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py → artifacts/<task>/training/)
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh <이름|디렉토리>)
 ├── run-world.sh              world 보기 — ./run-world.sh <task> [--calibration] [--command keyboard]
@@ -41,6 +42,7 @@ isaac/
 │   ├── drive.py              운전 창 (./run-world.sh) — 로봇 · env · 명령 선택
 ├── agents/base_agent.py      학습자 설정 바탕 BaseAgentCfg (PPO · 신경망 64×64 · 학습률 · 저장 간격) — task agent.py가 상속
 ├── commands/                 명령 경로 (Isaac Lab command): base_command.BaseCommand · square(네모 54 s — calibration 측정) · keyboard(직접 운전)
+├── tools/onnx_tool.py        ONNX 내보내기 · INT8 양자화 + fp32와 오차 비교 (isaac venv)
 ├── calibration/__main__.py   calibration 실행기 하나 (공식 train.py 역할) — ./run-calibration.sh <task> --robot sim|real|dummy → raw.csv
 ├── reports/base_report.py    BaseReport(ABC) — 측정 폴더 1개 single() · 2개 compare() (task 보고서가 상속: calibration/report.py CalibrationReport)
 ├── training/                 학습                                           → training/README.md

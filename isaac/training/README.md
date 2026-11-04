@@ -40,6 +40,7 @@ training/
 cd isaac
 ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
 ./run-training.sh rl_correction_waypoint --max_iterations 500                                         # 본 학습 (창 없음, 512대 · 평평 + 요철)
+./run-make-onnx.sh artifacts/rl_correction_waypoint/training/<시각>/model_499.pt   # ONNX만 (play를 창 없이, 스스로 끝남) · --quantize
 ./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 1   # 재생 + ONNX 내보내기 (Ctrl+C)
 tensorboard --logdir artifacts/rl_correction_waypoint/training
 ./run-training.sh -h                                                               # 자주 쓰는 옵션 · cfg 덮어쓰기
