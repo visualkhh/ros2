@@ -4,7 +4,7 @@ training/<task>/calibration/ 명령 · env와 그 task 폴더의 로봇(sim_robo
   sim    SimRobot + CalibrationEnv — Isaac venv · 창 기본 끔, --viz로 켬 · --watch (기록 후 창 닫을 때까지 반복)
   real   RealRobot — ROS .venv · 준비: Pi base + cmd_manager MANUAL · --check-only (안 움직임)
   dummy  DummyRobot — 표준 라이브러리만 (가짜 모터: --gain-l --gain-r --tau --delay --deadband --slip --noise)
-측정: 명령(BaseCommand)을 robot.dt마다 write → pace, 끝나면 robot.data()(로봇이 쌓은 기록) → raw.csv + 구간 표.
+측정: 명령(BaseCommand)을 robot.dt마다 write → pace, 끝나면 robot.data()(로봇이 쌓은 기록) → raw.csv (분석은 task의 report.py).
 출력: artifacts/<task>/calibration/<시각>_<label>/raw.csv · 분석: python3 training/<task>/calibration/report.py <sim 폴더> <real 폴더>
 """
 from __future__ import annotations
@@ -68,7 +68,7 @@ def make_command(args):
 
 
 def record(robot, cmd, out: str, tag: str = "calibration", label: str = "") -> list:
-    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace. 끝나면 robot.data() → out에 CSV + 구간 표 (분석은 task의 report.py).
+    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace. 끝나면 robot.data() → out에 CSV (분석은 task의 report.py).
 
     로봇이 측정 중에 스스로 쌓은 기록(robot.data(), 키 = CSV 열 — 로봇마다 다를 수 있음)에 label만 붙여 저장한다.
     """
@@ -82,44 +82,18 @@ def record(robot, cmd, out: str, tag: str = "calibration", label: str = "") -> l
         robot.write(v, w)
         robot.pace(k)
     rows = [{**r, "label": label} for r in robot.data()]
-    _save(tag, segs, rows, out)
+    _save(tag, rows, out)
     return rows
 
 
-def _save(tag: str, segs, rows, out: str) -> None:
+def _save(tag: str, rows, out: str) -> None:
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", newline="") as f:
         cw = csv.DictWriter(f, fieldnames=list(rows[0]))
         cw.writeheader()
         cw.writerows(rows)
-    print_segments(tag, segs, rows, out)
+    print(f"[{tag}] {len(rows)}줄 → {out}")
     print(f"[{tag}] 분석: python3 training/<task>/calibration/report.py <sim 폴더> <real 폴더>  (fit.json · report.png · compare.png · robot_cfg 값)")
-
-SEG_KEYS = ("v_enc", "w_enc", "w_gyro", "wheel_l_vel", "wheel_r_vel")   # 구간 표 (차동 구동 — 이 키가 없는 로봇이면 표를 건너뜀)
-
-
-def _average(rows, t0: float, t1: float, skip: float = 0.0):
-    """[t0+skip, t1) 구간 SEG_KEYS 평균. 비면 [t0, t1)."""
-    part = [r for r in rows if t0 + skip <= r["t"] < t1] or [r for r in rows if t0 <= r["t"] < t1]
-    return tuple(sum(r[k] for r in part) / len(part) for k in SEG_KEYS)
-
-
-def print_segments(tag: str, segs, rows, out: str) -> None:
-    """구간별 전진/회전 표 — sim · real 같은 형식."""
-    if not rows or not all(k in rows[0] for k in SEG_KEYS):
-        print(f"[{tag}] 구간 표 스킵 (기록에 {', '.join(SEG_KEYS)} 없음) → {out}")
-        return
-    for name in ("left", "right"):
-        for i, move in enumerate([s for s in segs if s[4] == f"move_{name}"], 1):
-            vf, wf, gf, lf, rf = _average(rows, move[0], move[1], skip=0.5)
-            print(f"[{tag}] {name.upper():5s} move{i} cmd={move[2]:.3f} v_enc={vf:+.3f} gain={vf / move[2]:.3f} "
-                  f"w_enc={wf:+.3f} w_gyro={gf:+.3f} | 바퀴 wl={lf:+.2f} wr={rf:+.2f} rad/s")
-        turn = next((s for s in segs if s[4] == f"turn_{name}"), None)
-        if turn is not None:
-            vt, wt, gt, lt, rt = _average(rows, turn[0], turn[1], skip=0.3)
-            print(f"[{tag}] {name.upper():5s} turn  v_enc={vt:+.3f} w_enc={wt:+.3f} w_gyro={gt:+.3f} | "
-                  f"바퀴 wl={lt:+.2f} wr={rt:+.2f} rad/s")
-    print(f"[{tag}] → {out}")
 
 
 MODES = ("sim", "real", "dummy")
