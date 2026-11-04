@@ -52,8 +52,7 @@ isaac/
 │                                    robot_cfg.py(로봇 ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 — 기본 로봇) · usda/robot.usda(외부 제공 USD) ·
 │                                    sim_robot.py · real_robot.py · dummy_robot.py(이 로봇의 sim · 실기기 · 가짜 입출력)
 ├── robots/                   로봇 공통 · urdf_to_usd.py 변환 · check_same.sh(ROS URDF와 같은지)
-│   ├── robot_interface.py    RobotInterface — write(v, w) · read() 상태 (ros2_control hardware_interface 역할)
-│   ├── sim_robot.py · dummy_robot.py   SimRobot(env.step, 어떤 로봇이든) · DummyRobot(가짜 모터)
+│   ├── robot_interface.py    RobotInterface(ABC) — 추상 write(v, w) · read() 상태 (ros2_control hardware_interface 역할), 구현은 task 폴더
 │   └── beebot/               urdf/robot.urdf.xacro · meshes/ · usd/(변환물, git 제외) — URDF만 (로봇으로 쓰려면 robot_cfg.py 추가)
 ├── learn/                    Isaac 개념 실습 L1~L5
 ├── artifacts/                산출물 (git 제외) — calibration/ · training/ · real/
