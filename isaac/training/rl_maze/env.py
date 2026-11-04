@@ -172,10 +172,12 @@ class RlMazeEnv(BaseEnv):
             self.markers.set_visible(visible)
 
     def debug_vis_draw(self) -> None:
-        self.markers.draw(self, self.vis_path())
+        dots, wps = self.vis_path() or (None, None)
+        self.markers.draw(self, dots, wps)
 
     def vis_path(self):
-        """노란 점선 = 로봇마다 지금 위치 → 앞 웨이포인트 lookahead개를 잇는 선 (정책이 보는 웨이포인트 그대로)."""
+        """(노란 점선, 웨이포인트) — 점선 = 로봇마다 지금 위치 → 앞 웨이포인트 lookahead개를 잇는 그림 ·
+        웨이포인트 = 정책이 관측으로 받는 그 점들 (빨간 큰 공)."""
         if not hasattr(self, "wps"):
             return None
         n, k = self.num_envs, self.cfg.lookahead
@@ -185,4 +187,5 @@ class RlMazeEnv(BaseEnv):
         t = torch.linspace(0.0, 1.0, 7, device=self.device)[:-1]                          # 선분마다 6점
         seg = pts[:, :-1, None] + (pts[:, 1:, None] - pts[:, :-1, None]) * t[None, None, :, None]   # [n, K, 6, 2]
         seg = torch.cat([seg.reshape(n, -1, 2), ahead[:, -1:]], dim=1).reshape(-1, 2)
-        return torch.cat([seg, torch.full((len(seg), 1), 0.02, device=self.device)], dim=-1)
+        z = lambda p: torch.cat([p, torch.full((len(p), 1), 0.02, device=self.device)], dim=-1)  # noqa: E731
+        return z(seg), z(ahead.reshape(-1, 2))

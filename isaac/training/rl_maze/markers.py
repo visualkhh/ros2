@@ -3,6 +3,7 @@
 - 초록 막대 = 명령 (v, w)대로라면 갈 방향 · 파랑 막대 = 실제 몸체 속도로 갈 방향
   (길이 ∝ 속도, 방향 = 지금 방향 + w × 0.25 s — 원호의 현. 제자리 회전도 보이게 최소 길이)
 - 노란 점 = 목표 경로 (학습: 명령이 바뀐 순간부터 그 명령대로 갈 길 · calibration: 사각형 전체)
+- 빨간 큰 공 = 진짜 웨이포인트 (정책이 관측으로 받는 점 — 노란 점선은 그 사이를 잇는 그림일 뿐)
   로봇이 노란 점에서 벗어나는 만큼이 드리프트다.
 
 Isaac Lab VisualizationMarkers를 쓴다 (센서 debug_vis와 같은 기능). 화살표 USD(Nucleus) 대신
@@ -36,6 +37,8 @@ class CommandMarkers:
             "act": bar((0.1, 0.35, 1.0)),
             "path": sim_utils.SphereCfg(radius=0.012,
                                         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.0))),
+            "wp": sim_utils.SphereCfg(radius=0.035,
+                                      visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.95, 0.1, 0.25))),
         }))
 
     def set_visible(self, on: bool) -> None:
@@ -59,20 +62,23 @@ class CommandMarkers:
         scale = torch.stack([length.clamp(min=1e-4), moving.clamp(min=1e-4), moving.clamp(min=1e-4)], dim=-1)
         return ctr, quat_from_euler_xyz(zero, zero, heading), scale
 
-    def update(self, pos_w, yaw, cmd_v, cmd_w, v, w, path_w: torch.Tensor | None = None) -> None:
-        """pos_w (n,3) · yaw (n,) · 명령/실제 v, w (n,) · path_w (m,3) 목표 경로 점 (없으면 안 그림)."""
+    def update(self, pos_w, yaw, cmd_v, cmd_w, v, w, path_w: torch.Tensor | None = None,
+               wp_w: torch.Tensor | None = None) -> None:
+        """pos_w (n,3) · yaw (n,) · 명령/실제 v, w (n,) · path_w (m,3) 목표 경로 점 · wp_w (k,3) 웨이포인트 (없으면 안 그림)."""
         from isaaclab.utils.math import quat_from_euler_xyz
         n, dev = pos_w.shape[0], pos_w.device
         c, a = self._bars(pos_w, yaw, cmd_v, cmd_w, self.Z_CMD), self._bars(pos_w, yaw, v, w, self.Z_ACT)
         trans, quat, scale = [c[0], a[0]], [c[1], a[1]], [c[2], a[2]]
         idx = [torch.zeros(n, dtype=torch.long, device=dev), torch.ones(n, dtype=torch.long, device=dev)]
-        if path_w is not None and len(path_w):
-            m = path_w.shape[0]
+        for pts, kind in ((path_w, 2), (wp_w, 3)):
+            if pts is None or not len(pts):
+                continue
+            m = pts.shape[0]
             zero = torch.zeros(m, device=dev)
-            trans.append(path_w)
+            trans.append(pts)
             quat.append(quat_from_euler_xyz(zero, zero, zero))
             scale.append(torch.ones(m, 3, device=dev))
-            idx.append(torch.full((m,), 2, dtype=torch.long, device=dev))
+            idx.append(torch.full((m,), kind, dtype=torch.long, device=dev))
         self.markers.visualize(translations=torch.cat(trans), orientations=torch.cat(quat),
                                scales=torch.cat(scale), marker_indices=torch.cat(idx))
 
@@ -93,8 +99,8 @@ class CommandMarkers:
         return pts.reshape(-1, 3)
 
 
-    def draw(self, env, path_w=None) -> None:
-        """env(BaseEnv)의 지금 명령 · 실제 속도 · path_w를 그린다 — task env의 debug_vis_draw()에서."""
+    def draw(self, env, path_w=None, wp_w=None) -> None:
+        """env(BaseEnv)의 지금 명령 · 실제 속도 · path_w · wp_w를 그린다 — task env의 debug_vis_draw()에서."""
         d = env.robot.data
         v, w = env.true_twist()
-        self.update(d.root_pos_w.torch, self.yaw_of(d.root_quat_w.torch), env.cmd[:, 0], env.cmd[:, 1], v, w, path_w)
+        self.update(d.root_pos_w.torch, self.yaw_of(d.root_quat_w.torch), env.cmd[:, 0], env.cmd[:, 1], v, w, path_w, wp_w)
