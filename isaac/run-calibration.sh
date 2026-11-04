@@ -1,5 +1,5 @@
 #!/bin/bash
-# calibration 실행기 — python -m calibration 을 --robot에 맞는 런타임(IsaacLab / ROS .venv / .venv)으로 돌린다.
+# calibration 실행기 — python -m calibration (calibration/__main__.py) 을 --robot에 맞는 런타임(IsaacLab / ROS .venv / .venv)으로 돌린다.
 #
 #   ./run-calibration.sh <task> --robot=sim|real|dummy|both [옵션...]   (경로는 isaac/ 기준 상대경로 또는 절대경로)
 #   ./run-calibration.sh <task> --robot=sim --help                       그 로봇의 옵션 전체 (python argparse)
