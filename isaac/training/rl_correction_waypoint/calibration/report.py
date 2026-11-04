@@ -2,9 +2,9 @@
 """이 task의 calibration 보고서 — 측정 폴더(raw.csv)를 받아 fit(바퀴 gain · 지연 · τ · 데드밴드) · 그림 · robot_cfg 값.
 이 로봇(차동 구동)의 기록 열(v_enc · w_enc · w_gyro · wheel_* · odom_* · t_*)을 쓴다 — 기록이 다른 task는 자기 report.py를.
 
-  python3 training/rl_correction_waypoint/report.py <sim 폴더> <real 폴더>   # 비교 (isaac/에서)
+  python3 training/rl_correction_waypoint/calibration/report.py <sim 폴더> <real 폴더>   # 비교 (isaac/에서)
       → 폴더마다 fit.json · report.png, real 폴더에 compare.png, robot_cfg.py RESPONSE_* 값 출력
-  python3 training/rl_correction_waypoint/report.py <폴더>                    # 하나만 → fit.json · report.png
+  python3 training/rl_correction_waypoint/calibration/report.py <폴더>                    # 하나만 → fit.json · report.png
 폴더 = artifacts/rl_correction_waypoint/calibration/<시각>_<label>/ (raw.csv 대신 CSV 경로를 줘도 된다).
 
 비교 패널: 0) odom x-y 궤적 (왼쪽 사각형 → 180° 턴 → 같은 사각형 역주행)
@@ -59,8 +59,8 @@ def _korean_font():
 _KOREAN_FONT = _korean_font()
 
 HERE = Path(__file__).resolve().parent
-ISAAC = HERE.parents[1]          # .../isaac (HERE = isaac/training/<task>)
-OUT_DIR = ISAAC / "artifacts" / HERE.name / "calibration"   # 비교 그림 기본 위치 (out을 안 줬을 때)
+ISAAC = HERE.parents[2]          # .../isaac (HERE = isaac/training/<task>/calibration)
+OUT_DIR = ISAAC / "artifacts" / HERE.parent.name / "calibration"   # 비교 그림 기본 위치 (out을 안 줬을 때)
 sys.path.insert(0, str(ISAAC))
 
 def _robot_cfg():
@@ -69,7 +69,7 @@ def _robot_cfg():
 
     import robots
 
-    return robots.load(os.path.dirname(os.path.abspath(__file__)))
+    return robots.load(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 CONTROL_HZ = 20.0   # 기록 · 정책 주기 (= envs/base_env_cfg.py CONTROL_HZ — Isaac 없이 돌아서 따로, 바꾸면 같이)

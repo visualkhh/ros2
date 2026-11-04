@@ -11,8 +11,8 @@ training/rl_correction_waypoint/
 ├── env_cfg.py    RlCorrectionWaypointEnvCfg — 랜덤 폭 (중심 = 로봇 config 실측 응답) · 기본 제어기 · 보상 가중치 · 지형
 ├── env.py        RlCorrectionWaypointEnv(BaseEnv) — 추정 자세 · 기본 제어기 · 모터 모델 · 관측 · 보상 · 도착/실패
 ├── command.py    RlCorrectionWaypointCommand — env마다 랜덤 웨이포인트 4개 (각 0.5~1.5 m, 방향 랜덤)
-├── calibration/  학습 전 1단계 측정 — command.py CalibrationCommand(네모) · env.py · env_cfg.py  (./run-calibration.sh rl_correction_waypoint --robot=sim|real)
-├── report.py     calibration 분석 — python3 report.py <sim 폴더> <real 폴더> → fit · 그림 · RESPONSE_* 값
+├── calibration/  학습 전 1단계 측정 — command.py CalibrationCommand(네모) · env.py · env_cfg.py ·
+│                 report.py (분석: python3 calibration/report.py <sim 폴더> <real 폴더> → fit · 그림 · RESPONSE_* 값)  (./run-calibration.sh rl_correction_waypoint --robot=sim|real)
 ├── robot_cfg.py · sim_robot.py · real_robot.py · dummy_robot.py · usda/robot.usda   로봇 (설정 · sim · 실기기 ROS · 가짜 · USD)
 └── agent.py      RlCorrectionWaypointAgentCfg(BaseAgentCfg) — PPO 값 (500회 기본)
 ```
@@ -59,7 +59,7 @@ cd isaac
 ./run-calibration.sh rl_correction_waypoint --robot=real --check-only    # real: 안 움직이고 상태만 → "check-only — 준비됨"
 ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor   # real 측정 (약 54 s)
 #   → artifacts/rl_correction_waypoint/calibration/<시각>_<label>/raw.csv
-python3 training/rl_correction_waypoint/report.py artifacts/rl_correction_waypoint/calibration/<sim 폴더> artifacts/rl_correction_waypoint/calibration/<real 폴더>
+python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_correction_waypoint/calibration/<sim 폴더> artifacts/rl_correction_waypoint/calibration/<real 폴더>
 #   → fit.json · report.png (폴더마다) · compare.png (real 폴더) · robot_cfg.py에 붙일 RESPONSE_* 값
 ```
 

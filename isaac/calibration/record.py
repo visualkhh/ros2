@@ -87,7 +87,7 @@ def _save(tag: str, segs, rows, out: str) -> None:
         cw.writeheader()
         cw.writerows(rows)
     print_segments(tag, segs, rows, out)
-    print(f"[{tag}] 분석: python3 training/<task>/report.py <sim 폴더> <real 폴더>  (fit.json · report.png · compare.png · robot_cfg 값)")
+    print(f"[{tag}] 분석: python3 training/<task>/calibration/report.py <sim 폴더> <real 폴더>  (fit.json · report.png · compare.png · robot_cfg 값)")
 
 SEG_KEYS = ("v_enc", "w_enc", "w_gyro", "wheel_l_vel", "wheel_r_vel")   # 구간 표 (차동 구동 — 이 키가 없는 로봇이면 표를 건너뜀)
 

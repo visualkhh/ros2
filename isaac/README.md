@@ -101,7 +101,7 @@ cd isaac
 
 ```bash
 ./run-calibration.sh rl_correction_waypoint --robot=sim --label sim          # 창 없음 (보려면 --viz)
-python3 training/rl_correction_waypoint/report.py artifacts/rl_correction_waypoint/calibration/<시각>_sim artifacts/rl_correction_waypoint/calibration/<시각>_real_floor
+python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_correction_waypoint/calibration/<시각>_sim artifacts/rl_correction_waypoint/calibration/<시각>_real_floor
 #   → 폴더마다 fit.json · report.png, real 폴더에 compare.png, robot_cfg.py에 붙일 RESPONSE_* 값 출력
 ```
 

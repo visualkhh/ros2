@@ -36,7 +36,7 @@
 #   ./run-calibration.sh rl_correction_waypoint --robot=dummy --gain-l 0.96 --gain-r 1.02
 #   ./run-calibration.sh rl_correction_waypoint --robot=both
 #
-# 분석 (측정 뒤 직접): python3 training/<task>/report.py <sim 폴더> <real 폴더>
+# 분석 (측정 뒤 직접): python3 training/<task>/calibration/report.py <sim 폴더> <real 폴더>
 #   → 폴더마다 fit.json · report.png, real 폴더에 compare.png, robot_cfg.py RESPONSE_* 값 출력
 #
 # common:
@@ -145,7 +145,7 @@ case "$ROBOT" in
       tail -30 "$RUN/real.log" >&2 || true
       exit 1
     fi
-    "$PY" "$ISAAC/training/$TASK/report.py" "$RUN/sim" "$RUN/real" | tee "$RUN/compare.log"
+    "$PY" "$ISAAC/training/$TASK/calibration/report.py" "$RUN/sim" "$RUN/real" | tee "$RUN/compare.log"
     echo "[calibrate] → $RUN  (sim/fit.json · real/fit.json · compare.png)"
     ;;
   *)
