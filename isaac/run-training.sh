@@ -7,10 +7,10 @@
 #
 # <task>: training/ 아래 task 폴더 이름 (예: rl_correction_waypoint) → gym 이름 RlCorrectionWaypoint (폴더 이름의 CamelCase,
 #   training/<task>/__init__.py의 gym.register). 로봇 = 그 task 폴더 (robot_cfg.py · usda/robot.usda). --external_callback training.register로 등록.
-# 결과: artifacts/<task>/training/<시각>[_<label>]/  (model_<N>.pt · params/ · TensorBoard · play 하면 exported/)
+# 결과: artifacts/<task>/training/<시각>_<label>/  (model_<N>.pt · params/ · TensorBoard · play 하면 exported/)
 #   (공식 스크립트의 logs/rsl_rl/<experiment_name>에 agent.experiment_name=<절대경로>를 넘겨 여기로)
 # 터미널 출력: artifacts/<task>/logs/<시각>_<label>_{training|play}.log (화면에도 그대로)
-#   --label NAME          폴더 이름 <시각>_NAME (= 공식 --run_name)
+#   --label NAME          폴더 이름 <시각>_NAME (= 공식 --run_name, 기본 = task 이름)
 #   --snap SEC            SEC초마다 화면 저장 → artifacts/<task>/logs/<시각>_<label>_snaps/<시각>.png + latest.png(덮어씀)
 #                         창 없이도 됨 (창이 없으면 화면 없는 Kit visualizer를 붙임, 학습이 느려짐)
 #
@@ -72,12 +72,13 @@ while [[ $# -gt 0 ]]; do
     *) REST+=("$1"); shift ;;
   esac
 done
-[[ -n "$LABEL" ]] && REST+=(--run_name "$LABEL")
+LABEL="${LABEL:-$TASK}"   # 안 주면 task 이름 — 폴더 <시각>_<label>
+REST+=(--run_name "$LABEL")
 [[ " ${REST[*]-} " == *" agent.experiment_name="* ]] || REST+=("agent.experiment_name=$ISAAC/artifacts/$TASK/training")   # 결과 폴더
 viz_args ${REST[@]+"${REST[@]}"}; args=(${VIZ_ARGS[@]+"${VIZ_ARGS[@]}"})
 STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 if [[ -n "$SNAP" ]]; then
-  SNAP_DIR="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL:-run}_snaps"
+  SNAP_DIR="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL}_snaps"
   args+=("env.snap_s=$SNAP" "env.snap_dir=$SNAP_DIR")
   # 캡처하려면 렌더 확장(replicator)이 켜진 Kit 설정 — 공식 train.py는 --video 때만 켜므로 --experience로 직접
   if [[ " ${args[*]} " == *" --viz "* || " ${args[*]} " == *" --visualizer "* ]]; then kit=isaaclab.python.rendering.kit
@@ -86,7 +87,7 @@ if [[ -n "$SNAP" ]]; then
 fi
 if [[ " ${REST[*]-} " != *" --help "* && " ${REST[*]-} " != *" -h "* ]]; then
   mkdir -p "$ISAAC/artifacts/$TASK/logs"
-  LOG="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL:-run}_${action/train/training}.log"
+  LOG="$ISAAC/artifacts/$TASK/logs/${STAMP}_${LABEL}_${action/train/training}.log"
   exec > >(tee -a "$LOG") 2>&1   # 화면 + 파일
   echo "[log] $LOG"
 fi
