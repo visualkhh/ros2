@@ -23,4 +23,4 @@ if [[ -n "$robot" && ! -f "$dir/urdf/robot.urdf.xacro" ]]; then
   exit 2
 fi
 cd "$ISAAC"
-"$ISAACLAB/isaaclab.sh" -p robots/convert_urdf.py ${robot:+"$robot"} 2>&1 | grep -E "^\[usd\]|Error|Traceback" | grep -v "omni.ext\|carb.scripting" || true
+VIRTUAL_ENV="$ISAACLAB/.venv" "$ISAACLAB/isaaclab.sh" -p robots/convert_urdf.py ${robot:+"$robot"} 2>&1 | grep -E "^\[usd\]|Error|Traceback" | grep -v "omni.ext\|carb.scripting" || true

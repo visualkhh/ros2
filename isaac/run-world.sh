@@ -42,4 +42,4 @@ if [[ $# -eq 0 || "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help"
 fi
 cd "$ISAAC"   # 상대경로 기준 = isaac/
 viz_args "$@"
-exec "$ISAACLAB/isaaclab.sh" -p -m envs.drive "${VIZ_ARGS[@]}"
+VIRTUAL_ENV="$ISAACLAB/.venv" exec "$ISAACLAB/isaaclab.sh" -p -m envs.drive "${VIZ_ARGS[@]}"

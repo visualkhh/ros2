@@ -92,5 +92,5 @@ if [[ " ${REST[*]-} " != *" --help "* && " ${REST[*]-} " != *" -h "* ]]; then
 fi
 cd "$ISAAC"   # logs/ · 상대경로 기준 = isaac/
 export PYTHONPATH="$ISAAC${PYTHONPATH:+:$PYTHONPATH}"   # training.register · robots · envs (ROS 경로는 유지 — xacro)
-exec "$ISAACLAB/isaaclab.sh" -p "$ISAACLAB/scripts/reinforcement_learning/$action.py" \
+VIRTUAL_ENV="$ISAACLAB/.venv" exec "$ISAACLAB/isaaclab.sh" -p "$ISAACLAB/scripts/reinforcement_learning/$action.py" \
   --task "$GYM_ID" --rl_library rsl_rl --external_callback training.register ${args[@]+"${args[@]}"}

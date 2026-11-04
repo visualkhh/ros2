@@ -68,7 +68,7 @@ viz_args() {
 
 sim() {
   viz_args "$@"
-  "$ISAACLAB/isaaclab.sh" -p "${VIZ_ARGS[@]}"
+  VIRTUAL_ENV="$ISAACLAB/.venv" "$ISAACLAB/isaaclab.sh" -p "${VIZ_ARGS[@]}"
 }
 
 ros_env() {
