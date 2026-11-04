@@ -93,6 +93,7 @@ tool/
 ./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
 ./run-cli stop-all              # 바퀴 정지 → 띄운 것 전부 종료
 ./run-cli restart-all           # 켜져 있던 것만 전부 재시작 (nav는 같은 지도로)
+./run-cli build [--full] [colcon 옵션]   # colcon build (PC면 SSH로 Pi에서) · --full은 setup/pi/build.sh (vcs·패치·rosdep 포함)
 ./run-cli stop                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
 ```
 

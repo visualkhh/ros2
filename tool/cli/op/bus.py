@@ -195,6 +195,19 @@ class Bus:
         print('전부 종료')
         return 0
 
+    # ------------------------------------------------------------- 빌드
+    def cmd_build(self, args) -> int:
+        """colcon build — 로봇이 아니면 SSH로 Pi에서. --full은 setup/pi/build.sh."""
+        running = [SERVICES[n].label for n in SERVICES if self.procs.running(n)]
+        if running:
+            print(self.term.paint(
+                f'주의: {", ".join(running)} 실행 중 — 빌드 후 재시작해야 새 코드가 적용됩니다 (restart-all)',
+                YELLOW))
+        rc = self.procs.build(getattr(args, 'args', []), full=getattr(args, 'full', False))
+        print(self.term.paint('빌드 완료', GREEN) if rc == 0
+              else self.term.paint(f'빌드 실패 (exit {rc})', RED))
+        return rc
+
     # ------------------------------------------------------------- 개별 노드
     def _node_guard(self, name: str, force: bool) -> str | None:
         """빈 이름·핵심 노드 검사 — 문제없으면 None. 한 번 명령용."""

@@ -34,8 +34,13 @@ SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')
 # (그래서 토픽이 보이는 곳 어디서나 같은 CLI). PC 시뮬레이션(로컬에 띄우기)은 TOOL_LOCAL=1.
 ROBOT_HOST = os.environ.get('ROBOT_HOST', 'pak.local')
 ROBOT_TOOL_DIR = os.environ.get('TOOL_ROBOT_DIR', '~/ros2/tool')   # 로봇의 tool 위치
+ROBOT_REPO_DIR = os.environ.get('TOOL_ROBOT_REPO', '~/ros2')        # 로봇의 저장소 루트
 ROBOT_SSH = os.environ.get('TOOL_ROBOT_SSH', f'pak@{ROBOT_HOST}')   # SSH 대상 (키 인증 필요)
 IS_ROBOT = socket.gethostname() == ROBOT_HOST.removesuffix('.local') or os.environ.get('TOOL_LOCAL') == '1'
+# run-cli build — Pi 4 메모리: 기본 2개, CMake 4.x 정책 옵션 (setup/pi/build.sh와 같은 값)
+BUILD_WORKERS = os.environ.get('TOOL_BUILD_WORKERS', '2')
+BUILD_POLICY_MIN = os.environ.get('TOOL_CMAKE_POLICY_MIN', '3.5')
+ROS_SETUP = os.environ.get('TOOL_ROS_SETUP', '/opt/ros/lyrical/setup.bash')
 
 
 @dataclass
@@ -188,6 +193,21 @@ class Procs:
             if not ok:
                 return False, '\n'.join(msgs)
         return True, '\n'.join(msgs)
+
+    # ------------------------------------------------------------ 빌드 (run-cli build)
+    def build(self, extra: list[str] | None = None, full: bool = False) -> int:
+        """colcon build. full=True면 setup/pi/build.sh (vcs import·패치·rosdep 포함)."""
+        extra = list(extra or [])
+        if full:
+            cmd = [str(REPO_DIR / 'setup' / 'pi' / 'build.sh'), *extra]
+            cwd = REPO_DIR
+        else:
+            cmd = ['colcon', 'build', '--symlink-install', '--parallel-workers', BUILD_WORKERS,
+                   *extra,
+                   '--cmake-args', f'-DCMAKE_POLICY_VERSION_MINIMUM={BUILD_POLICY_MIN}']
+            cwd = WS_DIR
+        print(f'$ {shlex.join(cmd)}')
+        return subprocess.call(cmd, cwd=str(cwd))
 
     # ------------------------------------------------------------ 개별 노드 (op/nodes.py · 로봇에서만)
     def node_pids(self, name: str) -> list[tuple[int, list[str]]]:
@@ -356,6 +376,19 @@ class RemoteProcs(Procs):
     def restart_all(self) -> tuple[bool, str]:
         rc, out = self._cli('restart-all')
         return rc == 0, f'[{self.host}] {out}'
+
+    def build(self, extra: list[str] | None = None, full: bool = False) -> int:
+        """로봇(Pi)에서 빌드 — 출력은 그대로 스트리밍한다 (빌드는 길어서 capture하지 않음)."""
+        extra = list(extra or [])
+        if full:
+            remote = f'cd {ROBOT_REPO_DIR} && ' + shlex.join(['setup/pi/build.sh', *extra])
+        else:
+            colcon = ['colcon', 'build', '--symlink-install', '--parallel-workers', BUILD_WORKERS,
+                      *extra, '--cmake-args', f'-DCMAKE_POLICY_VERSION_MINIMUM={BUILD_POLICY_MIN}']
+            remote = (f'source {ROS_SETUP} >/dev/null 2>&1 && cd {ROBOT_REPO_DIR}/ros2_ws && '
+                      + shlex.join(colcon))
+        print(f'[{self.host}] $ {remote}')
+        return subprocess.call(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ROBOT_SSH, remote])
 
     def tail(self, name: str, n: int = 40) -> str:
         return self._ssh(f'tail -n {int(n)} {ROBOT_TOOL_DIR}/.run/{name}.log 2>&1', 15)[1]

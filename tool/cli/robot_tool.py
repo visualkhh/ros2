@@ -195,14 +195,38 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('text', nargs='+', help='예: say 안녕 hello')
     sub.add_parser('stop-all', help='띄운 것 전부 종료 (바퀴 정지 먼저)')
     sub.add_parser('restart-all', help='켜져 있던 서비스만 같은 순서로 전부 재시작 (nav는 같은 지도로)')
+
+    b = sub.add_parser('build', help='colcon build (로봇 Pi · PC는 SSH 경유) — --full은 setup/pi/build.sh')
+    b.add_argument('--full', action='store_true',
+                   help='setup/pi/build.sh: reset + vcs import + rosdep + patch + build (deps.repos·patches 변경 후)')
+    b.add_argument('args', nargs=argparse.REMAINDER,
+                   help='colcon build에 그대로 전달 (예: --packages-select tb3_bringup)')
     return parser
+
+
+def split_build(argv: list[str]) -> argparse.Namespace:
+    """build 인자 — --full만 옵션으로 빼고 나머지는 colcon에 순서 그대로 넘긴다."""
+    rest, full = list(argv[1:]), False
+    while rest and rest[0] == '--full':
+        full = True
+        rest = rest[1:]
+    return argparse.Namespace(command='build', full=full, args=rest)
 
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
         argv = ['menu'] if sys.stdin.isatty() else ['status']
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    if argv and argv[0] == 'build':
+        # build는 colcon 옵션(--packages-select 등)을 순서 그대로 받는다.
+        # argparse REMAINDER는 옵션을 먼저 만나면 순서를 보존하지 못해서 직접 자른다.
+        if (argv[1:2] in (['-h'], ['--help'])
+                or (argv[1:2] == ['--full'] and argv[2:3] in (['-h'], ['--help']))):
+            parser.parse_args(['build', '--help'])
+        args = split_build(argv)
+    else:
+        args = parser.parse_args(argv)
     rclpy.init(args=[])
     node = RobotTool()
     try:

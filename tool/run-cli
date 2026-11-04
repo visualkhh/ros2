@@ -16,6 +16,7 @@
 #   ./run-cli control manual|nav-plan · route direct|rl · estop on|off · automap start|stop
 #   ./run-cli stop-all                       ROS 전부 끄기: 바퀴 정지 → Nav·SLAM·베이스 종료 (base|slam|nav stop = 하나씩)
 #   ./run-cli restart-all                    켜져 있던 것만 전부 재시작 (nav는 같은 지도로)
+#   ./run-cli build [--full] [colcon 옵션]   colcon build (PC면 로봇 Pi에서 SSH로) — --full은 vcs·패치·rosdep 포함
 #
 # 로봇이 아닌 곳에서는 켜기/끄기·지도·로그를 SSH(pak@pak.local)로 로봇에 넘깁니다. ROS_DOMAIN_ID=25 고정.
 set -eo pipefail
