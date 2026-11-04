@@ -4,7 +4,7 @@ task마다 폴더 하나. 학습 · 재생은 **Isaac Lab 공식 스크립트**(
 task는 `__init__.py`에서 `gym.register`로 이름을 등록하고, 공식 스크립트가 `--external_callback training.register`로 그 등록을 부른다.
 
 ```text
-1. calibration (학습 전에 먼저): ./run-calibration.sh <task> --robot=sim|real → training/<task>/calibration/의 명령 · env로 측정
+1. calibration (학습 전에 먼저): ./run-calibration.sh <task> --robot sim|real → training/<task>/calibration/의 명령 · env로 측정
    → 차이를 training/<task>/robot_cfg.py RESPONSE_*에 숫자로
 2. 학습
   → training/<task>/ 학습 (공식 train.py, rsl_rl PPO) → artifacts/<task>/training/<시각>/model_<N>.pt

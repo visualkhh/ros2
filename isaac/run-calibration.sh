@@ -1,8 +1,8 @@
 #!/bin/bash
 # calibration 실행기 — python -m calibration (calibration/__main__.py) 을 --robot에 맞는 런타임(IsaacLab / ROS .venv / .venv)으로 돌린다.
 #
-#   ./run-calibration.sh <task> --robot=sim|real|dummy|both [옵션...]   (경로는 isaac/ 기준 상대경로 또는 절대경로)
-#   ./run-calibration.sh <task> --robot=sim --help                       그 로봇의 옵션 전체 (python argparse)
+#   ./run-calibration.sh <task> --robot sim|real|dummy|both [옵션...]   (경로는 isaac/ 기준 상대경로 또는 절대경로)
+#   ./run-calibration.sh <task> --robot sim --help                       그 로봇의 옵션 전체 (python argparse)
 #
 # 학습 전에 먼저: training/<task>/calibration/ 명령(CalibrationCommand = 네모: 사각형 → 180° 턴 → 역주행, 54 s) · env로
 #   sim과 real에 같은 명령을 넣고 응답을 재서 fit.json(바퀴 gain 좌/우 · 지연 · τ · 데드밴드)으로 만든다.
@@ -29,12 +29,12 @@
 #   both   sim + real을 같은 경로로 한 번에 → 비교 그림 · --label real_floor --side --speed --turn --show
 #          → artifacts/<task>/calibration/<시각>_calibrate/{sim,real}/ + report.py (fit.json · report.png · compare.png · RESPONSE 값)
 #
-#   ./run-calibration.sh rl_correction_waypoint --robot=sim            # 창 없음
-#   ./run-calibration.sh rl_correction_waypoint --robot=sim --viz      # 창으로 보면서
-#   ./run-calibration.sh rl_correction_waypoint --robot=real --check-only
-#   ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
-#   ./run-calibration.sh rl_correction_waypoint --robot=dummy --gain-l 0.96 --gain-r 1.02
-#   ./run-calibration.sh rl_correction_waypoint --robot=both
+#   ./run-calibration.sh rl_correction_waypoint --robot sim            # 창 없음
+#   ./run-calibration.sh rl_correction_waypoint --robot sim --viz      # 창으로 보면서
+#   ./run-calibration.sh rl_correction_waypoint --robot real --check-only
+#   ./run-calibration.sh rl_correction_waypoint --robot real --label real_floor
+#   ./run-calibration.sh rl_correction_waypoint --robot dummy --gain-l 0.96 --gain-r 1.02
+#   ./run-calibration.sh rl_correction_waypoint --robot both
 #
 # 분석 (측정 뒤 직접): python3 training/<task>/calibration/report.py <sim 폴더> <real 폴더>
 #   → 폴더마다 fit.json · report.png, real 폴더에 compare.png, robot_cfg.py RESPONSE_* 값 출력
@@ -103,14 +103,14 @@ if [[ -n "$ROBOT" && -d "$ISAAC/training/$TASK" && " $* " != *" --help "* && " $
 fi
 case "$ROBOT" in
   sim)
-    sim -m calibration "$TASK" --robot=sim "$@"
+    sim -m calibration "$TASK" --robot sim "$@"
     ;;
   real)
     ros_env
-    exec "$PY" -m calibration "$TASK" --robot=real "$@"
+    exec "$PY" -m calibration "$TASK" --robot real "$@"
     ;;
   dummy)
-    exec "$PY" -m calibration "$TASK" --robot=dummy "$@"
+    exec "$PY" -m calibration "$TASK" --robot dummy "$@"
     ;;
   both)
     LABEL=real_floor SIDE=0.5 SPEED=0.15 TURN=1.0
@@ -130,11 +130,11 @@ case "$ROBOT" in
     mkdir -p "$RUN"
     COMMON=(--side "$SIDE" --speed "$SPEED" --turn "$TURN" ${COMMON_EXTRA[@]+"${COMMON_EXTRA[@]}"})
     echo "[calibrate] sim + real 시작 → $RUN"
-    "$0" "$TASK" --robot=sim "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
+    "$0" "$TASK" --robot sim "${COMMON[@]}" ${SIM_EXTRA[@]+"${SIM_EXTRA[@]}"} \
       --out "$RUN/sim/raw.csv" > "$RUN/sim.log" 2>&1 &
     SIM_PID=$!
     set +e
-    "$0" "$TASK" --robot=real "${COMMON[@]}" --label "$LABEL" \
+    "$0" "$TASK" --robot real "${COMMON[@]}" --label "$LABEL" \
       --out "$RUN/real/raw.csv" > "$RUN/real.log" 2>&1
     REAL_RC=$?
     wait "$SIM_PID"; SIM_RC=$?
@@ -149,7 +149,7 @@ case "$ROBOT" in
     echo "[calibrate] → $RUN  (sim/fit.json · real/fit.json · compare.png)"
     ;;
   *)
-    echo "--robot=sim|real|dummy|both 필요 (지금: '${ROBOT}') — ./run-calibration.sh -h" >&2
+    echo "--robot sim|real|dummy|both 필요 (지금: '${ROBOT}') — ./run-calibration.sh -h" >&2
     exit 2
     ;;
 esac

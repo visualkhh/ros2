@@ -16,6 +16,9 @@ from isaaclab.utils import configclass
 from envs.base_env_cfg import GROUND as _GROUND
 
 
+PATCH_T, PATCH_TOP = 0.005, 0.0005   # [m] 패치 두께 · 윗면 높이 (바닥 z 0 기준)
+
+
 @configclass
 class GroundCfg:
     """배경 설정 — Hydra: env.ground.uneven=false · env.ground.friction_patches=0 …"""
@@ -51,7 +54,8 @@ def make_terrain(g: GroundCfg) -> TerrainImporterCfg:
 
 def spawn_friction_patches(env, g: "GroundCfg") -> None:
     """마찰 패치 — env마다 출발점 둘레에 노랑(끈적) · 파랑(미끄럼) 얇은 판. 지형 prim 아래라 지형처럼 충돌 (지형 = 충돌 필터의 global).
-    판 두께 1 cm, 윗면이 바닥 +1 mm (바퀴가 그대로 지나간다). 배치는 seed 고정 (학습마다 같은 자리)."""
+    마찰만 바꾸는 판 — 높이는 env 출발점이 아니라 바닥(z 0) 기준: 두께 5 mm, 윗면 = 바닥 +0.5 mm (턱 없음).
+    (요철 칸은 출발점 판이 1~2.6 cm 높아서 출발점 기준이면 패치가 떠 언덕이 된다.) 배치는 seed 고정."""
     import random
 
     import isaaclab.sim as sim_utils
@@ -67,15 +71,15 @@ def spawn_friction_patches(env, g: "GroundCfg") -> None:
                                              friction_combine_mode="average")
         mat.func(f"/World/Materials/patch_{name}", mat)
     rng = random.Random(env.cfg.seed or 0)
-    for i, (ox, oy, oz) in enumerate(env._terrain.env_origins.tolist()):
+    for i, (ox, oy, _) in enumerate(env._terrain.env_origins.tolist()):
         for j in range(int(c.friction_patches)):
             name, _, color = kinds[rng.random() < 0.5]
             ang, rad = rng.uniform(0.0, 2.0 * math.pi), rng.uniform(*c.patch_radius)
-            cfg = sim_utils.CuboidCfg(size=(rng.uniform(*c.patch_size), rng.uniform(*c.patch_size), 0.01),
+            cfg = sim_utils.CuboidCfg(size=(rng.uniform(*c.patch_size), rng.uniform(*c.patch_size), PATCH_T),
                                       collision_props=sim_utils.CollisionPropertiesCfg(),
                                       visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color, roughness=0.8))
             q = quat_from_euler_xyz(torch.tensor(0.0), torch.tensor(0.0), torch.tensor(rng.uniform(0.0, math.pi)))
             path = f"{root}/env_{i}_{j}"
-            cfg.func(path, cfg, translation=(ox + rad * math.cos(ang), oy + rad * math.sin(ang), oz - 0.004),
+            cfg.func(path, cfg, translation=(ox + rad * math.cos(ang), oy + rad * math.sin(ang), PATCH_TOP - PATCH_T / 2),
                      orientation=tuple(q.tolist()))
             sim_utils.bind_physics_material(f"{path}/geometry/mesh", f"/World/Materials/patch_{name}")

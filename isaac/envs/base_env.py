@@ -41,6 +41,7 @@ class BaseEnv(DirectRLEnv):
         self.sep = torch.tensor([self.cfg.wheel_sep], device=dev)
         self.cmd = torch.zeros(n, 2, device=dev)       # 이번 스텝 명령 [v, w]
         self.target = torch.zeros(n, 2, device=dev)    # 바퀴 속도 목표 [rad/s]
+        self.set_debug_vis(self.cfg.debug_vis)         # Isaac Lab 6.1 DirectRLEnv는 cfg.debug_vis를 스스로 켜지 않는다
 
     # ------------------------------------------------------------------ 장면
     def _setup_scene(self):

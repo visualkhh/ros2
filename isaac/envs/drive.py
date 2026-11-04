@@ -1,9 +1,9 @@
-"""운전 창 — task 하나를 골라 띄운다 (./run-world.sh <task> [--calibration] [--command=NAME]).
+"""운전 창 — task 하나를 골라 띄운다 (./run-world.sh <task> [--calibration] [--command NAME] [--onnx PATH] [--viz]).
 
   <task>                  training/<task>/ — env.py + command.py (task env: 기본 제어기가 랜덤 웨이포인트를 따라감, 보정 0)
   --calibration           training/<task>/calibration/ — CalibrationEnv + CalibrationCommand (네모)
-  --policy=ONNX           기본 모드에서 정책 보정 (exported/policy.onnx) · P = 켬/끔 (정책 vs 기본 제어기만)
-  --command=NAME          명령만 바꿈: keyboard (commands/keyboard.py 직접 운전) · square · MOD:CLASS (BaseCommand)
+  --onnx PATH             기본 모드에서 정책 보정 (exported/policy.onnx) · P = 켬/끔 (정책 vs 기본 제어기만)
+  --command NAME          명령만 바꿈: keyboard (commands/keyboard.py 직접 운전) · square · MOD:CLASS (BaseCommand)
                           [v, w] 명령이라 task env(보정 행동)가 아니라 CalibrationEnv로 몰고, 배경만 학습과 같게 (ground.py)
                           (--calibration과 같이 쓰면 측정 그대로 = 빈 평면)
 로봇 = task 폴더 (robot_cfg.py · usda/robot.usda). 키: W/A/S/D(keyboard) · R 처음부터 · F 카메라를 로봇 쪽으로 · 창 닫으면 끝
@@ -31,7 +31,7 @@ def main(argv=None) -> int:
     p.add_argument("task", help="training/ 아래 task 폴더 이름 (예: rl_correction_waypoint)")
     p.add_argument("--calibration", action="store_true", help="task의 calibration/ (CalibrationEnv + CalibrationCommand 네모)")
     p.add_argument("--command", default=None, help=f"명령 바꾸기: {' · '.join(CMDS)} · MOD:CLASS (BaseCommand) — CalibrationEnv에서")
-    p.add_argument("--policy", default=None, help="학습한 정책 ONNX (exported/policy.onnx) — task 기본 모드에서만 (웨이포인트 보정). P = 켬/끔")
+    p.add_argument("--onnx", default=None, help="학습한 정책 ONNX (exported/policy.onnx, 옆에 .onnx.data) — task 기본 모드에서만 (웨이포인트 보정). P = 켬/끔")
     p.add_argument("--speed", type=float, default=0.15, help="전진 [m/s] (keyboard: 키 하나 · square: 기준 속도)")
     p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")
     AppLauncher.add_app_launcher_args(p)
@@ -40,10 +40,10 @@ def main(argv=None) -> int:
     from training import task_dir
 
     tdir = task_dir(args.task)   # sim 띄우기 전에 실패하게
-    if args.policy and (args.calibration or args.command is not None):
-        raise SystemExit("--policy는 task 기본 모드(학습 command = 웨이포인트)에서만 — 정책이 웨이포인트 목표를 보고 보정한다")
-    if args.policy and not os.path.isfile(args.policy):
-        raise SystemExit(f"정책 없음: {args.policy}")
+    if args.onnx and (args.calibration or args.command is not None):
+        raise SystemExit("--onnx는 task 기본 모드(학습 command = 웨이포인트)에서만 — 정책이 웨이포인트 목표를 보고 보정한다")
+    if args.onnx and not os.path.isfile(args.onnx):
+        raise SystemExit(f"정책 없음: {args.onnx}")
     name = os.path.basename(tdir)
     camel = "".join(w.capitalize() for w in name.split("_"))
     vw = args.calibration or args.command is not None   # [v, w] 명령으로 직접 몬다
@@ -54,7 +54,7 @@ def main(argv=None) -> int:
         env_spec, cfg_spec, cmd_spec = f"training.{name}.env:{camel}Env", f"training.{name}.env_cfg:{camel}EnvCfg", None
     shown = bool(args.visualizer) and args.visualizer != ["none"]   # 기본 headless — 창은 --viz
     if args.command == "keyboard" and "kit" not in (args.visualizer or []):
-        raise SystemExit("--command=keyboard는 창이 있어야 함 — --viz 를 붙이세요")
+        raise SystemExit("--command keyboard는 창이 있어야 함 — --viz 를 붙이세요")
     app = AppLauncher(args).app
     running = app.is_running if shown else (lambda: True)   # 창 없으면 Ctrl+C까지 (headless는 is_running이 False)
     try:
@@ -72,7 +72,7 @@ def main(argv=None) -> int:
         if vw:
             _drive(running, env, command_class(cmd_spec)(speed=args.speed, turn=args.turn))
         else:
-            _task(running, env, args.policy)
+            _task(running, env, args.onnx)
         env.close()
     except BaseException:
         import traceback
