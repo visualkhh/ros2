@@ -109,9 +109,7 @@ def main(argv=None) -> int:
             return 2
         speeds = getattr(cmd, "speeds_text", lambda: "-")()
         print(f"[{tag}] task {args.task} · side={args.side:.2f} m · speeds {speeds} m/s → {out}")
-        import robots
-
-        record(robot, cmd, out, tag, label, report=robots.load(task_dir(args), "calibration/report"))   # task의 보고서
+        record(robot, cmd, out, tag, label)
         robot.stop()
         if after:
             after()

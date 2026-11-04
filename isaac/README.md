@@ -89,7 +89,7 @@ cd ros2_ws && ./rl-only.sh label:=calib        # enable:=true 금지
 cd isaac
 ./run-calibration.sh rl_correction_waypoint --robot=real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
 ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
-#   → artifacts/rl_correction_waypoint/calibration/<시각>_real_floor/{raw.csv, fit.json, report.png}   (--label 없으면 <시각>_02-real)
+#   → artifacts/rl_correction_waypoint/calibration/<시각>_real_floor/raw.csv  (fit.json · report.png는 report.py가)   (--label 없으면 <시각>_02-real)
 ```
 
 - 로봇 주변 1 m 비우기. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 약 54초. 중간에 잡지 말 것. 자세한 순서: `training/rl_correction_waypoint/README.md` calibration 절.
@@ -101,7 +101,8 @@ cd isaac
 
 ```bash
 ./run-calibration.sh rl_correction_waypoint --robot=sim --label sim          # 창 없음 (보려면 --viz)
-./run-calibration.sh rl_correction_waypoint plot-compare artifacts/rl_correction_waypoint/calibration/<시각>_sim/raw.csv artifacts/rl_correction_waypoint/calibration/<real>/raw.csv
+python3 training/rl_correction_waypoint/report.py artifacts/rl_correction_waypoint/calibration/<시각>_sim artifacts/rl_correction_waypoint/calibration/<시각>_real_floor
+#   → 폴더마다 fit.json · report.png, real 폴더에 compare.png, robot_cfg.py에 붙일 RESPONSE_* 값 출력
 ```
 
 - 사각형 기본값(`--side 0.5 --speed 0.15 --turn 1.0`)이 real과 같아 **같은 명령**이 재생된다.

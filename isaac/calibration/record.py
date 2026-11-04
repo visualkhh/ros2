@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import csv
 import inspect
-import json
 import math
 import os
 import re
@@ -62,11 +61,10 @@ def make_command(args):
     return cmd
 
 
-def record(robot, cmd, out: str, tag: str = "calibration", label: str = "", report=None) -> list:
-    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace. 끝나면 robot.data() → out에 CSV + 구간 표 + fit.json + report.png.
+def record(robot, cmd, out: str, tag: str = "calibration", label: str = "") -> list:
+    """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace. 끝나면 robot.data() → out에 CSV + 구간 표 (분석은 task의 report.py).
 
     로봇이 측정 중에 스스로 쌓은 기록(robot.data(), 키 = CSV 열 — 로봇마다 다를 수 있음)에 label만 붙여 저장한다.
-    report = task의 calibration/report.py 모듈 (fit_wheel · write_report_png) — 없으면 CSV만.
     """
     dt = robot.dt
     segs = getattr(cmd, "segs", [])
@@ -78,38 +76,18 @@ def record(robot, cmd, out: str, tag: str = "calibration", label: str = "", repo
         robot.write(v, w)
         robot.pace(k)
     rows = [{**r, "label": label} for r in robot.data()]
-    _save(tag, segs, rows, out, report)
+    _save(tag, segs, rows, out)
     return rows
 
 
-def _save(tag: str, segs, rows, out: str, report=None) -> None:
+def _save(tag: str, segs, rows, out: str) -> None:
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", newline="") as f:
         cw = csv.DictWriter(f, fieldnames=list(rows[0]))
         cw.writeheader()
         cw.writerows(rows)
-    run_dir = os.path.dirname(out)
     print_segments(tag, segs, rows, out)
-    if report is None:
-        return
-    try:
-        fit = report.fit_wheel(rows)
-        if fit is not None:
-            _write_json(os.path.join(run_dir, "fit.json"), {"source": os.path.basename(out), "fit": fit})
-            print(f"[{tag}] fit.json (gain L/R={fit['wheel_gain_l']}/{fit['wheel_gain_r']} delay={fit['wheel_delay_steps']} "
-                  f"tau={fit['wheel_tau_s']} db={fit['wheel_deadband']})")
-        else:
-            print(f"[{tag}] fit 스킵 (전진 구간 없음)")
-        report.write_report_png(out, fit=fit)
-    except Exception as exc:
-        print(f"[{tag}] report.png/fit.json 스킵 ({exc})")
-
-
-def _write_json(path: str, doc: dict) -> None:
-    with open(path, "w") as f:
-        f.write(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
-    print(f"→ {path}")
-
+    print(f"[{tag}] 분석: python3 training/<task>/report.py <sim 폴더> <real 폴더>  (fit.json · report.png · compare.png · robot_cfg 값)")
 
 SEG_KEYS = ("v_enc", "w_enc", "w_gyro", "wheel_l_vel", "wheel_r_vel")   # 구간 표 (차동 구동 — 이 키가 없는 로봇이면 표를 건너뜀)
 

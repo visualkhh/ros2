@@ -3,14 +3,13 @@
 #
 #   ./run-calibration.sh <task> --robot=sim|real|dummy|both [옵션...]   (경로는 isaac/ 기준 상대경로 또는 절대경로)
 #   ./run-calibration.sh <task> --robot=sim --help                       그 로봇의 옵션 전체 (python argparse)
-#   ./run-calibration.sh <task> plot-compare <sim.csv> [<real.csv>]       그림만 (task의 calibration/report.py)
 #
 # 학습 전에 먼저: training/<task>/calibration/ 명령(CalibrationCommand = 네모: 사각형 → 180° 턴 → 역주행, 54 s) · env로
 #   sim과 real에 같은 명령을 넣고 응답을 재서 fit.json(바퀴 gain 좌/우 · 지연 · τ · 데드밴드)으로 만든다.
 #   차이는 training/<task>/robot_cfg.py RESPONSE_*에 숫자로 → 학습 env가 그 값 중심으로 랜덤. 자세히: README.md 3장.
 #   로봇 = 그 task 폴더: sim → sim_robot.py(+ calibration/env.py) · real → real_robot.py · dummy → dummy_robot.py
 #
-# 결과 폴더: artifacts/<task>/calibration/<시각>_<label>/  →  raw.csv · fit.json · report.png
+# 결과 폴더: artifacts/<task>/calibration/<시각>_<label>/raw.csv  (fit.json · report.png는 report.py가)
 # 터미널 출력: artifacts/<task>/logs/<시각>_<label>_calibration.log (화면에도 그대로)
 #   raw.csv  = 20 Hz 기록 (명령 · 보정 출력 · odom · 엔코더 · 자이로 · 바퀴 rad/s · 메시지 시각)
 #   fit.json = 응답 fit (gain 좌/우 · 지연 · τ · 데드밴드 · 구간별 speed_fit)
@@ -28,7 +27,7 @@
 #   dummy  가짜 로봇 (Isaac/ROS 없이 흐름 확인) · --gain/--gain-l/--gain-r --tau --delay --deadband --slip --noise --seed
 #          → fit.json에 넣은 값이 나오면 파이프라인 OK
 #   both   sim + real을 같은 경로로 한 번에 → 비교 그림 · --label real_floor --side --speed --turn --show
-#          → artifacts/<task>/calibration/<시각>_calibrate/{sim,real}/{raw.csv,fit.json,report.png} · compare.png · sim_calib.json
+#          → artifacts/<task>/calibration/<시각>_calibrate/{sim,real}/ + report.py (fit.json · report.png · compare.png · RESPONSE 값)
 #
 #   ./run-calibration.sh rl_correction_waypoint --robot=sim            # 창 없음
 #   ./run-calibration.sh rl_correction_waypoint --robot=sim --viz      # 창으로 보면서
@@ -36,7 +35,9 @@
 #   ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
 #   ./run-calibration.sh rl_correction_waypoint --robot=dummy --gain-l 0.96 --gain-r 1.02
 #   ./run-calibration.sh rl_correction_waypoint --robot=both
-#   ./run-calibration.sh rl_correction_waypoint plot-compare artifacts/rl_correction_waypoint/calibration/<sim>/raw.csv artifacts/rl_correction_waypoint/calibration/<real>/raw.csv
+#
+# 분석 (측정 뒤 직접): python3 training/<task>/report.py <sim 폴더> <real 폴더>
+#   → 폴더마다 fit.json · report.png, real 폴더에 compare.png, robot_cfg.py RESPONSE_* 값 출력
 #
 # common:
 #   -h, --help, help   이 도움말 · ISAACLAB_DIR 환경변수로 IsaacLab 경로 변경 (기본 /home/pank/pa-course/IsaacLab-6.1)
@@ -84,10 +85,6 @@ fi
 
 cd "$ISAAC"   # python -m calibration + 상대경로 기준
 TASK="$1"; shift
-if [[ "${1:-}" == "plot-compare" ]]; then   # 그림만 — task의 calibration/report.py
-  shift
-  PYTHONPATH="$ISAAC${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" "$ISAAC/training/$TASK/calibration/report.py" "$@"
-fi
 ROBOT=""; REST=()   # --robot=X 또는 --robot X
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -148,9 +145,7 @@ case "$ROBOT" in
       tail -30 "$RUN/real.log" >&2 || true
       exit 1
     fi
-    "$0" "$TASK" plot-compare "$RUN/sim/raw.csv" "$RUN/real/raw.csv" \
-      --out "$RUN/compare.png" --calib-out "$RUN/sim_calib.json" ${SHOW[@]+"${SHOW[@]}"} \
-      | tee "$RUN/compare.log"
+    "$PY" "$ISAAC/training/$TASK/report.py" "$RUN/sim" "$RUN/real" | tee "$RUN/compare.log"
     echo "[calibrate] → $RUN  (sim/fit.json · real/fit.json · compare.png)"
     ;;
   *)
