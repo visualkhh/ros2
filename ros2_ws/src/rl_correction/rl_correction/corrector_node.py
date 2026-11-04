@@ -18,6 +18,7 @@
 공통:
   /odom twist·pose, /imu angular z 사용. zero 명령은 zero 출력.
   바이패스 (enable false · 모델 없음): track = 입력 그대로 통과 · goal = nominal controller만 (보정 0, A/B의 A).
+  goal 모델이어도 웨이포인트가 없을 때 /cmd_vel_in(속도 명령)은 그대로 통과 — calibration 네모 · 키보드가 막히지 않게.
   goal dim mismatch -> 정지.
 
 ONNX 적용 켬/끔 (한 번 실행에 A/B) — 기본 켬 (enable true):
@@ -187,7 +188,9 @@ class RlCorrector(Node):
         self.get_logger().info('goal stop')
 
     def cb(self, msg):
-        if self.mode != 'track':
+        if self.mode != 'track':   # goal 모델: 웨이포인트 중이면 goal 제어가 출력 · 아니면 속도 명령을 그대로 통과 (calibration · 키보드)
+            if not self.goal_active:
+                self.pub.publish(msg)
             return
         cmd = (msg.linear.x, msg.angular.z)
         now = time.monotonic()
