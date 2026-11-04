@@ -40,7 +40,16 @@ $ISAACLAB_DIR/isaaclab.sh -p training/rl_maze/maze_grid.py        # 미로 USD�
 ./run-calibration.sh rl_maze --robot sim                            # 같은 로봇 calibration (복사본)
 ```
 
+## 실기기 (nav2 controller)
+
+`ros2_ws/src/rl_nav_controller` — nav2 `FollowPath` 플러그인. 안에 MPPI를 품고 toggle 끔(기본) = MPPI · 켬 = 이 정책.
+```bash
+./run-training.sh rl_maze --play --checkpoint artifacts/rl_maze/training/<시각>/model_N.pt --num_envs 1
+$ISAACLAB_DIR/isaaclab.sh -p training/rl_maze/export_mlp.py artifacts/rl_maze/training/<시각>/exported/policy.onnx   # → policy.mlp
+ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"
+```
+
 ## 아직 없는 것
 
 - 바퀴 응답 랜덤(gain · 지연 · τ — rl_correction_waypoint의 모터 모델)은 아직 안 넣음 — BaseEnv 드라이버 식 그대로.
-- 실기기: nav2 controller 플러그인 자리에 ONNX를 올리는 쪽 (경로 = nav2 planner, 위치 = AMCL, 라이다 = /scan 36방향으로 줄이기).
+- 라이다는 로봇 중심 기준으로 학습 — 실기기 LDS는 앞쪽에 달려 있어 조금 어긋난다 (방향만 tf로 맞춤).

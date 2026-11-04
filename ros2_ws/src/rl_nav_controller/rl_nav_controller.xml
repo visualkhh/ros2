@@ -1,0 +1,7 @@
+<class_libraries>
+  <library path="rl_nav_controller">
+    <class type="rl_nav_controller::RlNavController" base_class_type="nav2_core::Controller">
+      <description>RL policy controller (rl_maze MLP) · ~/toggle bypass → inner controller (MPPI)</description>
+    </class>
+  </library>
+</class_libraries>
