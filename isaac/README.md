@@ -44,7 +44,6 @@ isaac/
 ├── calibration/              calibration 실행기 (공식 train.py 역할) — --task의 calibration/ 명령 · env로 sim/real 측정 · fit · 비교 리포트
 │   ├── record.py             record(robot, cmd, out) — 명령(BaseCommand, --cmd square|MOD:CLASS)을 로봇에 흘려보내며 CSV · fit · report
 │   ├── run.py                ./run-calibration.sh <task> --robot=sim|real|dummy — SimRobot · RealRobot · DummyRobot 만들기 → ready() → record()
-│   └── report/report.py      fit(gain/지연/τ/데드밴드) + report.png · sim/real 비교
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
 │   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent ·
@@ -102,7 +101,7 @@ cd isaac
 
 ```bash
 ./run-calibration.sh rl_correction_waypoint --robot=sim --label sim          # 창 없음 (보려면 --viz)
-./run-calibration.sh plot-compare artifacts/rl_correction_waypoint/calibration/<시각>_sim/raw.csv artifacts/rl_correction_waypoint/calibration/<real>/raw.csv
+./run-calibration.sh rl_correction_waypoint plot-compare artifacts/rl_correction_waypoint/calibration/<시각>_sim/raw.csv artifacts/rl_correction_waypoint/calibration/<real>/raw.csv
 ```
 
 - 사각형 기본값(`--side 0.5 --speed 0.15 --turn 1.0`)이 real과 같아 **같은 명령**이 재생된다.

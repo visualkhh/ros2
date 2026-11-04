@@ -11,7 +11,7 @@ training/rl_correction_waypoint/
 ├── env_cfg.py    RlCorrectionWaypointEnvCfg — 랜덤 폭 (중심 = 로봇 config 실측 응답) · 기본 제어기 · 보상 가중치 · 지형
 ├── env.py        RlCorrectionWaypointEnv(BaseEnv) — 추정 자세 · 기본 제어기 · 모터 모델 · 관측 · 보상 · 도착/실패
 ├── command.py    RlCorrectionWaypointCommand — env마다 랜덤 웨이포인트 4개 (각 0.5~1.5 m, 방향 랜덤)
-├── calibration/  학습 전 1단계 측정 — command.py CalibrationCommand(네모) · env.py · env_cfg.py (./run-calibration.sh rl_correction_waypoint --robot=sim|real)
+├── calibration/  학습 전 1단계 측정 — command.py CalibrationCommand(네모) · env.py · env_cfg.py · report.py(fit · 그림) (./run-calibration.sh rl_correction_waypoint --robot=sim|real)
 ├── robot_cfg.py · sim_robot.py · real_robot.py · dummy_robot.py · usda/robot.usda   로봇 (설정 · sim · 실기기 ROS · 가짜 · USD)
 └── agent.py      RlCorrectionWaypointAgentCfg(BaseAgentCfg) — PPO 값 (500회 기본)
 ```

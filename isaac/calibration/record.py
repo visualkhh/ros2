@@ -62,10 +62,11 @@ def make_command(args):
     return cmd
 
 
-def record(robot, cmd, out: str, tag: str = "calibration", label: str = "") -> list:
+def record(robot, cmd, out: str, tag: str = "calibration", label: str = "", report=None) -> list:
     """robot(RobotInterface)에 cmd(BaseCommand, 끝이 있는 것)를 robot.dt마다 write → pace. 끝나면 robot.data() → out에 CSV + 구간 표 + fit.json + report.png.
 
     로봇이 측정 중에 스스로 쌓은 기록(robot.data(), 키 = CSV 열 — 로봇마다 다를 수 있음)에 label만 붙여 저장한다.
+    report = task의 calibration/report.py 모듈 (fit_wheel · write_report_png) — 없으면 CSV만.
     """
     dt = robot.dt
     segs = getattr(cmd, "segs", [])
@@ -77,11 +78,11 @@ def record(robot, cmd, out: str, tag: str = "calibration", label: str = "") -> l
         robot.write(v, w)
         robot.pace(k)
     rows = [{**r, "label": label} for r in robot.data()]
-    _save(tag, segs, rows, out)
+    _save(tag, segs, rows, out, report)
     return rows
 
 
-def _save(tag: str, segs, rows, out: str) -> None:
+def _save(tag: str, segs, rows, out: str, report=None) -> None:
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", newline="") as f:
         cw = csv.DictWriter(f, fieldnames=list(rows[0]))
@@ -89,16 +90,17 @@ def _save(tag: str, segs, rows, out: str) -> None:
         cw.writerows(rows)
     run_dir = os.path.dirname(out)
     print_segments(tag, segs, rows, out)
+    if report is None:
+        return
     try:
-        from calibration.report.report import fit_wheel, write_report_png
-        fit = fit_wheel(rows)
+        fit = report.fit_wheel(rows)
         if fit is not None:
             _write_json(os.path.join(run_dir, "fit.json"), {"source": os.path.basename(out), "fit": fit})
             print(f"[{tag}] fit.json (gain L/R={fit['wheel_gain_l']}/{fit['wheel_gain_r']} delay={fit['wheel_delay_steps']} "
                   f"tau={fit['wheel_tau_s']} db={fit['wheel_deadband']})")
         else:
             print(f"[{tag}] fit 스킵 (전진 구간 없음)")
-        write_report_png(out, fit=fit)
+        report.write_report_png(out, fit=fit)
     except Exception as exc:
         print(f"[{tag}] report.png/fit.json 스킵 ({exc})")
 

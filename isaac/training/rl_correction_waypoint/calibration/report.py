@@ -1,7 +1,9 @@
-"""run 보고서 PNG — 단일 run 리포트 + sim/real 비교. 한 파일.
+"""이 task의 calibration 보고서 — fit(바퀴 gain · 지연 · τ · 데드밴드) + 단일 run 그림 + sim/real 비교.
+이 로봇(차동 구동)의 기록 열(v_enc · w_enc · w_gyro · wheel_* · odom_* · t_*)을 쓴다 — 기록이 다른 task는 자기 report.py를.
 
-단일: ./report.py artifacts/<task>/calibration/<시각>_<label>/raw.csv [--out report.png]
-비교: ./report.py <sim.csv> <real.csv [--out compare.png] [--calib-out sim_calib.json]
+단일: ./run-calibration.sh <task> plot-compare artifacts/<task>/calibration/<시각>_<label>/raw.csv [--out report.png]
+비교: ./run-calibration.sh <task> plot-compare <sim.csv> <real.csv> [--out compare.png] [--calib-out sim_calib.json]
+측정이 끝나면 calibration/record.py가 fit_wheel · write_report_png를 부른다.
 
 비교 패널: 0) odom x-y 궤적 (왼쪽 사각형 → 180° 턴 → 같은 사각형 역주행)
   1) 직진: 명령 lin_raw vs v_enc (sim/real)
@@ -56,8 +58,18 @@ def _korean_font():
 _KOREAN_FONT = _korean_font()
 
 HERE = Path(__file__).resolve().parent
-ISAAC = HERE.parents[1]          # .../isaac (HERE = isaac/calibration/report)
+ISAAC = HERE.parents[2]          # .../isaac (HERE = isaac/training/<task>/calibration)
+OUT_DIR = ISAAC / "artifacts" / HERE.parent.name / "calibration"   # 비교 그림 기본 위치
 sys.path.insert(0, str(ISAAC))
+
+def _robot_cfg():
+    """이 task 폴더의 robot_cfg.py (바퀴 숫자)."""
+    import os
+
+    import robots
+
+    return robots.load(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 CONTROL_HZ = 20.0   # 기록 · 정책 주기 (= envs/base_env_cfg.py CONTROL_HZ — Isaac 없이 돌아서 따로, 바꾸면 같이)
 
@@ -137,8 +149,7 @@ def fit_wheels(rows, t, fit):
     v/w 명령 → (지연) → 차동기구학 → 8 rad/s 비례 축소 → gain → deadband → 1차지연.
     (학습 env 바퀴 모델 · wheel_targets와 같은 순서)
     """
-    import robots  # noqa: E402
-    _rc = robots.load()
+    _rc = _robot_cfg()
     MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP = _rc.MAX_WHEEL, _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
     dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
@@ -176,8 +187,7 @@ def fit_wheels(rows, t, fit):
 
 def fit_v(rows, t, fit):
     """좌/우 바퀴 모델 → 차동기구학으로 몸체 선속도 v 예측. (wl+wr)·r/2."""
-    import robots  # noqa: E402
-    _rc = robots.load()
+    _rc = _robot_cfg()
     WHEEL_RADIUS = _rc.WHEEL_RADIUS
     pl, pr = fit_wheels(rows, t, fit)
     return [WHEEL_RADIUS * (a + b) / 2.0 for a, b in zip(pl, pr)]
@@ -185,8 +195,7 @@ def fit_v(rows, t, fit):
 
 def fit_ang(rows, t, fit):
     """좌/우 바퀴 모델 → 차동기구학으로 각속도 w 예측. (wr − wl)·r/sep."""
-    import robots  # noqa: E402
-    _rc = robots.load()
+    _rc = _robot_cfg()
     WHEEL_RADIUS, WHEEL_SEP = _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
     pl, pr = fit_wheels(rows, t, fit)
     return [(r_ - l_) * WHEEL_RADIUS / WHEEL_SEP for l_, r_ in zip(pl, pr)]
@@ -249,8 +258,7 @@ def corrected_path(rows, t, fit):
     fit model(빨강)은 실제를 재현하는 모델이고, 이건 그 gain을 역으로 보상했을 때
     실제(파랑)가 이상(초록) 쪽으로 얼마나 붙는지를 보여준다. 지연/tau는 남는다.
     """
-    import robots  # noqa: E402
-    _rc = robots.load()
+    _rc = _robot_cfg()
     MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP = _rc.MAX_WHEEL, _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
     dts = sorted(t[i + 1] - t[i] for i in range(len(t) - 1) if t[i + 1] > t[i])
     dt = dts[len(dts) // 2] if dts else 1.0 / CONTROL_HZ
@@ -446,8 +454,7 @@ def fit_wheel(real):
       샘플의 중앙값이다.
     - 단륜·저속·고부하 구간은 진단값(`speed_fit`, `power`, sat)으로 함께 남긴다.
     """
-    import robots  # noqa: E402
-    _rc = robots.load()
+    _rc = _robot_cfg()
     MAX_WHEEL, WHEEL_RADIUS, WHEEL_SEP = _rc.MAX_WHEEL, _rc.WHEEL_RADIUS, _rc.WHEEL_SEP
 
     def wheel_cmds(r):
@@ -779,7 +786,7 @@ def compare(sim_path: str, real_path: str, out=None, calib_out=None, show: bool 
         a.legend(loc="lower right", fontsize=7, ncol=2)
     ax[-1].set_xlabel("시간 [s]")
 
-    out = Path(out) if out else ISAAC / "artifacts" / f"compare_{tag}.png"
+    out = Path(out) if out else OUT_DIR / f"compare_{tag}.png"
     fig.suptitle(f"{run_label(sim_path)} vs {run_label(real_path)}", fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.985) if ax_path is not None else None)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -788,7 +795,7 @@ def compare(sim_path: str, real_path: str, out=None, calib_out=None, show: bool 
     print(f"[plot] {out}")
 
     if fit:
-        calib_path = Path(calib_out) if calib_out else ISAAC / "artifacts" / f"sim_calib_{tag}.json"
+        calib_path = Path(calib_out) if calib_out else OUT_DIR / f"sim_calib_{tag}.json"
         old = {}
         try:
             old = json.loads(calib_path.read_text())

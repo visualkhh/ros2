@@ -3,7 +3,7 @@
 #
 #   ./run-calibration.sh <task> --robot=sim|real|dummy|both [옵션...]   (경로는 isaac/ 기준 상대경로 또는 절대경로)
 #   ./run-calibration.sh <task> --robot=sim --help                       그 로봇의 옵션 전체 (python argparse)
-#   ./run-calibration.sh plot-compare <sim.csv> [<real.csv>]              그림만
+#   ./run-calibration.sh <task> plot-compare <sim.csv> [<real.csv>]       그림만 (task의 calibration/report.py)
 #
 # 학습 전에 먼저: training/<task>/calibration/ 명령(CalibrationCommand = 네모: 사각형 → 180° 턴 → 역주행, 54 s) · env로
 #   sim과 real에 같은 명령을 넣고 응답을 재서 fit.json(바퀴 gain 좌/우 · 지연 · τ · 데드밴드)으로 만든다.
@@ -36,7 +36,7 @@
 #   ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
 #   ./run-calibration.sh rl_correction_waypoint --robot=dummy --gain-l 0.96 --gain-r 1.02
 #   ./run-calibration.sh rl_correction_waypoint --robot=both
-#   ./run-calibration.sh plot-compare artifacts/<task>/calibration/<sim>/raw.csv artifacts/<task>/calibration/<real>/raw.csv
+#   ./run-calibration.sh rl_correction_waypoint plot-compare artifacts/rl_correction_waypoint/calibration/<sim>/raw.csv artifacts/rl_correction_waypoint/calibration/<real>/raw.csv
 #
 # common:
 #   -h, --help, help   이 도움말 · ISAACLAB_DIR 환경변수로 IsaacLab 경로 변경 (기본 /home/pank/pa-course/IsaacLab-6.1)
@@ -83,11 +83,11 @@ if [[ $# -eq 0 ]] || [[ "$1" == "-h" || "$1" == "--help" || "$1" == "help" ]]; t
 fi
 
 cd "$ISAAC"   # python -m calibration + 상대경로 기준
-if [[ "$1" == "plot-compare" ]]; then
-  shift
-  exec "$PY" -m calibration.report.report "$@"
-fi
 TASK="$1"; shift
+if [[ "${1:-}" == "plot-compare" ]]; then   # 그림만 — task의 calibration/report.py
+  shift
+  PYTHONPATH="$ISAAC${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" "$ISAAC/training/$TASK/calibration/report.py" "$@"
+fi
 ROBOT=""; REST=()   # --robot=X 또는 --robot X
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -148,7 +148,7 @@ case "$ROBOT" in
       tail -30 "$RUN/real.log" >&2 || true
       exit 1
     fi
-    "$0" plot-compare "$RUN/sim/raw.csv" "$RUN/real/raw.csv" \
+    "$0" "$TASK" plot-compare "$RUN/sim/raw.csv" "$RUN/real/raw.csv" \
       --out "$RUN/compare.png" --calib-out "$RUN/sim_calib.json" ${SHOW[@]+"${SHOW[@]}"} \
       | tee "$RUN/compare.log"
     echo "[calibrate] → $RUN  (sim/fit.json · real/fit.json · compare.png)"
