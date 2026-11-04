@@ -1,6 +1,6 @@
 """KeyboardCommand — 사람 입력 (Isaac 창의 키 상태 폴링, carb.input). AppLauncher 뒤에 import.
 
-W/A/S/D(화살표) 주행 · Shift = 0.3배 · X = 정지. `pressed()`는 다른 키(R · F · C · N)를 쓰는 루프도 같이 쓴다.
+W/A/S/D(화살표) 주행 · Shift = 0.3배 · X = 정지. `pressed()`는 다른 키(R · F · C · N · P)를 쓰는 루프도 같이 쓴다.
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import omni.appwindow
 
 from commands.base_command import BaseCommand
 
-KEYS = ("W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "LEFT_SHIFT", "RIGHT_SHIFT", "X", "C", "R", "N", "F")
+KEYS = ("W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "LEFT_SHIFT", "RIGHT_SHIFT", "X", "C", "R", "N", "P", "F")
 _inp = carb.input.acquire_input_interface()
 _kbd = omni.appwindow.get_default_app_window().get_keyboard()
 _map = {n: getattr(carb.input.KeyboardInput, n) for n in KEYS}

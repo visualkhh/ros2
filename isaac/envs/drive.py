@@ -2,9 +2,10 @@
 
   <task>                  training/<task>/ — env.py + command.py (task env: 기본 제어기가 랜덤 웨이포인트를 따라감, 보정 0)
   --calibration           training/<task>/calibration/ — CalibrationEnv + CalibrationCommand (네모)
+  --policy=ONNX           기본 모드에서 정책 보정 (exported/policy.onnx) · P = 켬/끔 (정책 vs 기본 제어기만)
   --command=NAME          명령만 바꿈: keyboard (commands/keyboard.py 직접 운전) · square · MOD:CLASS (BaseCommand)
-                          [v, w] 명령이라 task env(보정 행동)가 아니라 CalibrationEnv에서 — 배경은 학습과 같게 (ground.py)
-                          (--calibration과 같이 쓰면 측정용 평면)
+                          [v, w] 명령이라 task env(보정 행동)가 아니라 CalibrationEnv로 몰고, 배경만 학습과 같게 (ground.py)
+                          (--calibration과 같이 쓰면 측정 그대로 = 빈 평면)
 로봇 = task 폴더 (robot_cfg.py · usda/robot.usda). 키: W/A/S/D(keyboard) · R 처음부터 · F 카메라를 로봇 쪽으로 · 창 닫으면 끝
 """
 from __future__ import annotations
@@ -30,6 +31,7 @@ def main(argv=None) -> int:
     p.add_argument("task", help="training/ 아래 task 폴더 이름 (예: rl_correction_waypoint)")
     p.add_argument("--calibration", action="store_true", help="task의 calibration/ (CalibrationEnv + CalibrationCommand 네모)")
     p.add_argument("--command", default=None, help=f"명령 바꾸기: {' · '.join(CMDS)} · MOD:CLASS (BaseCommand) — CalibrationEnv에서")
+    p.add_argument("--policy", default=None, help="학습한 정책 ONNX (exported/policy.onnx) — task 기본 모드에서만 (웨이포인트 보정). P = 켬/끔")
     p.add_argument("--speed", type=float, default=0.15, help="전진 [m/s] (keyboard: 키 하나 · square: 기준 속도)")
     p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")
     AppLauncher.add_app_launcher_args(p)
@@ -38,6 +40,10 @@ def main(argv=None) -> int:
     from training import task_dir
 
     tdir = task_dir(args.task)   # sim 띄우기 전에 실패하게
+    if args.policy and (args.calibration or args.command is not None):
+        raise SystemExit("--policy는 task 기본 모드(학습 command = 웨이포인트)에서만 — 정책이 웨이포인트 목표를 보고 보정한다")
+    if args.policy and not os.path.isfile(args.policy):
+        raise SystemExit(f"정책 없음: {args.policy}")
     name = os.path.basename(tdir)
     camel = "".join(w.capitalize() for w in name.split("_"))
     vw = args.calibration or args.command is not None   # [v, w] 명령으로 직접 몬다
@@ -57,15 +63,16 @@ def main(argv=None) -> int:
         cfg.scene.num_envs = 1
         cfg.sim.device = args.device
         cfg.debug_vis = shown
-        if args.command is not None and not args.calibration:   # 직접 운전 = 학습 배경 위에서 (calibration은 평면)
-            cfg.ground = importlib.import_module(f"training.{name}.ground").GroundCfg()
-        env = load(env_spec)(cfg)
+        env_cls = load(env_spec)
+        if args.command is not None and not args.calibration:   # 직접 운전 = 학습 배경 위에서 (측정 env는 평면 그대로)
+            env_cls = _on_training_ground(env_cls, importlib.import_module(f"training.{name}.ground"))
+        env = env_cls(cfg)
         print(f"[drive] {args.task} · env {env_spec} · 명령 {cmd_spec or f'training.{name}.command (랜덤 웨이포인트)'} · "
               f"로봇 {cfg.robot_cfg.spawn.usd_path}", flush=True)
         if vw:
             _drive(running, env, command_class(cmd_spec)(speed=args.speed, turn=args.turn))
         else:
-            _task(running, env)
+            _task(running, env, args.policy)
         env.close()
     except BaseException:
         import traceback
@@ -74,6 +81,20 @@ def main(argv=None) -> int:
     finally:
         app.close()
     return 0
+
+
+def _on_training_ground(env_cls, ground):
+    """env_cls의 배경만 task의 학습 배경(ground.py)으로 바꾼 클래스 — 측정 env 코드는 건드리지 않는다."""
+    g = ground.GroundCfg()
+
+    class OnTrainingGround(env_cls):
+        def ground_cfg(self):
+            return ground.make_terrain(g)
+
+        def ground_objects(self) -> None:
+            ground.spawn_friction_patches(self, g)
+
+    return OnTrainingGround
 
 
 def _keys(env, prev):
@@ -89,21 +110,37 @@ def _keys(env, prev):
     return new, keys
 
 
-def _task(running, env) -> None:
-    """task env 그대로 — 행동 0 (정책 보정 없음) = 기본 제어기만으로 웨이포인트. 에피소드가 끝나면 env가 새 웨이포인트로 리셋."""
+def _task(running, env, policy_path: str | None = None) -> None:
+    """task env 그대로 — 기본 제어기가 웨이포인트로 몰고, 행동(보정) = 정책(ONNX) 또는 0. 에피소드가 끝나면 env가 새 웨이포인트로 리셋."""
     import torch
 
-    env.reset()
+    sess = None
+    if policy_path:
+        import onnxruntime as ort
+
+        sess = ort.InferenceSession(policy_path)   # 옆의 policy.onnx.data(가중치)도 같이 읽는다
+        in_name = sess.get_inputs()[0].name
+        print(f"[drive] 정책 {policy_path} · 입력 {sess.get_inputs()[0].shape} → 출력 {sess.get_outputs()[0].shape}", flush=True)
+    obs, _ = env.reset()
     env.look_at((0.0, 0.0, 0.0))
     zero = torch.zeros(env.num_envs, env.cfg.action_space, device=env.device)
-    print("[drive] 노란 점 = 웨이포인트 경로 · 보정 0 · R 새 에피소드 · F 카메라 · 창 닫으면 끝", flush=True)
+    on = sess is not None
+    print(f"[drive] 노란 점 = 웨이포인트 경로 · 보정 {'정책' if on else '0'} · P 정책 켬/끔 · R 새 에피소드 · F 카메라 · 창 닫으면 끝", flush=True)
     prev = set()
     while running():
         t = time.monotonic()
         new, prev = _keys(env, prev)
         if "R" in new:
-            env.reset()
-        env.step(zero)
+            obs, _ = env.reset()
+        if "P" in new and sess is not None:
+            on = not on
+            print(f"[drive] 보정 {'정책' if on else '0 (기본 제어기만)'}", flush=True)
+        if on:
+            act = sess.run(None, {in_name: obs["policy"].cpu().numpy()})[0]
+            action = torch.as_tensor(act, device=env.device)
+        else:
+            action = zero
+        obs, _, _, _, _ = env.step(action)
         time.sleep(max(0.0, env.step_dt - (time.monotonic() - t)))   # 실시간
 
 

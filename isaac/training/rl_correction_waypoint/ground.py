@@ -1,7 +1,7 @@
 """이 task의 배경 — 지형(평평 + 요철) · 마찰 패치. env의 조건(웨이포인트 · 보상 · 모터 랜덤)과 따로.
 
 BaseEnv가 장면을 만들 때 ground_cfg()(지형 cfg) · ground_objects()(지형 위 물건)를 부른다 — 이 파일의 두 함수가 그 내용.
-같은 배경을 학습 env · run-world 키보드 운전이 쓴다 (calibration 측정은 평면: GroundCfg(uneven=False, friction_patches=0)).
+같은 배경을 학습 env · run-world 직접 운전(--command)이 쓴다. calibration 측정 env는 이걸 안 쓴다 (빈 평면).
 """
 from __future__ import annotations
 
@@ -27,9 +27,6 @@ class GroundCfg:
     patch_size: tuple = (0.4, 0.9)            # [m] 한 변
     sticky_friction: tuple = (1.10, 0.90)     # (static, dynamic)
     slippery_friction: tuple = (0.20, 0.15)
-
-
-PLANE = GroundCfg(uneven=False, friction_patches=0)   # calibration 측정용 (순수 sim)
 
 
 def make_terrain(g: GroundCfg) -> TerrainImporterCfg:

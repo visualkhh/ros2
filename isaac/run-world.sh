@@ -10,6 +10,7 @@
 #                   (--calibration과 같이 쓰면 측정용 평면)
 #                   (--command keyboard처럼 띄어 써도 된다)
 #   --speed --turn  기준 전진 [m/s] · 회전 [rad/s] (keyboard: 키 하나 · 네모: 기준 속도)
+#   --policy=ONNX   기본 모드(웨이포인트)에서 학습한 정책으로 보정 (exported/policy.onnx + .onnx.data) · P = 켬/끔
 #   --viz           창 켜기 (기본 끔 = headless · --viz만 쓰면 kit · --viz X로 다른 visualizer). keyboard는 창이 있어야 함
 #
 # 키: W/A/S/D(화살표) 주행(keyboard) · Shift 느리게 · X 정지 · R 처음부터 · F 카메라를 로봇 쪽으로 · 창 닫으면 끝
@@ -19,6 +20,7 @@
 #   ./run-world.sh rl_correction_waypoint --viz
 #   ./run-world.sh rl_correction_waypoint --calibration --viz
 #   ./run-world.sh rl_correction_waypoint --command=keyboard --viz
+#   ./run-world.sh rl_correction_waypoint --viz --policy artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx
 set -euo pipefail
 ISAAC=$(cd "$(dirname "$0")" && pwd)
 ISAACLAB="${ISAACLAB_DIR:-/home/pank/pa-course/IsaacLab-6.1}"
