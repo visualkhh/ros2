@@ -18,17 +18,18 @@ from commands import CMDS, command_class
 
 
 ISAAC = Path(__file__).resolve().parents[1]
-RUNS_DIR = ISAAC / "artifacts" / "calibration"
+ARTIFACTS = ISAAC / "artifacts"   # artifacts/<task>/{calibration, training, logs}/<시각>_<label>
+STAMP = "%Y-%m-%d_%H-%M-%S"        # Isaac Lab 학습 폴더와 같은 시각 형식
 CSV_HEADER = ["t", "lin_raw", "ang_raw", "lin_out", "ang_out",
               "odom_x", "odom_y", "odom_yaw", "v_enc", "w_enc", "w_gyro",
               "wheel_l_vel", "wheel_r_vel", "wheel_l_pos", "wheel_r_pos", "label",
               "t_ros", "t_odom", "t_imu", "t_joint"]
 
 
-def run_path(name: str) -> str:
-    """artifacts/calibration/<시각>-<name>/raw.csv"""
+def run_path(task: str, name: str) -> str:
+    """artifacts/<task>/calibration/<시각>_<name>/raw.csv"""
     name = re.sub(r"[^0-9A-Za-z_.-]+", "_", str(name)).strip("._") or "run"
-    return str(RUNS_DIR / f"{datetime.now():%Y%m%d_%H%M%S}-{name}" / "raw.csv")
+    return str(ARTIFACTS / task / "calibration" / f"{datetime.now():{STAMP}}_{name}" / "raw.csv")
 
 
 def add_command_args(p) -> None:

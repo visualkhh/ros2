@@ -1,6 +1,6 @@
 """run 보고서 PNG — 단일 run 리포트 + sim/real 비교. 한 파일.
 
-단일: ./report.py artifacts/calibration/<stamp>-<tag>/raw.csv [--out report.png]
+단일: ./report.py artifacts/<task>/calibration/<시각>_<label>/raw.csv [--out report.png]
 비교: ./report.py <sim.csv> <real.csv [--out compare.png] [--calib-out sim_calib.json]
 
 비교 패널: 0) odom x-y 궤적 (왼쪽 사각형 → 180° 턴 → 같은 사각형 역주행)

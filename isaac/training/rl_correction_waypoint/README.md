@@ -45,8 +45,8 @@ training/rl_correction_waypoint/
 cd isaac
 ./run-training.sh rl_correction_waypoint --max_iterations 500                                   # task 폴더 → gym RlCorrectionWaypoint (창 없음, 512대)
 ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 창 (노란 점 = 웨이포인트 경로)
-./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true
-tensorboard --logdir logs/rsl_rl          # Metrics/cross_track (경로 이탈 평균) · Metrics/waypoints_done (평균 도착 수)
+./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true
+tensorboard --logdir artifacts/rl_correction_waypoint/training          # Metrics/cross_track (경로 이탈 평균) · Metrics/waypoints_done (평균 도착 수)
 ```
 
 ## calibration (학습 전에 먼저) — sim · real에 같은 네모를 넣고 차이를 `robot_cfg.py` `RESPONSE_*`에
@@ -56,7 +56,7 @@ cd isaac
 ./run-calibration.sh rl_correction_waypoint --robot=sim                  # sim (창 없음 · 보려면 --viz)
 ./run-calibration.sh rl_correction_waypoint --robot=real --check-only    # real: 안 움직이고 상태만 → "check-only — 준비됨"
 ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor   # real 측정 (약 54 s)
-#   → artifacts/calibration/<시각>-<label>/{raw.csv, fit.json, report.png}
+#   → artifacts/rl_correction_waypoint/calibration/<시각>_<label>/{raw.csv, fit.json, report.png}
 ```
 
 ### real 준비 순서 (`거부: MANUAL 아님 (state=None)`이면 1~2가 안 된 것)
@@ -98,7 +98,7 @@ cd isaac
 ```bash
 # 1) 학습 → 재생으로 ONNX 내보내기 (PC isaac/)
 ./run-training.sh rl_correction_waypoint --max_iterations 500
-./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1   # → <시각>/exported/policy.onnx (+ .onnx.data)
+./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 1   # → <시각>/exported/policy.onnx (+ .onnx.data)
 # 2) 로봇 쪽은 calibration과 같게: base start · route rl (MANUAL)
 ```
 
@@ -106,7 +106,7 @@ cd isaac
 
 | 방법 | 명령 | 언제 |
 |---|---|---|
-| rl-only를 정책으로 띄움 | `./rl-only.sh enable:=true label:=after model:=../isaac/logs/rsl_rl/rl_waypoint/<시각>/exported/policy.onnx` | 처음부터 B만 |
+| rl-only를 정책으로 띄움 | `./rl-only.sh enable:=true label:=after model:=../isaac/artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx` | 처음부터 B만 |
 | 띄운 채 파라미터로 전환 | `./policy.sh <정책.onnx>` (켬) · `./policy.sh off` (바이패스) · `./policy.sh status` | **한 번 실행 안에서 A/B** (같은 배터리 · 바닥) |
 
 - `policy.sh` = `ros2 param set /rl_corrector model_path · enable` — 다시 띄울 필요 없음, 다음 명령부터 적용. 기록 CSV의 `rl_policy` 칸으로 A/B 구간이 나뉜다 → `./report.py`.

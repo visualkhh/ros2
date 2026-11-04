@@ -10,7 +10,8 @@
 #   차이는 training/<task>/robot_cfg.py RESPONSE_*에 숫자로 → 학습 env가 그 값 중심으로 랜덤. 자세히: README.md 3장.
 #   로봇 = 그 task 폴더: sim → sim_robot.py(+ calibration/env.py) · real → real_robot.py · dummy → dummy_robot.py
 #
-# 결과 폴더: artifacts/calibration/<시각>-<label>/  →  raw.csv · fit.json · report.png
+# 결과 폴더: artifacts/<task>/calibration/<시각>_<label>/  →  raw.csv · fit.json · report.png
+# 터미널 출력: artifacts/<task>/logs/<시각>_<label>_calibration.log (화면에도 그대로)
 #   raw.csv  = 20 Hz 기록 (명령 · 보정 출력 · odom · 엔코더 · 자이로 · 바퀴 rad/s · 메시지 시각)
 #   fit.json = 응답 fit (gain 좌/우 · 지연 · τ · 데드밴드 · 구간별 speed_fit)
 #
@@ -27,7 +28,7 @@
 #   dummy  가짜 로봇 (Isaac/ROS 없이 흐름 확인) · --gain/--gain-l/--gain-r --tau --delay --deadband --slip --noise --seed
 #          → fit.json에 넣은 값이 나오면 파이프라인 OK
 #   both   sim + real을 같은 경로로 한 번에 → 비교 그림 · --label real_floor --side --speed --turn --show
-#          → artifacts/calibration/<시각>-calibrate/{sim,real}/{raw.csv,fit.json,report.png} · compare.png · sim_calib.json
+#          → artifacts/<task>/calibration/<시각>_calibrate/{sim,real}/{raw.csv,fit.json,report.png} · compare.png · sim_calib.json
 #
 #   ./run-calibration.sh rl_correction_waypoint --robot=sim            # 창 없음
 #   ./run-calibration.sh rl_correction_waypoint --robot=sim --viz      # 창으로 보면서
@@ -35,7 +36,7 @@
 #   ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
 #   ./run-calibration.sh rl_correction_waypoint --robot=dummy --gain-l 0.96 --gain-r 1.02
 #   ./run-calibration.sh rl_correction_waypoint --robot=both
-#   ./run-calibration.sh plot-compare artifacts/calibration/<sim>/raw.csv artifacts/calibration/<real>/raw.csv
+#   ./run-calibration.sh plot-compare artifacts/<task>/calibration/<sim>/raw.csv artifacts/<task>/calibration/<real>/raw.csv
 #
 # common:
 #   -h, --help, help   이 도움말 · ISAACLAB_DIR 환경변수로 IsaacLab 경로 변경 (기본 /home/pank/pa-course/IsaacLab-6.1)
@@ -96,6 +97,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 set -- ${REST[@]+"${REST[@]}"}
+LABEL_ARG=$(printf '%s\n' "$@" | sed -n '/^--label=/{s/^--label=//p;q}; /^--label$/{n;p;q}')
+if [[ -n "$ROBOT" && -d "$ISAAC/training/$TASK" && " $* " != *" --help "* && " $* " != *" -h "* ]]; then
+  mkdir -p "$ISAAC/artifacts/$TASK/logs"
+  LOG="$ISAAC/artifacts/$TASK/logs/$(date +%Y-%m-%d_%H-%M-%S)_${LABEL_ARG:-$ROBOT}_calibration.log"
+  exec > >(tee -a "$LOG") 2>&1   # 화면 + 파일
+  echo "[log] $LOG"
+fi
 case "$ROBOT" in
   sim)
     sim -m calibration "$TASK" --robot=sim "$@"
@@ -121,7 +129,7 @@ case "$ROBOT" in
         *) echo "모르는 옵션: $1" >&2; exit 2 ;;
       esac
     done
-    RUN="artifacts/calibration/$(date +%Y%m%d_%H%M%S)-calibrate"
+    RUN="artifacts/$TASK/calibration/$(date +%Y-%m-%d_%H-%M-%S)_calibrate"
     mkdir -p "$RUN"
     COMMON=(--side "$SIDE" --speed "$SPEED" --turn "$TURN" ${COMMON_EXTRA[@]+"${COMMON_EXTRA[@]}"})
     echo "[calibrate] sim + real 시작 → $RUN"

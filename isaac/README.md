@@ -31,7 +31,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 ```text
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
-├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py, logs/rsl_rl/)
+├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py → artifacts/<task>/training/)
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh <이름|디렉토리>)
 ├── run-world.sh              world 보기 — ./run-world.sh <task> [--calibration] [--command=keyboard]
 ├── envs/                     환경 바탕 — 모든 env가 상속
@@ -91,7 +91,7 @@ cd ros2_ws && ./rl-only.sh label:=calib        # enable:=true 금지
 cd isaac
 ./run-calibration.sh rl_correction_waypoint --robot=real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
 ./run-calibration.sh rl_correction_waypoint --robot=real --label real_floor
-#   → artifacts/calibration/<시각>-real_floor/{raw.csv, fit.json, report.png}   (--label 없으면 <시각>-02-real)
+#   → artifacts/rl_correction_waypoint/calibration/<시각>_real_floor/{raw.csv, fit.json, report.png}   (--label 없으면 <시각>_02-real)
 ```
 
 - 로봇 주변 1 m 비우기. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 약 54초. 중간에 잡지 말 것. 자세한 순서: `training/rl_correction_waypoint/README.md` calibration 절.
@@ -103,7 +103,7 @@ cd isaac
 
 ```bash
 ./run-calibration.sh rl_correction_waypoint --robot=sim --label sim          # 창 없음 (보려면 --viz)
-./run-calibration.sh plot-compare artifacts/calibration/<시각>-sim/raw.csv artifacts/calibration/<real>/raw.csv
+./run-calibration.sh plot-compare artifacts/rl_correction_waypoint/calibration/<시각>_sim/raw.csv artifacts/rl_correction_waypoint/calibration/<real>/raw.csv
 ```
 
 - 사각형 기본값(`--side 0.5 --speed 0.15 --turn 1.0`)이 real과 같아 **같은 명령**이 재생된다.
@@ -132,9 +132,9 @@ real 값을 그대로 넣으면 안 된다 — sim 로봇의 자체 응답(3.2)�
 ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz kit env.debug_vis=true   # 짧게 확인 (창)
 ./run-training.sh rl_correction_waypoint --max_iterations 500                                            # 본 학습 (창 없음, 512대)
 ./run-training.sh rl_correction_waypoint --max_iterations 500 env.uneven=false                          # 평면만 (기본은 평평 + 요철)
-tensorboard --logdir logs/rsl_rl                                                  # 진행 그래프 (다른 터미널)
-#   → logs/rsl_rl/rl_waypoint/<시각>/ (model_<N>.pt · params/env.yaml · TensorBoard)
-./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1
+tensorboard --logdir artifacts/rl_correction_waypoint/training                                                  # 진행 그래프 (다른 터미널)
+#   → artifacts/rl_correction_waypoint/training/<시각>/ (model_<N>.pt · params/env.yaml · TensorBoard)
+./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 1
 #   → <시각>/exported/policy.onnx + policy.onnx.data (+ policy.pt) — 내보낸 뒤 재생이 계속 돈다, Ctrl+C로 끝
 ```
 
@@ -149,7 +149,7 @@ tensorboard --logdir logs/rsl_rl                                                
 ### 3.4b 정책 보기 — 실기기 전에
 
 ```bash
-./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true   # 학습 env에서 정책 재생
+./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 16 --viz kit env.debug_vis=true   # 학습 env에서 정책 재생
 ```
 
 - 학습 env는 실측 값이 들어간 sim이라 정책 효과가 보인다 (노란 선 = 웨이포인트 경로).
@@ -171,7 +171,7 @@ tensorboard --logdir logs/rsl_rl                                                
 ### 3.5 실기기 A/B — 한 번 실행에 보정 끔/켬
 
 ```bash
-cp logs/rsl_rl/rl_waypoint/<시각>/exported/policy.onnx* artifacts/real/   # isaac/ 에서 — policy.onnx + policy.onnx.data 둘 다
+cp artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx* artifacts/real/   # isaac/ 에서 — policy.onnx + policy.onnx.data 둘 다
 # 로봇: 베이스 · MANUAL (3.1과 같음) · 출발 위치·방향을 A와 B에서 같게
 cd ../ros2_ws
 ./rl-only.sh label:=ab output:=artifacts/real/ab.csv          # 터미널 A — RL 노드 + 기록 (바이패스로 시작 = A)

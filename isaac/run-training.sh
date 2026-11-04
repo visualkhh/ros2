@@ -7,7 +7,10 @@
 #
 # <task>: training/ 아래 task 폴더 이름 (예: rl_correction_waypoint) → gym 이름 RlCorrectionWaypoint (폴더 이름의 CamelCase,
 #   training/<task>/__init__.py의 gym.register). 로봇 = 그 task 폴더 (robot_cfg.py · usda/robot.usda). --external_callback training.register로 등록.
-# 결과: isaac/logs/rsl_rl/<experiment_name>/<시각>/  (model_<N>.pt · params/ · TensorBoard · play 하면 exported/)
+# 결과: artifacts/<task>/training/<시각>[_<label>]/  (model_<N>.pt · params/ · TensorBoard · play 하면 exported/)
+#   (공식 스크립트의 logs/rsl_rl/<experiment_name>에 agent.experiment_name=<절대경로>를 넘겨 여기로)
+# 터미널 출력: artifacts/<task>/logs/<시각>_<label>_{training|play}.log (화면에도 그대로)
+#   --label NAME          폴더 이름 <시각>_NAME (= 공식 --run_name)
 #
 # ─── 자주 쓰는 공식 옵션 ───────────────────────────────────────
 #   --num_envs N          동시에 학습하는 로봇 수 (기본: env cfg 512 · 창 볼 땐 16~32)
@@ -26,8 +29,8 @@
 # ─── 예 ───────────────────────────────────────────────
 #   ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz env.debug_vis=true   # 짧게 확인
 #   ./run-training.sh rl_correction_waypoint --max_iterations 500                                       # 본 학습
-#   ./run-training.sh rl_correction_waypoint --play --checkpoint logs/rsl_rl/rl_waypoint/<시각>/model_499.pt --num_envs 1
-#   tensorboard --logdir logs/rsl_rl
+#   ./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 1
+#   tensorboard --logdir artifacts/rl_correction_waypoint/training
 #   policy.onnx 출력은 신경망 그대로 [-1, 1] — 로봇 corrector가 clamp × action_scale(0.10 m/s · 0.60 rad/s)을 곱한다.
 #   exported/policy.onnx.data(가중치)도 같이 복사할 것.
 set -euo pipefail
@@ -56,11 +59,24 @@ if [[ ! -f "$ISAAC/training/$TASK/__init__.py" ]]; then
   exit 2
 fi
 GYM_ID=$(sed -E 's/(^|_)([a-z])/\U\2/g' <<< "$TASK")   # rl_correction_waypoint → RlCorrectionWaypoint
-action=train REST=()
-for a in "$@"; do
-  if [[ "$a" == "--play" ]]; then action=play; else REST+=("$a"); fi
+action=train REST=() LABEL=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --play) action=play; shift ;;
+    --label=*) LABEL="${1#--label=}"; shift ;;
+    --label) LABEL="${2:?--label 이름}"; shift 2 ;;
+    *) REST+=("$1"); shift ;;
+  esac
 done
+[[ -n "$LABEL" ]] && REST+=(--run_name "$LABEL")
+[[ " ${REST[*]-} " == *" agent.experiment_name="* ]] || REST+=("agent.experiment_name=$ISAAC/artifacts/$TASK/training")   # 결과 폴더
 viz_args ${REST[@]+"${REST[@]}"}; args=(${VIZ_ARGS[@]+"${VIZ_ARGS[@]}"})
+if [[ " ${REST[*]-} " != *" --help "* && " ${REST[*]-} " != *" -h "* ]]; then
+  mkdir -p "$ISAAC/artifacts/$TASK/logs"
+  LOG="$ISAAC/artifacts/$TASK/logs/$(date +%Y-%m-%d_%H-%M-%S)_${LABEL:-run}_${action/train/training}.log"
+  exec > >(tee -a "$LOG") 2>&1   # 화면 + 파일
+  echo "[log] $LOG"
+fi
 cd "$ISAAC"   # logs/ · 상대경로 기준 = isaac/
 export PYTHONPATH="$ISAAC${PYTHONPATH:+:$PYTHONPATH}"   # training.register · robots · envs (ROS 경로는 유지 — xacro)
 exec "$ISAACLAB/isaaclab.sh" -p "$ISAACLAB/scripts/reinforcement_learning/$action.py" \

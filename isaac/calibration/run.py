@@ -4,7 +4,7 @@ training/<task>/calibration/ 명령 · env와 그 task 폴더의 로봇(sim_robo
   sim    SimRobot (task 폴더 sim_robot.py) + CalibrationEnv — Isaac venv · 창 기본 끔, --viz로 켬 · --watch (기록 후 창 닫을 때까지 반복)
   real   RealRobot (task 폴더 real_robot.py) — ROS .venv · 준비: Pi base + cmd_manager MANUAL · --check-only (안 움직임)
   dummy  DummyRobot (task 폴더 dummy_robot.py) — 표준 라이브러리만 (가짜 모터: --gain-l --gain-r --tau --delay --deadband --slip --noise)
-출력: artifacts/calibration/<시각>-<label>/ (--label 없으면 02-sim · 02-real · dummy) · --out으로 정확한 경로.
+출력: artifacts/<task>/calibration/<시각>_<label>/ (--label 없으면 02-sim · 02-real · dummy) · --out으로 정확한 경로.
 """
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ def main(argv=None) -> int:
     tag, label = TAGS[mode], args.label or LABELS[mode]
     cmd = make_command(args)   # 로봇 · sim 띄우기 전에 실패하게
     out = args.out and (args.out if os.path.isabs(args.out) else str(ISAAC / args.out))
-    out = out or run_path(args.label or tag)
+    out = out or run_path(os.path.basename(task_dir(args)), args.label or tag)
     robot, after, app = _robot(mode, args, cmd)
     try:
         if mode == "real":
