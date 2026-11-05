@@ -17,6 +17,7 @@ task는 `__init__.py`에서 `gym.register`로 이름을 등록하고, 공식 스
 ```text
 training/
 ├── __init__.py                 register() — training/ 아래 task 폴더를 import (각 __init__.py의 gym.register)
+├── rl_nav_correction/        명령 (v, w) 추종 보정 (beebot · ml rl_nav_correction용) → rl_nav_correction/README.md
 └── rl_correction_waypoint/     랜덤 웨이포인트를 이탈 없이 — task 이름 RlCorrectionWaypoint
     ├── __init__.py             gym.register
     ├── env.py · env_cfg.py     RlCorrectionWaypointEnv(BaseEnv) · RlCorrectionWaypointEnvCfg(BaseEnvCfg — 로봇과 상관없음, 실측 중심은 robot_cfg.py)

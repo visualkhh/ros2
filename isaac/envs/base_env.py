@@ -45,6 +45,7 @@ class BaseEnv(DirectRLEnv):
 
         self._snap_t0 = time.time()
         self._wheels, _ = self.robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
+        self._hold = [i for i in range(self.robot.num_joints) if i not in {int(j) for j in self._wheels}]   # 팔 · 그리퍼 등 바퀴 아닌 관절 — 기본 자세로 붙잡는다 (tb3은 없음)
         n, dev = self.num_envs, self.device
         self.policy_dt = self.cfg.sim.dt * self.cfg.decimation
         self.r = torch.tensor([self.cfg.wheel_radius], device=dev)
@@ -114,8 +115,14 @@ class BaseEnv(DirectRLEnv):
         self.cmd = actions.clone()
         self.target = self.wheel_speeds(self.cmd[:, 0], self.cmd[:, 1])
 
+    def hold_joints(self) -> None:
+        """바퀴 아닌 관절을 기본 자세(robot_cfg init_state)로 붙잡는 위치 목표 — 안 주면 목표 0이라 팔이 펴져 로봇이 넘어진다."""
+        if self._hold:
+            self.robot.set_joint_position_target(self.robot.data.default_joint_pos.torch[:, self._hold], joint_ids=self._hold)
+
     def _apply_action(self) -> None:
         self.robot.set_joint_velocity_target(self.target, joint_ids=self._wheels)
+        self.hold_joints()
 
     def _get_observations(self) -> dict:
         v_enc, w_enc = self.encoders()
@@ -143,6 +150,9 @@ class BaseEnv(DirectRLEnv):
         self.robot.write_root_velocity_to_sim(torch.zeros(n, 6, device=dev), ids)
         zeros = torch.zeros(n, len(self._wheels), device=dev)
         self.robot.write_joint_state_to_sim(zeros, zeros, self._wheels, ids)
+        if self._hold:   # 팔도 기본 자세로 되돌림
+            hp = self.robot.data.default_joint_pos.torch[ids][:, self._hold]
+            self.robot.write_joint_state_to_sim(hp, torch.zeros_like(hp), self._hold, ids)
         if not hasattr(self, "reset_pose"):   # 리셋 자세 (월드 x, y, yaw) — sim에서 다시 읽으면 다음 스텝 전엔 옛 값
             self.reset_pose = torch.zeros(self.num_envs, 3, device=dev)
         self.reset_pose[ids] = torch.stack([root[:, 0], root[:, 1], yaw], dim=-1)
@@ -158,6 +168,9 @@ class BaseEnv(DirectRLEnv):
         self.robot.write_root_velocity_to_sim(torch.zeros(1, 6, device=dev), ids)
         z = torch.zeros(1, len(self._wheels), device=dev)
         self.robot.write_joint_state_to_sim(z, z, self._wheels, ids)
+        if self._hold:
+            hp = self.robot.data.default_joint_pos.torch[ids][:, self._hold]
+            self.robot.write_joint_state_to_sim(hp, torch.zeros_like(hp), self._hold, ids)
         self.target[ids] = 0.0
 
     def look_at(self, origin) -> None:
