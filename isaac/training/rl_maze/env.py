@@ -38,7 +38,7 @@ class RlMazeEnv(BaseEnv):
         self.grid_x0, self.grid_y0, self.grid_res = g["origin"][0], g["origin"][1], g["res"]
         self.ray_ang = torch.linspace(0.0, 2.0 * math.pi, c.lidar_rays + 1, device=dev)[:-1]
         self.ray_d = torch.arange(0.0, c.lidar_max, self.grid_res / 2.0, device=dev)
-        self.command = RlMazeCommand(dev)
+        self.command = RlMazeCommand()
         w = self.command.pts.shape[1]
         self.wps = torch.zeros(n, w, 2, device=dev)
         self.wp_n = torch.ones(n, dtype=torch.long, device=dev)
@@ -151,7 +151,7 @@ class RlMazeEnv(BaseEnv):
         super()._reset_idx(env_ids)
         ids = self.robot._ALL_INDICES if env_ids is None else torch.as_tensor(env_ids, device=self.device)
         m, dev = len(ids), self.device
-        self.wps[ids], self.wp_n[ids] = self.command.sample(m)
+        self.wps[ids], self.wp_n[ids] = self.command.sample(m, self.device)
         start, first = self.wps[ids, 0], self.wps[ids, 1]
         yaw = torch.atan2(first[:, 1] - start[:, 1], first[:, 0] - start[:, 0]) + sample_uniform(-0.5, 0.5, (m,), dev)
         root = self.robot.data.default_root_state.torch[ids].clone()

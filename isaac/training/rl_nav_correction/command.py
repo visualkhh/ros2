@@ -8,8 +8,10 @@ import torch
 
 from isaaclab.utils.math import sample_uniform
 
+from commands.rl_base_command import RlBaseCommand
 
-class RlNavCorrectionCommand:
+
+class RlNavCorrectionCommand(RlBaseCommand):
     def __init__(self, max_lin: float, max_ang: float, hold=(0.5, 2.0), stop_prob=0.15, straight_prob=0.30, turn_prob=0.20,
                  lin_frac=(0.1, 0.8), ang_frac=(0.1, 0.6), reverse_prob=0.1):
         self.max_lin, self.max_ang, self.hold = max_lin, max_ang, hold
@@ -31,7 +33,7 @@ class RlNavCorrectionCommand:
         return (sample_uniform(*self.hold, (k,), device) / dt).round().long().clamp(min=1)
 
 
-if __name__ == "__main__":   # 자체 확인 — Isaac venv: isaaclab.sh -p training/rl_nav_correction/command.py
+if __name__ == "__main__":   # 자체 확인 — isaac/에서: PYTHONPATH=. <Isaac venv python> training/rl_nav_correction/command.py
     c = RlNavCorrectionCommand(0.26, 1.82)
     x = c.sample(20000, "cpu")
     stop = ((x[:, 0] == 0) & (x[:, 1] == 0)).float().mean()

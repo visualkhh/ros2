@@ -7,16 +7,19 @@ from __future__ import annotations
 import numpy as np
 import torch
 
+from commands.rl_base_command import RlBaseCommand
 from training.rl_maze.maze_grid import PATHS_NPZ
 
 
-class RlMazeCommand:
-    def __init__(self, device, path: str = PATHS_NPZ):
+class RlMazeCommand(RlBaseCommand):
+    def __init__(self, path: str = PATHS_NPZ):
         d = np.load(path)
-        self.pts = torch.as_tensor(d["pts"], device=device)    # [N, W, 2] (남는 자리 = 마지막 점)
-        self.lens = torch.as_tensor(d["lens"], device=device)  # [N] 실제 점 개수 (첫 점 = 출발)
+        self.pts = torch.as_tensor(d["pts"])    # [N, W, 2] (남는 자리 = 마지막 점) — sample의 device로 처음 쓸 때 옮김
+        self.lens = torch.as_tensor(d["lens"])  # [N] 실제 점 개수 (첫 점 = 출발)
 
-    def sample(self, k: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def sample(self, k: int, device) -> tuple[torch.Tensor, torch.Tensor]:
         """경로 k개 → (웨이포인트 [k, W, 2], 개수 [k])."""
+        if self.lens.device != torch.device(device):
+            self.pts, self.lens = self.pts.to(device), self.lens.to(device)
         i = torch.randint(0, len(self.lens), (k,), device=self.lens.device)
         return self.pts[i], self.lens[i]

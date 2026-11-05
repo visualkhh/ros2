@@ -9,8 +9,10 @@ import torch
 
 from isaaclab.utils.math import sample_uniform
 
+from commands.rl_base_command import RlBaseCommand
 
-class RlCorrectionWaypointCommand:
+
+class RlCorrectionWaypointCommand(RlBaseCommand):
     def __init__(self, num: int = 4, dist: tuple[float, float] = (0.5, 1.5), turn: tuple[float, float] = (-3.14159, 3.14159)):
         self.num, self.dist, self.turn = num, dist, turn
 
@@ -22,7 +24,7 @@ class RlCorrectionWaypointCommand:
         return torch.cumsum(steps, dim=1)
 
 
-if __name__ == "__main__":   # 자체 확인 — Isaac venv: isaaclab.sh -p training/rl_correction_waypoint/command.py
+if __name__ == "__main__":   # 자체 확인 — isaac/에서: PYTHONPATH=. <Isaac venv python> training/rl_correction_waypoint/command.py
     w = RlCorrectionWaypointCommand().sample(1000, "cpu")
     seg = torch.diff(torch.cat([torch.zeros(1000, 1, 2), w], dim=1), dim=1).norm(dim=-1)
     assert w.shape == (1000, 4, 2) and (seg >= 0.5 - 1e-5).all() and (seg <= 1.5 + 1e-5).all()
