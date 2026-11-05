@@ -42,6 +42,9 @@ class StateStore:
         self.robot_level = -1                                      # 0 OK · 1 WARN · 2 ERROR · -1 모름
         self.robot_msg = ''
         self.robot_vals: dict[str, str] = {}                       # 전류·온도·uptime·jumps
+        self.diagnostics: dict[str, tuple[int, str]] = {}          # 전체 /diagnostics (이름 → 레벨·메시지)
+        self.diag_values: dict[str, list[tuple[str, str]]] = {}    # 진단별 key-value
+        self.param_clients: dict = {}                              # 노드별 AsyncParameterClient 캐시
         self.joints: dict[str, tuple[float, float, float | None]] = {}  # /joint_states 이름 → (rad, rad/s, 전류 A)
         self.last_cmd: tuple[float, float] = (0.0, 0.0)
         self.st_control: str | None = None                            # state_manager /state_* (None = 수신 없음)
@@ -127,11 +130,18 @@ class StateStore:
 
     def on_diagnostics(self, msg) -> None:
         for st in msg.status:
+            lv = st.level
+            # DiagnosticStatus.level은 byte 타입이라 rclpy에서 bytes로 온다.
+            if isinstance(lv, (bytes, bytearray)):
+                lv = lv[0] if len(lv) else 0
+            else:
+                lv = int(lv)
+            self.diagnostics[st.name] = (lv, st.message)
+            self.diag_values[st.name] = [(kv.key, kv.value) for kv in st.values]
             if st.name != 'opencr':
                 continue
             self.robot.tick()
-            lv = st.level
-            self.robot_level = lv[0] if isinstance(lv, (bytes, bytearray)) else int(lv)
+            self.robot_level = lv
             self.robot_msg = st.message
             self.robot_vals = {kv.key: kv.value for kv in st.values}
 

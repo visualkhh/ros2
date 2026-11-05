@@ -703,7 +703,7 @@ class Bus:
 
     # ------------------------------------------------------------- 노드
     def node_names(self) -> list[str]:
-        self._poll(0.5)
+        self._poll(0.1)   # 메뉴 루프가 이미 poll(0.2)를 돌린다 — 여기서 길게 막지 않는다
         names = self.node.get_node_names_and_namespaces()
         out = sorted(f'{ns.rstrip("/")}/{n}' for n, ns in names if n != self.node.get_name())
         now = time.monotonic()
@@ -723,7 +723,159 @@ class Bus:
                  if n not in alive and now - t < 600]
         return rows
 
+    # --------------------------------------------------- 노드 상태·파라미터·진단
+    @staticmethod
+    def diag_short(name: str) -> str:
+        """'/Beebot/인지/signal_decoder' → 'Beebot / 인지 / signal_decoder'."""
+        return ' / '.join(p for p in name.split('/') if p) or name
+
+    def diag_entries(self) -> list[tuple[str, int, str]]:
+        """진단 항목 — 문제 있는 것 먼저, 같은 레벨이면 이름순."""
+        rows = [(n, lv, msg) for n, (lv, msg) in self.state.diagnostics.items()]
+        return sorted(rows, key=lambda r: (-r[1], r[0]))
+
+    @staticmethod
+    def _node_parts(name: str) -> tuple[str, str]:
+        """'/ns/노드' → (노드, '/ns') · '/노드' → (노드, '/')"""
+        parts = [p for p in (name or '').strip().split('/') if p]
+        if not parts:
+            return '', '/'
+        return parts[-1], ('/' + '/'.join(parts[:-1])) if len(parts) > 1 else '/'
+
+    def node_status_lines(self, name: str) -> list[str]:
+        """노드 하나의 상태 — 그래프·발행/구독·진단 (메뉴에서 1초마다 다시 부름)."""
+        row = next((r for r in self.node_rows() if r[0] == name), None)
+        lines = [f'[{name}]']
+        if row is None:
+            lines.append(' 그래프에도 최근 목록에도 없음 (안 떠 있음)')
+        else:
+            alive, age = row[1], row[2]
+            lines.append(' 실행: ' + ('그래프에 보임' if alive else f'그래프에 안 보임 ({age:.0f}초 전 확인)'))
+        short, ns = self._node_parts(name)
+        try:
+            pubs = self.node.get_publisher_names_and_types_by_node(short, ns)
+            subs = self.node.get_subscriber_names_and_types_by_node(short, ns)
+            lines.append(f' 발행 {len(pubs)}개 · 구독 {len(subs)}개')
+        except Exception:
+            pass
+        diags = [(n, lv, msg) for n, lv, msg in self.diag_entries()
+                 if short and (short in n or name in n)]
+        for n, lv, msg in diags[:8]:
+            mark = {0: 'OK', 1: 'WARN', 2: 'ERR', 3: 'STALE'}.get(lv, '?')
+            lines.append(f' 진단 {self.diag_short(n)}: {mark} {msg}')
+        if not diags:
+            lines.append(' 진단: 이 노드 항목 없음')
+        return lines
+
+    def param_nodes(self) -> list[tuple[str, str]]:
+        """파라미터 조회 대상 노드 (이름, 네임스페이스) — 자기 자신 제외."""
+        self._poll(0.1)   # 메뉴 루프가 이미 poll(0.2)를 돌린다
+        found: set[tuple[str, str]] = set()
+        try:
+            pairs = self.node.get_node_names_and_namespaces()
+        except Exception:
+            pairs = [(n, '/') for n in self.node.get_node_names()]
+        me = self.node.get_name()
+        for n, ns in pairs or []:
+            if str(n) != me:
+                found.add((str(n), str(ns or '/')))
+        return sorted(found)
+
+    def param_target(self, name: str):
+        """'/ns/노드' 전체 이름 → (이름, 네임스페이스) · 없으면 None."""
+        full = (name or '').rstrip('/')
+        for n, ns in self.param_nodes():
+            cand = f'/{n}' if ns in ('/', '') else f'{ns.rstrip("/")}/{n}'
+            if cand == full or n == full.lstrip('/'):
+                return n, ns
+        return None
+
+    def param_client(self, node_name: str, node_ns: str):
+        """대상 노드의 AsyncParameterClient (재사용 캐시) · 없으면 None."""
+        try:
+            from rclpy.parameter_client import AsyncParameterClient
+        except ImportError:
+            return None
+        key = (node_name, node_ns)
+        cli = self.state.param_clients.get(key)
+        if cli is None:
+            fqn = f'/{node_name}' if node_ns in ('/', '') else f'{node_ns.rstrip("/")}/{node_name}'
+            try:
+                cli = AsyncParameterClient(self.node, fqn)
+            except Exception:
+                return None
+            self.state.param_clients[key] = cli
+        return cli
+
+    def param_wait(self, future, timeout: float = 5.0):
+        """파라미터 서비스 future 완료 대기 (TUI 루프에서도 안전)."""
+        try:
+            rclpy.spin_until_future_complete(self.node, future, timeout_sec=timeout)
+        except Exception:
+            return None
+        if not future.done():
+            return None
+        try:
+            return future.result()
+        except Exception:
+            return None
+
+    def param_list_names(self, cli) -> list[str] | None:
+        try:
+            res = self.param_wait(cli.list_parameters())
+        except Exception:
+            return None
+        if res is None or res.result is None:
+            return None
+        try:
+            return sorted(res.result.names)
+        except Exception:
+            return None
+
+    def param_describe(self, cli, names: list[str]):
+        try:
+            res = self.param_wait(cli.describe_parameters(names))
+        except Exception:
+            return None
+        if res is None or getattr(res, 'descriptors', None) is None:
+            return None
+        return list(res.descriptors)
+
+    def param_get_vals(self, cli, names: list[str]):
+        try:
+            res = self.param_wait(cli.get_parameters(names))
+        except Exception:
+            return None
+        if res is None or getattr(res, 'values', None) is None:
+            return None
+        return list(res.values)
+
+    @staticmethod
+    def param_display_value(ptype: int, value) -> object:
+        """ParameterValue 메시지 → 표시용 파이썬 값."""
+        from rcl_interfaces.msg import ParameterType as PT
+        if ptype == PT.PARAMETER_BOOL:
+            return bool(value.bool_value)
+        if ptype == PT.PARAMETER_INTEGER:
+            return int(value.integer_value)
+        if ptype == PT.PARAMETER_DOUBLE:
+            return float(value.double_value)
+        if ptype == PT.PARAMETER_STRING:
+            return str(value.string_value)
+        if ptype == PT.PARAMETER_BYTE_ARRAY:
+            return list(value.byte_array_value)
+        if ptype == PT.PARAMETER_BOOL_ARRAY:
+            return [bool(v) for v in value.bool_array_value]
+        if ptype == PT.PARAMETER_INTEGER_ARRAY:
+            return [int(v) for v in value.integer_array_value]
+        if ptype == PT.PARAMETER_DOUBLE_ARRAY:
+            return [float(v) for v in value.double_array_value]
+        if ptype == PT.PARAMETER_STRING_ARRAY:
+            return [str(v) for v in value.string_array_value]
+        return None
+
     def cmd_nodes(self, args) -> int:
+        self._poll(0.5)   # 한 번 실행 명령 — 디스커버리 시간을 준다
         names = self.node_names()
         print('\n'.join(names) if names else '노드 없음 (같은 ROS_DOMAIN_ID인지 확인)')
         return 0
