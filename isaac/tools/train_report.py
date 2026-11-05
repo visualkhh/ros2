@@ -18,6 +18,11 @@ import math
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import yaml
+except ImportError:   # PyYAML 없는 환경이면 env.yaml 해석만 생략
+    yaml = None
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -40,6 +45,84 @@ KEY_TAGS = (
     "Loss/learning_rate",
     "Policy/mean_std",
 )
+
+# tag → (한글 이름, 설명, 좋아지는 방향)
+TAG_INFO = {
+    "Train/mean_reward": (
+        "에피소드 전체 보상 합",
+        "음수일 수 있음. 에피소드 길이가 변하면 총합도 같이 변하므로 "
+        "mean_reward ÷ mean_episode_length(스텝당)로 보는 게 안전.",
+        "덜 음수"),
+    "Metrics/track_err_v": (
+        "전진 속도 추종 오차 [m/s]",
+        "몸체 v가 명령(정책 보정 후)을 얼마나 못 따라갔는지. 이 task의 실제 목표. "
+        "action_scale_lin보다 크면 정책 출력이 포화됐을 수 있음.",
+        "작을수록 좋음"),
+    "Metrics/track_err_w": (
+        "회전 속도 추종 오차 [rad/s]",
+        "몸체 w가 명령(정책 보정 후)을 얼마나 못 따라갔는지. "
+        "action_scale_ang보다 크면 정책 출력이 포화됐을 수 있음.",
+        "작을수록 좋음"),
+    "Metrics/cross_track": (
+        "경로 이탈 [m]",
+        "웨이포인트 경로(앞 점 → 다음 점 직선)에서 벗어난 평균 거리 (rl_maze).",
+        "작을수록 좋음"),
+    "Metrics/waypoints_done": (
+        "도착 웨이포인트 수",
+        "에피소드에서 통과한 웨이포인트 수 (rl_maze).",
+        "클수록 좋음"),
+    "Metrics/collision_rate": (
+        "충돌 비율",
+        "벽/장애물 충돌로 끝난 비율.",
+        "작을수록 좋음"),
+    "Metrics/goal_rate": (
+        "최종 goal 도달 비율",
+        "마지막 웨이포인트까지 간 비율.",
+        "클수록 좋음"),
+    "Train/mean_episode_length": (
+        "평균 에피소드 길이 [step]",
+        "최대 길이에 붙어 있는데 track_err가 안 줄면 '버티기'만 배운 것일 수 있음.",
+        "적당히 안정"),
+    "Loss/value": (
+        "critic value loss",
+        "가치 함수 학습 오차. 수백~수천이면 reward scale이 크거나 critic이 return을 못 맞추는 중.",
+        "작을수록 좋음"),
+    "Loss/surrogate": (
+        "PPO policy loss",
+        "0 근처면 정책 업데이트가 작음 (KL/clip 상태 확인).",
+        "0 근처"),
+    "Loss/entropy": (
+        "정책 엔트로피",
+        "탐색량. 급격히 0이 되면 탐색이 붕괴.",
+        "서서히 감소"),
+    "Loss/learning_rate": (
+        "학습률 (adaptive면 자동 조절)",
+        "adaptive schedule이 0.01 max에 붙으면 발산 위험. fixed 3e-4 권장.",
+        "낮게 유지"),
+    "Policy/mean_std": (
+        "행동 표준편차",
+        "탐색 노이즈. 0으로 붕괴하면 학습이 멈춤.",
+        "0.2~0.5"),
+    "Perf/total_fps": ("학습 처리량 [step/s]", "학습 속도 (정책 성능 아님).", "참고"),
+    "Perf/collection_time": ("수집 시간 [s/iter]", "환경 스텝 수집 시간.", "참고"),
+    "Perf/learning_time": ("학습 시간 [s/iter]", "PPO 업데이트 시간.", "참고"),
+}
+
+
+def tag_info(tag: str) -> tuple[str, str, str]:
+    if tag in TAG_INFO:
+        return TAG_INFO[tag]
+    if tag.startswith("Metrics/"):
+        return ("task 지표", "task가 기록한 scalar. task README와 태그 이름을 참고.", "task에 따라")
+    if tag.startswith("Loss/"):
+        return ("loss", "학습 loss.", "작을수록 좋음")
+    if tag.startswith("Train/"):
+        return ("학습 지표", "학습 중 집계된 값.", "task에 따라")
+    if tag.startswith("Policy/"):
+        return ("정책 통계", "정책 분포/노이즈 통계.", "안정적")
+    if tag.startswith("Perf/"):
+        return ("성능", "처리량/시간.", "참고")
+    return ("scalar", "설명 없음 — 태그 이름을 참고.", "—")
 
 
 def find_run(arg: str) -> Path:
@@ -100,8 +183,97 @@ def fmt(v: float) -> str:
     return f"{float(v):.5g}"
 
 
+def per_step_reward(series: dict) -> list[tuple[int, float]]:
+    """mean_reward / mean_episode_length — 에피소드 길이가 변해도 비교 가능한 스텝당 보상."""
+    r = series.get("Train/mean_reward")
+    length = series.get("Train/mean_episode_length")
+    if not r or not length:
+        return []
+    lm = {e.step: e.value for e in length}
+    return [(e.step, e.value / lm[e.step]) for e in r if e.step in lm and lm[e.step] > 0]
+
+
+def verdict_items(series: dict, env_cfg: dict) -> list[tuple[str, str]]:
+    """first/last 자동 비교 — 좋아짐/정체/나빠짐을 색으로. 참고용."""
+    items: list[tuple[str, str]] = []
+
+    def add(cls: str, text: str):
+        items.append((cls, text))
+
+    def trend(tag: str):
+        ev = series.get(tag)
+        if not ev or len(ev) < 2:
+            return None
+        return ev[0].value, ev[-1].value, min(x.value for x in ev), max(x.value for x in ev)
+
+    def judge(first: float, last: float, lower_better: bool) -> tuple[str, str]:
+        if lower_better:
+            if last < first * 0.90:
+                return "good", "좋아짐"
+            if last > first * 1.05:
+                return "bad", "나빠짐"
+        else:
+            if last > first * 1.10:
+                return "good", "좋아짐"
+            if last < first * 0.90:
+                return "bad", "나빠짐"
+        return "warn", "정체"
+
+    for tag, lower in (("Metrics/track_err_v", True), ("Metrics/track_err_w", True),
+                       ("Metrics/cross_track", True), ("Metrics/collision_rate", True),
+                       ("Metrics/waypoints_done", False), ("Metrics/goal_rate", False)):
+        t = trend(tag)
+        if t is None:
+            continue
+        first, last, lo, hi = t
+        cls, word = judge(first, last, lower)
+        add(cls, f"{tag}: first {first:.4g} → last {last:.4g} (min {lo:.4g}, max {hi:.4g}) — {word}")
+        if tag.startswith("Metrics/track_err"):
+            scale = env_cfg.get("action_scale")
+            if isinstance(scale, (list, tuple)) and len(scale) >= 2:
+                lim = scale[1] if tag.endswith("_w") else scale[0]
+                if last > float(lim) * 1.05:
+                    kind = "ang" if tag.endswith("_w") else "lin"
+                    add("warn", f"{tag} last {last:.3g} > action_scale_{kind} {float(lim):.3g} — "
+                                f"정책 출력이 포화됐을 수 있음. action_scale 키우기 검토.")
+
+    ps = per_step_reward(series)
+    if len(ps) >= 2:
+        first, last = ps[0][1], ps[-1][1]
+        cls = "good" if last > first * 1.02 else "bad" if last < first * 0.98 else "warn"
+        word = "좋아짐" if cls == "good" else "나빠짐" if cls == "bad" else "정체"
+        add(cls, f"스텝당 보상 (mean_reward ÷ episode_length): {first:.4g} → {last:.4g} — {word}")
+
+    length = series.get("Train/mean_episode_length")
+    ep_s = env_cfg.get("episode_length_s")
+    if length and ep_s:
+        max_steps = round(float(ep_s) / 0.05)   # 정책 20 Hz
+        if length[-1].value >= max_steps * 0.99:
+            add("warn", f"에피소드 길이가 최대({max_steps} step)에 붙어 있음 — "
+                        f"track_err가 안 줄면 '버티기'만 배운 것일 수 있음.")
+
+    lr = series.get("Loss/learning_rate")
+    if lr and lr[-1].value >= 0.009:
+        add("warn", f"학습률이 {lr[-1].value:.4g} (adaptive max 근처) — 발산 위험. "
+                    f"agent.algorithm.schedule=fixed, learning_rate=3e-4 검토.")
+
+    val = series.get("Loss/value")
+    if val and len(val) >= 2:
+        cls = "good" if val[-1].value < val[0].value else "warn"
+        add(cls, f"Loss/value: {val[0].value:.4g} → {val[-1].value:.4g} — "
+                 f"{'감소' if cls == 'good' else '감소 안 함/증가'}")
+
+    std = series.get("Policy/mean_std")
+    if std and std[-1].value < 0.1:
+        add("bad", f"Policy/mean_std {std[-1].value:.3g} — 탐색 노이즈가 거의 0. 탐색 붕괴 위험.")
+
+    if not items:
+        add("warn", "비교할 scalar가 부족함.")
+    return items
+
+
 def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: list[Path],
-               run_json: dict, cfg_files: list[tuple[str, Path]]) -> str:
+               run_json: dict, cfg_files: list[tuple[str, Path]], env_cfg: dict) -> str:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     created = run_json.get("created_at", "")
     task = run_json.get("task", "")
@@ -109,6 +281,25 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
     last_wall = max((ev[-1].wall_time for ev in series.values() if ev), default=None)
     elapsed = (last_wall - first_wall) if (first_wall and last_wall) else None
     last_step = max((ev[-1].step for ev in series.values() if ev), default=None)
+
+    verdict = verdict_items(series, env_cfg)
+    verdict_html = "".join(f'<li class="{cls}">{html.escape(text)}</li>' for cls, text in verdict)
+
+    glossary_rows = []
+    for tag in tags:
+        label, desc, good = tag_info(tag)
+        glossary_rows.append(
+            f"<tr><td><code>{html.escape(tag)}</code></td><td>{html.escape(label)}</td>"
+            f"<td>{html.escape(desc)}</td><td>{html.escape(good)}</td></tr>")
+    glossary = (
+        "<table><thead><tr><th>tag</th><th>뜻</th><th>설명</th><th>좋아지는 방향</th></tr></thead>"
+        f"<tbody>{''.join(glossary_rows)}</tbody></table>")
+
+    scale = env_cfg.get("action_scale")
+    scale_card = ""
+    if isinstance(scale, (list, tuple)) and len(scale) >= 2:
+        scale_card = (f'<div class="card"><div class="k">action_scale (lin/ang)</div>'
+                      f'<div class="v">{float(scale[0]):.3g} / {float(scale[1]):.3g}</div></div>')
 
     rows = []
     for tag in tags:
@@ -129,8 +320,10 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
         ev = series.get(tag)
         if not ev:
             continue
+        label, desc, good = tag_info(tag)
         plot_cards.append(
-            f'<figure class="plot"><figcaption>{html.escape(tag)}</figcaption>'
+            f'<figure class="plot"><figcaption><b>{html.escape(tag)}</b> — {html.escape(label)}'
+            f'<br><span class="muted">{html.escape(desc)} · {html.escape(good)}</span></figcaption>'
             f'{b64img(plot_png(tag, ev), tag)}</figure>')
     plots = "".join(plot_cards) if plot_cards else "<p>scalar 없음</p>"
 
@@ -173,6 +366,12 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
   th:first-child, td:first-child {{text-align: left;}}
   th {{background: #f3f4f6;}}
   tr.key td {{background: #f8fafc; font-weight: 600;}}
+  .verdict {{list-style: none; padding-left: 0; margin: 0;}}
+  .verdict li {{margin: 5px 0; padding: 7px 10px; border-left: 4px solid #d1d5db; background: #f9fafb;
+                border-radius: 3px;}}
+  .verdict li.good {{border-left-color: #16a34a;}}
+  .verdict li.warn {{border-left-color: #d97706;}}
+  .verdict li.bad {{border-left-color: #dc2626;}}
   .grid {{display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px;}}
   .plot {{margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px;}}
   .plot figcaption {{font-size: 12px; color: #4b5563; margin: 2px 4px 4px;}}
@@ -189,6 +388,9 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
 </style></head><body>
 <h1>{html.escape(title)}</h1>
 <p class="muted">run <code>{html.escape(run.name)}</code> · report {now}</p>
+<p>이 리포트는 학습 run의 <b>TensorBoard event</b>(마지막으로 기록된 iteration까지) · <b>snapshot</b> · <b>config</b>를
+모아 만든 정적 HTML입니다. <b>요약 판정</b>은 first/last 자동 비교라 <b>참고용</b>이고,
+최종 판단은 아래 plot의 추세와 실기기 A/B로 하세요.</p>
 
 <div class="cards">
   <div class="card"><div class="k">created</div><div class="v">{html.escape(str(created))}</div></div>
@@ -197,7 +399,14 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
   <div class="card"><div class="k">elapsed (events)</div><div class="v">{elapsed_s}</div></div>
   <div class="card"><div class="k">scalar tags</div><div class="v">{len(tags)}</div></div>
   <div class="card"><div class="k">snapshots</div><div class="v">{len(snaps)}</div></div>
+  {scale_card}
 </div>
+
+<h2>요약 판정 <span class="muted">(자동 first/last 비교 · 참고용)</span></h2>
+<ul class="verdict">{verdict_html}</ul>
+
+<h2>지표 설명</h2>
+{glossary}
 
 <h2>Scalars</h2>
 {table}
@@ -246,6 +455,15 @@ def main(argv=None) -> int:
             run_json = json.loads((run / "run.json").read_text())
         except (OSError, json.JSONDecodeError):
             pass
+
+    env_cfg = {}
+    env_path = run / "params/env.yaml"
+    if yaml is not None and env_path.is_file():
+        try:
+            env_cfg = yaml.unsafe_load(env_path.read_text()) or {}
+        except Exception:
+            env_cfg = {}
+
     cfg = []
     for rel in ("params/env.yaml", "params/agent.yaml", "run.json", "git/IsaacLab-6.1.diff"):
         p = run / rel
@@ -256,7 +474,7 @@ def main(argv=None) -> int:
     if out.is_dir():
         out = out / "report.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    doc = build_html(run, event, tags, series, snaps, run_json, cfg)
+    doc = build_html(run, event, tags, series, snaps, run_json, cfg, env_cfg)
     out.write_text(doc)
     print(f"[report] {out} ({out.stat().st_size / 1024:.0f} KB · {len(tags)} tags · {len(snaps)} snaps)")
     return 0
