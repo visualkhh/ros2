@@ -27,7 +27,19 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib import font_manager, rcParams  # noqa: E402
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator  # noqa: E402
+
+
+def _set_korean_font() -> None:
+    for name in ("Noto Sans CJK KR", "Noto Sans KR", "Noto Sans CJK JP", "Malgun Gothic", "DejaVu Sans"):
+        if any(f.name == name for f in font_manager.fontManager.ttflist):
+            rcParams["font.family"] = name
+            break
+    rcParams["axes.unicode_minus"] = False
+
+
+_set_korean_font()
 
 ISAAC = Path(__file__).resolve().parents[1]
 
@@ -49,86 +61,157 @@ KEY_TAGS = (
 
 # tag → (한글 이름, 설명, 좋아지는 방향)
 TAG_INFO = {
-    "Train/mean_reward": (
-        "에피소드 전체 보상 합",
-        "음수일 수 있음. 에피소드 길이가 변하면 총합도 같이 변하므로 "
-        "mean_reward ÷ mean_episode_length(스텝당)로 보는 게 안전.",
-        "덜 음수"),
-    "Metrics/track_err_v": (
-        "전진 속도 추종 오차 [m/s]",
-        "몸체 v가 명령(정책 보정 후)을 얼마나 못 따라갔는지. 이 task의 실제 목표. "
-        "action_scale_lin보다 크면 정책 출력이 포화됐을 수 있음.",
-        "작을수록 좋음"),
-    "Metrics/track_err_w": (
-        "회전 속도 추종 오차 [rad/s]",
-        "몸체 w가 명령(정책 보정 후)을 얼마나 못 따라갔는지. "
-        "action_scale_ang보다 크면 정책 출력이 포화됐을 수 있음.",
-        "작을수록 좋음"),
-    "Metrics/combined_err": (
-        "종합 추종 오차 [0~1]",
-        "0.5 × (|v_err|/max_lin + |w_err|/max_ang). 0=완벽, 1=최대 속도 오차. "
-        "v·w를 한 숫자로 합친 이 task의 대표 지표.",
-        "작을수록 좋음"),
-    "Metrics/cross_track": (
-        "경로 이탈 [m]",
-        "웨이포인트 경로(앞 점 → 다음 점 직선)에서 벗어난 평균 거리 (rl_maze).",
-        "작을수록 좋음"),
-    "Metrics/waypoints_done": (
-        "도착 웨이포인트 수",
-        "에피소드에서 통과한 웨이포인트 수 (rl_maze).",
-        "클수록 좋음"),
-    "Metrics/collision_rate": (
-        "충돌 비율",
-        "벽/장애물 충돌로 끝난 비율.",
-        "작을수록 좋음"),
-    "Metrics/goal_rate": (
-        "최종 goal 도달 비율",
-        "마지막 웨이포인트까지 간 비율.",
-        "클수록 좋음"),
-    "Train/mean_episode_length": (
-        "평균 에피소드 길이 [step]",
-        "최대 길이에 붙어 있는데 track_err가 안 줄면 '버티기'만 배운 것일 수 있음.",
-        "적당히 안정"),
-    "Loss/value": (
-        "critic value loss",
-        "가치 함수 학습 오차. 수백~수천이면 reward scale이 크거나 critic이 return을 못 맞추는 중.",
-        "작을수록 좋음"),
-    "Loss/surrogate": (
-        "PPO policy loss",
-        "0 근처면 정책 업데이트가 작음 (KL/clip 상태 확인).",
-        "0 근처"),
-    "Loss/entropy": (
-        "정책 엔트로피",
-        "탐색량. 급격히 0이 되면 탐색이 붕괴.",
-        "서서히 감소"),
-    "Loss/learning_rate": (
-        "학습률 (adaptive면 자동 조절)",
-        "adaptive schedule이 0.01 max에 붙으면 발산 위험. fixed 3e-4 권장.",
-        "낮게 유지"),
-    "Policy/mean_std": (
-        "행동 표준편차",
-        "탐색 노이즈. 0으로 붕괴하면 학습이 멈춤.",
-        "0.2~0.5"),
-    "Perf/total_fps": ("학습 처리량 [step/s]", "학습 속도 (정책 성능 아님).", "참고"),
-    "Perf/collection_time": ("수집 시간 [s/iter]", "환경 스텝 수집 시간.", "참고"),
-    "Perf/learning_time": ("학습 시간 [s/iter]", "PPO 업데이트 시간.", "참고"),
+    "Train/mean_reward": {
+        "label": "에피소드 전체 보상 합",
+        "desc": "에피소드 보상의 합. 이 값만으로 좋아졌다고 판단하면 안 됨 — "
+                "에피소드 길이(mean_episode_length)가 같이 변하기 때문.",
+        "low": "더 음수가 됨. 에피소드가 길어져서 총합이 커진 것일 수 있음. "
+               "mean_reward ÷ episode_length(스텝당)가 같이 내려가는지 확인.",
+        "high": "덜 음수가 됨. 스텝당 보상이 올라갔거나 에피소드가 짧아진 것. "
+                "track_err/성공률이 같이 좋아져야 진짜 개선.",
+        "good": "스텝당 보상이 올라가고 track_err가 내려갈 때",
+    },
+    "Metrics/track_err_v": {
+        "label": "전진 속도 추종 오차 [m/s]",
+        "desc": "몸체 전진 속도가 명령(정책 보정 후)을 얼마나 못 따라갔는지. 이 task의 실제 목표.",
+        "low": "0에 가까워짐 → 명령을 잘 따라감 → 좋음. action_scale_lin(현재 0.05)보다 작아지면 "
+               "정책 보정이 충분히 먹는 범위.",
+        "high": "명령을 못 따라감(지연·슬립·포화). action_scale_lin보다 크면 정책 출력이 포화됐을 수 있고, "
+                "max_lin(0.26)에 가까우면 심각.",
+        "good": "작을수록 좋음 · 50~100 iteration 동안 우하향",
+    },
+    "Metrics/track_err_w": {
+        "label": "회전 속도 추종 오차 [rad/s]",
+        "desc": "몸체 회전 속도가 명령(정책 보정 후)을 얼마나 못 따라갔는지. 이 task의 실제 목표.",
+        "low": "0에 가까워짐 → 회전 명령을 잘 따라감 → 좋음. action_scale_ang(현재 0.10)보다 작아지면 "
+               "정책 보정이 충분한 범위.",
+        "high": "회전이 처지거나 과함(지연·슬립·포화). action_scale_ang보다 크면 정책 출력이 포화됐을 수 있고, "
+                "max_ang(1.82)에 가까우면 심각.",
+        "good": "작을수록 좋음 · 50~100 iteration 동안 우하향",
+    },
+    "Metrics/combined_err": {
+        "label": "종합 추종 오차 [0~1]",
+        "desc": "0.5 × (|v오차|/max_lin + |w오차|/max_ang). v·w를 한 숫자로 합친 이 task의 대표 지표.",
+        "low": "0%에 가까워짐 → 전진·회전 둘 다 명령을 잘 따라감 → 좋음. 0%가 완벽.",
+        "high": "100%에 가까워짐 → 최대 속도 오차 수준으로 못 따라감. 10% 이상이면 개선 여지가 큼.",
+        "good": "작을수록 좋음 · 리포트 맨 위 종합 그래프가 우하향",
+    },
+    "Metrics/cross_track": {
+        "label": "경로 이탈 [m]",
+        "desc": "웨이포인트 경로(앞 점 → 다음 점 직선)에서 벗어난 평균 거리 (rl_maze).",
+        "low": "0에 가까워짐 → 경로에 딱 붙어 감 → 좋음. 0.1 m 이하면 좋은 편.",
+        "high": "경로에서 멀어짐 → 벽/장애물 쪽으로 감. fail_cross(1.0 m)에 가까우면 실패 종료.",
+        "good": "작을수록 좋음",
+    },
+    "Metrics/waypoints_done": {
+        "label": "도착 웨이포인트 수",
+        "desc": "에피소드에서 통과한 웨이포인트 수 (rl_maze).",
+        "low": "0에 가까우면 출발점 근처에서 못 감 → 나쁨.",
+        "high": "num_waypoints(4)에 가까워질수록 끝까지 간 것 → 좋음.",
+        "good": "클수록 좋음",
+    },
+    "Metrics/collision_rate": {
+        "label": "충돌 비율",
+        "desc": "벽/장애물 충돌로 끝난 비율.",
+        "low": "0에 가까울수록 충돌 없이 주행 → 좋음.",
+        "high": "충돌이 많음 → 나쁨. 경로/라이다/속도 확인.",
+        "good": "작을수록 좋음",
+    },
+    "Metrics/goal_rate": {
+        "label": "최종 goal 도달 비율",
+        "desc": "마지막 웨이포인트까지 간 비율.",
+        "low": "0에 가까우면 최종 goal을 못 감 → 나쁨.",
+        "high": "1에 가까울수록 끝까지 도달 → 좋음.",
+        "good": "클수록 좋음",
+    },
+    "Train/mean_episode_length": {
+        "label": "평균 에피소드 길이 [step]",
+        "desc": "에피소드가 몇 step 만에 끝났는지. 최대 길이(20 s × 20 Hz = 400)에 붙는지 확인.",
+        "low": "빨리 끝남. 성공/실패/충돌 중 무엇 때문인지 확인해야 함. 지나치게 낮으면 학습 불안정.",
+        "high": "끝까지 버팀. 최대(400)에 붙었는데 track_err/성공률이 안 좋으면 '버티기'만 배운 것. "
+                "최대 = 시간 초과.",
+        "good": "최대에 붙어도 track_err/성공률이 같이 좋아져야 함",
+    },
+    "Loss/value": {
+        "label": "critic value loss",
+        "desc": "가치 함수가 return을 얼마나 못 맞추는지.",
+        "low": "critic이 return을 잘 맞춤 → 좋음. 학습이 안정적.",
+        "high": "reward scale이 크거나 critic이 return을 못 맞추는 중. 수백~수천이면 "
+                "reward 가중치/normalization을 확인.",
+        "good": "작을수록 좋음",
+    },
+    "Loss/surrogate": {
+        "label": "PPO policy loss",
+        "desc": "정책 업데이트 크기(클립 전/후).",
+        "low": "0 근처 = 정책 업데이트가 작음. KL/clip 상태 확인. 학습이 정체됐을 수 있음.",
+        "high": "업데이트가 큼 → 불안정. clip_param/learning_rate 확인.",
+        "good": "0 근처에서 안정",
+    },
+    "Loss/entropy": {
+        "label": "정책 엔트로피",
+        "desc": "정책 분포의 탐색량.",
+        "low": "탐색이 줄어듦. 0에 가까우면 탐색 붕괴 → 정책이 굳음.",
+        "high": "탐색이 많음. 초기엔 정상. 너무 오래 높으면 보상 신호가 약하거나 학습이 안 되는 중.",
+        "good": "서서히 감소 (대략 0.5~1.5)",
+    },
+    "Loss/learning_rate": {
+        "label": "학습률 (adaptive면 자동 조절)",
+        "desc": "PPO 학습률. adaptive schedule이면 KL 보고 자동으로 바뀜.",
+        "low": "안정적. 너무 낮으면 학습이 느림.",
+        "high": "발산 위험. adaptive가 0.01 max에 붙으면 위험 신호. fixed 3e-4 권장.",
+        "good": "낮게 유지 (고정 시 3e-4 근처)",
+    },
+    "Policy/mean_std": {
+        "label": "행동 표준편차",
+        "desc": "정책 행동의 탐색 노이즈.",
+        "low": "노이즈가 작음. 0.1 이하면 탐색 붕괴/확신 과다 → 새 상황에 약함.",
+        "high": "노이즈가 큼. 학습 초기엔 정상. 너무 오래 높으면 보상 신호가 약함.",
+        "good": "0.2~0.5 근처",
+    },
+    "Perf/total_fps": {
+        "label": "학습 처리량 [step/s]",
+        "desc": "초당 환경 스텝 수. 정책 성능이 아니라 학습 속도.",
+        "low": "느림. env 수/렌더링/CPU 확인.",
+        "high": "빠름. 좋지만 정책 성능과는 무관.",
+        "good": "참고",
+    },
+    "Perf/collection_time": {
+        "label": "수집 시간 [s/iter]",
+        "desc": "한 iteration에서 환경 스텝을 모으는 시간.",
+        "low": "수집이 빠름.",
+        "high": "수집이 느림. env 수/렌더링 확인.",
+        "good": "참고",
+    },
+    "Perf/learning_time": {
+        "label": "학습 시간 [s/iter]",
+        "desc": "PPO 업데이트 시간.",
+        "low": "업데이트가 빠름.",
+        "high": "업데이트가 느림. 네트워크/배치 확인.",
+        "good": "참고",
+    },
 }
 
 
-def tag_info(tag: str) -> tuple[str, str, str]:
+def tag_info(tag: str) -> dict:
     if tag in TAG_INFO:
         return TAG_INFO[tag]
     if tag.startswith("Metrics/"):
-        return ("task 지표", "task가 기록한 scalar. task README와 태그 이름을 참고.", "task에 따라")
+        return {"label": "task 지표", "desc": "task가 기록한 scalar. task README와 태그 이름을 참고.",
+                "low": "낮아지면 task에 따라 좋을 수도/나쁠 수도 있음 — task README 확인.",
+                "high": "높아지면 task에 따라 좋을 수도/나쁠 수도 있음 — task README 확인.",
+                "good": "task에 따라"}
     if tag.startswith("Loss/"):
-        return ("loss", "학습 loss.", "작을수록 좋음")
+        return {"label": "loss", "desc": "학습 loss.", "low": "낮아지면 좋음.",
+                "high": "높아지면 학습 불안정/정체 가능.", "good": "작을수록 좋음"}
     if tag.startswith("Train/"):
-        return ("학습 지표", "학습 중 집계된 값.", "task에 따라")
+        return {"label": "학습 지표", "desc": "학습 중 집계된 값.", "low": "task/지표에 따라.",
+                "high": "task/지표에 따라.", "good": "task에 따라"}
     if tag.startswith("Policy/"):
-        return ("정책 통계", "정책 분포/노이즈 통계.", "안정적")
+        return {"label": "정책 통계", "desc": "정책 분포/노이즈 통계.", "low": "너무 낮으면 탐색 붕괴 가능.",
+                "high": "너무 높으면 학습 불안정 가능.", "good": "안정적"}
     if tag.startswith("Perf/"):
-        return ("성능", "처리량/시간.", "참고")
-    return ("scalar", "설명 없음 — 태그 이름을 참고.", "—")
+        return {"label": "성능", "desc": "처리량/시간.", "low": "참고.", "high": "참고.", "good": "참고"}
+    return {"label": "scalar", "desc": "설명 없음 — 태그 이름을 참고.", "low": "—", "high": "—", "good": "—"}
 
 
 def find_run(arg: str) -> Path:
@@ -163,9 +246,10 @@ def sort_tags(tags: list[str]) -> list[str]:
 
 
 def plot_png(tag: str, ev) -> str:
+    label = tag_info(tag)["label"]
     fig, ax = plt.subplots(figsize=(5.4, 2.7), dpi=110)
     ax.plot([e.step for e in ev], [e.value for e in ev], lw=1.2)
-    ax.set_title(tag, fontsize=9)
+    ax.set_title(f"{tag}\n{label}", fontsize=9)
     ax.grid(alpha=0.3)
     ax.tick_params(labelsize=7)
     fig.tight_layout()
@@ -210,10 +294,10 @@ def combined_png(pairs: list[tuple[int, float]]) -> str:
     ys = [100.0 * p[1] for p in pairs]
     ax.plot(xs, ys, lw=2.0, color="#2563eb")
     ax.fill_between(xs, ys, 0, color="#2563eb", alpha=0.10)
-    ax.set_title("Combined tracking error — 0.5·(|v_err|/max_lin + |w_err|/max_ang) × 100 [%]  (lower is better)",
+    ax.set_title("종합 추종 오차 — 0.5·(|v오차|/max_lin + |w오차|/max_ang) × 100 [%]  (낮을수록 좋음)",
                  fontsize=10)
-    ax.set_xlabel("iteration", fontsize=8)
-    ax.set_ylabel("%", fontsize=8)
+    ax.set_xlabel("학습 반복", fontsize=8)
+    ax.set_ylabel("종합 오차 [%]", fontsize=8)
     ax.grid(alpha=0.3)
     ax.tick_params(labelsize=7)
     fig.tight_layout()
@@ -352,20 +436,20 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
     verdict = verdict_items(series, env_cfg)
     verdict_html = "".join(f'<li class="{cls}">{html.escape(text)}</li>' for cls, text in verdict)
 
-    glossary_rows = []
+    def metric_card(tag: str) -> str:
+        info = tag_info(tag)
+        return (
+            f'<div class="metric"><h3><code>{html.escape(tag)}</code> — {html.escape(info["label"])}</h3>'
+            f'<p>{html.escape(info["desc"])}</p><ul>'
+            f'<li><b>낮아지면</b> {html.escape(info["low"])}</li>'
+            f'<li><b>높아지면</b> {html.escape(info["high"])}</li>'
+            f'<li><b>좋아지는 방향</b> {html.escape(info["good"])}</li></ul></div>')
+
+    glossary_cards = []
     if combined and "Metrics/combined_err" not in tags:
-        label, desc, good = tag_info("Metrics/combined_err")
-        glossary_rows.append(
-            f"<tr><td><code>Metrics/combined_err</code> <span class='muted'>(계산)</span></td>"
-            f"<td>{html.escape(label)}</td><td>{html.escape(desc)}</td><td>{html.escape(good)}</td></tr>")
-    for tag in tags:
-        label, desc, good = tag_info(tag)
-        glossary_rows.append(
-            f"<tr><td><code>{html.escape(tag)}</code></td><td>{html.escape(label)}</td>"
-            f"<td>{html.escape(desc)}</td><td>{html.escape(good)}</td></tr>")
-    glossary = (
-        "<table><thead><tr><th>tag</th><th>뜻</th><th>설명</th><th>좋아지는 방향</th></tr></thead>"
-        f"<tbody>{''.join(glossary_rows)}</tbody></table>")
+        glossary_cards.append(metric_card("Metrics/combined_err"))
+    glossary_cards.extend(metric_card(tag) for tag in tags)
+    glossary = '<div class="glossary">' + "".join(glossary_cards) + "</div>"
 
     scale = env_cfg.get("action_scale")
     scale_card = ""
@@ -392,10 +476,10 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
         ev = series.get(tag)
         if not ev:
             continue
-        label, desc, good = tag_info(tag)
+        info = tag_info(tag)
         plot_cards.append(
-            f'<figure class="plot"><figcaption><b>{html.escape(tag)}</b> — {html.escape(label)}'
-            f'<br><span class="muted">{html.escape(desc)} · {html.escape(good)}</span></figcaption>'
+            f'<figure class="plot"><figcaption><b>{html.escape(tag)}</b> — {html.escape(info["label"])}'
+            f'<br><span class="muted">{html.escape(info["desc"])} · {html.escape(info["good"])}</span></figcaption>'
             f'{b64img(plot_png(tag, ev), tag)}</figure>')
     plots = "".join(plot_cards) if plot_cards else "<p>scalar 없음</p>"
 
@@ -444,6 +528,12 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
   .verdict li.good {{border-left-color: #16a34a;}}
   .verdict li.warn {{border-left-color: #d97706;}}
   .verdict li.bad {{border-left-color: #dc2626;}}
+  .glossary {{display: grid; grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); gap: 12px;}}
+  .metric {{background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px;}}
+  .metric h3 {{font-size: 13px; margin: 0 0 6px;}}
+  .metric p {{font-size: 12.5px; color: #374151; margin: 4px 0 6px;}}
+  .metric ul {{margin: 0; padding-left: 18px; font-size: 12.5px; color: #4b5563;}}
+  .metric li {{margin: 3px 0;}}
   .grid {{display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px;}}
   .plot {{margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px;}}
   .plot figcaption {{font-size: 12px; color: #4b5563; margin: 2px 4px 4px;}}
