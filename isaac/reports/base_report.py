@@ -24,10 +24,15 @@ class BaseReport(ABC):
 
     @staticmethod
     def load(path) -> list[dict]:
-        """raw.csv(또는 폴더) → 줄 dict 목록. label 말고는 float, t는 0부터."""
+        """raw.csv(또는 폴더) → 줄 dict 목록. 숫자는 float, 문자열(rl_onnx 등)은 그대로, t는 0부터."""
         p = Path(path)
         p = p / "raw.csv" if p.is_dir() else p
-        rows = [{k: (v if k == "label" else float(v)) for k, v in r.items()} for r in csv.DictReader(open(p))]
+        def value(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return v
+        rows = [{k: value(v) for k, v in r.items()} for r in csv.DictReader(open(p))]
         if not rows:
             raise SystemExit(f"빈 CSV: {p}")
         t0 = rows[0]["t"]
