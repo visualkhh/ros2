@@ -22,6 +22,11 @@ import time
 from pathlib import Path
 
 try:
+    import yaml
+except ImportError:
+    yaml = None
+
+try:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 except ImportError:
     raise SystemExit("tensorboard가 없음 — IsaacLab venv python으로 실행: "
@@ -78,6 +83,26 @@ def summary(event: Path, tags: tuple[str, ...]) -> str:
         lines.append(f"  {tag:30s} n={len(ev):4d} first={ev[0].value:10.4f} "
                      f"last={ev[-1].value:10.4f} min={min(x.value for x in ev):10.4f} "
                      f"max={max(x.value for x in ev):10.4f}")
+
+    # v·w 종합 추종 오차 — env.yaml의 max_lin/max_ang가 있으면 (%)
+    ev_v = ea.Scalars("Metrics/track_err_v") if "Metrics/track_err_v" in have else []
+    ev_w = ea.Scalars("Metrics/track_err_w") if "Metrics/track_err_w" in have else []
+    env_cfg = {}
+    if yaml is not None and (event.parent / "params/env.yaml").is_file():
+        try:
+            env_cfg = yaml.unsafe_load((event.parent / "params/env.yaml").read_text()) or {}
+        except Exception:
+            env_cfg = {}
+    max_lin, max_ang = env_cfg.get("max_lin"), env_cfg.get("max_ang")
+    if ev_v and ev_w and max_lin and max_ang:
+        wm = {e.step: e.value for e in ev_w}
+        pairs = [(e.step, 100.0 * 0.5 * (abs(e.value) / float(max_lin) + abs(wm[e.step]) / float(max_ang)))
+                 for e in ev_v if e.step in wm]
+        if pairs:
+            lines.append(f"  {'Metrics/combined_err [%]':30s} n={len(pairs):4d} "
+                         f"first={pairs[0][1]:10.2f} last={pairs[-1][1]:10.2f} "
+                         f"min={min(p[1] for p in pairs):10.2f} max={max(p[1] for p in pairs):10.2f}")
+
     if last_step is not None:
         lines.append(f"  {'iteration':30s} last={last_step}")
     return "\n".join(lines)

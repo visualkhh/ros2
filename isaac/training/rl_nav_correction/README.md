@@ -42,6 +42,7 @@ training/rl_nav_correction/
 ./run-training.sh rl_nav_correction --max_iterations 500 --label v1 --snap 60                        # 본 학습
 ./run-make-onnx.sh artifacts/rl_nav_correction/training/<시각>_v1/model_499.pt                        # → exported/policy.onnx (+ .onnx.data)
 tensorboard --logdir artifacts/rl_nav_correction/training      # Metrics/track_err_v (m/s) · track_err_w (rad/s) — 작을수록 좋음
+#   Metrics/combined_err = 0.5·(track_err_v/max_lin + track_err_w/max_ang) — 종합 추종 오차 [0~1], 낮을수록 좋음
 ./run-tb-summary.sh rl_nav_correction --watch 10               # 터미널 요약 (first/last/min/max)
 ./run-training-report.sh rl_nav_correction                    # → artifacts/rl_nav_correction/training/<최신>/report.html
 ```

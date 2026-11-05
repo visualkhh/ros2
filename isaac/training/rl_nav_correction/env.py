@@ -124,6 +124,7 @@ class RlNavCorrectionEnv(BaseEnv):
         log = self.extras.setdefault("log", {})
         log["Metrics/track_err_v"] = (ev.abs() * c.max_lin).mean().item()
         log["Metrics/track_err_w"] = (ew.abs() * c.max_ang).mean().item()
+        log["Metrics/combined_err"] = (0.5 * (ev.abs() + ew.abs())).mean().item()
         return r
 
     def _get_observations(self) -> dict:

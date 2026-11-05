@@ -36,6 +36,7 @@ KEY_TAGS = (
     "Train/mean_reward",
     "Metrics/track_err_v",
     "Metrics/track_err_w",
+    "Metrics/combined_err",
     "Metrics/cross_track",
     "Metrics/waypoints_done",
     "Metrics/collision_rate",
@@ -62,6 +63,11 @@ TAG_INFO = {
         "회전 속도 추종 오차 [rad/s]",
         "몸체 w가 명령(정책 보정 후)을 얼마나 못 따라갔는지. "
         "action_scale_ang보다 크면 정책 출력이 포화됐을 수 있음.",
+        "작을수록 좋음"),
+    "Metrics/combined_err": (
+        "종합 추종 오차 [0~1]",
+        "0.5 × (|v_err|/max_lin + |w_err|/max_ang). 0=완벽, 1=최대 속도 오차. "
+        "v·w를 한 숫자로 합친 이 task의 대표 지표.",
         "작을수록 좋음"),
     "Metrics/cross_track": (
         "경로 이탈 [m]",
@@ -183,6 +189,40 @@ def fmt(v: float) -> str:
     return f"{float(v):.5g}"
 
 
+def combined_series(series: dict, env_cfg: dict) -> list[tuple[int, float]]:
+    """v·w 추종 오차를 한 숫자로: 0.5*(|v|/max_lin + |w|/max_ang) — 낮을수록 좋음."""
+    ev = series.get("Metrics/combined_err")
+    if ev:
+        return [(e.step, e.value) for e in ev]
+    v = series.get("Metrics/track_err_v")
+    w = series.get("Metrics/track_err_w")
+    max_lin, max_ang = env_cfg.get("max_lin"), env_cfg.get("max_ang")
+    if not v or not w or not max_lin or not max_ang:
+        return []
+    wm = {e.step: e.value for e in w}
+    return [(e.step, 0.5 * (abs(e.value) / float(max_lin) + abs(wm[e.step]) / float(max_ang)))
+            for e in v if e.step in wm]
+
+
+def combined_png(pairs: list[tuple[int, float]]) -> str:
+    fig, ax = plt.subplots(figsize=(11.0, 3.1), dpi=115)
+    xs = [p[0] for p in pairs]
+    ys = [100.0 * p[1] for p in pairs]
+    ax.plot(xs, ys, lw=2.0, color="#2563eb")
+    ax.fill_between(xs, ys, 0, color="#2563eb", alpha=0.10)
+    ax.set_title("Combined tracking error — 0.5·(|v_err|/max_lin + |w_err|/max_ang) × 100 [%]  (lower is better)",
+                 fontsize=10)
+    ax.set_xlabel("iteration", fontsize=8)
+    ax.set_ylabel("%", fontsize=8)
+    ax.grid(alpha=0.3)
+    ax.tick_params(labelsize=7)
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 def per_step_reward(series: dict) -> list[tuple[int, float]]:
     """mean_reward / mean_episode_length — 에피소드 길이가 변해도 비교 가능한 스텝당 보상."""
     r = series.get("Train/mean_reward")
@@ -237,6 +277,14 @@ def verdict_items(series: dict, env_cfg: dict) -> list[tuple[str, str]]:
                     add("warn", f"{tag} last {last:.3g} > action_scale_{kind} {float(lim):.3g} — "
                                 f"정책 출력이 포화됐을 수 있음. action_scale 키우기 검토.")
 
+    comb = combined_series(series, env_cfg)
+    if len(comb) >= 2:
+        first, last = 100.0 * comb[0][1], 100.0 * comb[-1][1]
+        cls = "good" if last < first * 0.95 else "bad" if last > first * 1.05 else "warn"
+        word = "좋아짐" if cls == "good" else "나빠짐" if cls == "bad" else "정체"
+        add(cls, f"종합 추종 오차: {first:.1f}% → {last:.1f}% — {word} "
+                 f"(0=완벽, 100%=최대 속도 오차)")
+
     ps = per_step_reward(series)
     if len(ps) >= 2:
         first, last = ps[0][1], ps[-1][1]
@@ -282,10 +330,34 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
     elapsed = (last_wall - first_wall) if (first_wall and last_wall) else None
     last_step = max((ev[-1].step for ev in series.values() if ev), default=None)
 
+    combined = combined_series(series, env_cfg)
+    combined_card = ""
+    combined_block = ""
+    if len(combined) >= 2:
+        c_first, c_last = 100.0 * combined[0][1], 100.0 * combined[-1][1]
+        cls = "good" if c_last < c_first * 0.95 else "bad" if c_last > c_first * 1.05 else "warn"
+        word = "좋아짐" if cls == "good" else "나빠짐" if cls == "bad" else "정체"
+        combined_card = (
+            f'<div class="card"><div class="k">종합 추종 오차 (낮을수록)</div>'
+            f'<div class="v">{c_last:.1f}% <span class="muted">← {c_first:.1f}%</span></div>'
+            f'<div class="k">{word}</div></div>')
+        combined_block = (
+            '<h2>종합 지표 — 한 눈에</h2>'
+            '<p class="muted">v·w 추종 오차를 한 숫자로 합친 값입니다. '
+            '<b>0% = 완벽, 100% = 최대 속도 오차</b>. 낮을수록 좋고, 선이 오른쪽으로 갈수록 내려가면 학습이 좋아지는 중입니다.</p>'
+            f'<figure class="plot big">{b64img(combined_png(combined), "combined track error")}'
+            f'<figcaption><b>종합 추종 오차</b> — 0.5·(|track_err_v|/max_lin + |track_err_w|/max_ang) × 100 [%]'
+            f' · first {c_first:.1f}% → last {c_last:.1f}% ({word})</figcaption></figure>')
+
     verdict = verdict_items(series, env_cfg)
     verdict_html = "".join(f'<li class="{cls}">{html.escape(text)}</li>' for cls, text in verdict)
 
     glossary_rows = []
+    if combined and "Metrics/combined_err" not in tags:
+        label, desc, good = tag_info("Metrics/combined_err")
+        glossary_rows.append(
+            f"<tr><td><code>Metrics/combined_err</code> <span class='muted'>(계산)</span></td>"
+            f"<td>{html.escape(label)}</td><td>{html.escape(desc)}</td><td>{html.escape(good)}</td></tr>")
     for tag in tags:
         label, desc, good = tag_info(tag)
         glossary_rows.append(
@@ -400,6 +472,7 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
   <div class="card"><div class="k">scalar tags</div><div class="v">{len(tags)}</div></div>
   <div class="card"><div class="k">snapshots</div><div class="v">{len(snaps)}</div></div>
   {scale_card}
+  {combined_card}
 </div>
 
 <h2>요약 판정 <span class="muted">(자동 first/last 비교 · 참고용)</span></h2>
@@ -410,6 +483,8 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
 
 <h2>Scalars</h2>
 {table}
+
+{combined_block}
 
 <h2>Plots</h2>
 <div class="grid">{plots}</div>
