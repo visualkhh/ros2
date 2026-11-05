@@ -43,6 +43,7 @@ training/rl_nav_correction/
 ./run-make-onnx.sh artifacts/rl_nav_correction/training/<시각>_v1/model_499.pt                        # → exported/policy.onnx (+ .onnx.data)
 tensorboard --logdir artifacts/rl_nav_correction/training      # Metrics/track_err_v (m/s) · track_err_w (rad/s) — 작을수록 좋음
 ./run-tb-summary.sh rl_nav_correction --watch 10               # 터미널 요약 (first/last/min/max)
+./run-training-report.sh rl_nav_correction                    # → artifacts/rl_nav_correction/training/<최신>/report.html
 ```
 
 배포: `policy.onnx` **와 `policy.onnx.data` 둘 다** → Lv2_bee_Assignment `ros2_ws/model/nav_correction/` (빌드 때 `share/ml/model/nav_correction/`로 설치) → `ros2 param set /rl_nav_correction model_path ...` 또는 재시작.
