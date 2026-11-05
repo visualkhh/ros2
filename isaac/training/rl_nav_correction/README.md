@@ -31,7 +31,7 @@ training/rl_nav_correction/
 ├── robot_cfg.py  beebot — 바퀴 숫자 · 응답(RESPONSE_*, 아직 안 잼 = 중립값) · ROBOT_CFG
 ├── usda/         beebot USD (robot.usda + payloads/ — 그대로, Physics 변형 physx)
 ├── ground.py · markers.py   요철 · 마찰 패치 지형 · 화면 막대 (초록 = 명령, 파랑 = 실제)
-├── sim_robot.py · dummy_robot.py   calibration 입출력 (real_robot.py 없음 — 아래)
+├── sim_robot.py · real_robot.py · dummy_robot.py   calibration 입출력 (real = 로봇 bee에서 run-cli calibrate로 재생 · 기록)
 └── calibration/  sim 측정 (command · env · env_cfg · report)
 ```
 
@@ -46,6 +46,21 @@ tensorboard --logdir artifacts/rl_nav_correction/training      # Metrics/track_e
 
 배포: `policy.onnx` **와 `policy.onnx.data` 둘 다** → Lv2_bee_Assignment `ros2_ws/model/nav_correction/` (빌드 때 `share/ml/model/nav_correction/`로 설치) → `ros2 param set /rl_nav_correction model_path ...` 또는 재시작.
 
+## 칼리브레이션 (sim → real)
+
+```bash
+./run-calibration.sh rl_nav_correction --robot sim --label sim                 # 1) sim (로봇 안 움직임)
+./run-calibration.sh rl_nav_correction --robot real --check-only               # 2) 실기기 준비 확인 (안 움직임)
+./run-calibration.sh rl_nav_correction --robot real --label real_floor         # 3) 실기기 측정 (로봇이 움직임 · 약 54 s)
+python3 training/rl_nav_correction/calibration/report.py artifacts/rl_nav_correction/calibration/<sim 폴더> artifacts/rl_nav_correction/calibration/<real 폴더>
+#   → fit · 그림 · RESPONSE_* 값 → robot_cfg.py에 반영
+```
+
+- real = PC가 sim과 같은 네모 명령을 계획(JSON)으로 만들어 `bee@bee.local`로 보내고, 로봇의 `./run-cli calibrate`(Lv2_bee_Assignment `tool/`)가 수동 경로 `/cmd/manual/cmd_vel`로 재생하며 `/odom` · `/imu` · `/joint_states` · `/cmd_vel`을 기록한 `raw.csv`를 PC가 가져옵니다. 수동 경로는 `rl_nav_correction`을 건너뛰므로 보정 없는 순수 응답입니다.
+- 준비: 로봇에서 bringup · `./run-cli mode manual` · 사방 약 1.5 m 비움 · 팔은 시작 자세. 멈추려면 Ctrl+C 또는 `./run-cli estop on`.
+- 환경변수: `BEE_HOST`(기본 bee@bee.local) · `BEE_TOOL`(로봇의 tool 폴더) · `BEE_ENV`(로봇 ROS 환경 — 기본 도메인 88 · 로컬 DDS).
+
 ## 아직 안 한 것
-- **beebot calibration**: `robot_cfg.py`의 RESPONSE_*는 중립값 (gain 1 · 지연 1 step). `./run-calibration.sh rl_nav_correction --robot sim`은 되지만, 실기기 측정 · A/B는 `real_robot.py`가 없다 (beebot ROS는 `/cmd_vel_nav` · `/cmd_vel_corrected` 체인이라 pak의 corrector와 토픽이 다르다).
-- 체인 뒤쪽(`velocity_smoother`의 가속 한계)은 sim에 없다.
+- **beebot 응답은 아직 안 쟀습니다.** `robot_cfg.py`의 RESPONSE_*는 중립값 (gain 1 · 지연 1 step) — 위 3)으로 잰 뒤 고친다.
+- **실기기 A/B(`--onnx`)와 `report.py`는 없다** — 정책이 생긴 뒤 `rl_nav_correction`을 `/cmd_vel_nav` 경로로 켜고 비교한다.
+- 체인 뒤쪽(`velocity_smoother`의 가속 한계)은 sim에 없다 (실기기 측정에는 들어간다).
