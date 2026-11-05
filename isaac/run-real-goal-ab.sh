@@ -84,7 +84,7 @@ start_rl() {   # $1 enable (false/true), $2 label, $3 output
   stop_rl
   sleep 0.5
   check_no_corrector || return 1
-  if ! msg=$("$WS/rl-only.sh" start "enable:=$en" "label:=$lab" "output:=$out" "model:=$ONNX" 2>&1); then
+  if ! msg=$("$WS/rl-only.sh" start "enable:=$en" "label:=$lab" "output:=$out" "model:=$ONNX" "goal_mode:=absolute" 2>&1); then
     echo "$msg" >&2
     return 1
   fi
@@ -154,11 +154,18 @@ echo "[goal-ab] B — 정책 보정"
 start_rl true wp_B "$RUN/B/raw.csv"
 route_rl
 send_goal
-wait_goal
+B_OK=1
+if ! wait_goal; then
+  B_OK=0
+  echo "[goal-ab] B가 goal에 도착하지 못함 — 부분 기록으로 보고서 생성" >&2
+fi
 finish_run
 
 trap - EXIT
 "$PY" "$ISAAC/training/$TASK/report_goal.py" \
   "$RUN/A/raw.csv" "$RUN/B/raw.csv" \
   --goal "$GX,$GY" --out "$RUN/compare_goal.png"
+if (( B_OK == 0 )); then
+  echo "[goal-ab] 경고: B goal 미도착 — B 지표는 참고용 (정책이 goal까지 못 감)" >&2
+fi
 echo "[goal-ab] → $RUN"

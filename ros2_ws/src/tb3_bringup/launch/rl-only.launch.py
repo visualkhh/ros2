@@ -19,7 +19,7 @@ def generate_launch_description():
         DeclareLaunchArgument('enable', default_value='true', description='ONNX 적용 (모델이 없으면 어차피 통과) · false = 바이패스 · 실행 중: /rl_corrector/toggle'),
         DeclareLaunchArgument('model', default_value='', description='ONNX 정책 경로'),
         DeclareLaunchArgument('mode', default_value='auto', description='auto | track | goal'),
-        DeclareLaunchArgument('goal_mode', default_value='relative', description='relative | absolute'),
+        DeclareLaunchArgument('goal_mode', default_value='absolute', description='relative | absolute (웨이포인트 학습과 같음)'),
         DeclareLaunchArgument('label', default_value='rl'),
         DeclareLaunchArgument('output', default_value='/tmp/rl_eval.csv'),
         Node(package='rl_correction', executable='corrector', name='rl_corrector',
