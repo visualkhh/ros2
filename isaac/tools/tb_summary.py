@@ -84,6 +84,10 @@ def summary(event: Path, tags: tuple[str, ...]) -> str:
                      f"last={ev[-1].value:10.4f} min={min(x.value for x in ev):10.4f} "
                      f"max={max(x.value for x in ev):10.4f}")
 
+    main_ev = ea.Scalars("Train/mean_reward") if "Train/mean_reward" in have else []
+    if main_ev:
+        last_step = main_ev[-1].step
+
     # v·w 종합 추종 오차 — env.yaml의 max_lin/max_ang가 있으면 (%)
     ev_v = ea.Scalars("Metrics/track_err_v") if "Metrics/track_err_v" in have else []
     ev_w = ea.Scalars("Metrics/track_err_w") if "Metrics/track_err_w" in have else []

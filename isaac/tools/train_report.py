@@ -405,14 +405,16 @@ def verdict_items(series: dict, env_cfg: dict) -> list[tuple[str, str]]:
 
 
 def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: list[Path],
-               run_json: dict, cfg_files: list[tuple[str, Path]], env_cfg: dict) -> str:
+               run_json: dict, cfg_files: list[tuple[str, Path]], env_cfg: dict,
+               agent_cfg: dict) -> str:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     created = run_json.get("created_at", "")
     task = run_json.get("task", "")
     first_wall = min((ev[0].wall_time for ev in series.values() if ev), default=None)
     last_wall = max((ev[-1].wall_time for ev in series.values() if ev), default=None)
     elapsed = (last_wall - first_wall) if (first_wall and last_wall) else None
-    last_step = max((ev[-1].step for ev in series.values() if ev), default=None)
+    main_ev = series.get("Train/mean_reward")
+    last_step = main_ev[-1].step if main_ev else max((ev[-1].step for ev in series.values() if ev), default=None)
 
     combined = combined_series(series, env_cfg)
     combined_card = ""
@@ -432,6 +434,59 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
             f'<figure class="plot big">{b64img(combined_png(combined), "combined track error")}'
             f'<figcaption><b>종합 추종 오차</b> — 0.5·(|track_err_v|/max_lin + |track_err_w|/max_ang) × 100 [%]'
             f' · first {c_first:.1f}% → last {c_last:.1f}% ({word})</figcaption></figure>')
+
+    # 학습 설정 — envs/iterations/batch/epochs/PPO/로봇 config를 한 표로
+    scene = env_cfg.get("scene") if isinstance(env_cfg.get("scene"), dict) else {}
+    sim = env_cfg.get("sim") if isinstance(env_cfg.get("sim"), dict) else {}
+    algo = agent_cfg.get("algorithm") if isinstance(agent_cfg.get("algorithm"), dict) else {}
+    actor = agent_cfg.get("actor") if isinstance(agent_cfg.get("actor"), dict) else {}
+    envs = scene.get("num_envs")
+    steps = agent_cfg.get("num_steps_per_env")
+    max_it = agent_cfg.get("max_iterations")
+    epochs = algo.get("num_learning_epochs")
+    mini = algo.get("num_mini_batches")
+    rollout = int(envs) * int(steps) if isinstance(envs, (int, float)) and isinstance(steps, (int, float)) else None
+    mini_size = int(rollout) // int(mini) if rollout and isinstance(mini, (int, float)) and int(mini) > 0 else None
+    dt = sim.get("dt")
+    decimation = env_cfg.get("decimation")
+    policy_dt = float(dt) * int(decimation) if isinstance(dt, (int, float)) and isinstance(decimation, (int, float)) else None
+    ep_s = env_cfg.get("episode_length_s")
+    ep_steps = round(float(ep_s) / policy_dt) if ep_s and policy_dt else None
+    scale = env_cfg.get("action_scale")
+    hidden = actor.get("hidden_dims")
+    init_std = (actor.get("distribution_cfg") or {}).get("init_std") if isinstance(actor.get("distribution_cfg"), dict) else None
+    fps = series["Perf/total_fps"][-1].value if series.get("Perf/total_fps") else None
+    progress = (100.0 * last_step / max_it) if (last_step is not None and isinstance(max_it, (int, float)) and max_it) else None
+    total_steps = int(max_it) * rollout if isinstance(max_it, (int, float)) and rollout else None
+    done_steps = int(last_step) * rollout if last_step is not None and rollout else None
+    setup_pairs = [
+        ("run name", run.name),
+        ("task", task or "—"),
+        ("created", created or "—"),
+        ("envs", envs if envs is not None else "—"),
+        ("iterations", f"{max_it} (last {last_step}, {progress:.1f}%)" if progress is not None else f"{max_it} (last {last_step})"),
+        ("rollout / iter", f"{rollout:,} step (envs × num_steps_per_env)" if rollout else "—"),
+        ("PPO epochs / iter", epochs if epochs is not None else "—"),
+        ("mini-batches / iter", mini if mini is not None else "—"),
+        ("mini-batch size", f"{mini_size:,} step" if mini_size else "—"),
+        ("total steps (planned)", f"{total_steps:,}" if total_steps else "—"),
+        ("steps done", f"{done_steps:,}" if done_steps else "—"),
+        ("learning rate / schedule", f"{algo.get('learning_rate', '—')} / {algo.get('schedule', '—')}"),
+        ("gamma / lam", f"{algo.get('gamma', '—')} / {algo.get('lam', '—')}"),
+        ("clip / entropy / desired_kl", f"{algo.get('clip_param', '—')} / {algo.get('entropy_coef', '—')} / {algo.get('desired_kl', '—')}"),
+        ("max_grad_norm", algo.get("max_grad_norm", "—")),
+        ("sim dt / decimation / policy dt", f"{dt:.6g} s / {decimation} / {policy_dt:.4g} s ({1/policy_dt:.0f} Hz)" if policy_dt else "—"),
+        ("episode", f"{ep_s} s = {ep_steps} step" if ep_steps else str(ep_s or "—")),
+        ("action_scale (lin/ang)", f"{float(scale[0]):.3g} / {float(scale[1]):.3g}" if isinstance(scale, (list, tuple)) and len(scale) >= 2 else "—"),
+        ("max_lin / max_ang", f"{env_cfg.get('max_lin', '—')} / {env_cfg.get('max_ang', '—')}"),
+        ("network", f"{hidden} · init_std {init_std}" if hidden is not None else "—"),
+        ("seed / device", f"{agent_cfg.get('seed', env_cfg.get('seed', '—'))} / {agent_cfg.get('device', '—')}"),
+        ("save_interval / logger", f"{agent_cfg.get('save_interval', '—')} / {agent_cfg.get('logger', '—')}"),
+        ("fps (last)", f"{fps:,.0f}" if fps else "—"),
+    ]
+    setup_rows = "".join(
+        f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>" for k, v in setup_pairs)
+    setup_html = f'<table class="setup"><tbody>{setup_rows}</tbody></table>'
 
     verdict = verdict_items(series, env_cfg)
     verdict_html = "".join(f'<li class="{cls}">{html.escape(text)}</li>' for cls, text in verdict)
@@ -534,6 +589,9 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
   .metric p {{font-size: 12.5px; color: #374151; margin: 4px 0 6px;}}
   .metric ul {{margin: 0; padding-left: 18px; font-size: 12.5px; color: #4b5563;}}
   .metric li {{margin: 3px 0;}}
+  .setup td {{text-align: left;}}
+  .setup td:first-child {{color: #4b5563; width: 42%;}}
+  .setup tr:nth-child(even) td {{background: #fafafa;}}
   .grid {{display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px;}}
   .plot {{margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px;}}
   .plot figcaption {{font-size: 12px; color: #4b5563; margin: 2px 4px 4px;}}
@@ -564,6 +622,9 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
   {scale_card}
   {combined_card}
 </div>
+
+<h2>학습 설정 <span class="muted">(params/env.yaml · agent.yaml — 학습 시작 시 고정)</span></h2>
+{setup_html}
 
 <h2>요약 판정 <span class="muted">(자동 first/last 비교 · 참고용)</span></h2>
 <ul class="verdict">{verdict_html}</ul>
@@ -604,7 +665,8 @@ def main(argv=None) -> int:
     event = events[-1]
     ea = EventAccumulator(str(event), size_guidance={"scalars": 0})
     ea.Reload()
-    tags = sort_tags([t for t in ea.Tags().get("scalars", []) if ea.Scalars(t)])
+    tags = sort_tags([t for t in ea.Tags().get("scalars", [])
+                      if ea.Scalars(t) and not t.endswith("/time")])
     series = {tag: ea.Scalars(tag) for tag in tags}
 
     snap_dir = run / "snap"
@@ -629,6 +691,14 @@ def main(argv=None) -> int:
         except Exception:
             env_cfg = {}
 
+    agent_cfg = {}
+    agent_path = run / "params/agent.yaml"
+    if yaml is not None and agent_path.is_file():
+        try:
+            agent_cfg = yaml.unsafe_load(agent_path.read_text()) or {}
+        except Exception:
+            agent_cfg = {}
+
     cfg = []
     for rel in ("params/env.yaml", "params/agent.yaml", "run.json", "git/IsaacLab-6.1.diff"):
         p = run / rel
@@ -639,7 +709,7 @@ def main(argv=None) -> int:
     if out.is_dir():
         out = out / "report.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    doc = build_html(run, event, tags, series, snaps, run_json, cfg, env_cfg)
+    doc = build_html(run, event, tags, series, snaps, run_json, cfg, env_cfg, agent_cfg)
     out.write_text(doc)
     print(f"[report] {out} ({out.stat().st_size / 1024:.0f} KB · {len(tags)} tags · {len(snaps)} snaps)")
     return 0
