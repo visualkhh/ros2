@@ -132,6 +132,34 @@ python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_corre
 - 필요: Pi `route rl` + PC `./rl-only.sh`. `--onnx` 없이 corrector도 없으면(route direct) 보정 없이 그대로 측정.
 - **이 task 정책(웨이포인트, goal 모드)은 속도 입력(네모)을 보정하지 않는다** — 위 A/B는 track 모드 정책(관측 6)일 때 차이가 난다.
 
+**goal 모드 A/B (이 task 정책)** — 같은 `/rl_goal`을 A(바이패스) · B(정책)로 두 번
+
+```bash
+# A — 모델은 goal 모드 판별용으로 반드시 넣는다 (enable=false = nominal controller, 보정 0)
+cd ros2_ws
+./rl-only.sh enable:=false label:=wp_A output:=artifacts/real/wp_A.csv model:=<policy.onnx>
+# Pi: control manual · route rl
+ros2 topic pub --once /rl_goal geometry_msgs/msg/Point "{x: 1.0, y: 0.0, z: 0.0}"   # 시작 자세 기준
+# rl-only 로그에 "goal 도착" → 
+ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"
+./rl-only.sh stop
+
+# B — 로봇을 A와 같은 자리·방향으로 돌려놓고
+./rl-only.sh label:=wp_B output:=artifacts/real/wp_B.csv model:=<policy.onnx>
+# 같은 goal → "goal 도착" → stop
+```
+
+```bash
+cd isaac
+python3 training/rl_correction_waypoint/report_goal.py \
+  ../ros2_ws/artifacts/real/wp_A.csv ../ros2_ws/artifacts/real/wp_B.csv --goal 1.0,0.0
+# → compare_goal.png + 경로/최대 이탈/끝점/정책 출력 표
+```
+
+- goal은 **첫 goal 때의 로봇 자세 기준**: `x` 앞, `y` 왼쪽 [m]. `y=0`이면 그 방향 직진이라 A/B 경로 오차가 의미 있음.
+- `rl_goal_stop`은 `start_pose`를 리셋한다. A/B는 새 `rl-only` 프로세스로 하는 게 깔끔.
+- 웨이포인트 자동 송신기는 아직 없다 — 점마다 손으로 `/rl_goal`을 보낸다.
+
 **아직 없는 것**
 - **웨이포인트 송신기**: 도착하면 다음 `/rl_goal`을 보내는 쪽. 지금은 손으로 한 점씩.
 - **A = 보정 0인 기본 제어기**: goal 모드에서 toggle 끔(바이패스)은 nominal controller만 돈다 (보정 0 = 학습 env의 행동 0) — 같은 웨이포인트로 A/B 가능.
