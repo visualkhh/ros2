@@ -214,6 +214,41 @@ def tag_info(tag: str) -> dict:
     return {"label": "scalar", "desc": "설명 없음 — 태그 이름을 참고.", "low": "—", "high": "—", "good": "—"}
 
 
+# 학습 설정 표의 한글 설명
+SETUP_INFO = {
+    "run name": "이 학습 run의 폴더 이름 (`<시작시각>_<label>`).",
+    "task": "gym에 등록된 task 이름. env/로봇/보상 세트를 결정.",
+    "created": "run이 시작된 시각 (`run.json`).",
+    "envs": "동시에 학습하는 로봇(환경) 수. 클수록 rollout이 커지고 GPU 메모리를 더 씀.",
+    "iterations": "PPO 업데이트 전체 횟수. `last`는 지금까지 돈 횟수, %는 진행률.",
+    "rollout / iter": "1 iteration에서 모으는 스텝 수 = envs × num_steps_per_env. "
+                      "PPO는 이 rollout을 모은 뒤 한 번 업데이트함.",
+    "PPO epochs / iter": "같은 rollout을 PPO가 몇 번 반복 학습하는지. "
+                         "크면 더 많이 쓰지만 과적합/불안정해질 수 있음.",
+    "mini-batches / iter": "한 rollout을 몇 조각으로 나눠 SGD하는지.",
+    "mini-batch size": "한 mini-batch의 스텝 수 = rollout ÷ mini-batches.",
+    "total steps (planned)": "전체 학습 계획 스텝 수 = iterations × rollout.",
+    "steps done": "지금까지 실제로 돈 스텝 수 ≈ last iteration × rollout.",
+    "learning rate / schedule": "PPO 학습률과 스케줄. adaptive는 KL을 보고 자동 조절, fixed는 고정. "
+                                "adaptive가 0.01 max에 붙으면 발산 위험.",
+    "gamma / lam": "gamma = 미래 보상 할인율(0.99), lam = GAE λ(0.95). "
+                   "클수록 먼 미래를 더 크게 봄.",
+    "clip / entropy / desired_kl": "clip = PPO 정책 변화 제한(0.2), entropy = 탐색 보너스(0.005), "
+                                   "desired_kl = adaptive LR이 목표로 하는 KL(0.01).",
+    "max_grad_norm": "gradient clipping. 1.0 = gradient 폭주 방지.",
+    "sim dt / decimation / policy dt": "물리 스텝 = 1/480 s, decimation 24 → 정책 20 Hz(0.05 s). "
+                                       "시뮬은 480 Hz로 돌고 정책은 20 Hz로 결정.",
+    "episode": "한 에피소드 길이. 20 s × 20 Hz = 400 step.",
+    "action_scale (lin/ang)": "정책 출력 [-1, 1]에 곱하는 최대 보정량. "
+                              "선속도 0.05 m/s · 각속도 0.10 rad/s. 배포 노드와 같아야 함.",
+    "max_lin / max_ang": "명령/로봇의 최대 선·각속도. 보정 후 명령을 이 범위로 자름.",
+    "network": "actor/critic MLP hidden 차원과 초기 행동 표준편차(init_std).",
+    "seed / device": "랜덤 시드와 학습 장치(cuda:0).",
+    "save_interval / logger": "체크포인트 저장 주기(iteration)와 로거.",
+    "fps (last)": "마지막 iteration의 초당 스텝 수. 학습 속도이며 정책 성능은 아님.",
+}
+
+
 def find_run(arg: str) -> Path:
     p = Path(arg).expanduser()
     if p.is_file():
@@ -485,8 +520,10 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
         ("fps (last)", f"{fps:,.0f}" if fps else "—"),
     ]
     setup_rows = "".join(
-        f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>" for k, v in setup_pairs)
-    setup_html = f'<table class="setup"><tbody>{setup_rows}</tbody></table>'
+        f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td>"
+        f"<td class='desc'>{html.escape(SETUP_INFO.get(k, ''))}</td></tr>" for k, v in setup_pairs)
+    setup_html = ('<table class="setup"><thead><tr><th>항목</th><th>값</th><th>설명</th></tr></thead>'
+                  f'<tbody>{setup_rows}</tbody></table>')
 
     verdict = verdict_items(series, env_cfg)
     verdict_html = "".join(f'<li class="{cls}">{html.escape(text)}</li>' for cls, text in verdict)
@@ -589,8 +626,11 @@ def build_html(run: Path, event: Path, tags: list[str], series: dict, snaps: lis
   .metric p {{font-size: 12.5px; color: #374151; margin: 4px 0 6px;}}
   .metric ul {{margin: 0; padding-left: 18px; font-size: 12.5px; color: #4b5563;}}
   .metric li {{margin: 3px 0;}}
-  .setup td {{text-align: left;}}
-  .setup td:first-child {{color: #4b5563; width: 42%;}}
+  .setup th {{text-align: left;}}
+  .setup td {{text-align: left; vertical-align: top;}}
+  .setup td:first-child {{color: #4b5563; width: 22%; white-space: nowrap;}}
+  .setup td:nth-child(2) {{width: 28%;}}
+  .setup td.desc {{color: #4b5563; font-size: 12.5px;}}
   .setup tr:nth-child(even) td {{background: #fafafa;}}
   .grid {{display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px;}}
   .plot {{margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px;}}
