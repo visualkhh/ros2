@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import os
 
-# 바퀴 · 속도 (드라이버 식) — beebot: 바퀴 · 간격은 Lv2_bee_Assignment isaac/lab/demo_cycle.py · 속도 한계는 ml rl_nav_correction(max_vel_x/theta)와 같다
+# 바퀴 · 속도 (드라이버 식) — beebot: 바퀴 반지름 · 간격은 Lv2_bee_Assignment ros_system controllers.yaml diff_drive_controller · 속도 한계는 ml rl_nav_correction(max_vel_x/theta)와 같다
 WHEEL_RADIUS = 0.033   # [m]
-WHEEL_SEP = 0.2878     # [m]
+WHEEL_SEP = 0.287      # [m] 실기기 diff_drive_controller wheel_separation (Lv2_bee_Assignment controllers.yaml)
 MAX_LIN = 0.26         # [m/s]
 MAX_ANG = 1.82         # [rad/s]
 MAX_WHEEL = 8.0        # [rad/s] shortcut: beebot 펌웨어 한계는 확인 못 함 (Waffle Pi 값) — 다르면 여기를 고친다

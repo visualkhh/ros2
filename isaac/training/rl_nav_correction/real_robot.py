@@ -5,7 +5,7 @@ beebot의 ROS는 로봇 안에서만 돈다 (DDS 공유 메모리, ROS_DOMAIN_ID
   data   계획(JSON) → scp → ssh `run-cli calibrate wheel` (수동 경로 /cmd/manual/cmd_vel — rl_nav_correction을 건너뜀 = 보정 없는 순수 응답,
          로봇이 20 Hz로 재생 · /odom /imu /joint_states /cmd_vel 기록) → raw.csv scp로 가져와 줄로 돌려줌
   ready  ssh `run-cli calibrate wheel --check-only` (안 움직임: MANUAL · E-STOP OFF · 토픽 도착)
-준비: 로봇에서 bringup · MANUAL (`./run-cli mode manual`) · 사방 약 1.5 m 비움 · 팔은 시작 자세. 멈추려면 Ctrl+C (ssh -tt가 로봇에 전달) 또는 `./run-cli estop on`.
+준비: 로봇에서 bringup · MANUAL (`./run-cli mode manual`) · 사방 약 1.5 m 비움 (팔은 로봇이 재생 전에 stow로 자동 이동). 멈추려면 Ctrl+C (ssh -tt가 로봇에 전달) 또는 `./run-cli estop on`.
 설정(환경변수): BEE_HOST (bee@bee.local) · BEE_TOOL (로봇의 tool 폴더) · BEE_ENV (로봇 ROS 환경 — 기본 도메인 88 · 로컬 DDS)
 표준 라이브러리만 (ssh · scp 필요).
 """
