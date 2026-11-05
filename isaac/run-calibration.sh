@@ -1,7 +1,7 @@
 #!/bin/bash
 # calibration 실행기 — python -m calibration (calibration/__main__.py) 을 --robot에 맞는 런타임(IsaacLab / ROS .venv / .venv)으로 돌린다.
 #
-#   ./run-calibration.sh <task> --robot sim|real|dummy|both [옵션...]   (경로는 isaac/ 기준 상대경로 또는 절대경로)
+#   ./run-calibration.sh <task> --robot sim|real|dummy|plan|both [옵션...]   (경로는 isaac/ 기준 상대경로 또는 절대경로)
 #   ./run-calibration.sh <task> --robot sim --help                       그 로봇의 옵션 전체 (python argparse)
 #
 # 학습 전에 먼저: training/<task>/calibration/ 명령(CalibrationCommand = 네모: 사각형 → 180° 턴 → 역주행, 54 s) · env로
@@ -27,6 +27,7 @@
 #          (순서: training/<task>/README.md calibration 절)
 #   dummy  가짜 로봇 (Isaac/ROS 없이 흐름 확인) · --gain/--gain-l/--gain-r --tau --delay --deadband --slip --noise --seed
 #          → fit.json에 넣은 값이 나오면 파이프라인 OK
+#   plan   로봇 없이 명령만 계획 JSON {dt, label, steps[[v, w]...]}으로 (--out PATH · --rate 20) — 로봇 쪽 재생기(Lv2_bee_Assignment run-cli calibrate wheel)가 읽는다
 #   both   sim + real을 같은 경로로 한 번에 → 비교 그림 · --label real_floor --side --speed --turn --show
 #          → artifacts/<task>/calibration/<시각>_calibrate/{sim,real}/ + report.py (fit.json · report.png · compare.png · RESPONSE 값)
 #
@@ -131,6 +132,9 @@ case "$ROBOT" in
     set +e; "$PY" -m calibration "$TASK" --robot dummy "$@"; rc=$?; set -e
     report $rc
     ;;
+  plan)
+    exec "$PY" -m calibration "$TASK" --robot plan "$@"
+    ;;
   both)
     LABEL=real_floor SIDE=0.5 SPEED=0.15 TURN=1.0
     SIM_EXTRA=() SHOW=() COMMON_EXTRA=()
@@ -168,7 +172,7 @@ case "$ROBOT" in
     echo "[calibrate] → $RUN  (sim/fit.json · real/fit.json · compare.png)"
     ;;
   *)
-    echo "--robot sim|real|dummy|both 필요 (지금: '${ROBOT}') — ./run-calibration.sh -h" >&2
+    echo "--robot sim|real|dummy|plan|both 필요 (지금: '${ROBOT}') — ./run-calibration.sh -h" >&2
     exit 2
     ;;
 esac

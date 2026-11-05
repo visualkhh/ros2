@@ -3,6 +3,7 @@
 training/<task>/calibration/ 명령 · env와 그 task 폴더의 로봇(sim_robot.py · real_robot.py · dummy_robot.py)으로 한 번 측정 → raw.csv.
   sim    SimRobot + CalibrationEnv — Isaac venv · 창 기본 끔, --viz로 켬 · --watch (기록 후 창 닫을 때까지 반복)
   real   RealRobot — ROS .venv · 준비: Pi base + cmd_manager MANUAL · --check-only (안 움직임)
+  plan   로봇 없이 명령만 → 계획 JSON (--out · --rate) — 로봇 쪽 재생기가 읽는다
   dummy  DummyRobot — 표준 라이브러리만 (가짜 모터: --gain-l --gain-r --tau --delay --deadband --slip --noise)
 측정: 명령(BaseCommand)을 robot.dt마다 write → pace, 끝나면 robot.data()(로봇이 쌓은 기록) → raw.csv (분석은 task의 report.py).
 출력: artifacts/<task>/calibration/<시각>_<label>/raw.csv · 분석: python3 training/<task>/calibration/report.py <sim 폴더> <real 폴더>
@@ -12,6 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 import inspect
+import json
 import math
 import os
 import re
@@ -95,9 +97,22 @@ def _save(tag: str, rows, out: str) -> None:
     print(f"[{tag}] {len(rows)}줄 → {out}")
 
 
-MODES = ("sim", "real", "dummy")
-TAGS = {"sim": "02-sim", "real": "02-real", "dummy": "dummy"}
-LABELS = {"sim": "sim_sensor_floor", "real": "real", "dummy": "dummy"}   # CSV label 기본
+MODES = ("sim", "real", "dummy", "plan")
+TAGS = {"sim": "02-sim", "real": "02-real", "dummy": "dummy", "plan": "plan"}
+LABELS = {"sim": "sim_sensor_floor", "real": "real", "dummy": "dummy", "plan": "real"}   # CSV label 기본
+
+
+def export_plan(cmd, rate: float, out: str, label: str = "real") -> str:
+    """명령(BaseCommand, 끝이 있는 것) → 계획 JSON {"dt", "label", "steps": [[v, w], ...]}.
+    sim · real이 같은 명령을 쓰게 하는 한 곳 — 로봇 쪽 재생기(예: Lv2_bee_Assignment tool/ run-cli calibrate wheel)가 이 파일을 읽는다."""
+    dt = 1.0 / rate
+    steps = [[round(v, 6), round(w, 6)] for v, w in (cmd(k * dt) for k in range(int(round(cmd.total / dt))))]
+    spec = ", ".join(f"{k}={getattr(cmd, k):g}" for k in ("speed", "turn", "side") if hasattr(cmd, k))
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    with open(out, "w") as f:
+        json.dump({"source": f"{type(cmd).__name__}({spec})", "dt": dt, "label": label, "steps": steps}, f, separators=(",", ":"))
+    print(f"[plan] {type(cmd).__name__}({spec}) · {len(steps)}스텝 · {len(steps) * dt:.1f}s → {out}")
+    return out
 
 
 def _args(mode: str, argv):
@@ -115,6 +130,8 @@ def _args(mode: str, argv):
         p.add_argument("--rate", type=float, default=20.0)
         p.add_argument("--onnx", default=None, help="이 정책으로 corrector 보정 (A/B의 B) — 안 주면 바이패스 (A · calibration). route rl + rl-only 필요")
         p.add_argument("--check-only", action="store_true", help="상태만 확인 (로봇 안 움직임)")
+    elif mode == "plan":
+        p.add_argument("--rate", type=float, default=20.0, help="스텝 주기 [Hz] (기본 20 = 학습 · 기록 주기)")
     else:
         p.add_argument("--gain", type=float, default=0.99, help="모터 gain (1.0 = 이상)")
         p.add_argument("--gain-l", type=float, default=None)
@@ -176,8 +193,12 @@ def main(argv=None) -> int:
         print("사용법: run-calibration.sh <task> --robot=" + "|".join(MODES) + " [옵션...]  (옵션: --robot=<mode> --help)")
         return 0 if {"-h", "--help"} & set(argv) else 2
     args = _args(mode, argv)
-    tag, label = TAGS[mode], args.label or LABELS[mode]
     cmd = make_command(args)   # 로봇 · sim 띄우기 전에 실패하게
+    if mode == "plan":   # 로봇 없이 명령만 JSON으로
+        out = args.out or run_path(os.path.basename(task_dir(args)), args.label or "plan").replace("raw.csv", "plan.json")
+        export_plan(cmd, args.rate, out if os.path.isabs(out) else str(ISAAC / out), args.label or "real")
+        return 0
+    tag, label = TAGS[mode], args.label or LABELS[mode]
     out = args.out and (args.out if os.path.isabs(args.out) else str(ISAAC / args.out))
     out = out or run_path(os.path.basename(task_dir(args)), args.label or tag)
     robot, after, app = _robot(mode, args, cmd)
