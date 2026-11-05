@@ -134,11 +134,31 @@ python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_corre
 
 **goal 모드 A/B (이 task 정책)** — 같은 `/rl_goal`을 A(바이패스) · B(정책)로 두 번
 
+가장 간단히 (스크립트가 `rl-only` A/B · `route rl` · `/rl_goal` · 도착 대기 · 보고서까지):
+
+```bash
+cd isaac
+./run-real-goal-ab.sh rl_correction_waypoint \
+  --onnx artifacts/rl_correction_waypoint/training/2026-11-04_11-28-19/exported/policy.onnx \
+  --goal 1.0,0.0
+# A 끝 → 로봇을 A와 같은 자리·방향으로 돌려놓고 Enter → B → compare_goal.png
+```
+
+직접 할 때:
+
 ```bash
 # A — 모델은 goal 모드 판별용으로 반드시 넣는다 (enable=false = nominal controller, 보정 0)
 cd ros2_ws
 ./rl-only.sh enable:=false label:=wp_A output:=artifacts/real/wp_A.csv model:=<policy.onnx>
 # Pi: control manual · route rl
+
+# /rl_goal을 보내는 터미널은 ROS env + domain 25가 필요하다 (rl-only.sh/run-cli는 내부에서 해 줌)
+source /opt/ros/lyrical/setup.bash
+source <repo>/ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=25
+source <repo>/tool/peers.sh          # PC에서만 (Pi는 불필요)
+ros2 topic list | grep rl_goal        # /rl_goal + 구독자(/rl_corrector) 확인
+
 ros2 topic pub --once /rl_goal geometry_msgs/msg/Point "{x: 1.0, y: 0.0, z: 0.0}"   # 시작 자세 기준
 # rl-only 로그에 "goal 도착" → 
 ros2 topic pub --once /rl_goal_stop std_msgs/msg/Empty "{}"

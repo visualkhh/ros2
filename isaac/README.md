@@ -32,6 +32,7 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
 ├── run-real-ab.sh            실기기 A/B — ./run-real-ab.sh <task> --onnx <policy.onnx> (A 바이패스 → B 정책 → training/<task>/report.py)
+├── run-real-goal-ab.sh       실기기 goal 모드 A/B — ./run-real-goal-ab.sh <task> --onnx <policy.onnx> --goal X,Y (A/B → report_goal.py)
 ├── run-make-onnx.sh          체크포인트 → ONNX: ./run-make-onnx.sh <model_N.pt> [--quantize] (tools/onnx_tool.py · play 창 없이, 스스로 끝남)
 ├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py → artifacts/<task>/training/)
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh <이름|디렉토리>)
@@ -184,7 +185,8 @@ python3 training/rl_correction_waypoint/report.py <A 폴더> <B 폴더>         
   RealRobot이 측정 직전에 `/rl_corrector/set_parameters`(model_path) · `/rl_corrector/toggle`을 직접 바꾼다 (A = 모델 내림 + 끔 · B = 그 ONNX + 켬).
 - 보고서 지표 (작을수록 좋음): 경로 오차 · 끝점 오차 · 직진 중 휨 — 궤적은 거리 = 엔코더 · 방향 = 자이로 (odom 궤적은 휘어도 직선이라 안 씀).
   B 보정량이 0이면 경고 (정책이 일을 안 함).
-- **웨이포인트 정책(goal 모드)은 속도 입력(네모)을 보정하지 않는다** — 이 A/B로 차이를 보려면 track 모드 정책(관측 6)이 필요하다.
+- **웨이포인트 정책(goal 모드)은 속도 입력(네모)을 보정하지 않는다** — 이 스크립트 대신
+  `./run-real-goal-ab.sh rl_correction_waypoint --onnx <policy.onnx> --goal 1.0,0.0`을 쓴다 (`/rl_goal` A/B · `report_goal.py`).
 - OpenCR는 로봇을 가만히 둔 채 켠다 (부팅 때 자이로 영점). 정지 중에도 자이로가 0이 아니면 정책 입력이 오염된다.
 - maze 정책(nav2 controller)의 A/B는 nav2 `/controller_server/FollowPath/toggle`로 같은 목표를 두 번 — 이 스크립트 범위 밖.
 
