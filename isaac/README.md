@@ -35,6 +35,7 @@ isaac/
 ├── run-real-goal-ab.sh       실기기 goal 모드 A/B — ./run-real-goal-ab.sh <task> --onnx <policy.onnx> --goal X,Y (A/B → report_goal.py)
 ├── run-make-onnx.sh          체크포인트 → ONNX: ./run-make-onnx.sh <model_N.pt> [--quantize] (tools/onnx_tool.py · play 창 없이, 스스로 끝남)
 ├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py → artifacts/<task>/training/)
+├── run-tb-summary.sh         학습 진행 요약 — ./run-tb-summary.sh <task> [--watch 초] [--tags ...]
 ├── run-usd.sh                로봇 URDF → USD 변환만 (./run-usd.sh <이름|디렉토리>)
 ├── run-world.sh              world 보기 — ./run-world.sh <task> [--calibration] [--command keyboard]
 ├── envs/                     환경 바탕 — 모든 env가 상속
