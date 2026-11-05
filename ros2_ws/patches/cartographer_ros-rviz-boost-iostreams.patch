@@ -1,0 +1,14 @@
+diff --git a/cartographer_rviz/CMakeLists.txt b/cartographer_rviz/CMakeLists.txt
+index 4d7c0c2..d6a5cfb 100644
+--- a/cartographer_rviz/CMakeLists.txt
++++ b/cartographer_rviz/CMakeLists.txt
+@@ -29,6 +29,9 @@ endif()
+ 
+ set(CMAKE_AUTOMOC ON)
+ 
++# cartographer's exported target links Boost::iostreams (Boost config mode),
++# so the imported target must exist before find_package(cartographer).
++find_package(Boost REQUIRED COMPONENTS iostreams)
+ find_package(cartographer REQUIRED)
+ include("${CARTOGRAPHER_CMAKE_DIR}/functions.cmake")
+ set(BUILD_SHARED_LIBS OFF)
