@@ -57,8 +57,144 @@ class RestartNodeItem(MenuItem):
         return STAY
 
 
+class ParamItem(MenuItem):
+    """파라미터 한 줄 — Enter로 값 변경 (형식은 descriptor.type에 맞춤)."""
+
+    shows_busy = False
+
+    # rcl_interfaces/msg/ParameterType 값 (rclpy 없이도 표시/파싱)
+    P_BOOL, P_INT, P_DOUBLE, P_STRING = 1, 2, 3, 4
+    P_BYTE_ARRAY, P_BOOL_ARRAY, P_INT_ARRAY, P_DOUBLE_ARRAY, P_STRING_ARRAY = 5, 6, 7, 8, 9
+
+    def __init__(self, app, menu, name: str, value, desc, cli, key: str = ''):
+        super().__init__(app)
+        self.key = key
+        self.menu = menu
+        self.name = name
+        self.value = value
+        self.desc = desc
+        self.cli = cli
+
+    @classmethod
+    def type_name(cls, t) -> str:
+        return {cls.P_BOOL: 'bool', cls.P_INT: 'int', cls.P_DOUBLE: 'double',
+                cls.P_STRING: 'string', cls.P_BYTE_ARRAY: 'byte[]',
+                cls.P_BOOL_ARRAY: 'bool[]', cls.P_INT_ARRAY: 'int[]',
+                cls.P_DOUBLE_ARRAY: 'double[]', cls.P_STRING_ARRAY: 'string[]'}.get(
+                    t, f'type {t}')
+
+    @classmethod
+    def fmt(cls, t, v) -> str:
+        if t == cls.P_BOOL:
+            return 'true' if v else 'false'
+        if t in (cls.P_BYTE_ARRAY, cls.P_BOOL_ARRAY, cls.P_INT_ARRAY,
+                 cls.P_DOUBLE_ARRAY, cls.P_STRING_ARRAY):
+            return ', '.join(str(x) for x in (v or []))
+        return '' if v is None else str(v)
+
+    @staticmethod
+    def _split(raw: str) -> list[str]:
+        s = raw.strip()
+        if s.startswith('[') and s.endswith(']'):
+            s = s[1:-1]
+        if not s.strip():
+            return []
+        return [p.strip() for p in (s.split(',') if ',' in s else s.split())]
+
+    @classmethod
+    def parse(cls, t, raw: str):
+        if t == cls.P_STRING:
+            return raw
+        s = raw.strip()
+        if t == cls.P_BOOL:
+            low = s.lower()
+            if low in ('1', 'true', 'on', 'yes', 'y'):
+                return True
+            if low in ('0', 'false', 'off', 'no', 'n'):
+                return False
+            raise ValueError('bool: true/false/1/0/on/off')
+        if t == cls.P_INT:
+            return int(s, 0)
+        if t == cls.P_DOUBLE:
+            return float(s)
+        parts = cls._split(s)
+        if t == cls.P_BYTE_ARRAY:
+            vals = [int(p, 0) for p in parts]
+            if any(v < 0 or v > 255 for v in vals):
+                raise ValueError('byte는 0~255')
+            return vals
+        if t == cls.P_BOOL_ARRAY:
+            vals = []
+            for p in parts:
+                low = p.lower()
+                if low in ('1', 'true', 'on', 'yes', 'y'):
+                    vals.append(True)
+                elif low in ('0', 'false', 'off', 'no', 'n'):
+                    vals.append(False)
+                else:
+                    raise ValueError(f'bool 아님: {p!r}')
+            return vals
+        if t == cls.P_INT_ARRAY:
+            return [int(p, 0) for p in parts]
+        if t == cls.P_DOUBLE_ARRAY:
+            return [float(p) for p in parts]
+        if t == cls.P_STRING_ARRAY:
+            return [p.strip() for p in s.split(',')] if s else []
+        raise ValueError(f'지원하지 않는 형식: {t}')
+
+    def label(self):
+        ro = ' [읽기전용]' if getattr(self.desc, 'read_only', False) else ''
+        return f'{self.name} = {self.value!r}{ro}'
+
+    def run(self):
+        ptype = getattr(self.desc, 'type', None)
+        if ptype is None:
+            print('형식 정보 없음 — 값을 바꿀 수 없습니다')
+            return STAY
+        if getattr(self.desc, 'read_only', False):
+            print(f'{self.name}: 읽기 전용 파라미터')
+            return STAY
+        raw = self.ui.modal_input(
+            f'파라미터 · {self.name}',
+            [f'형식: {self.type_name(ptype)}', f'현재: {self.fmt(ptype, self.value)}',
+             'Enter 적용 · Esc 취소'],
+            '값>', default=self.fmt(ptype, self.value),
+            validate=lambda t: self._validate(ptype, t))
+        if raw is None:
+            return STAY
+        try:
+            value = self.parse(ptype, raw)
+        except (ValueError, TypeError) as exc:
+            print(f'값 변환 실패: {exc}')
+            return STAY
+        ok, msg = self.bus.param_set(self.cli, self.name, ptype, value)
+        print(('설정: ' if ok else 'FAIL: ') + f'{self.name} = {value!r}'
+              + ('' if ok else f' — {msg}'))
+        if ok:
+            self.menu.refresh()
+            self._runtime_note()
+        return STAY
+
+    @classmethod
+    def _validate(cls, ptype, raw):
+        try:
+            cls.parse(ptype, raw)
+        except (ValueError, TypeError) as exc:
+            return str(exc)
+        return None
+
+    def _runtime_note(self):
+        n = self.name
+        if n.endswith('FollowPath.model_path'):
+            print('model_path는 controller_server가 configure될 때만 읽습니다 — nav restart 후 적용')
+        elif n.endswith('FollowPath.enable'):
+            print('enable 파라미터는 configure 때만 읽습니다 — 실제 토글은 ab rl_nav_controller on/off')
+        elif n.endswith('FollowPath.lidar_inflation'):
+            print('다음 제어 주기부터 적용됩니다 (재시작 불필요)')
+
+
 class NodeParamMenu(Menu):
-    """노드 하나의 파라미터 현재값 + 진단 — 1초마다 자동 갱신 (읽기 전용)."""
+    """노드 하나의 파라미터 현재값 + 진단 — Enter로 값 변경 · 1초마다 자동 갱신."""
 
     REFRESH_S = 1.0
 
@@ -68,19 +204,21 @@ class NodeParamMenu(Menu):
         self.nodens = ns
         disp = f'/{name}' if ns in ('/', '') else f'{ns.rstrip("/")}/{name}'
         self.title = f'파라미터 · {disp}'
-        self._rows: list[tuple[str, object]] | None = None
+        self._rows: list[tuple[str, object, object]] | None = None
+        self._cli = None
         self._at = 0.0
 
     def refresh(self):
         self._rows = None
         self._at = 0.0
 
-    def _fetch(self) -> list[tuple[str, object]]:
+    def _fetch(self) -> list[tuple[str, object, object]]:
         now = time.monotonic()
         if self._rows is not None and now - self._at < self.REFRESH_S:
             return self._rows
-        rows: list[tuple[str, object]] = []
+        rows: list[tuple[str, object, object]] = []
         cli = self.bus.param_client(self.nodename, self.nodens)
+        self._cli = cli
         if cli is not None and cli.wait_for_services(timeout_sec=1.0):
             names = self.bus.param_list_names(cli) or []
             if names:
@@ -92,7 +230,7 @@ class NodeParamMenu(Menu):
                              if i < len(descs) and i < len(vals) else None)
                     except Exception:
                         v = None
-                    rows.append((n, v))
+                    rows.append((n, v, descs[i] if i < len(descs) else None))
         self._rows = rows
         self._at = time.monotonic()
         return rows
@@ -101,20 +239,23 @@ class NodeParamMenu(Menu):
         rows = self._fetch()
         if not rows:
             return [InfoItem(self.app, '파라미터 없음 (서비스 무응답·권한 없음)')]
-        return [InfoItem(self.app, f'{n} = {v!r}', key=str(i + 1))
-                for i, (n, v) in enumerate(rows)]
+        return [ParamItem(self.app, self, n, v, d, self._cli, str(i + 1))
+                for i, (n, v, d) in enumerate(rows)]
 
     def center(self):
         full = f'/{self.nodename}' if self.nodens in ('/', '') else \
             f'{self.nodens.rstrip("/")}/{self.nodename}'
-        lines = [f'[노드] {full}', ' 파라미터 현재값 — 1초마다 자동 갱신 (읽기 전용)', '']
+        lines = [f'[노드] {full}', ' 파라미터 — Enter로 값 변경 · 1초 갱신', '']
         diags = [(n, lv, msg) for n, lv, msg in self.bus.diag_entries()
                  if self.nodename in n or full in n]
-        for n, lv, msg in diags[:8]:
-            mark = {0: 'OK', 1: 'WARN', 2: 'ERR', 3: 'STALE'}.get(lv, '?')
-            lines.append(f' 진단 {self.bus.diag_short(n)}: {mark} {msg}')
-        if not diags:
-            lines.append(' 진단: 이 노드 항목 없음')
+        if diags:
+            lines.append(f' 진단 {len(diags)}개')
+            for n, lv, msg in diags[:8]:
+                mark = {0: 'OK', 1: 'WARN', 2: 'ERR', 3: 'STALE'}.get(lv, '?')
+                lines.append(f'  {self.bus.diag_short(n)}: {mark} {msg}')
+        else:
+            bad = sum(1 for _, lv, _ in self.bus.diag_entries() if lv >= 1)
+            lines.append(' 진단: 이 노드 항목 없음' + (f' · 전체 경고/에러 {bad}개' if bad else ''))
         return lines
 
 

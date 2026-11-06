@@ -872,6 +872,33 @@ class Bus:
             return None
         return list(res.values)
 
+    def param_set(self, cli, name: str, ptype: int, value) -> tuple[bool, str]:
+        """파라미터 하나 설정 — (성공, 메시지). 값 형식은 type에 맞춰야 한다."""
+        from rcl_interfaces.msg import Parameter, ParameterType as PT, ParameterValue
+        field = {
+            PT.PARAMETER_BOOL: 'bool_value',
+            PT.PARAMETER_INTEGER: 'integer_value',
+            PT.PARAMETER_DOUBLE: 'double_value',
+            PT.PARAMETER_STRING: 'string_value',
+            PT.PARAMETER_BYTE_ARRAY: 'byte_array_value',
+            PT.PARAMETER_BOOL_ARRAY: 'bool_array_value',
+            PT.PARAMETER_INTEGER_ARRAY: 'integer_array_value',
+            PT.PARAMETER_DOUBLE_ARRAY: 'double_array_value',
+            PT.PARAMETER_STRING_ARRAY: 'string_array_value',
+        }.get(ptype)
+        if field is None:
+            return False, f'지원하지 않는 형식: {ptype}'
+        pv = ParameterValue(type=ptype)
+        try:
+            setattr(pv, field, value)
+            res = self.param_wait(cli.set_parameters([Parameter(name=name, value=pv)]))
+        except Exception as exc:
+            return False, str(exc)
+        if res is None or getattr(res, 'results', None) is None:
+            return False, '설정 응답 없음'
+        bad = [r.reason for r in res.results if not r.successful]
+        return not bad, ('ok' if not bad else '; '.join(bad))
+
     @staticmethod
     def param_display_value(ptype: int, value) -> object:
         """ParameterValue 메시지 → 표시용 파이썬 값."""
