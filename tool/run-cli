@@ -26,7 +26,10 @@
 set -eo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-cmd="${1:-start}"
+if [ $# -eq 0 ]; then
+  exec "$HERE/cli/start.sh"   # 인자 없음 = 대화형 메뉴 (TTY 아니면 status)
+fi
+cmd="$1"
 case "$cmd" in
   -h|--help)
     sed -n '2,/^set -eo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
@@ -34,8 +37,8 @@ case "$cmd" in
     exec "$HERE/cli/start.sh" --help 2>/dev/null | sed -n '/^usage:/,$p'
     ;;
   start)
-    [ $# -gt 0 ] && shift
-    exec "$HERE/cli/start.sh" "$@"
+    shift
+    exec "$HERE/cli/start.sh" start "$@"
     ;;
   stop)
     [ $# -gt 0 ] && shift
