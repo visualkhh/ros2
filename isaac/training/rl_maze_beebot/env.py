@@ -13,6 +13,7 @@ import torch
 
 from training.rl_maze.env import RlMazeEnv
 from training.rl_maze_beebot.env_cfg import RlMazeBeebotEnvCfg
+from training.rl_maze_beebot.reward import compute_rewards
 
 
 class RlMazeBeebotEnv(RlMazeEnv):
@@ -45,6 +46,10 @@ class RlMazeBeebotEnv(RlMazeEnv):
         infl_pts = torch.stack([xy[:, 0, None] + infl * torch.cos(ang),
                                 xy[:, 1, None] + infl * torch.sin(ang), z], dim=-1)
         return raw_pts, infl_pts, raw, infl
+
+    def _get_rewards(self) -> torch.Tensor:
+        """beebot 전용 보상 — `rl_maze_beebot/reward.py` (rl_maze와 별도로 수정 가능)."""
+        return compute_rewards(self)
 
     def _get_observations(self) -> dict:
         c = self.cfg
