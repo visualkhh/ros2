@@ -153,17 +153,75 @@ def _svg(series: list[dict], *, width=760, height=250, title='', xlabel='t (s)',
     return ''.join(out)
 
 
-def _metric_row(name, a, b, fmt='{:.2f}'):
+def _seg_dist(px, py, ax, ay, bx, by):
+    dx, dy = bx - ax, by - ay
+    den = dx * dx + dy * dy
+    if den < 1e-12:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / den))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def _path_stats(odom, start, route):
+    pts = [(x, y) for _, _, _, x, y in odom]
+    if not pts:
+        return dict(lat_rms=None, lat_max=None, goal_err=None, efficiency=None,
+                    drive_time=0.0, stop_frac=None, alpha=None)
+    s = start or pts[0]
+    goals = list(route) or [pts[-1]]
+    poly = [s] + goals
+    errs = [min(_seg_dist(px, py, *poly[i], *poly[i + 1])
+                for i in range(len(poly) - 1)) for px, py in pts]
+    rms = math.sqrt(sum(e * e for e in errs) / len(errs))
+    straight = sum(math.hypot(poly[i + 1][0] - poly[i][0], poly[i + 1][1] - poly[i][1])
+                   for i in range(len(poly) - 1))
+    dist = sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+               for i in range(1, len(pts)))
+    goal = goals[-1]
+    moving = [o for o in odom if abs(o[1]) > 0.01]
+    drive_time = (moving[-1][0] - moving[0][0]) if len(moving) > 1 else (
+        odom[-1][0] - odom[0][0] if len(odom) > 1 else 0.0)
+    stop_frac = sum(1 for o in odom if abs(o[1]) < 0.01) / len(odom) * 100.0
+    alphas = []
+    for i in range(1, len(odom)):
+        dt = odom[i][0] - odom[i - 1][0]
+        if 1e-3 < dt < 0.5:
+            alphas.append(abs(odom[i][2] - odom[i - 1][2]) / dt)
+    alpha = sum(alphas) / len(alphas) if alphas else None
+    return dict(lat_rms=rms, lat_max=max(errs), goal_err=math.hypot(pts[-1][0] - goal[0], pts[-1][1] - goal[1]),
+                efficiency=(straight / dist * 100.0) if dist > 1e-6 else None,
+                drive_time=drive_time, stop_frac=stop_frac, alpha=alpha)
+
+
+def _pct(a, b, lower: bool) -> float | None:
+    if a is None or b is None:
+        return None
+    base = max(abs(b), 1e-6)
+    return ((b - a) / base * 100.0) if lower else ((a - b) / base * 100.0)
+
+
+def _row(name, a, b, *, lower=None, fmt='{:.2f}', unit='', word=''):
     def f(v):
-        if v is None:
-            return '-'
-        return fmt.format(v)
-    return f'<tr><th>{_esc(name)}</th><td>{f(a)}</td><td>{f(b)}</td></tr>'
+        return '-' if v is None else fmt.format(v) + (f' {unit}' if unit else '')
+    diff, cls = '-', ''
+    if lower is not None:
+        p = _pct(a, b, lower)
+        if p is None:
+            pass
+        elif abs(p) <= 3.0:
+            diff = '비슷'
+        elif p > 0:
+            diff, cls = f'A 우세 ({p:.0f}% {word})', 'good'
+        else:
+            diff, cls = f'B 우세 ({-p:.0f}% {word})', 'bad'
+    return f'<tr><th>{_esc(name)}</th><td>{f(a)}</td><td>{f(b)}</td><td class="{cls}">{diff}</td></tr>'
 
 
 def generate_report(a_path: Path, b_path: Path, label: str | None = None,
-                    out: Path | None = None) -> Path:
+                    out: Path | None = None, start=None, route=None) -> Path:
     a, b = _load(Path(a_path)), _load(Path(b_path))
+    for x in (a, b):
+        x.update(_path_stats(x['odom'], start, route))
     label = label or time.strftime('%Y%m%d_%H%M%S')
     out = Path(out) if out else a_path.parent / f'report_{label}_{time.strftime("%H%M%S")}.html'
 
@@ -179,18 +237,75 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
     xy = [dict(label='A RL', color='#e5484d', xs=[x[3] for x in a['odom']], ys=[x[4] for x in a['odom']]),
           dict(label='B inner', color='#2f81f7', xs=[x[3] for x in b['odom']], ys=[x[4] for x in b['odom']])]
 
+    ok_a = a['goal_err'] is not None and a['goal_err'] <= 0.30 and a['distance'] > 0.5
+    ok_b = b['goal_err'] is not None and b['goal_err'] <= 0.30 and b['distance'] > 0.5
     rows = [
-        _metric_row('주행 시간 (s)', a['duration'], b['duration']),
-        _metric_row('이동 거리 (m)', a['distance'], b['distance']),
-        _metric_row('평균 속도 (m/s)', a['avg_speed'], b['avg_speed']),
-        _metric_row('최고 속도 (m/s)', a['max_speed'], b['max_speed']),
-        _metric_row('평균 |ω| (rad/s)', a['avg_w'], b['avg_w']),
-        _metric_row('최고 |ω| (rad/s)', a['max_w'], b['max_w']),
-        _metric_row('명령 활동 (%)', a['active'], b['active'], '{:.0f}'),
-        _metric_row('RL active (%)', a['rl_pct'], b['rl_pct'], '{:.0f}'),
-        _metric_row('모델 loaded (%)', a['loaded_pct'], b['loaded_pct'], '{:.0f}'),
-        f'<tr><th>cmd 토픽</th><td>{_esc(a["cmd_topic"])}</td><td>{_esc(b["cmd_topic"])}</td></tr>',
+        _row('주행 시간 (s)', a['drive_time'], b['drive_time'], lower=True, word='빠름'),
+        _row('주행 거리 (m)', a['distance'], b['distance']),
+        _row('평균 속도 (m/s)', a['avg_speed'], b['avg_speed']),
+        _row('최고 속도 (m/s)', a['max_speed'], b['max_speed']),
+        _row('경로 오차 RMS (m)', a['lat_rms'], b['lat_rms'], lower=True, unit='m', word='작음'),
+        _row('경로 오차 최대 (m)', a['lat_max'], b['lat_max'], lower=True, unit='m', word='작음'),
+        _row('도착 오차 (m)', a['goal_err'], b['goal_err'], lower=True, unit='m', word='작음'),
+        _row('평균 |ω| (rad/s)', a['avg_w'], b['avg_w'], lower=True, word='작음'),
+        _row('평균 각가속도 (rad/s²)', a['alpha'], b['alpha'], lower=True, word='부드러움'),
+        _row('정지 비율 (%)', a['stop_frac'], b['stop_frac'], lower=True, fmt='{:.0f}', word='작음'),
+        _row('RL active (%)', a['rl_pct'], b['rl_pct'], fmt='{:.0f}'),
+        _row('모델 loaded (%)', a['loaded_pct'], b['loaded_pct'], fmt='{:.0f}'),
+        f'<tr><th>완주</th><td class="{"good" if ok_a else "bad"}">{"예" if ok_a else "아니오"}</td>'
+        f'<td class="{"good" if ok_b else "bad"}">{"예" if ok_b else "아니오"}</td>'
+        f'<td class="{"good" if ok_a and not ok_b else "bad" if ok_b and not ok_a else ""}">'
+        f'{"A만 완주" if ok_a and not ok_b else "B만 완주" if ok_b and not ok_a else "-"}</td></tr>',
+        f'<tr><th>cmd 토픽</th><td>{_esc(a["cmd_topic"])}</td><td>{_esc(b["cmd_topic"])}</td><td>-</td></tr>',
     ]
+
+    # 종합 판정: 핵심 5개 지표 가중치
+    scored = [
+        ('주행 시간', a['drive_time'], b['drive_time'], True, 25),
+        ('경로 오차', a['lat_rms'], b['lat_rms'], True, 30),
+        ('도착 오차', a['goal_err'], b['goal_err'], True, 20),
+        ('부드러움', a['alpha'], b['alpha'], True, 15),
+        ('정지 비율', a['stop_frac'], b['stop_frac'], True, 10),
+    ]
+    aw = bw = 0
+    for _, av, bv, lower, w in scored:
+        p = _pct(av, bv, lower)
+        if p is None:
+            continue
+        if p > 3.0:
+            aw += w
+        elif p < -3.0:
+            bw += w
+    total = aw + bw
+    if total == 0:
+        verdict, vcls = '비슷', 'neutral'
+    elif aw > bw * 1.2:
+        verdict, vcls = 'A (RL) 우세', 'good'
+    elif bw > aw * 1.2:
+        verdict, vcls = 'B (inner) 우세', 'bad'
+    else:
+        verdict, vcls = '비슷', 'neutral'
+
+    highlights = []
+    for name, av, bv, lower, word in (
+            ('주행 시간', a['drive_time'], b['drive_time'], True, '빠름'),
+            ('경로 이탈', a['lat_rms'], b['lat_rms'], True, '작음'),
+            ('도착 오차', a['goal_err'], b['goal_err'], True, '작음'),
+            ('각가속도', a['alpha'], b['alpha'], True, '부드러움')):
+        p = _pct(av, bv, lower)
+        if p is None or abs(p) <= 3.0:
+            continue
+        who = 'A(RL)' if p > 0 else 'B(inner)'
+        highlights.append(f'{who}가 {name} {abs(p):.0f}% {word}')
+    summary = ' · '.join(highlights[:4]) if highlights else '주요 지표 차이 3% 이내 — 비슷'
+
+    score_bar = ''
+    if total:
+        ap = aw / total * 100.0
+        score_bar = (f'<div class="score"><div class="scoreA" style="width:{ap:.0f}%">'
+                     f'A {aw}</div><div class="scoreB" style="width:{100-ap:.0f}%">B {bw}</div></div>'
+                     f'<p class="muted">가중치: 시간 25 · 경로오차 30 · 도착오차 20 · 부드러움 15 · 정지 10</p>')
+
     body = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
 <title>RL vs inner A/B — {_esc(label)}</title>
@@ -198,26 +313,38 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
 body{{font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif;margin:24px;color:#1f2328;background:#fff}}
 h1{{font-size:22px;margin:0 0 4px}} h2{{font-size:16px;margin:24px 0 8px}}
 .muted,.lbl,.yl,.xl,.lg{{fill:#57606a;font-size:11px}} .t{{font-size:13px;font-weight:600}}
-table{{border-collapse:collapse;margin:8px 0 16px;min-width:520px}}
+table{{border-collapse:collapse;margin:8px 0 16px;min-width:720px}}
 th,td{{border:1px solid #d0d7de;padding:6px 10px;text-align:right}} th{{text-align:left;background:#f6f8fa}}
-td:first-child,th:first-child{{text-align:left}}
+td:first-child,th:first-child{{text-align:left}} td:nth-child(4){{text-align:left;font-weight:600}}
+.good{{color:#1a7f37}} .bad{{color:#cf222e}} .neutral{{color:#57606a}}
 .chart{{width:100%;max-width:900px;background:#fff;border:1px solid #d0d7de;border-radius:6px;margin:6px 0}}
 .g{{stroke:#eaeef2;stroke-width:1}} code{{background:#f6f8fa;padding:2px 5px;border-radius:4px}}
+.hero{{border:1px solid #d0d7de;border-radius:8px;padding:14px 16px;margin:14px 0;background:#f6f8fa}}
+.verdict{{font-size:20px;font-weight:700;margin-bottom:4px}} .verdict.good{{color:#1a7f37}} .verdict.bad{{color:#cf222e}} .verdict.neutral{{color:#57606a}}
+.score{{display:flex;height:22px;border-radius:5px;overflow:hidden;margin:10px 0 2px;font-size:12px;color:#fff;font-weight:600}}
+.scoreA{{background:#e5484d;display:flex;align-items:center;justify-content:center;min-width:2em}}
+.scoreB{{background:#2f81f7;display:flex;align-items:center;justify-content:center;min-width:2em}}
 </style></head><body>
 <h1>RL vs inner controller A/B</h1>
 <p class="muted">{_esc(label)} · {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
 <p>A: <code>{_esc(a_path)}</code><br>B: <code>{_esc(b_path)}</code></p>
-<h2>지표</h2>
-<table><thead><tr><th>항목</th><th>A (RL)</th><th>B (inner)</th></tr></thead><tbody>
+<div class="hero">
+  <div class="verdict {vcls}">종합: {verdict}</div>
+  <div>{_esc(summary)}</div>
+  {score_bar}
+</div>
+<h2>지표 비교</h2>
+<table><thead><tr><th>항목</th><th>A (RL)</th><th>B (inner)</th><th>차이 / 판정</th></tr></thead><tbody>
 {''.join(rows)}
 </tbody></table>
-<p class="muted">RL active는 <code>/controller_server/FollowPath/status</code>의 첫 값이 0.5 이상인 비율입니다.
+<p class="muted">주행 시간은 bag 시작의 2초 대기와 정지 구간을 제외한 실제 이동 구간입니다.
+RL active는 <code>/controller_server/FollowPath/status</code>의 첫 값이 0.5 이상인 비율입니다.
 B(inner)는 0이 정상입니다.</p>
+<h2>odom 위치 궤적 (XY)</h2>{_svg(xy, title='odom 위치 궤적', xlabel='x (m)', ylabel='y (m)')}
 <h2>명령 속도 v</h2>{_svg(series_cmd(1), title='cmd v', ylabel='m/s', zero=True)}
 <h2>명령 각속도 ω</h2>{_svg(series_cmd(2), title='cmd ω', ylabel='rad/s', zero=True)}
 <h2>실제 속도 v (odom)</h2>{_svg(series_odom('v'), title='odom v', ylabel='m/s', zero=True)}
 <h2>실제 각속도 ω (odom)</h2>{_svg(series_odom('w'), title='odom ω', ylabel='rad/s', zero=True)}
-<h2>궤적 (odom)</h2>{_svg(xy, title='XY trajectory', xlabel='x (m)', ylabel='y (m)')}
 </body></html>'''
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(body, encoding='utf-8')

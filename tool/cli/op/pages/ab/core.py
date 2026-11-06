@@ -378,8 +378,15 @@ class AbTest:
             return 1
         try:
             from .report import generate_report
+            start = route = None
+            try:
+                plan = self.load_plan()
+                start = (plan['start']['x'], plan['start']['y']) if plan.get('start') else None
+                route = [(g['x'], g['y']) for g in plan.get('route', [])]
+            except Exception:
+                pass
             path = generate_report(Path(a['bag']), Path(b['bag']), label=label,
-                                   out=Path(out) if out else None)
+                                   out=Path(out) if out else None, start=start, route=route)
         except Exception as exc:
             print(f'FAIL: 보고서 생성 — {exc}', file=sys.stderr)
             return 1
