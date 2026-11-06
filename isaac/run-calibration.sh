@@ -78,6 +78,13 @@ ros_env() {
   set -u
 }
 
+# real_robot.py가 bee에 SSH/scp로 붙어 로봇 안에서 재생하는 task(rl_maze_beebot 등)는
+# PC의 ROS/peers가 필요 없다. ros_env()는 pak.local(DDS 피어) · ROS_DOMAIN_ID=25를 쓰는
+# Pi 직접 연결용이라 beebot에서는 엉뚱한 pak를 찾고 25로 표시된다 → 건너뛴다.
+real_uses_ssh() {
+  grep -q "BEE_HOST" "$ISAAC/training/$TASK/real_robot.py" 2>/dev/null
+}
+
 if [[ $# -eq 0 ]] || [[ "$1" == "-h" || "$1" == "--help" || "$1" == "help" ]]; then
   usage
   exit 0
@@ -121,7 +128,10 @@ case "$ROBOT" in
     report $rc
     ;;
   real)
-    ros_env
+    # beebot처럼 real_robot.py가 SSH로 로봇 안에서 재생하는 task는 PC ROS/peers를 안 쓴다.
+    if ! real_uses_ssh; then
+      ros_env
+    fi
     set +e; "$PY" -m calibration "$TASK" --robot real "$@"; rc=$?; set -e
     report $rc
     ;;

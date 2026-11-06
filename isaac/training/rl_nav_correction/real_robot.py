@@ -28,6 +28,9 @@ SSH = ["ssh", "-o", "ConnectTimeout=8", "-o", "BatchMode=yes"]
 
 
 class RealRobot(RobotInterface):
+    HOST = HOST   # 표시용 (calibration/__main__.py가 SSH 대상 · 도메인을 출력)
+    ENV = ENV
+
     def __init__(self, rate: float = 20.0):
         super().__init__(1.0 / rate)
         self.steps = []

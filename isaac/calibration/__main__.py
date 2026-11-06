@@ -200,7 +200,12 @@ def main(argv=None) -> int:
     robot, after, app = _robot(mode, args, cmd)
     try:
         if mode == "real":
-            print(f"[{tag}] ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '(unset)')}")
+            # bee SSH task는 PC 환경변수가 아니라 실제 로봇에 보내는 ENV의 도메인을 보여준다
+            env = getattr(robot, "ENV", "") or ""
+            m = re.search(r"ROS_DOMAIN_ID=(\d+)", env)
+            domain = m.group(1) if m else os.environ.get("ROS_DOMAIN_ID", "(unset)")
+            host = getattr(robot, "HOST", "")
+            print(f"[{tag}] ROS_DOMAIN_ID={domain}" + (f" ({host} SSH)" if host else ""))
         why = robot.ready()
         if getattr(args, "check_only", False):
             print(f"[{tag}] check-only — {'준비됨' if why is None else '거부: ' + why}")
