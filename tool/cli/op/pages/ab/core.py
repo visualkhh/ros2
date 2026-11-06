@@ -216,6 +216,7 @@ class AbTest:
         data = self._load()
         data['recording'] = rec
         self._save(data)
+        time.sleep(2.0)   # rosbag2가 토픽을 발견할 시간 — 짧은 주행에서 odom/cmd 누락 방지
         return rec
 
     def stop(self) -> dict | None:
@@ -257,6 +258,7 @@ class AbTest:
         data.setdefault('repeats', 1)
         data.setdefault('settle_s', 1.0)
         data.setdefault('auto_mode', True)
+        data.setdefault('pause_between', False)
         data.setdefault('move_to_start', False)
         data.setdefault('return_to_start', False)
         return data
@@ -318,6 +320,19 @@ class AbTest:
                     except RuntimeError as exc:
                         print(f'FAIL: {exc}', file=sys.stderr)
                         ok_all = False
+
+                if plan.get('pause_between'):
+                    if sys.stdin.isatty():
+                        pos = (f'시작 위치 ({start["x"]:.2f}, {start["y"]:.2f}, '
+                               f'{start.get("yaw_deg", 0.0):.0f}°)' if start else '시작 위치')
+                        body = [f'A{r} (RL) 녹화 완료.',
+                                f'로봇을 {pos}에 맞추세요.',
+                                '필요하면 RViz 2D Pose Estimate / ./run-cli initpose로 위치를 보정하세요.',
+                                '준비되면 Y — B(inner)를 시작합니다.']
+                        if not self.bus.ui.confirm('B(inner) 준비', body=body, default=True):
+                            raise RuntimeError('사용자가 B 단계를 취소')
+                    else:
+                        print('pause_between: TTY가 아니라 B를 바로 시작합니다')
 
                 ok, msg = self.toggle(False)
                 if not ok:

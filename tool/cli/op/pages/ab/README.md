@@ -41,6 +41,7 @@ ab/
 | `goal_timeout_s` | goal 하나당 제한 시간 |
 | `settle_s` | goal 도착 뒤 대기 |
 | `auto_mode` | 시작 전에 NAV_PLAN으로 전환 |
+| `pause_between` | A(RL) 끝나고 B(inner) 전에 "시작 위치로 놓고 Y" 대기 |
 | `move_to_start` · `return_to_start` | 시작 자세로 이동/복귀 |
 
 새 A/B 노드는 `AB_NODES`와 `<노드>/command.json`을 추가한다.
