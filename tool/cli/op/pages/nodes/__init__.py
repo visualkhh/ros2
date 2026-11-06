@@ -280,7 +280,7 @@ class NodeActionMenu(Menu):
                                  RestartNodeItem(self.app, self._name)]
         if self._target is not None:
             n, ns = self._target
-            items.append(GoMenu(self.app, '3', '파라미터 · 진단 (live · 1초 갱신)',
+            items.append(GoMenu(self.app, '3', '파라미터 설정 · 진단 (live · 1초 갱신)',
                                 NodeParamMenu(self.app, n, ns)))
         return items
 
@@ -294,7 +294,7 @@ class NodeActionMenu(Menu):
         self._refresh_status()
         lines = list(self._lines)
         if self._target is not None:
-            lines += ['', ' 3) 파라미터 · 진단 live 화면으로']
+            lines += ['', ' 3) 파라미터 설정 · 진단 live 화면으로']
         if base(self._name) in CRITICAL:
             lines.append(self.term.paint(' 제어 핵심 노드 (state/cmd/opencr)', YELLOW))
         lines += ['', ' 중지: OS 프로세스 kill (launch respawn 없음 → 멈춤 유지)',
