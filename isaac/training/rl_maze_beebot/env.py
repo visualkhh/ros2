@@ -30,7 +30,7 @@ class RlMazeBeebotEnv(RlMazeEnv):
         self.lidar_markers.set_visible(self.lidar_vis)
         print(f"[vis] nvblox height slice {'ON' if self.lidar_vis else 'OFF'} · "
               f"360° · {self.cfg.lidar_vis_rays} rays · z=0.10 m "
-              f"(raw=청록 · inflation=마젠타 0~0.02 m · 3.5m=회색)", flush=True)
+              f"(raw=청록 · inflation=마젠타 0.01~0.05 m · 3.5m=회색)", flush=True)
         return self.lidar_vis
 
     def lidar_points(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:

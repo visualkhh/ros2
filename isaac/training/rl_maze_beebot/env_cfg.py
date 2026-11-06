@@ -24,13 +24,16 @@ class RlMazeBeebotEnvCfg(RlMazeEnvCfg):
     lidar_rays = 360                                      # nvblox 0.05 m voxel / 3.5 m → 1°(360)가 최대 의미 해상도
     lidar_vis_rays = 360                                  # L 시각화도 같은 360방향
     collide_r = 0.18                                      # beebot Nav2 robot_radius
-    # 인플레이션은 실기 파라미터(lidar_inflation)와 같은 단위. 학습은 거의 raw에 가까운 5 mm~2 cm만.
-    inflation_range = (0.005, 0.02)
-    path_margin = 0.32                                    # max(inflation) + 0.32 = 경로 최소 0.34 m 유지
-    # 보상용 여유 — 관측용 inflation(0.005~0.02)과 분리한다. 경로는 0.34 m를 확보하므로
-    # 이 값(0.30 m)보다 가까워지면 beebot 전용 보상에서 soft 패널티를 준다.
-    reward_margin = 0.30
-    reward_dynamic_margin = 0.30
+    # 인플레이션은 실기 파라미터(lidar_inflation)와 같은 단위. 사용자가 1~5 cm로 바꿀 수 있으므로
+    # 학습도 같은 범위(0.01~0.05 m)를 랜덤으로 커버한다 — 좁은 범위면 실기 설정 변경에 일반화가 안 된다.
+    inflation_range = (0.01, 0.05)
+    path_margin = 0.32                                    # max(inflation) + 0.32 = 경로 최소 0.37 m 유지
+    # 인플레이션 점군과 로봇 몸이 겹칠 때의 작은 패널티 (실제 충돌 −200은 별도).
+    # 충돌 반경(collide_r)은 로봇 반경이라 보상용 임의 여유가 아니다.
+    w_inflate = 0.5
+    w_dynamic_inflate = 0.5
+    # 중간 웨이포인트 보상 — 기본 2.0보다 크게 (경로를 끝까지 따라가게)
+    w_reach = 5.0
     # 실사형 동적 장애물 — 충돌하면 에피소드 종료(재스폰 없음), 로봇 앞 텔레포트도 없음.
     dynamic_respawn_s = 1e9                               # 8초마다 사람이 갑자기 나타나는 연출 끔
     dynamic_block_teleport = False                        # 로봇을 막는 사람/공을 강제 텔레포트하지 않음
