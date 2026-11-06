@@ -592,13 +592,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: clicked_point
-    - Class: rviz_default_plugins/SetGoal
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /goal_pose
+    - Class: nav2_rviz_plugins/GoalTool
+      # 기본 rviz SetGoal은 /goal_pose로만 발행 → Nav2가 안 받는다.
+      # 이 툴은 Nav2 패널을 통해 /navigate_to_pose 액션으로 보낸다.
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
