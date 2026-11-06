@@ -104,7 +104,7 @@ tool/
 ./run-cli beep [Hz ms]         # OpenCR 부저 삑 (/cmd_beep · /cmd_beep_tone · 메뉴 0) 비프음 · 텔레오퍼 b)
 ./run-cli say <글>              # 타이핑삑 — 한/영 → 자모별 삑 (/cmd_say · 메뉴 0) 비프음 → 3)
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
-./run-cli ab rl_nav_controller status|on|off|record|stop|guide|history   # RL vs inner A/B
+./run-cli ab rl_nav_controller status|on|off|record|stop|guide|report|history   # RL vs inner A/B
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
 ./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
 ./run-cli stop                  # 바퀴 정지 → 띄운 것 전부 종료

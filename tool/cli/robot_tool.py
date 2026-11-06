@@ -198,9 +198,10 @@ def build_parser() -> argparse.ArgumentParser:
     ab.add_argument('node', nargs='?', default='nodes',
                     help='노드 이름 (예: rl_nav_controller) 또는 nodes')
     ab.add_argument('action', nargs='?', default=None,
-                    choices=('status', 'on', 'off', 'record', 'stop', 'guide', 'history'),
-                    help='status · on · off · record · stop · guide · history (생략 시 status)')
-    ab.add_argument('--label', '-l', default=None, help='record/guide: bag 이름에 붙일 라벨 (예: A, B)')
+                    choices=('status', 'on', 'off', 'record', 'stop', 'guide', 'report', 'history'),
+                    help='status · on · off · record · stop · guide · report · history (생략 시 status)')
+    ab.add_argument('--label', '-l', default=None, help='record/guide/report: bag 이름·보고서 라벨')
+    ab.add_argument('--out', default=None, help='report: HTML 출력 경로')
     ab.add_argument('--config', default=None,
                     help='guide: command.json 경로 (기본 op/pages/ab/rl_nav_controller/command.json)')
     for cmd, help_ in (('node-kill', '개별 노드 중지 — OS 프로세스 kill (로봇에서 실행 · PC는 SSH 경유)'),

@@ -58,7 +58,7 @@ class AbRecordItem(MenuItem):
             print('FAIL: 이미 녹화 중 — 4) 녹화 종료를 먼저 누르세요', file=sys.stderr)
             return STAY
         label = self.ui.modal_input(
-            'A/B 녹화', ['라벨 (예: A, B, rl, mppi)', '저장: ~/bags/ab/<시각>_<라벨>'], '라벨>', default='A')
+            'A/B 녹화', ['라벨 (예: A, B, rl, mppi)', '저장: tool/bags/ab/<시각>_<라벨>'], '라벨>', default='A')
         if label is None:
             return STAY
         try:
@@ -156,6 +156,6 @@ class AbMenu(Menu):
 
     def center(self):
         lines = ['[A/B 대상 노드]', ' rl_nav_controller — Nav2 FollowPath RL/inner']
-        lines += ['', ' 녹화: ~/bags/ab/<시각>_<라벨> (rosbag2)',
+        lines += ['', ' 녹화: tool/bags/ab/<시각>_<라벨> (rosbag2)',
                   ' 자동: rl_nav_controller/command.json의 route']
         return lines

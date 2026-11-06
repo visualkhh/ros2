@@ -20,13 +20,15 @@ ab/
 ./run-cli ab rl_nav_controller record --label A
 ./run-cli ab rl_nav_controller stop
 ./run-cli ab rl_nav_controller guide --label ab1
+./run-cli ab rl_nav_controller report --label ab1
 ./run-cli ab rl_nav_controller history
 ```
 
 - `on`: RL 정책 ON (`/controller_server/FollowPath/toggle` true)
 - `off`: inner controller(DWB/MPPI)로 바이패스
-- `record`: `~/bags/ab/<시각>_<라벨>`에 rosbag2 기록
+- `record`: `tool/bags/ab/<시각>_<라벨>`에 rosbag2 기록 (`-a`)
 - `guide`: `rl_nav_controller/command.json`의 route를 A(RL) → B(inner)로 자동 주행
+- `report`: A/B bag → `tool/bags/ab/report_<label>_<시각>.html` (인라인 SVG, matplotlib 불필요)
 
 ## command.json
 

@@ -24,9 +24,10 @@ AB_NODES = (
 
 NODE = 'rl_nav_controller'
 TOGGLE = '/controller_server/FollowPath/toggle'
-BAG_DIR = Path.home() / 'bags' / 'ab'
+TOOL_DIR = Path(__file__).resolve().parents[4]   # tool/
+BAG_DIR = TOOL_DIR / 'bags' / 'ab'
 STATE = Path.home() / '.cache' / 'robot_tool' / 'ab.json'
-RECORD_LOG = Path.home() / '.cache' / 'robot_tool' / 'ab-record.log'
+RECORD_LOG = BAG_DIR / 'record.log'
 PLAN = Path(__file__).resolve().parent / NODE / 'command.json'
 INNER = {1: 'DWB', 2: 'MPPI', 3: 'RPP', 4: 'RotationShim'}
 REASONS = {0: '', 1: '모델 없음/로드 실패', 2: 'enable=false', 3: '/scan 없음', 4: '추론 실패'}
@@ -347,6 +348,26 @@ class AbTest:
         return 0 if ok_all else 1
 
     # --------------------------------------------------------------- CLI
+    def report(self, label: str | None = None, out: str | None = None) -> int:
+        """A/B bag 두 개를 HTML 보고서로 — `ab ... report --label ab1`."""
+        hist = self.history()
+        if label:
+            hist = [h for h in hist if str(h.get('label', '')).startswith(label)]
+        a = next((h for h in reversed(hist) if str(h.get('label', '')).endswith('_A')), None)
+        b = next((h for h in reversed(hist) if str(h.get('label', '')).endswith('_B')), None)
+        if not a or not b:
+            print('A/B bag을 찾지 못함 — 먼저 guide 또는 record로 녹화하세요', file=sys.stderr)
+            return 1
+        try:
+            from .report import generate_report
+            path = generate_report(Path(a['bag']), Path(b['bag']), label=label,
+                                   out=Path(out) if out else None)
+        except Exception as exc:
+            print(f'FAIL: 보고서 생성 — {exc}', file=sys.stderr)
+            return 1
+        print(f'보고서: {path}')
+        return 0
+
     def cmd(self, args) -> int:
         target = getattr(args, 'node', None) or 'nodes'
         action = getattr(args, 'action', None)
@@ -391,6 +412,8 @@ class AbTest:
             return 0
         if action == 'guide':
             return self.guide(getattr(args, 'label', None), getattr(args, 'config', None))
+        if action == 'report':
+            return self.report(getattr(args, 'label', None), getattr(args, 'out', None))
         if action == 'history':
             hist = self.history()
             if not hist:
