@@ -39,6 +39,17 @@ amcl:
     z_rand: 0.5
     z_short: 0.05
     scan_topic: scan
+    # Nav2 bringup이 autostart로 올라갈 때 map→odom이 없으면 global_costmap 활성화가
+    # 타임아웃되고 lifecycle_manager가 전체 bringup을 중단한다 (bt_navigator가 inactive → goal 거부).
+    # 기본 자세로 먼저 map→odom을 만들어 bringup을 끝낸 뒤, 실제 위치는
+    # ./run-cli initpose <x> <y> <yaw> 또는 RViz 2D Pose Estimate로 보정한다.
+    set_initial_pose: true
+    always_reset_initial_pose: false
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
 
 bt_navigator:
   ros__parameters:
