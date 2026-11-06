@@ -291,41 +291,70 @@ class MapStartItem(MenuItem):
 
 
 class PickItem(MenuItem):
-    def __init__(self, app, key: str, name: str, path):
+    def __init__(self, app, key: str, name: str, path, model: str | None = None):
         super().__init__(app)
         self.key = key
         self.name = name
         self.path = path
+        self.model = model
 
     def label(self):
         return self.name
 
     def run(self):
-        self.bus.start('nav', str(self.path))
+        self.bus.start('nav', str(self.path), self.model)
         return BACK
 
 
 class MapPickMenu(Menu):
     title = 'Nav — 지도 선택'
 
+    def __init__(self, app, model: str | None = None):
+        super().__init__(app)
+        self.model = model
+
     def items(self):
         from .base import InfoItem
         maps = self.bus.procs.maps()
         if not maps:
             return [InfoItem(self.app, f'지도 없음 — SLAM으로 만들고 저장 ({self.bus.procs.map_dir_txt})')]
-        return [PickItem(self.app, str(i), name, path) for i, (name, path) in enumerate(maps, 1)]
+        return [PickItem(self.app, str(i), name, path, self.model)
+                for i, (name, path) in enumerate(maps, 1)]
 
     def center(self):
         return ['[지도 목록] 최신 먼저', f' {self.bus.procs.map_dir_txt}', '',
                 ' 고르면 nav2 bringup(map_server+amcl+주행)을 띄웁니다',
-                ' 그다음 초기 위치(3)를 꼭 넣으세요']
+                ' 그다음 초기 위치(3)를 꼭 넣으세요'] + (
+                    [f' RL 모델: {self.model}'] if self.model else [])
+
+
+class ModelStartItem(MenuItem):
+    """RL ONNX를 지정해서 Nav 시작 — 지도 선택으로 이어짐."""
+    key = '6'
+
+    def label(self):
+        return 'RL 모델로 시작 (ONNX)'
+
+    def visible(self):
+        return not self.bus.procs.running('nav')
+
+    def run(self):
+        raw = self.ui.modal_input(
+            'RL 모델로 Nav 시작',
+            ['ONNX 경로 (PC 경로면 .onnx.data와 함께 로봇으로 복사)',
+             '비우면 취소 · 취소: Esc'],
+            '경로>', default=os.environ.get('TOOL_RL_MODEL', ''))
+        if raw is None or not raw.strip():
+            return STAY
+        return MapPickMenu(self.app, model=raw.strip()).show()
 
 
 class NavMenu(ServiceMenu):
     name = 'nav'
 
     def items(self):
-        return [MapStartItem(self.app), StopItem(self.app, '1', self.name),
+        return [MapStartItem(self.app), ModelStartItem(self.app),
+                StopItem(self.app, '1', self.name),
                 RestartItem(self.app, '2', self.name), InitPoseItem(self.app),
                 GoalItem(self.app), CancelGoalItem(self.app), RvizItem(self.app, 'nav'),
                 LogItem(self.app, 'l', self.name)]
@@ -333,7 +362,7 @@ class NavMenu(ServiceMenu):
     def hint(self):
         info = self.bus.procs.info('nav')
         return ([f' 지도: {info}'] if info else []) + [
-            self.term.paint(' 순서: 시작 → 초기 위치 → 목표', DIM),
+            self.term.paint(' 순서: 시작(또는 6 RL 모델) → 초기 위치 → 목표', DIM),
             self.term.paint(' 보기: v) RViz로 보기', DIM)]
 
 
