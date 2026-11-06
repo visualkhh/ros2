@@ -74,8 +74,8 @@ def _load(path: Path) -> dict:
     duration = max((r[0] for r in cmd + odom + imu + status), default=0.0)
     dist = sum(math.hypot(odom[i][3] - odom[i - 1][3], odom[i][4] - odom[i - 1][4])
                for i in range(1, len(odom)))
-    speeds = [abs(v) for _, v, _ in odom] or [abs(v) for _, v, _ in cmd]
-    angs = [abs(w) for _, _, w in odom] or [abs(w) for _, _, w in cmd]
+    speeds = [abs(o[1]) for o in odom] or [abs(c[1]) for c in cmd]
+    angs = [abs(o[2]) for o in odom] or [abs(c[2]) for c in cmd]
     active = sum(1 for _, v, w in cmd if abs(v) > 0.01 or abs(w) > 0.03)
     rl = sum(1 for _, d in status if d and d[0] >= 0.5)
     loaded = sum(1 for _, d in status if len(d) > 2 and d[2] >= 0.5)
