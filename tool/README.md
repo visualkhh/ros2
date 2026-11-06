@@ -86,7 +86,7 @@ tool/
 ./run-cli                       # 대화형 메뉴 (TTY 아니면 status)
 ./run-cli status                # 프로세스 + odom·scan·map·amcl 수신 상태
 ./run-cli {base|slam|nav|explore} {start|stop|restart|status|log}
-./run-cli nav start [지도이름|폴더|yaml]
+./run-cli nav start [지도이름|폴더|yaml] [--model <policy.onnx>]   # --model: RL 정책으로 시작
 ./run-cli map list
 ./run-cli map save [이름]       # 기본 이름: 날짜_시각 · 저장 후 그 지도로 LOCALIZATION 전환을 물음
 ./run-cli map save [이름] --no-switch   # 저장만 (전환 질문 없음)

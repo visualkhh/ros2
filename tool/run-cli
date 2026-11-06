@@ -13,6 +13,7 @@
 #   ./run-cli base start                     바퀴·odom·라이다 (tb-only)
 #   ./run-cli slam start | map save office | slam stop
 #   ./run-cli nav start office | initpose 0 0 0 | goal 1.0 0.5 90
+#   ./run-cli nav start office --model <policy.onnx>   # RL 정책으로 시작 (PC 경로는 로봇으로 복사)
 #   ./run-cli teleop                         w/x/a/d · q/e/z/c 사선 · s 정지 · -/= 속도 · b 삑 · Esc 종료
 #   ./run-cli control manual|nav-plan · estop on|off · automap start|stop
 #   ./run-cli ab nodes | ab rl_nav_controller status|on|off|record|stop|guide|history   # RL vs inner A/B

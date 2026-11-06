@@ -150,6 +150,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument('action', type=str.lower, choices=('start', 'stop', 'restart', 'status', 'log'))
         if name == 'nav':
             p.add_argument('map', nargs='?', help='지도 이름·폴더·yaml (기본: 가장 최근 지도)')
+            p.add_argument('--model', metavar='ONNX',
+                           help='RL 정책 .onnx — 주면 FollowPath.enable=true로 시작 '
+                                '(PC 경로면 .onnx.data와 함께 로봇으로 복사)')
         p.add_argument('--lines', type=int, default=60, help='log 줄 수')
 
     m = sub.add_parser('map', help='지도 파일 목록·저장')

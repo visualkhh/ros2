@@ -131,6 +131,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ```bash
 # ① Nav 시작 (SLAM·SLAM 중 Nav가 켜져 있으면 자동 정지 후 시작 — SLAM 지도는 저장 안 했으면 사라지니 먼저 저장)
 ./run-cli nav start office   # 이름 생략 = 가장 최근 지도 · 상태바: 운행 LOCALIZATION (지도 office)
+./run-cli nav start office --model <policy.onnx>   # RL 정책까지 같이 로드 (PC 경로는 로봇 복사)
 
 # ② 주행 화면
 ./run-rviz nav

@@ -139,7 +139,13 @@ class Bus:
         print('  (베이스 없이 SLAM·Nav를 켜면 odom·scan이 없어 지도·RViz에 아무것도 안 나옵니다)')
         return False
 
-    def start(self, name: str, map_yaml: str | None = None) -> int:
+    def _nav_init_hint(self) -> None:
+        print(self.term.paint(
+            'AMCL 초기 자세: 기본 (0,0,0) — 실제 위치가 다르면 '
+            './run-cli initpose <x> <y> <yaw> 또는 RViz 2D Pose Estimate로 보정', DIM))
+
+    def start(self, name: str, map_yaml: str | None = None,
+              model_path: str | None = None) -> int:
         if name != 'base' and not self.base_ready():
             return 1
         if 'slam' in [c for c in SERVICES[name].conflicts if self.procs.running(c)]:
@@ -150,8 +156,12 @@ class Bus:
                     return 1
             else:
                 print(self.term.paint('주의: ' + warn, YELLOW))
-        ok, msg = self.procs.start(name, map_yaml)
+        ok, msg = self.procs.start(name, map_yaml, model_path)
         print(msg)
+        if ok and name == 'nav':
+            if model_path:
+                print(self.term.paint(f'RL 모델: {model_path} (enable=true)', DIM))
+            self._nav_init_hint()
         return 0 if ok else 1
 
     def stop(self, name: str) -> int:
@@ -169,7 +179,7 @@ class Bus:
                     print(f'지도 없음: {args.map or "(최근 지도)"} — {self.procs.map_dir_txt} 확인 · `map list`', file=sys.stderr)
                     return 1
                 map_yaml = str(path)
-            return self.start(name, map_yaml)
+            return self.start(name, map_yaml, getattr(args, 'model', None))
         if args.action == 'stop':
             return self.stop(name)
         if args.action == 'restart':

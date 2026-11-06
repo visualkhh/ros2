@@ -64,7 +64,8 @@ class Service:
     desc: str
     conflicts: tuple[str, ...] = ()
 
-    def command(self, map_yaml: str | None = None) -> list[str]:
+    def command(self, map_yaml: str | None = None,
+                params_file: Path | str | None = None) -> list[str]:
         if self.name == 'base':
             return shlex.split(BASE_CMD)
         if self.name == 'slam':
@@ -74,7 +75,7 @@ class Service:
             if not map_yaml:
                 raise ValueError('nav는 지도(map.yaml)가 필요합니다')
             return ['ros2', 'launch', 'nav2_bringup', 'bringup_launch.py',
-                    f'map:={map_yaml}', f'params_file:={NAV_PARAMS}',
+                    f'map:={map_yaml}', f'params_file:={params_file or NAV_PARAMS}',
                     f'use_sim_time:={SIM}', 'autostart:=true']
         if self.name == 'explore':
             # SLAM이 /map·map→odom을 내는 중에 Nav2 주행만 (지도 없이, amcl 없이) + lifecycle_manager
@@ -134,6 +135,14 @@ class Procs:
         except OSError:
             return ''
 
+    def model_info(self, name: str) -> str:
+        """pid 파일 세 번째 줄 = 시작 때 쓴 RL 모델 경로 (nav만)."""
+        try:
+            lines = self._pidfile(name).read_text().splitlines()
+            return lines[2] if len(lines) > 2 else ''
+        except OSError:
+            return ''
+
     def uptime(self, name: str) -> float | None:
         try:
             return time.time() - self._pidfile(name).stat().st_mtime if self.running(name) else None
@@ -141,7 +150,34 @@ class Procs:
             return None
 
     # ------------------------------------------------------------ start/stop
-    def start(self, name: str, map_yaml: str | None = None) -> tuple[bool, str]:
+    @staticmethod
+    def nav_params_with_model(model_path: str) -> Path:
+        """NAV_PARAMS 사본에 FollowPath.model_path + enable=true를 넣어 임시 파일로.
+
+        rl_nav_controller는 configure() 때만 모델을 읽으므로, 실행 중 ros2 param set으로는
+        바꿀 수 없다 — nav를 띄울 때 params_file로 넘겨야 한다.
+        """
+        import yaml
+        model = Path(model_path).expanduser().resolve()
+        if not model.is_file():
+            raise ValueError(f'모델 파일 없음: {model}')
+        src = Path(NAV_PARAMS).expanduser()
+        if not src.is_file():
+            raise ValueError(f'Nav2 파라미터 파일 없음: {src}')
+        data = yaml.safe_load(src.read_text()) or {}
+        try:
+            follow = data['controller_server']['ros__parameters']['FollowPath']
+        except (KeyError, TypeError) as exc:
+            raise ValueError(f'controller_server.FollowPath 설정이 없음: {src}') from exc
+        follow['model_path'] = str(model)
+        follow['enable'] = True
+        RUN_DIR.mkdir(parents=True, exist_ok=True)
+        out = RUN_DIR / f'nav_params_rl_{time.strftime("%Y%m%d_%H%M%S")}.yaml'
+        out.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+        return out
+
+    def start(self, name: str, map_yaml: str | None = None,
+              model_path: str | None = None) -> tuple[bool, str]:
         svc = SERVICES[name]
         if self.running(name):
             return False, f'{svc.label}: 이미 실행 중 (pid {self.pid(name)})'
@@ -150,8 +186,14 @@ class Procs:
         for c in busy:
             self.stop(c)
             stopped.append(SERVICES[c].label)
+        params_file = None
+        if name == 'nav' and model_path:
+            try:
+                params_file = self.nav_params_with_model(model_path)
+            except (OSError, ValueError) as exc:
+                return False, f'{svc.label}: RL 모델 설정 실패 — {exc}'
         try:
-            cmd = svc.command(map_yaml)
+            cmd = svc.command(map_yaml, params_file)
         except ValueError as exc:
             return False, f'{svc.label}: {exc}'
         log = open(self.logfile(name), 'w')
@@ -159,7 +201,7 @@ class Procs:
         log.flush()
         p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                              start_new_session=True, cwd=str(WS_DIR if WS_DIR.is_dir() else TOOL_DIR))
-        self._pidfile(name).write_text(f'{p.pid}\n{map_yaml or ""}\n')
+        self._pidfile(name).write_text(f'{p.pid}\n{map_yaml or ""}\n{model_path or ""}\n')
         time.sleep(1.5)  # 바로 죽는 경우(패키지 없음·파라미터 오류) 잡기
         if p.poll() is not None:
             self._pidfile(name).unlink(missing_ok=True)
@@ -188,21 +230,22 @@ class Procs:
 
     def restart(self, name: str) -> tuple[bool, str]:
         info = self.info(name) or None   # nav: 같은 지도로
+        model = self.model_info(name) or None   # nav: 같은 RL 모델로
         _, msg = self.stop(name)
-        ok, msg2 = self.start(name, info)
+        ok, msg2 = self.start(name, info, model)
         return ok, f'{msg}\n{msg2}'
 
     def restart_all(self) -> tuple[bool, str]:
-        """켜져 있던 서비스만 같은 순서로 전부 재시작 (nav는 같은 지도로)."""
+        """켜져 있던 서비스만 같은 순서로 전부 재시작 (nav는 같은 지도·모델로)."""
         running = [n for n in SERVICES if self.running(n)]
         if not running:
             return False, '실행 중인 서비스 없음'
-        info = {n: self.info(n) or None for n in running}
+        info = {n: (self.info(n) or None, self.model_info(n) or None) for n in running}
         msgs = []
         for n in reversed(running):
             msgs.append(self.stop(n)[1])
         for n in running:
-            ok, m = self.start(n, info[n])
+            ok, m = self.start(n, info[n][0], info[n][1])
             msgs.append(m)
             if not ok:
                 return False, '\n'.join(msgs)
@@ -363,8 +406,41 @@ class RemoteProcs(Procs):
     def logfile(self, name: str) -> str:
         return f'{self.host}:{ROBOT_TOOL_DIR}/.run/{name}.log'
 
-    def start(self, name: str, map_yaml: str | None = None) -> tuple[bool, str]:
-        rc, out = self._cli(name, 'start', *([map_yaml] if map_yaml else []))
+    def _push_model(self, model_path: str) -> str:
+        """PC 경로면 .onnx(+.onnx.data)를 로봇으로 복사하고 로봇 경로를 돌려준다.
+
+        이미 로봇 경로면(로컬에 없음) 그대로 넘긴다.
+        """
+        p = Path(model_path).expanduser()
+        if not p.is_file():
+            return model_path
+        tag = p.parent.parent.name if p.parent.name == 'exported' else p.parent.name
+        dest = f'{ROBOT_REPO_DIR}/temp/models/{tag}'
+        rc, out = self._ssh(f'mkdir -p {dest}', 15)
+        if rc != 0:
+            raise RuntimeError(f'로봇 디렉터리 생성 실패: {out.strip()[-300:]}')
+        files = [p]
+        data = Path(str(p) + '.data')
+        if data.is_file():
+            files.append(data)
+        for f in files:
+            r = subprocess.run(
+                ['scp', '-q', '-o', 'BatchMode=yes', str(f), f'{ROBOT_SSH}:{dest}/'],
+                capture_output=True, text=True, timeout=120)
+            if r.returncode != 0:
+                raise RuntimeError(f'scp {f.name} 실패: {r.stderr.strip()[-300:]}')
+        return f'{dest}/{p.name}'
+
+    def start(self, name: str, map_yaml: str | None = None,
+              model_path: str | None = None) -> tuple[bool, str]:
+        extra: list[str] = []
+        if name == 'nav' and model_path:
+            try:
+                model_path = self._push_model(model_path)
+            except Exception as exc:
+                return False, f'[{self.host}] RL 모델 전송 실패: {exc}'
+            extra = ['--model', model_path]
+        rc, out = self._cli(name, 'start', *([map_yaml] if map_yaml else []), *extra)
         return rc == 0, f'[{self.host}] {out}'
 
     def stop(self, name: str, timeout: float = 10.0) -> tuple[bool, str]:
