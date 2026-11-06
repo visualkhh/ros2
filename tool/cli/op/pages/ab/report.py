@@ -253,6 +253,10 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
           dict(label='B inner', color='#2f81f7',
                xs=[x[1] for x in b['amcl']] or [x[3] for x in b['odom']],
                ys=[x[2] for x in b['amcl']] or [x[4] for x in b['odom']])]
+    xy_odom = [dict(label='A RL', color='#e5484d',
+                    xs=[x[3] for x in a['odom']], ys=[x[4] for x in a['odom']]),
+               dict(label='B inner', color='#2f81f7',
+                    xs=[x[3] for x in b['odom']], ys=[x[4] for x in b['odom']])]
 
     ok_a = a['goal_err'] is not None and a['goal_err'] <= 0.30 and a['distance'] > 0.5
     ok_b = b['goal_err'] is not None and b['goal_err'] <= 0.30 and b['distance'] > 0.5
@@ -363,9 +367,10 @@ td:first-child,th:first-child{{text-align:left}} td:nth-child(4){{text-align:lef
 <p class="muted">주행 시간은 bag 시작의 2초 대기와 정지 구간을 제외한 실제 이동 구간입니다.
 RL active는 <code>/controller_server/FollowPath/status</code>의 첫 값이 0.5 이상인 비율입니다.
 B(inner)는 0이 정상입니다.</p>
-<h2>위치 궤적 (map 기준 · amcl_pose)</h2>{_svg(xy, title='map 위치 궤적', xlabel='x (m)', ylabel='y (m)')}
-<p class="muted">궤적은 /amcl_pose(map) 기준입니다. amcl_pose가 없으면 /odom으로 대체합니다.
-경로·도착 오차도 같은 map 좌표로 계산합니다.</p>
+<h2>odom 위치 궤적 (raw)</h2>{_svg(xy_odom, title='odom 위치 궤적', xlabel='x (m)', ylabel='y (m)')}
+<h2>map 위치 궤적 (amcl_pose)</h2>{_svg(xy, title='map 위치 궤적', xlabel='x (m)', ylabel='y (m)')}
+<p class="muted">경로·도착 오차는 map(amcl_pose) 기준입니다. amcl_pose가 없으면 /odom으로 대체합니다.
+odom 궤적은 원본 odom 프레임이라 map 궤적과 원점이 다를 수 있습니다.</p>
 <h2>명령 속도 v</h2>{_svg(series_cmd(1), title='cmd v', ylabel='m/s', zero=True)}
 <h2>명령 각속도 ω</h2>{_svg(series_cmd(2), title='cmd ω', ylabel='rad/s', zero=True)}
 <h2>실제 속도 v (odom)</h2>{_svg(series_odom('v'), title='odom v', ylabel='m/s', zero=True)}
