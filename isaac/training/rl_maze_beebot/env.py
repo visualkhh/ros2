@@ -55,8 +55,9 @@ class RlMazeBeebotEnv(RlMazeEnv):
         cs, sn = torch.cos(yaw_o)[:, None], torch.sin(yaw_o)[:, None]
         local = torch.stack([cs * rel[..., 0] + sn * rel[..., 1], -sn * rel[..., 0] + cs * rel[..., 1]], dim=-1)
         raw = (self.lidar(xy_o, yaw_o) + torch.randn(n, c.lidar_rays, device=self.device) * c.lidar_noise).clamp(0.0, c.lidar_max)
+        scan = (raw - self.inflation[:, None]).clamp(0.0, c.lidar_max)  # 실기 lidar_inflation과 같은 식
         v_enc, w_enc = self.encoders()
-        obs = torch.cat([local.reshape(n, -1) / c.wp_scale, raw / c.lidar_max,
+        obs = torch.cat([local.reshape(n, -1) / c.wp_scale, scan / c.lidar_max,
                          torch.stack([v_enc / c.max_lin, w_enc / c.max_ang,
                                       self.true_twist()[1] / c.max_ang], dim=-1),
                          self.action], dim=-1)
