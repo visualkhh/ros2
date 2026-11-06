@@ -139,7 +139,8 @@ class AbTest:
                 return None
             vals = self.bus.param_get_vals(cli, ['FollowPath.model_path', 'FollowPath.enable'])
             if vals and len(vals) >= 2:
-                self._cfg = (vals[0].string_value, bool(vals[1].bool_value))
+                model = vals[0].string_value or '(자동 share)'
+                self._cfg = (model, bool(vals[1].bool_value))
         except Exception:
             pass
         return self._cfg
