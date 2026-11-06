@@ -20,6 +20,7 @@ class RlMazeEnvCfg(BaseEnvCfg):
     행동 = [v, w] 정규화 [-1, 1] → × (max_lin, max_ang) — 정책이 직접 운전 (보정 아님).
     """
     robot = os.path.dirname(os.path.abspath(__file__))   # 이 폴더의 robot_cfg.py + usda/robot.usda
+    maze_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usda", "maze")  # 미로 USD · grid.npz · paths.npz
     episode_length_s = 50.0
     random_yaw = False
     action_space = 2
@@ -60,6 +61,7 @@ class RlMazeEnvCfg(BaseEnvCfg):
     ball_radius = 0.13             # [m]
     ball_speed = (0.40, 1.20)      # [m/s]
     dynamic_respawn_s = 8.0        # [s] 사람 한 명이 갑자기 다시 나타나는 간격 (로봇 앞쪽 우선)
+    dynamic_block_teleport = True  # 로봇 앞을 오래 막는 사람/공을 텔레포트 (play/소수 env) — 실사형 task는 False
     dynamic_spawn_min = 1.8        # [m] 갑자기 나타날 때 로봇 앞 최소 거리
     dynamic_spawn_max = 3.2        # [m] 최대 거리 (라이다 3.5 m 안)
     spawn_grace_steps = 12         # [스텝] 리셋 직후 충돌 판정 유예 (0.6 s — 사람이 겹쳐 있어도 출발 가능)

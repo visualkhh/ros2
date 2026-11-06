@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -24,7 +25,7 @@ from envs.base_env_cfg import GROUND_FRICTION
 from training.rl_maze.command import RlMazeCommand
 from training.rl_maze.dynamic import DynamicObstacles
 from training.rl_maze.ground import spawn_friction_patches
-from training.rl_maze.maze_grid import MAZE_USD, inside, load
+from training.rl_maze.maze_grid import inside, load
 from training.rl_maze.markers import CommandMarkers, LidarMarkers, WheelMarkers
 
 if TYPE_CHECKING:
@@ -37,7 +38,8 @@ class RlMazeEnv(BaseEnv):
 
     def __init__(self, cfg: RlMazeEnvCfg, render_mode: str | None = None, **kwargs):
         c = cfg
-        g = load()
+        g = load(os.path.join(c.maze_dir, "grid.npz"))
+        self.maze_usd = os.path.join(c.maze_dir, "maze.usda")
         # 배경(ground_objects)이 super().__init__ 안에서 불리므로 격자 · 빈 칸을 먼저 둔다 (아직 CPU).
         self.occ_np = g["occ"]
         self.wall_dist_np = g["dist"].astype(np.float32)
@@ -103,7 +105,7 @@ class RlMazeEnv(BaseEnv):
         import isaaclab.sim as sim_utils
 
         path = f"{self.cfg.terrain.prim_path}/maze"
-        maze = sim_utils.UsdFileCfg(usd_path=MAZE_USD)
+        maze = sim_utils.UsdFileCfg(usd_path=self.maze_usd)
         maze.func(path, maze)
         # MaterialX 재질 대신 단색 (RTX가 MaterialX를 컴파일하다 화면이 안 나옴) — 미로 전체에 덮어씀 (충돌 · 물리 재질은 그대로)
         look = sim_utils.PreviewSurfaceCfg(diffuse_color=(0.23, 0.25, 0.34), roughness=0.6)

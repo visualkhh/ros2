@@ -218,7 +218,7 @@ class DynamicObstacles:
             stuck = (moved < 0.005) & (self._pause_t <= 0.0)
             self._stuck_t = torch.where(stuck, self._stuck_t + dt, torch.zeros_like(self._stuck_t))
             self._last_pos = self.people_pos.clone()
-            if self.env.num_envs <= 4:   # 키보드/소수 env — 로봇 앞을 막고 서 있으면 텔레포트
+            if self.env.num_envs <= 4 and getattr(c, "dynamic_block_teleport", True):   # 키보드/소수 env — 로봇 앞을 막고 서 있으면 텔레포트
                 rxy = self.env.pose()[0]
                 dmin = torch.linalg.norm(self.people_pos[:, None, :] - rxy[None, :, :], dim=-1).min(dim=1).values
                 near = dmin < (self.person_r + 0.30)
@@ -246,7 +246,7 @@ class DynamicObstacles:
             stuck = moved < 0.002
             self._ball_stuck_t = torch.where(stuck, self._ball_stuck_t + dt, torch.zeros_like(self._ball_stuck_t))
             self._last_ball = self.ball_pos.clone()
-            if self.env.num_envs <= 4:
+            if self.env.num_envs <= 4 and getattr(c, "dynamic_block_teleport", True):
                 rxy = self.env.pose()[0]
                 dmin = torch.linalg.norm(self.ball_pos[:, None, :] - rxy[None, :, :], dim=-1).min(dim=1).values
                 near = dmin < (self.ball_r + 0.30)

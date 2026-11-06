@@ -27,3 +27,7 @@ class RlMazeBeebotEnvCfg(RlMazeEnvCfg):
     # 인플레이션은 실기 파라미터(lidar_inflation)와 같은 단위. 학습은 거의 raw에 가까운 5 mm~2 cm만.
     inflation_range = (0.005, 0.02)
     path_margin = 0.32                                    # max(inflation) + 0.32 = 경로 최소 0.34 m 유지
+    # 실사형 동적 장애물 — 충돌하면 에피소드 종료(재스폰 없음), 로봇 앞 텔레포트도 없음.
+    dynamic_respawn_s = 1e9                               # 8초마다 사람이 갑자기 나타나는 연출 끔
+    dynamic_block_teleport = False                        # 로봇을 막는 사람/공을 강제 텔레포트하지 않음
+    # (벽에 끼어 못 움직이는 사람만 2초 뒤 다른 곳으로 이동 — 미로 밖으로 나가는 것 방지)
