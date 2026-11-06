@@ -149,12 +149,14 @@ class AbTest:
         st = self.status()
         lines = ['[RL/fallback A/B · rl_nav_controller]']
         if not st['fresh']:
-            lines.append(' 상태 없음 — 주행 중이 아니거나 controller_server가 꺼짐')
             cfg = self.configured()
             if cfg:
                 model, enable = cfg
+                lines.append(' 대기 — active goal 없음 (goal을 보내면 RL 상태 표시)')
                 lines.append(f' 설정: 모델 {Path(model).name if model else "없음"}'
-                             f' · enable {"on" if enable else "off"} (주행 전 파라미터)')
+                             f' · enable {"on" if enable else "off"}')
+            else:
+                lines.append(' 상태 없음 — controller_server가 꺼졌거나 파라미터 응답 없음')
         else:
             mode = 'RL 적용' if st['enabled'] else f'{st["inner"]} 바이패스'
             why = REASONS.get(st['reason'], f'reason {st["reason"]}')
