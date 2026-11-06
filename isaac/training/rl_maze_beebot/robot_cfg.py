@@ -18,13 +18,13 @@ MAX_ANG = 1.82         # [rad/s]
 MAX_WHEEL = 8.0        # [rad/s] shortcut: beebot 펌웨어 한계는 확인 못 함 (Waffle Pi 값) — 다르면 여기를 고친다
 DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호
 
-# 바퀴 응답 — 실측 (2026-11-05, bee 같은 바닥 4회: isaac/artifacts/rl_nav_correction/calibration/*_real_floor − 2026-11-05_11-53-53_sim)
-# 4회 모두 일정: 좌우 gain real÷sim 0.998 · 지연 2 step(한 번 1) · 회전은 자이로가 엔코더의 0.955 (몸체가 4.5 % 덜 돎 = 간격 오차 — env의 sep_nominal_err 범위).
-# ./run-calibration.sh rl_nav_correction --robot sim|real 로 다시 재면 여기를 고친다. 학습은 이 값을 랜덤 범위의 중심으로 쓴다.
-RESPONSE_GAIN_LR = (0.998, 0.998)   # 좌/우 바퀴 gain
-RESPONSE_DELAY_STEPS = 2            # 명령 지연 [20 Hz 스텝] = 0.1 s
-RESPONSE_TAU_S = 0.06               # 1차 지연 τ [s] — shortcut: 리포트 fit이 격자값(0.1136 − sim 0.05)만 내서 신뢰 낮음, 다시 재면 고친다
-RESPONSE_DEADBAND = 0.0             # [rad/s]
+# 바퀴 응답 — 실측 (2026-11-06, rl_maze_beebot: sim 17:18:47 − real_floor 18:02:40)
+# gain real÷sim 0.9979/0.9984 · 지연 1 step · τ 0.0636 s · deadband 0.0.
+# ./run-calibration.sh rl_maze_beebot --robot sim|real 로 다시 재면 여기를 고친다. 학습은 이 값을 랜덤 범위의 중심으로 쓴다.
+RESPONSE_GAIN_LR = (0.9979, 0.9984)   # 좌/우 바퀴 gain
+RESPONSE_DELAY_STEPS = 1              # 명령 지연 [20 Hz 스텝] = 0.05 s
+RESPONSE_TAU_S = 0.0636               # 1차 지연 τ [s]
+RESPONSE_DEADBAND = 0.0               # [rad/s]
 
 # 주행 중 팔 자세 = Lv2_bee_Assignment ros2_ws/src/skills/params/basket.yaml pose_stow (= ros_system controllers.yaml rest_pose · beebot.usda 기본 자세)
 STOW = (0.0, -1.9024, 1.344, 0.9023, 0.0)   # [rad] joint1~5
