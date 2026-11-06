@@ -13,7 +13,7 @@ from pathlib import Path
 
 WANTED = (
     '/cmd_vel_nav', '/cmd_vel', '/cmd_vel_smoothed', '/cmd_vel_base',
-    '/odom', '/imu', '/controller_server/FollowPath/status',
+    '/odom', '/imu', '/amcl_pose', '/controller_server/FollowPath/status',
 )
 CMD_TOPICS = ('/cmd_vel_nav', '/cmd_vel', '/cmd_vel_smoothed', '/cmd_vel_base')
 
@@ -55,7 +55,7 @@ def _load(path: Path) -> dict:
 
     t0 = min(t for _, t, _ in rows)
     cmd_topic = next((x for x in CMD_TOPICS if any(tp == x for tp, _, _ in rows)), None)
-    cmd, odom, imu, status = [], [], [], []
+    cmd, odom, imu, status, amcl = [], [], [], [], []
     for topic, t, msg in rows:
         sec = (t - t0) / 1e9
         if topic == cmd_topic:
@@ -66,6 +66,9 @@ def _load(path: Path) -> dict:
             v = float(msg.twist.twist.linear.x)
             w = float(msg.twist.twist.angular.z)
             odom.append((sec, v, w, float(p.x), float(p.y)))
+        elif topic == '/amcl_pose':
+            p = msg.pose.pose.position
+            amcl.append((sec, float(p.x), float(p.y)))
         elif topic == '/imu':
             imu.append((sec, float(msg.angular_velocity.z)))
         elif topic == '/controller_server/FollowPath/status':
@@ -80,9 +83,9 @@ def _load(path: Path) -> dict:
     rl = sum(1 for _, d in status if d and d[0] >= 0.5)
     loaded = sum(1 for _, d in status if len(d) > 2 and d[2] >= 0.5)
     return {
-        'path': path, 'duration': duration, 'distance': dist,
+        'path': path, 'duration': duration, 'run_time': max(0.0, duration - 2.0), 'distance': dist,
         'samples': len(odom), 'cmd_topic': cmd_topic or '-',
-        'cmd': cmd, 'odom': odom, 'imu': imu, 'status': status,
+        'cmd': cmd, 'odom': odom, 'imu': imu, 'amcl': amcl, 'status': status,
         'avg_speed': sum(speeds) / len(speeds) if speeds else 0.0,
         'max_speed': max(speeds, default=0.0),
         'avg_w': sum(angs) / len(angs) if angs else 0.0,
@@ -162,8 +165,8 @@ def _seg_dist(px, py, ax, ay, bx, by):
     return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 
 
-def _path_stats(odom, start, route):
-    pts = [(x, y) for _, _, _, x, y in odom]
+def _path_stats(odom, amcl, start, route):
+    pts = [(x, y) for _, x, y in amcl] or [(x, y) for _, _, _, x, y in odom]
     if not pts:
         return dict(lat_rms=None, lat_max=None, goal_err=None, efficiency=None,
                     drive_time=0.0, stop_frac=None, alpha=None)
@@ -221,7 +224,7 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
                     out: Path | None = None, start=None, route=None) -> Path:
     a, b = _load(Path(a_path)), _load(Path(b_path))
     for x in (a, b):
-        x.update(_path_stats(x['odom'], start, route))
+        x.update(_path_stats(x['odom'], x['amcl'], start, route))
     label = label or time.strftime('%Y%m%d_%H%M%S')
     out = Path(out) if out else a_path.parent / f'report_{label}_{time.strftime("%H%M%S")}.html'
 
@@ -234,13 +237,17 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
         return [dict(label='A RL', color='#e5484d', xs=[x[0] for x in a['odom']], ys=[x[idx] for x in a['odom']]),
                 dict(label='B inner', color='#2f81f7', xs=[x[0] for x in b['odom']], ys=[x[idx] for x in b['odom']])]
 
-    xy = [dict(label='A RL', color='#e5484d', xs=[x[3] for x in a['odom']], ys=[x[4] for x in a['odom']]),
-          dict(label='B inner', color='#2f81f7', xs=[x[3] for x in b['odom']], ys=[x[4] for x in b['odom']])]
+    xy = [dict(label='A RL', color='#e5484d',
+               xs=[x[1] for x in a['amcl']] or [x[3] for x in a['odom']],
+               ys=[x[2] for x in a['amcl']] or [x[4] for x in a['odom']]),
+          dict(label='B inner', color='#2f81f7',
+               xs=[x[1] for x in b['amcl']] or [x[3] for x in b['odom']],
+               ys=[x[2] for x in b['amcl']] or [x[4] for x in b['odom']])]
 
     ok_a = a['goal_err'] is not None and a['goal_err'] <= 0.30 and a['distance'] > 0.5
     ok_b = b['goal_err'] is not None and b['goal_err'] <= 0.30 and b['distance'] > 0.5
     rows = [
-        _row('주행 시간 (s)', a['drive_time'], b['drive_time'], lower=True, word='빠름'),
+        _row('주행 시간 (s)', a['run_time'], b['run_time'], lower=True, word='빠름'),
         _row('주행 거리 (m)', a['distance'], b['distance']),
         _row('평균 속도 (m/s)', a['avg_speed'], b['avg_speed']),
         _row('최고 속도 (m/s)', a['max_speed'], b['max_speed']),
@@ -261,7 +268,7 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
 
     # 종합 판정: 핵심 5개 지표 가중치
     scored = [
-        ('주행 시간', a['drive_time'], b['drive_time'], True, 25),
+        ('주행 시간', a['run_time'], b['run_time'], True, 25),
         ('경로 오차', a['lat_rms'], b['lat_rms'], True, 30),
         ('도착 오차', a['goal_err'], b['goal_err'], True, 20),
         ('부드러움', a['alpha'], b['alpha'], True, 15),
@@ -288,7 +295,7 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
 
     highlights = []
     for name, av, bv, lower, word in (
-            ('주행 시간', a['drive_time'], b['drive_time'], True, '빠름'),
+            ('주행 시간', a['run_time'], b['run_time'], True, '빠름'),
             ('경로 이탈', a['lat_rms'], b['lat_rms'], True, '작음'),
             ('도착 오차', a['goal_err'], b['goal_err'], True, '작음'),
             ('각가속도', a['alpha'], b['alpha'], True, '부드러움')):
@@ -340,7 +347,9 @@ td:first-child,th:first-child{{text-align:left}} td:nth-child(4){{text-align:lef
 <p class="muted">주행 시간은 bag 시작의 2초 대기와 정지 구간을 제외한 실제 이동 구간입니다.
 RL active는 <code>/controller_server/FollowPath/status</code>의 첫 값이 0.5 이상인 비율입니다.
 B(inner)는 0이 정상입니다.</p>
-<h2>odom 위치 궤적 (XY)</h2>{_svg(xy, title='odom 위치 궤적', xlabel='x (m)', ylabel='y (m)')}
+<h2>위치 궤적 (map 기준 · amcl_pose)</h2>{_svg(xy, title='map 위치 궤적', xlabel='x (m)', ylabel='y (m)')}
+<p class="muted">궤적은 /amcl_pose(map) 기준입니다. amcl_pose가 없으면 /odom으로 대체합니다.
+경로·도착 오차도 같은 map 좌표로 계산합니다.</p>
 <h2>명령 속도 v</h2>{_svg(series_cmd(1), title='cmd v', ylabel='m/s', zero=True)}
 <h2>명령 각속도 ω</h2>{_svg(series_cmd(2), title='cmd ω', ylabel='rad/s', zero=True)}
 <h2>실제 속도 v (odom)</h2>{_svg(series_odom('v'), title='odom v', ylabel='m/s', zero=True)}
