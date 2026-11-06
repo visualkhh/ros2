@@ -334,6 +334,9 @@ class AbTest:
                     else:
                         print('pause_between: TTY가 아니라 B를 바로 시작합니다')
 
+                if plan['settle_s'] > 0:   # B 시작 전 TF/스캔이 안정될 시간
+                    time.sleep(float(plan['settle_s']))
+
                 ok, msg = self.toggle(False)
                 if not ok:
                     raise RuntimeError(f'inner controller 전환 실패: {msg}')
