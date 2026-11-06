@@ -20,4 +20,6 @@ class RlMazeBeebotEnvCfg(RlMazeEnvCfg):
     maze_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usda", "maze")
     observation_space = 2 * 5 + 36 + 5                    # 51 — inflation 입력 없음 (beebot plugin과 동일)
     camera_fov_deg = 55.0                                 # pole_front_cam 수평 FOV — 이 밖은 lidar_max
+    pointcloud_vis_rays = 111                             # L 시각화: FOV 안 dense ray (0.5° 간격)
+    pointcloud_vis_z = 8                                  # L 시각화: 벽면 높이 층 수 (점군처럼 보이게)
     collide_r = 0.18                                      # beebot Nav2 robot_radius

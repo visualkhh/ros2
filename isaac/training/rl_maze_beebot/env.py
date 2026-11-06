@@ -29,6 +29,37 @@ class RlMazeBeebotEnv(RlMazeEnv):
         return torch.where(mask[None, :], raw,
                            torch.full_like(raw, float(self.cfg.lidar_max)))
 
+    def toggle_lidar_vis(self, on: bool | None = None) -> bool:
+        """L — beebot 전방 카메라 point cloud를 켜고 끈다 (360° LiDAR 링 아님)."""
+        if getattr(self, "lidar_markers", None) is None:
+            if not self.cfg.debug_vis:
+                return False
+            from training.rl_maze.markers import LidarMarkers
+            self.lidar_markers = LidarMarkers("/Visuals/BeebotPointCloud")
+        self.lidar_vis = (not self.lidar_vis) if on is None else bool(on)
+        self.lidar_markers.set_visible(self.lidar_vis)
+        print(f"[vis] beebot front point cloud {'ON' if self.lidar_vis else 'OFF'} · "
+              f"{self.cfg.camera_fov_deg:.0f}° FOV · {self.cfg.pointcloud_vis_rays} rays × "
+              f"{self.cfg.pointcloud_vis_z} z (raw=청록 · 3.5m=회색)", flush=True)
+        return self.lidar_vis
+
+    def lidar_points(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """beebot point cloud — 전방 FOV dense ray × 여러 높이 z. LiDAR 360° 링이 아니다."""
+        xy, yaw = self.pose()
+        n = self.num_envs
+        half = math.radians(float(self.cfg.camera_fov_deg)) / 2.0
+        ang = torch.linspace(-half, half, int(self.cfg.pointcloud_vis_rays), device=self.device)
+        raw = self.lidar(xy, yaw, ang)                         # [n, R] FOV 안
+        zs = torch.linspace(0.05, 0.85, int(self.cfg.pointcloud_vis_z), device=self.device)
+        r = raw[:, None, :].expand(n, len(zs), -1)             # [n, Z, R]
+        a = yaw[:, None, None] + ang[None, None, :]
+        z = zs[None, :, None].expand(n, len(zs), len(ang))
+        pts = torch.stack([xy[:, 0, None, None] + r * torch.cos(a),
+                           xy[:, 1, None, None] + r * torch.sin(a), z], dim=-1).reshape(n, -1, 3)
+        dist = r.reshape(n, -1)
+        infl = torch.zeros_like(dist)                          # magenta 없음 — raw point cloud만
+        return pts, pts, dist, infl
+
     def _get_observations(self) -> dict:
         c = self.cfg
         xy, yaw = self.pose()
