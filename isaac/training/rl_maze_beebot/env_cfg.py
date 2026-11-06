@@ -17,6 +17,7 @@ from training.rl_maze.env_cfg import RlMazeEnvCfg
 @configclass
 class RlMazeBeebotEnvCfg(RlMazeEnvCfg):
     robot = os.path.dirname(os.path.abspath(__file__))   # 이 폴더의 robot_cfg.py + usda/robot.usda
+    maze_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usda", "maze")
     observation_space = 2 * 5 + 36 + 5                    # 51 — inflation 입력 없음 (beebot plugin과 동일)
     camera_fov_deg = 55.0                                 # pole_front_cam 수평 FOV — 이 밖은 lidar_max
     collide_r = 0.18                                      # beebot Nav2 robot_radius
