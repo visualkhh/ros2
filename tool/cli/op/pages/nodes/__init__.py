@@ -1,6 +1,7 @@
 """노드 목록 + 상태·파라미터·진단 live + 중지·재시작 (프로세스가 있는 로봇에서 실행 · PC는 SSH 경유)."""
 from __future__ import annotations
 
+import textwrap
 import time
 
 from ...defs import STAY
@@ -245,7 +246,36 @@ class NodeParamMenu(Menu):
     def center(self):
         full = f'/{self.nodename}' if self.nodens in ('/', '') else \
             f'{self.nodens.rstrip("/")}/{self.nodename}'
+        rows = self._fetch()
         lines = [f'[노드] {full}', ' 파라미터 — Enter로 값 변경 · 1초 갱신', '']
+        if rows:
+            idx = max(0, min(getattr(self.ui, '_sel_idx', 0), len(rows) - 1))
+            n, v, d = rows[idx]
+            ptype = getattr(d, 'type', None)
+            lines.append('[선택한 파라미터]')
+            lines.append(f' {n}')
+            if ptype is not None:
+                lines.append(f' 형식: {ParamItem.type_name(ptype)}')
+                lines.append(f' 현재: {ParamItem.fmt(ptype, v)}')
+            else:
+                lines.append(f' 현재: {v!r}')
+            lines.append(f' 읽기전용: {"yes" if getattr(d, "read_only", False) else "no"}')
+            desc = (getattr(d, 'description', '') or '').strip()
+            lines.append(' 설명:')
+            if desc:
+                lines += [f'  {x}' for x in textwrap.wrap(desc, 46)]
+            else:
+                lines.append('  (설명 없음)')
+            extra = (getattr(d, 'additional_constraints', '') or '').strip()
+            if extra:
+                lines.append(' 제약:')
+                lines += [f'  {x}' for x in textwrap.wrap(extra, 46)]
+            ranges = list(getattr(d, 'integer_range', []) or []) + \
+                list(getattr(d, 'floating_point_range', []) or [])
+            if ranges:
+                r = ranges[0]
+                lines.append(f' 범위: {r.from_value} ~ {r.to_value} (step {r.step})')
+            lines.append('')
         diags = [(n, lv, msg) for n, lv, msg in self.bus.diag_entries()
                  if self.nodename in n or full in n]
         if diags:
