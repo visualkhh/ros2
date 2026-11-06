@@ -258,6 +258,34 @@ class Bus:
     def default_map_name() -> str:
         return time.strftime('%Y%m%d_%H%M%S')
 
+    def after_map_save(self, name: str, ok: bool) -> int:
+        """지도 저장 뒤 — SLAM(맵핑)이면 저장한 지도로 LOCALIZATION(Nav/amcl) 전환을 물어본다."""
+        if not ok:
+            return 1
+        if not self.procs.running('slam'):
+            print(f'저장한 지도: ./run-cli nav start {name}')
+            return 0
+        if not sys.stdin.isatty():
+            print(f'LOCALIZATION 전환 생략 (TTY 아님) — 나중에: ./run-cli nav start {name}')
+            return 0
+        body = [f'저장: {name}/map.yaml · map.pgm',
+                'SLAM 맵핑을 끄고 저장한 지도로 Nav2(amcl localization)를 시작합니다.',
+                '시작 후 초기 위치를 지정해야 합니다: ./run-cli initpose <x> <y> <yaw> (Nav 메뉴 3).']
+        if not self.ui.confirm(f'저장한 지도 "{name}"으로 LOCALIZATION 모드로 전환할까요?',
+                               default=True, body=body):
+            print(f'LOCALIZATION 전환 생략 — SLAM 맵핑 유지. 나중에: ./run-cli nav start {name}')
+            return 0
+        self.send_velocity(0.0, 0.0)
+        path = self.procs.resolve_map(name)
+        if path is None:
+            print(self.term.paint(f'지도 경로를 찾지 못함: {name}', RED))
+            return 1
+        ok, msg = self.procs.start('nav', str(path))   # SLAM/explore는 conflicts로 자동 종료
+        print(msg)
+        if ok:
+            print(f'LOCALIZATION 시작 — 초기 위치: ./run-cli initpose <x> <y> <yaw> (지도: {name})')
+        return 0 if ok else 1
+
     def cmd_map(self, args) -> int:
         if args.action == 'list':
             maps = self.procs.maps()
@@ -271,7 +299,7 @@ class Bus:
         if not IS_ROBOT:   # 로봇의 run-cli가 저장 (지도는 로봇에 — Nav가 거기서 씀)
             ok, msg = self.procs.save_map(name)
             print(msg)
-            return 0 if ok else 1
+            return self.after_map_save(name, ok)
         end = time.monotonic() + 5.0   # 막 켠 프로세스(원격 저장)는 latched /map을 받기까지 몇 초
         while self.state.map.age() is None and time.monotonic() < end:
             self._poll(0.2)
@@ -282,7 +310,7 @@ class Bus:
             print(self.term.paint('주의: SLAM이 꺼져 있음 — /map을 내는 노드(map_server 등)가 있어야 저장됩니다', YELLOW))
         ok, msg = self.procs.save_map(name)
         print(msg)
-        return 0 if ok else 1
+        return self.after_map_save(name, ok)
 
     # ------------------------------------------------------------- 상태 요청 (cmd_manager가 판단 → state_manager가 알림)
     def request(self, key: str, value) -> bool:

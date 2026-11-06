@@ -197,6 +197,7 @@ class SaveMapItem(MenuItem):
             return STAY
         ok, msg = self.bus.procs.save_map(name)
         print(msg)
+        self.bus.after_map_save(name, ok)
         return STAY
 
 
