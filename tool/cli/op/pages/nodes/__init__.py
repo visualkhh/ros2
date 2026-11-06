@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import time
 
-from ..defs import STAY
-from ..nodes import CRITICAL, base
-from ..terminal import BOLD, DIM, GREEN, RED, YELLOW
-from .base import GoMenu, InfoItem, Menu, MenuItem
+from ...defs import STAY
+from ...terminal import BOLD, DIM, GREEN, RED, YELLOW
+from ..base import GoMenu, InfoItem, Menu, MenuItem
+from .core import CRITICAL, base
 
 
 class KillNodeItem(MenuItem):
@@ -272,4 +272,27 @@ class NodesMenu(Menu):
             lines.append(self.term.paint(f' 진단 OK ({len(self.state.diagnostics)}개)', GREEN))
         else:
             lines.append(' 진단: -')
+        if any(base(name) == 'controller_server' for name, _, _ in self._rows):
+            lines += self.bus.node_feature_lines('controller_server', summary=True)
         return lines
+
+
+from .feature import NodeFeature
+from .controller_server import ControllerServerFeature
+
+FEATURES: tuple[NodeFeature, ...] = (ControllerServerFeature(),)
+
+
+def feature_for(name: str) -> NodeFeature | None:
+    """노드 이름(네임스페이스 포함 가능) → 추가 상태 feature."""
+    short = name.rstrip('/').split('/')[-1]
+    for feature in FEATURES:
+        if feature.node == short:
+            return feature
+    return None
+
+
+def wire_all(tool) -> None:
+    """RobotTool 기동 시 각 feature의 ROS 구독을 만든다."""
+    for feature in FEATURES:
+        feature.wire(tool)

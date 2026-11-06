@@ -7,7 +7,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 set(deps rclcpp rclcpp_lifecycle nav2_core nav2_util nav2_costmap_2d nav2_ros_common pluginlib
-  geometry_msgs nav_msgs sensor_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs rl_policy)
+  geometry_msgs nav_msgs sensor_msgs std_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs rl_policy)
 foreach(d ${deps})
   find_package(${d} REQUIRED)
 endforeach()
@@ -19,7 +19,7 @@ target_link_libraries(rl_nav_controller PUBLIC
   rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle nav2_core::nav2_core nav2_util::nav2_util_core
   nav2_costmap_2d::nav2_costmap_2d_core nav2_ros_common::nav2_ros_common pluginlib::pluginlib
   tf2::tf2 tf2_ros::tf2_ros tf2_geometry_msgs::tf2_geometry_msgs rl_policy::rl_policy
-  ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_srvs_TARGETS})
+  ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} ${std_srvs_TARGETS})
 
 pluginlib_export_plugin_description_file(nav2_core rl_nav_controller.xml)
 

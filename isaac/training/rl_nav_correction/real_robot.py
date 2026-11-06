@@ -2,7 +2,7 @@
 
 beebot의 ROS는 로봇 안에서만 돈다 (DDS 공유 메모리, ROS_DOMAIN_ID=88) — PC에서 직접 토픽을 못 본다. 그래서:
   write  스텝(v, w)을 모은다 (실제로 보내지 않음) · pace는 기다리지 않음 (측정 전체가 data() 안에서 돈다)
-  data   계획(JSON) → scp → ssh `run-cli calibrate wheel` (수동 경로 /cmd/manual/cmd_vel — rl_nav_correction을 건너뜀 = 보정 없는 순수 응답,
+  data   계획(JSON) → scp → ssh `run-cli calibrate wheel` (수동 경로 /cmd/manual/cmd_vel — 보정 없는 순수 응답,
          로봇이 20 Hz로 재생 · /odom /imu /joint_states /cmd_vel 기록) → raw.csv scp로 가져와 줄로 돌려줌
   ready  ssh `run-cli calibrate wheel --check-only` (안 움직임: MANUAL · E-STOP OFF · 토픽 도착)
 준비: 로봇에서 bringup · MANUAL (`./run-cli mode manual`) · 사방 약 1.5 m 비움 (팔은 로봇이 재생 전에 stow로 자동 이동). 멈추려면 Ctrl+C (ssh -tt가 로봇에 전달) 또는 `./run-cli estop on`.
@@ -28,9 +28,9 @@ SSH = ["ssh", "-o", "ConnectTimeout=8", "-o", "BatchMode=yes"]
 
 
 class RealRobot(RobotInterface):
-    def __init__(self, rate: float = 20.0, onnx: str | None = None):
+    def __init__(self, rate: float = 20.0):
         super().__init__(1.0 / rate)
-        self.onnx, self.steps = onnx, []
+        self.steps = []
         self.stamp = time.strftime("%Y%m%d_%H%M%S")
 
     def write(self, v, w):
@@ -60,8 +60,6 @@ class RealRobot(RobotInterface):
         return remote
 
     def ready(self):
-        if self.onnx:
-            return "beebot은 아직 calibration만 (--onnx A/B 없음) — --onnx 빼고"
         plan = self._plan_file([[0.0, 0.0, ""]])
         try:
             remote = self._send(plan)

@@ -79,22 +79,28 @@ class RobotTool(Node):
         from sensor_msgs.msg import JointState
         self.create_subscription(JointState, '/joint_states', self.state.on_joint_states, 10)
         from std_msgs.msg import Bool, String
-        for key, typ in (('control', String), ('rl', Bool), ('estop', Bool), ('operation', String), ('map', String)):
+        for key, typ in (('control', String), ('estop', Bool), ('operation', String), ('map', String)):
             self.create_subscription(typ, f'/state_{key}',
                                      lambda m, k=key: self.state.on_state(k, m.data), LATCHED)
         self.create_subscription(String, '/explore_status', lambda m: setattr(self.state, 'explore_status', m.data), 10)
-        from geometry_msgs.msg import Twist
-        self.create_subscription(Twist, '/cmd_vel_rl_out', lambda _m: self.state.rl_out.tick(), 10)
+        # 노드별 추가 상태·기능 (예: controller_server RL/MPPI)
+        from op.pages.nodes import wire_all
+        wire_all(self)
 
     def screen(self, name: str):
         from op import pages
         return {
             '1': pages.StatusMenu, '2': pages.BaseMenu, '3': pages.SlamMenu, '4': pages.NavMenu,
             '5': pages.DriveMenu, '6': pages.MapMenu, '7': pages.ExploreMenu, '8': pages.NodesMenu,
-            '9': pages.StopAllPage, '0': pages.BeepMenu,
+            'b': pages.AbMenu, '9': pages.StopAllPage, '0': pages.BeepMenu,
         }[name](self)
 
     # ------------------------------------------------------------- CLI 진입
+    def cmd_node_status(self, args) -> int:
+        self.poll(1.0)
+        print('\n'.join(self.bus.node_status_lines(args.name)))
+        return 0
+
     def cmd_menu(self, args) -> int:
         from op.pages import MainMenu
         return int(MainMenu(self).show() or 0)
@@ -173,6 +179,18 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument('--cancel', action='store_true', help='이 CLI가 보낸 목표 취소')
 
     sub.add_parser('nodes', help='보이는 ROS 노드 목록')
+    p = sub.add_parser('node-status', help='노드 하나의 상태·발행/구독·진단 (예: /controller_server)')
+    p.add_argument('name', help='노드 이름 (예: /controller_server)')
+
+    ab = sub.add_parser('ab', help='A/B 테스트 — ab nodes | ab <노드> <동작>')
+    ab.add_argument('node', nargs='?', default='nodes',
+                    help='노드 이름 (예: rl_nav_controller) 또는 nodes')
+    ab.add_argument('action', nargs='?', default=None,
+                    choices=('status', 'on', 'off', 'record', 'stop', 'guide', 'history'),
+                    help='status · on · off · record · stop · guide · history (생략 시 status)')
+    ab.add_argument('--label', '-l', default=None, help='record/guide: bag 이름에 붙일 라벨 (예: A, B)')
+    ab.add_argument('--config', default=None,
+                    help='guide: command.json 경로 (기본 op/pages/ab/rl_nav_controller/command.json)')
     for cmd, help_ in (('node-kill', '개별 노드 중지 — OS 프로세스 kill (로봇에서 실행 · PC는 SSH 경유)'),
                        ('node-restart', '개별 노드 재시작 — kill 후 같은 명령으로 재실행 · 추적됨')):
         p = sub.add_parser(cmd, help=help_)
@@ -182,8 +200,6 @@ def build_parser() -> argparse.ArgumentParser:
     for name, choices, help_ in (('control', ('manual', 'nav-plan', 'slam-auto-mapping'),
                                   '제어 상태: manual=텔레오퍼 · nav-plan=Nav2 목표 · slam-auto-mapping=자동 맵핑 (/cmd_manual_control)'),
                                  ('mode', ('manual', 'nav-plan', 'nav', 'slam-auto-mapping', 'auto'), '= control (예전 이름)'),
-                                 ('route', ('direct', 'rl'), '바퀴 명령 경로: direct=바로 opencr_driver · rl=PC RL 보정 경유'),
-                                 ('rl', ('on', 'off'), '= route rl / route direct (예전 이름)'),
                                  ('automap', ('start', 'stop'), '자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING / 중지(MANUAL)'),
                                  ('estop', ('on', 'off'), '비상정지 (/cmd_manual_estop)')):
         p = sub.add_parser(name, help=help_)

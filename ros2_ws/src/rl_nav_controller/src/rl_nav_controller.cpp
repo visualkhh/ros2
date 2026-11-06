@@ -1,9 +1,11 @@
 // RlNavController — 관측 · 행동은 isaac/training/rl_maze/env.py와 같은 약속 (바꾸면 같이):
-//   관측 51 = [다음 웨이포인트 K(5)개 로봇 기준 (x, y) ÷ wp_scale · 라이다 R(36)방향 ÷ lidar_max · v ÷ max_lin · w ÷ max_ang · 자이로 w ÷ max_ang · 이전 행동 2]
+//   관측 52 = [다음 웨이포인트 K(5)개 로봇 기준 (x, y) ÷ wp_scale · 라이다 R(36)방향 ÷ lidar_max · v ÷ max_lin · w ÷ max_ang · 자이로 w ÷ max_ang · 이전 행동 2 · inflation ÷ inflation_scale]
+//   라이다는 scan_rays에서 r - lidar_inflation (m) — 학습 env와 같은 식. 51차원 모델이면 inflation 입력은 빼고 스캔도 raw로 두려면 lidar_inflation=0.
 //   행동 [-1, 1]² → v = a0 × max_lin (후진은 v_min_ratio까지) · w = a1 × max_ang
 #include "rl_nav_controller/rl_nav_controller.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 #include "nav2_ros_common/node_utils.hpp"
@@ -34,9 +36,38 @@ void RlNavController::configure(
   auto node = parent.lock();
   logger_ = node->get_logger();
 
-  const auto inner = param<std::string>(node, name + ".inner_plugin", "nav2_mppi_controller::MPPIController");
+  // 바이패스 controller 선택 — fallback_controller (별칭 또는 전체 pluginlib 클래스)
+  //   dwb | mppi | rpp | rotation_shim
+  //   dwb_core::DWBLocalPlanner · nav2_mppi_controller::MPPIController ·
+  //   nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController ·
+  //   nav2_rotation_shim_controller::RotationShimController
+  //   선택한 플러그인의 파라미터는 <name>.inner.* 에 둔다.
+  const auto fallback = param<std::string>(node, name + ".fallback_controller", "");
+  std::string inner;
+  if (!fallback.empty()) {
+    std::string f = fallback;
+    std::transform(f.begin(), f.end(), f.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (f == "dwb" || f == "dwb_core::dwblocalplanner") inner = "dwb_core::DWBLocalPlanner";
+    else if (f == "mppi" || f == "nav2_mppi_controller::mppicontroller") inner = "nav2_mppi_controller::MPPIController";
+    else if (f == "rpp" || f == "regulated_pure_pursuit" ||
+             f == "nav2_regulated_pure_pursuit_controller::regulatedpurepursuitcontroller")
+      inner = "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController";
+    else if (f == "rotation_shim" || f == "nav2_rotation_shim_controller::rotationshimcontroller")
+      inner = "nav2_rotation_shim_controller::RotationShimController";
+    else inner = fallback;  // 전체 pluginlib 클래스명 그대로
+    RCLCPP_INFO(logger_, "[%s] fallback_controller=%s → %s", name_.c_str(), fallback.c_str(), inner.c_str());
+  } else {
+    // 예전 이름 호환 — fallback_controller가 없을 때만
+    inner = param<std::string>(node, name + ".inner_plugin", "dwb_core::DWBLocalPlanner");
+  }
+  if (inner.find("DWBLocalPlanner") != std::string::npos) inner_kind_ = 1;
+  else if (inner.find("MPPIController") != std::string::npos) inner_kind_ = 2;
+  else if (inner.find("RegulatedPurePursuit") != std::string::npos) inner_kind_ = 3;
+  else if (inner.find("RotationShim") != std::string::npos) inner_kind_ = 4;
   const auto model = param<std::string>(node, name + ".model_path", "");
-  enable_ = param<bool>(node, name + ".enable", false);
+  enable_requested_ = param<bool>(node, name + ".enable", false);
+  enable_ = enable_requested_;
   const auto scan_topic = param<std::string>(node, name + ".scan_topic", "scan");
   const auto imu_topic = param<std::string>(node, name + ".imu_topic", "imu");
   lookahead_ = param<int>(node, name + ".lookahead", lookahead_);
@@ -47,6 +78,8 @@ void RlNavController::configure(
   max_lin_ = param<double>(node, name + ".max_lin", max_lin_);
   max_ang_ = param<double>(node, name + ".max_ang", max_ang_);
   v_min_ratio_ = param<double>(node, name + ".v_min_ratio", v_min_ratio_);
+  lidar_inflation_ = std::max(0.0, param<double>(node, name + ".lidar_inflation", lidar_inflation_));
+  inflation_scale_ = std::max(1e-6, param<double>(node, name + ".inflation_scale", inflation_scale_));
 
   // 바이패스용 기본 controller — 파라미터는 <name>.inner.* (예: FollowPath.inner.time_steps)
   inner_ = loader_.createSharedInstance(inner);
@@ -55,6 +88,12 @@ void RlNavController::configure(
   if (enable_ && !policy_.loaded()) {
     RCLCPP_WARN(logger_, "[%s] enable인데 정책 없음 — 바이패스로 (%s)", name.c_str(), inner.c_str());
     enable_ = false;
+  }
+  RCLCPP_INFO(logger_, "[%s] lidar_inflation=%.3f m · inflation_scale=%.2f · model_inputs=%ld",
+              name.c_str(), lidar_inflation_, inflation_scale_, static_cast<long>(policy_.inputs()));
+  if (policy_.loaded() && policy_.inputs() < 52 && lidar_inflation_ > 1e-6) {
+    RCLCPP_WARN(logger_, "[%s] 51차원 모델 + lidar_inflation>0 — 학습 때 인플레이션을 썼는지 확인 (아니면 0으로)",
+                name.c_str());
   }
 
   scan_sub_ = node->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -73,6 +112,7 @@ void RlNavController::configure(
     [this](const std::shared_ptr<rmw_request_id_t>, const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
     std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
       std::lock_guard<std::mutex> lk(mtx_);
+      enable_requested_ = req->data;  // 실패해도 '켜려 했다'를 남겨 상태 이유를 모델 없음으로
       if (req->data && !policy_.loaded()) {
         res->success = false;
         res->message = "정책 없음 (model_path) — 바이패스 그대로";
@@ -86,9 +126,11 @@ void RlNavController::configure(
         " · model=" + (policy_.loaded() ? "loaded" : "none");
       RCLCPP_INFO(logger_, "[%s] toggle: %s", name_.c_str(), res->message.c_str());
     });
+  status_pub_ = node->create_publisher<std_msgs::msg::Float32MultiArray>("~/" + name + "/status", 10);
   RCLCPP_INFO(
-    logger_, "[%s] RlNavController: inner=%s · model=%s · enable=%s · toggle: ~/%s/toggle",
-    name.c_str(), inner.c_str(), policy_.loaded() ? model.c_str() : "(없음)", enable_ ? "true" : "false", name.c_str());
+    logger_, "[%s] RlNavController: inner=%s · model=%s · enable=%s · toggle: ~/%s/toggle · status: ~/%s/status",
+    name.c_str(), inner.c_str(), policy_.loaded() ? model.c_str() : "(없음)", enable_ ? "true" : "false",
+    name.c_str(), name.c_str());
 }
 
 void RlNavController::load_model(const std::string & path)
@@ -110,7 +152,43 @@ void RlNavController::load_model(const std::string & path)
   }
 }
 
-void RlNavController::cleanup() {inner_->cleanup(); scan_sub_.reset(); imu_sub_.reset(); toggle_srv_.reset();}
+void RlNavController::publish_status(
+  int rl_active, int reason, const geometry_msgs::msg::TwistStamped & cmd)
+{
+  if (!status_pub_) {return;}
+  bool enable = false, scan_ok = false;
+  float scan_age = -1.0f, scan_min = float(lidar_max_);
+  {
+    std::lock_guard<std::mutex> lk(mtx_);
+    enable = enable_;
+    scan_ok = bool(scan_);
+    if (scan_) {
+      const auto node = node_.lock();
+      if (node && (scan_->header.stamp.sec != 0 || scan_->header.stamp.nanosec != 0)) {
+        scan_age = float((node->now() - rclcpp::Time(scan_->header.stamp)).seconds());
+      }
+      for (float r : scan_->ranges) {
+        if (std::isfinite(r) && r >= scan_->range_min && r <= scan_->range_max) {
+          scan_min = std::min(scan_min, r);
+        }
+      }
+    }
+  }
+  std_msgs::msg::Float32MultiArray s;
+  s.data = {float(rl_active), float(reason), policy_.loaded() ? 1.0f : 0.0f,
+    enable ? 1.0f : 0.0f, scan_ok ? 1.0f : 0.0f, scan_age, scan_min,
+    float(cmd.twist.linear.x), float(cmd.twist.angular.z), float(inner_kind_)};
+  status_pub_->publish(s);
+}
+
+void RlNavController::cleanup()
+{
+  inner_->cleanup();
+  scan_sub_.reset();
+  imu_sub_.reset();
+  toggle_srv_.reset();
+  status_pub_.reset();
+}
 void RlNavController::activate() {inner_->activate();}
 void RlNavController::deactivate() {inner_->deactivate();}
 void RlNavController::newPathReceived(const nav_msgs::msg::Path & raw) {inner_->newPathReceived(raw);}
@@ -163,9 +241,11 @@ std::vector<float> RlNavController::waypoints(
   return out;
 }
 
-std::vector<float> RlNavController::scan_rays(const sensor_msgs::msg::LaserScan & scan, double laser_yaw) const
+std::vector<float> RlNavController::scan_rays(
+  const sensor_msgs::msg::LaserScan & scan, double laser_yaw, double inflation) const
 {
   // 로봇 기준 0°부터 반시계로 R방향 — 각 방향에서 가장 가까운 빔(±1)의 거리, 없으면 lidar_max → ÷ lidar_max
+  //   inflation [m]: 사용자 안전거리 — r - inflation (학습 env observation과 같은 식)
   std::vector<float> out(lidar_rays_, 1.0f);
   const int n = int(scan.ranges.size());
   if (n == 0 || scan.angle_increment == 0.0f) {return out;}
@@ -178,6 +258,7 @@ std::vector<float> RlNavController::scan_rays(const sensor_msgs::msg::LaserScan 
       const float v = scan.ranges[((j % n) + n) % n];
       if (std::isfinite(v) && v >= scan.range_min && v <= scan.range_max) {best = std::min(best, double(v));}
     }
+    best = std::max(0.0, best - std::max(0.0, inflation));
     out[r] = float(std::clamp(best, 0.0, lidar_max_) / lidar_max_);
   }
   return out;
@@ -189,18 +270,34 @@ geometry_msgs::msg::TwistStamped RlNavController::computeVelocityCommands(
   const geometry_msgs::msg::PoseStamped & global_goal)
 {
   sensor_msgs::msg::LaserScan::SharedPtr scan;
-  bool on;
+  bool on, enabled, requested;
   double gyro;
   {
     std::lock_guard<std::mutex> lk(mtx_);
+    enabled = enable_;
+    requested = enable_requested_;
     on = enable_ && policy_.loaded();
     scan = scan_;
     gyro = gyro_seen_ ? gyro_z_ : velocity.angular.z;
   }
+  auto fallback = [&](int reason) -> geometry_msgs::msg::TwistStamped {
+      auto cmd = inner_->computeVelocityCommands(pose, velocity, goal_checker, transformed_global_plan, global_goal);
+      publish_status(0, reason, cmd);
+      return cmd;
+    };
   if (!on || !scan) {
     if (on) {RCLCPP_WARN_THROTTLE(logger_, *node_.lock()->get_clock(), 2000, "[%s] /scan 없음 — 바이패스", name_.c_str());}
-    return inner_->computeVelocityCommands(pose, velocity, goal_checker, transformed_global_plan, global_goal);
+    int reason = 2;  // enable=false
+    if (requested && !policy_.loaded()) {reason = 1;}  // 모델 없음/로드 실패
+    else if (enabled) {reason = 3;}                    // /scan 없음
+    return fallback(reason);
   }
+  // 사용자가 바꾼 lidar_inflation을 매 주기 읽는다 (ros2 param set으로 런타임 변경)
+  double inflation = lidar_inflation_;
+  if (auto node = node_.lock()) {
+    try {node->get_parameter(name_ + ".lidar_inflation", inflation);} catch (const std::exception &) {}
+  }
+  inflation = std::max(0.0, inflation);
   if (!laser_yaw_known_) {   // 라이다가 로봇 기준으로 얼마나 돌아 있는지 (한 번)
     try {
       const auto t = tf_->lookupTransform(costmap_ros_->getBaseFrameID(), scan->header.frame_id, tf2::TimePointZero);
@@ -211,14 +308,22 @@ geometry_msgs::msg::TwistStamped RlNavController::computeVelocityCommands(
     }
   }
   std::vector<float> obs = waypoints(pose, transformed_global_plan);
-  const auto rays = scan_rays(*scan, laser_yaw_);
+  const auto rays = scan_rays(*scan, laser_yaw_, inflation);
   obs.insert(obs.end(), rays.begin(), rays.end());
   obs.push_back(float(velocity.linear.x / max_lin_));
   obs.push_back(float(velocity.angular.z / max_ang_));
   obs.push_back(float(gyro / max_ang_));
   obs.push_back(prev_a_[0]);
   obs.push_back(prev_a_[1]);
-  const auto a = policy_.run(obs);
+  if (policy_.inputs() >= 52) {obs.push_back(float(inflation / inflation_scale_));}   // conditioned policy
+  std::vector<float> a;
+  try {
+    a = policy_.run(obs);
+  } catch (const std::exception & e) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, *node_.lock()->get_clock(), 5000, "정책 추론 실패: %s — 바이패스", e.what());
+    return fallback(4);
+  }
   const float a0 = std::clamp(a[0], -1.0f, 1.0f), a1 = std::clamp(a[1], -1.0f, 1.0f);
   prev_a_[0] = a0;
   prev_a_[1] = a1;
@@ -228,6 +333,7 @@ geometry_msgs::msg::TwistStamped RlNavController::computeVelocityCommands(
   cmd.header.stamp = pose.header.stamp;
   cmd.twist.linear.x = std::max(double(a0) * max_lin_, v_min_ratio_ * max_lin_) * speed_ratio_;
   cmd.twist.angular.z = double(a1) * max_ang_;
+  publish_status(1, 0, cmd);
   return cmd;
 }
 

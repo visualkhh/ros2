@@ -5,7 +5,6 @@
 #
 #   ./base-only.sh                 state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다
 #   ./base-only.sh lidar:=false    라이다 없이
-#   ./base-only.sh rl:=true        RL 경로 켠 상태로 시작 (실행 중엔 ./run-cli route rl)
 #   ./base-only.sh port:=/dev/ttyACM0
 #
 # - Ctrl+C로 끝낸다. 백그라운드로 띄우고 관리하려면 tool/run-cli base start (같은 launch) — 둘을 같이 띄우지 말 것.

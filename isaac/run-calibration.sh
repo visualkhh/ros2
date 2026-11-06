@@ -22,9 +22,7 @@
 #   sim    순수 sim (IsaacLab — 보정 없음) · 창은 기본 끔 · --viz (= kit) 또는 --viz X로 켬 · --watch (기록 후 창 닫을 때까지 반복)
 #          창: 초록 막대 = 명령 방향 · 파랑 막대 = 실제 방향 · 노란 점 = 목표 경로 — 벗어나는 만큼이 드리프트
 #   real   실기기 (PC · .venv · ROS 환경/peers 자동, ROS_DOMAIN_ID=25) · --check-only (안 움직이고 상태만) · --rate 20
-#          --onnx PATH  corrector를 이 정책으로 켜고 측정 (A/B의 B) · 안 주면 바이패스 (A · calibration) — corrector는 route rl일 때만
-#          준비: 로봇 베이스 켜기 · PC rl-only.sh enable:=false (바이패스, 기본은 정책 켬) · MANUAL · route rl · 주변 1 m 비우기
-#          (순서: training/<task>/README.md calibration 절)
+#          준비: 로봇 베이스 켜기 · MANUAL · 주변 1 m 비우기 (순서: training/<task>/README.md calibration 절)
 #   dummy  가짜 로봇 (Isaac/ROS 없이 흐름 확인) · --gain/--gain-l/--gain-r --tau --delay --deadband --slip --noise --seed
 #          → fit.json에 넣은 값이 나오면 파이프라인 OK
 #   plan   로봇 없이 명령만 계획 JSON {dt, label, steps[[v, w]...]}으로 (--out PATH · --rate 20) — 로봇 쪽 재생기(Lv2_bee_Assignment run-cli calibrate wheel)가 읽는다
@@ -34,8 +32,7 @@
 #   ./run-calibration.sh rl_correction_waypoint --robot sim            # 창 없음
 #   ./run-calibration.sh rl_correction_waypoint --robot sim --viz      # 창으로 보면서
 #   ./run-calibration.sh rl_correction_waypoint --robot real --check-only
-#   ./run-calibration.sh rl_correction_waypoint --robot real --label real_floor            # = A (바이패스)
-#   ./run-calibration.sh rl_correction_waypoint --robot real --onnx <policy.onnx> --label B  # 같은 입력 + 정책 보정
+#   ./run-calibration.sh rl_correction_waypoint --robot real --label real_floor
 #   ./run-calibration.sh rl_correction_waypoint --robot dummy --gain-l 0.96 --gain-r 1.02
 #   ./run-calibration.sh rl_correction_waypoint --robot both
 #

@@ -1,4 +1,4 @@
-"""rl_maze 학습자 설정 — 관측 51(라이다 포함) → 행동 2라 신경망을 조금 크게 (공통 PPO 표준값은 agents/base_agent.py)."""
+"""rl_maze 학습자 설정 — 관측 52(라이다 + inflation) → 행동 2라 신경망을 조금 크게 (공통 PPO 표준값은 agents/base_agent.py)."""
 from isaaclab.utils import configclass
 
 from agents.base_agent import POLICY, PPO, BaseAgentCfg

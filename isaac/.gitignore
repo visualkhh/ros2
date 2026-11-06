@@ -8,3 +8,4 @@ __pycache__/
 /export/
 /artifacts/
 .venv/
+/training/artifacts/

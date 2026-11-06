@@ -12,10 +12,8 @@
 #   train-goal-friction [iters] [...]  goal + 바닥 마찰 randomization
 #   export <ckpt.pt> <이름.onnx> [track|goal]  체크포인트 → ONNX
 #   play <model.onnx> [envs]     학습된 정책 구경 (뷰포트, 기본 4)
-#   real-launch <model.onnx> [goal|track]  PC RL 노드 실행 (Pi는 route rl)
 #   real-square [...]            같은 사각형+삼각형을 RL goal로 주행 + CSV
 #   plot-goal-square [--show]    RL 전/후 궤적·보정 비교 PNG
-#   real-rl <model.onnx> [goal|track] [task_dir]  corrector 실행 + 보고서
 #   sim-eval <model.onnx> [track|goal] [...]  sim Before/After (real 가기 전 수치 확인)
 #     ./run-training.sh sim-eval export/rl_correct/foo.onnx track --episodes 5
 #
@@ -111,23 +109,6 @@ case "$CMD" in
     cd "$ISAACLAB"
     ./isaaclab.sh -p "$TASK_DEFAULT/play.py" --model "$MODEL" --envs "$ENVS" --visualizer kit
     ;;
-  real-launch)
-    REPO=$(cd "$ISAAC/.." && pwd)
-    MODEL=${1:?ONNX 파일 경로}
-    MODE=${2:-goal}
-    [[ "$MODEL" != /* ]] && MODEL="$ISAAC/$MODEL"
-    [ -f "$MODEL" ] || { echo "ONNX 없음: $MODEL" >&2; exit 2; }
-    [ -f "$REPO/ros2_ws/install/setup.bash" ] || {
-      echo "먼저 빌드: cd $REPO/ros2_ws && colcon build --packages-select rl_correction tb3_bringup" >&2
-      exit 2
-    }
-    source /opt/ros/lyrical/setup.bash
-    source "$REPO/ros2_ws/install/setup.bash"
-    export ROS_DOMAIN_ID=25
-    source "$REPO/tool/peers.sh"
-    exec ros2 launch tb3_bringup rl-only.launch.py \
-      enable:=true mode:="$MODE" goal_mode:=absolute model:="$MODEL"
-    ;;
   real-square)
     REPO=$(cd "$ISAAC/.." && pwd)
     source /opt/ros/lyrical/setup.bash
@@ -147,29 +128,6 @@ case "$CMD" in
     PY="$ISAAC/.venv/bin/python"
     [ -x "$PY" ] || PY=python3
     exec "$PY" "$TASK_DEFAULT/plot_goal_square.py" "$@"
-    ;;
-  real-rl)
-    MODEL=${1:?ONNX 파일 경로}
-    MODE=${2:-goal}
-    TASK=${3:-rl_correction_wheel_drift}
-    [[ "$TASK" = /* ]] || TASK="$TRAINING/$TASK"
-    [[ -d "$TASK" ]] || { echo "task 없음: $TASK" >&2; exit 2; }
-    [[ "$MODEL" = /* ]] || MODEL="$ISAAC/$MODEL"
-    [[ -f "$MODEL" ]] || { echo "ONNX 없음: $MODEL" >&2; exit 2; }
-    STAMP=$(date +%Y%m%d_%H%M%S)
-    RUN="$TRAINING/artifacts/real_rl_${STAMP}"
-    mkdir -p "$RUN"
-    {
-      echo "date: $(date -Is)"
-      echo "model: $MODEL"
-      echo "mode: $MODE"
-      echo "task: $TASK"
-    } > "$RUN/command.txt"
-    echo "[real_rl] model: $MODEL"
-    echo "[real_rl] report: $RUN"
-    echo "[real_rl] Pi에서 먼저: ssh pak@pak.local 'cd ~/ros2/tool && ./run-cli route rl'"
-    set -o pipefail
-    "$0" real-launch "$MODEL" "$MODE" 2>&1 | tee "$RUN/launch.log"
     ;;
   sim-eval)
     MODEL=${1:?사용법: sim-eval <model.onnx> [track|goal] [calibration.py 옵션...]}

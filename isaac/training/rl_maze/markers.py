@@ -104,3 +104,105 @@ class CommandMarkers:
         d = env.robot.data
         v, w = env.true_twist()
         self.update(d.root_pos_w.torch, self.yaw_of(d.root_quat_w.torch), env.cmd[:, 0], env.cmd[:, 1], v, w, path_w, wp_w)
+
+
+class WheelMarkers:
+    """바퀴 위 두 줄 — 아래 = 유효 동마찰, 위 = 바퀴 속도.
+
+    - 마찰: 파랑(미끄럼) · 회색(보통) · 빨강(끈적), 길이 ∝ 유효 동마찰
+    - 속도: 초록(전진) · 마젠타(후진), 길이 ∝ |바퀴 선속도| / max_lin
+    """
+
+    Z_FRIC, Z_SPEED = 0.30, 0.34
+
+    def __init__(self, prim_path: str = "/Visuals/WheelDebug"):
+        import isaaclab.sim as sim_utils
+        from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+
+        def bar(rgb):
+            return sim_utils.CuboidCfg(size=(1.0, 0.018, 0.018),
+                                       visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=rgb))
+
+        self.markers = VisualizationMarkers(VisualizationMarkersCfg(prim_path=prim_path, markers={
+            "fric_slip": bar((0.10, 0.35, 1.00)),
+            "fric_norm": bar((0.65, 0.68, 0.72)),
+            "fric_stick": bar((1.00, 0.12, 0.08)),
+            "speed_fwd": bar((0.10, 0.90, 0.20)),
+            "speed_rev": bar((1.00, 0.15, 0.75)),
+        }))
+
+    def set_visible(self, on: bool) -> None:
+        self.markers.set_visibility(on)
+
+    def draw(self, env) -> None:
+        from isaaclab.utils.math import euler_xyz_from_quat, quat_from_euler_xyz
+
+        yaw = euler_xyz_from_quat(env.robot.data.root_quat_w.torch)[2]
+        zero = torch.zeros_like(yaw)
+        q = quat_from_euler_xyz(zero, zero, yaw)
+        pos, jv, fric = env.wheel_state()
+        trans, quats, scales, idx = [], [], [], []
+
+        def add(p, length, kind):
+            trans.append(p)
+            quats.append(q)
+            scales.append(torch.stack([length.clamp(min=1e-4), torch.ones_like(length), torch.ones_like(length)], dim=-1))
+            idx.append(kind)
+
+        for w in range(2):
+            p = pos[:, w].clone()
+            p[:, 2] += self.Z_FRIC
+            length = 0.04 + 0.10 * ((fric[:, w] - 0.5) / 0.7).clamp(0.0, 1.0)
+            base = torch.zeros_like(fric[:, w], dtype=torch.long)
+            kind = torch.where(fric[:, w] < 0.7, base,
+                               torch.where(fric[:, w] > 1.0, base + 2, base + 1))
+            add(p, length, kind)
+
+            p = pos[:, w].clone()
+            p[:, 2] += self.Z_SPEED
+            length = 0.02 + 0.12 * (jv[:, w].abs() * env.cfg.wheel_radius / env.cfg.max_lin).clamp(0.0, 1.0)
+            kind = torch.where(jv[:, w] >= 0.0, torch.zeros_like(base) + 3, torch.zeros_like(base) + 4)
+            add(p, length, kind)
+
+        self.markers.visualize(translations=torch.cat(trans), orientations=torch.cat(quats),
+                               scales=torch.cat(scales), marker_indices=torch.cat(idx))
+
+
+class LidarMarkers:
+    """라이다 점군 — raw 측정(청록)과 inflation 적용점(마젠타), 3.5 m 반사 없음(회색). RViz처럼."""
+
+    Z = 0.15                 # [m] 라이다 단면 높이 (maze_grid.SLICE_Z와 같게)
+
+    def __init__(self, prim_path: str = "/Visuals/LidarPoints"):
+        import isaaclab.sim as sim_utils
+        from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+
+        def dot(rgb, r):
+            return sim_utils.SphereCfg(radius=r,
+                                       visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=rgb))
+
+        self.markers = VisualizationMarkers(VisualizationMarkersCfg(prim_path=prim_path, markers={
+            "raw": dot((0.10, 0.90, 1.00), 0.008),      # 실제 측정점 = 청록
+            "infl": dot((1.00, 0.15, 0.75), 0.009),     # inflation 적용점 = 마젠타
+            "max": dot((0.30, 0.35, 0.40), 0.004),      # 3.5 m (반사 없음) = 작은 회색
+        }))
+
+    def set_visible(self, on: bool) -> None:
+        self.markers.set_visibility(on)
+
+    def draw(self, raw_pts: torch.Tensor, infl_pts: torch.Tensor, raw: torch.Tensor,
+             infl: torch.Tensor, lidar_max: float) -> None:
+        """raw_pts/infl_pts [n, R, 3] · raw/infl [n, R] — raw=청록, inflation=마젠타, 3.5 m=회색.
+        inflation이 0인 점(마진 안쪽)은 그리지 않는다 — 로봇 위에 뭉쳐 보이지 않게."""
+        raw_flat, infl_flat = raw_pts.reshape(-1, 3), infl_pts.reshape(-1, 3)
+        s = raw.reshape(-1)
+        is_max = s >= lidar_max - 1e-6
+        raw_idx = torch.where(is_max, torch.full_like(s, 2, dtype=torch.long),
+                              torch.zeros_like(s, dtype=torch.long))
+        show = (~is_max) & (infl.reshape(-1) > 1e-6)
+        if show.any():
+            trans = torch.cat([raw_flat, infl_flat[show]])
+            idx = torch.cat([raw_idx, torch.ones(int(show.sum()), dtype=torch.long, device=raw.device)])
+        else:
+            trans, idx = raw_flat, raw_idx
+        self.markers.visualize(translations=trans, marker_indices=idx)

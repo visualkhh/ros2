@@ -52,10 +52,11 @@ class Bus:
         self._say_pub = None   # /cmd_say — say_text 첫 사용 때 생성
         from std_msgs.msg import Bool, String
         self._req = {'control': (node.create_publisher(String, '/cmd_manual_control', 10), String),
-                     'rl': (node.create_publisher(Bool, '/cmd_manual_rl', 10), Bool),
                      'estop': (node.create_publisher(Bool, '/cmd_manual_estop', 10), Bool)}
         self._nav_client = None
         self._goal_handle = None
+        from .pages.ab.core import AbTest
+        self.ab = AbTest(self)
 
     def _poll(self, seconds: float = 0.2):
         self.node.poll(seconds)
@@ -211,7 +212,7 @@ class Bus:
     # ------------------------------------------------------------- 개별 노드
     def _node_guard(self, name: str, force: bool) -> str | None:
         """빈 이름·핵심 노드 검사 — 문제없으면 None. 한 번 명령용."""
-        from .nodes import CRITICAL, base
+        from .pages.nodes.core import CRITICAL, base
         name = base(name)
         if not name:
             return '노드 이름이 비었음'
@@ -221,7 +222,7 @@ class Bus:
         return None
 
     def cmd_node_kill(self, args) -> int:
-        from .nodes import base
+        from .pages.nodes.core import base
         err = self._node_guard(args.name, args.force)
         if err:
             print(err)
@@ -232,7 +233,7 @@ class Bus:
         return 0 if ok else 1
 
     def cmd_node_restart(self, args) -> int:
-        from .nodes import base
+        from .pages.nodes.core import base
         err = self._node_guard(args.name, args.force)
         if err:
             print(err)
@@ -328,36 +329,6 @@ class Bus:
         ok = self.request('control', value)
         print(f'모드: {self.state.st_control}' if ok else self.term.paint('모드 변경 실패', RED))
         return 0 if ok else 1
-
-    def cmd_route(self, args) -> int:
-        """바퀴 명령 경로: direct = cmd_manager → opencr_driver · rl = PC RL 보정을 거침."""
-        want = args.value in ('rl', 'on')
-        if want and not self.rl_node_up():
-            print(self.term.paint('RL 노드(rl_corrector)가 없음 — 켜면 바퀴가 바로 멈춥니다. 먼저 PC에서:', RED))
-            print('  ros2 launch tb3_bringup rl-only.launch.py            # 보정 없이 통과 (연결 확인)')
-            print('  ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/경로/policy.onnx')
-            print('  (ROS_DOMAIN_ID=25 · 자세히: ros2_ws/STATE_CONTROL.md 2장)')
-            return 1
-        ok = self.request('rl', want)
-        if ok and self.state.st_rl:
-            print('경로 → RL 경유 — PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 떠 있어야 바퀴가 움직입니다')
-        elif ok:
-            print('경로 → 직결 (cmd_manager → opencr_driver)')
-        else:
-            print(self.term.paint('경로 변경 실패', RED))
-        return 0 if ok else 1
-
-    cmd_rl = cmd_route   # 예전 이름 (rl on|off)
-
-    def rl_node_up(self, timeout: float = 3.0) -> bool:
-        """rl-only의 rl_corrector가 그래프에 보이나 (막 켠 CLI는 탐색 시간을 조금 줌)."""
-        end = time.monotonic() + timeout
-        while True:
-            if any(n == 'rl_corrector' for n, _ in self.node.get_node_names_and_namespaces()):
-                return True
-            if time.monotonic() >= end:
-                return False
-            self._poll(0.3)
 
     def cmd_control(self, args) -> int:
         return self.cmd_mode(args)
@@ -742,6 +713,12 @@ class Bus:
             return '', '/'
         return parts[-1], ('/' + '/'.join(parts[:-1])) if len(parts) > 1 else '/'
 
+    def node_feature_lines(self, name: str, summary: bool = False) -> list[str]:
+        """노드별 추가 상태 — op/pages/nodes/<node>.py의 NodeFeature."""
+        from .pages.nodes import feature_for
+        feature = feature_for(name)
+        return feature.status_lines(self, name, summary=summary) if feature else []
+
     def node_status_lines(self, name: str) -> list[str]:
         """노드 하나의 상태 — 그래프·발행/구독·진단 (메뉴에서 1초마다 다시 부름)."""
         row = next((r for r in self.node_rows() if r[0] == name), None)
@@ -751,6 +728,7 @@ class Bus:
         else:
             alive, age = row[1], row[2]
             lines.append(' 실행: ' + ('그래프에 보임' if alive else f'그래프에 안 보임 ({age:.0f}초 전 확인)'))
+        lines += self.node_feature_lines(name)
         short, ns = self._node_parts(name)
         try:
             pubs = self.node.get_publisher_names_and_types_by_node(short, ns)
@@ -879,3 +857,6 @@ class Bus:
         names = self.node_names()
         print('\n'.join(names) if names else '노드 없음 (같은 ROS_DOMAIN_ID인지 확인)')
         return 0
+
+    def cmd_ab(self, args) -> int:
+        return self.ab.cmd(args)

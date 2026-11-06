@@ -1,7 +1,7 @@
-# isaac — 바퀴 드리프트 보정 RL (sim 보정 → 학습 → 실기기)
+# isaac — Nav2 주행 RL (sim 학습 → 실기기)
 
 같은 `(v, w)` 명령을 넣어도 실제 로봇은 모터 지연 · 좌우 바퀴 차이 · 데드밴드 · 슬립 때문에 다르게 움직인다.
-이걸 PC의 정책이 `[Δv, Δw]`로 보정한다. **학습은 Isaac sim에서, 추론은 PC(ROS)에서** — Pi에는 모델이 없다.
+학습은 Isaac sim에서, 추론은 Nav2 `rl_nav_controller` 플러그인(ONNX Runtime C++)이 한다.
 
 목적·합격 기준: [../documents/isaac/task-spec.md](../documents/isaac/task-spec.md)
 (같은 경로를 RL 끄고/켜고 달려 회전 추종 RMS 20%↓ · 직진 RMS 악화 없음).
@@ -9,8 +9,8 @@
 ```text
 calibration/  real·sim 응답 측정 → fit.json (sim을 real에 맞춤)
   → training/   Isaac Lab PPO 학습 (실기기 맞춤 값 중심 랜덤화 — cfg에 숫자) → policy.onnx
-  → ros2_ws/rl-only.sh   PC corrector가 ONNX로 보정 + 기록(raw.csv)
-  → ros2_ws/report.py    Before/After 그림
+  → Nav2 rl_nav_controller   FollowPath가 ONNX 정책으로 /cmd_vel_nav 생성
+  → ./run-cli node-status /controller_server   RL/fallback 상태 확인
 ```
 
 ## 1. 처음이면 — 강화학습 5단어
@@ -31,8 +31,6 @@ Isaac Sim = 물리 시뮬레이터, Isaac Lab = 그 위의 강화학습 도구(�
 ```text
 isaac/
 ├── run-calibration.sh        보정 실행기 (sim=IsaacLab · real=ROS · dummy/plot=.venv)
-├── run-real-ab.sh            실기기 A/B — ./run-real-ab.sh <task> --onnx <policy.onnx> (A 바이패스 → B 정책 → training/<task>/report.py)
-├── run-real-goal-ab.sh       실기기 goal 모드 A/B — ./run-real-goal-ab.sh <task> --onnx <policy.onnx> --goal X,Y (A/B → report_goal.py)
 ├── run-make-onnx.sh          체크포인트 → ONNX: ./run-make-onnx.sh <model_N.pt> [--quantize] (tools/onnx_tool.py · play 창 없이, 스스로 끝남)
 ├── run-training.sh           학습 · 재생 — ./run-training.sh <task> [--play] (Isaac Lab 공식 train.py · play.py → artifacts/<task>/training/)
 ├── run-tb-summary.sh         학습 진행 요약 — ./run-tb-summary.sh <task> [--watch 초] [--tags ...]
@@ -51,7 +49,8 @@ isaac/
 ├── reports/base_report.py    BaseReport(ABC) — 측정 폴더 1개 single() · 2개 compare() (task 보고서가 상속: calibration/report.py CalibrationReport)
 ├── training/                 학습                                           → training/README.md
 │   ├── __init__.py           register() — 공식 train.py · play.py가 --external_callback으로 부름
-│   └── rl_correction_waypoint/      task RlCorrectionWaypoint (랜덤 웨이포인트 이탈 없이): __init__(gym.register) · env · env_cfg · command · agent ·
+│   ├── rl_maze/               task RlMaze — Nav2 RL (현재 실기 정책): 미로 · 라이다 · 웨이포인트
+│   └── rl_correction_waypoint/      task RlCorrectionWaypoint (레거시 보정 실험): __init__(gym.register) · env · env_cfg · command · agent ·
 │                                    calibration/(1단계 측정: command · env · env_cfg) ·
 │                                    robot_cfg.py(로봇 ROBOT_CFG · 바퀴 숫자 · 모터 · 마찰 · 실측 응답 — 기본 로봇) · usda/robot.usda(외부 제공 USD) ·
 │                                    sim_robot.py · real_robot.py · dummy_robot.py(이 로봇의 sim · 실기기 · 가짜 입출력)
@@ -79,7 +78,7 @@ real 측정 → 순수 sim 측정 (calibration은 여기까지) → **RL 쪽 env
 
 ```bash
 cd isaac && ./setup_venv.sh                                               # real 측정·리포트용 .venv
-cd ../ros2_ws && colcon build --packages-select rl_correction rl_eval tb3_bringup   # PC
+cd ../ros2_ws && colcon build --packages-select rl_policy rl_nav_controller tb3_bringup   # PC
 ```
 
 ### 3.1 real 측정 — 실기기 사각형
@@ -87,10 +86,8 @@ cd ../ros2_ws && colcon build --packages-select rl_correction rl_eval tb3_bringu
 ```bash
 # 로봇: 베이스 (Pi에서 또는 PC tool로)
 ./tool/run-cli base start
-# PC: RL 노드 바이패스 (보정 없이 통과 — 정책을 쓸 때와 같은 경로 · 같은 PC 왕복 지연)
-cd ros2_ws && ./rl-only.sh enable:=false label:=calib   # 바이패스 필수 (기본은 정책 켬)
-# MANUAL · 경로 rl
-./tool/run-cli control manual  &&  ./tool/run-cli route rl
+# MANUAL
+./tool/run-cli control manual
 cd isaac
 ./run-calibration.sh rl_correction_waypoint --robot real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
 ./run-calibration.sh rl_correction_waypoint --robot real --label real_floor
@@ -98,7 +95,6 @@ cd isaac
 ```
 
 - 로봇 주변 1 m 비우기. 사각형(한 변 0.5 m) → 180° 턴 → 역주행, 약 54초. 중간에 잡지 말 것. 자세한 순서: `training/rl_correction_waypoint/README.md` calibration 절.
-- 2026-11-02 측정은 직결(`route direct`)이었다 — rl 경로로 다시 재면 PC 왕복만큼 지연이 늘 수 있다 (`RESPONSE_DELAY_STEPS`).
 - `fit.json` = 측정 결과 (gain 좌/우 · 지연 · τ · 데드밴드). 2026-11-02(`20261102_140931-02-real`): gain 0.9943/0.9951 · 지연 2스텝(0.1 s) · τ 0.046 s.
   τ는 20 Hz 기록의 한계값 · 데드밴드 0은 "못 잼"(저속 구간 없음).
 
@@ -118,7 +114,7 @@ python3 training/rl_correction_waypoint/calibration/report.py artifacts/rl_corre
 
 calibration은 측정만 한다. 잰 차이는 **로봇 설정**(`robot_cfg.py`의 `RESPONSE_*`)에 숫자로 넣는다 — 로봇의 성질이라서.
 학습 task는 그 값을 랜덤 범위의 **중심**으로 쓰고 폭만 자기가 정한다 (`env.robot=`으로 로봇을 바꾸면 그 로봇 값이 따라온다).
-기본 로봇(`training/rl_correction_waypoint/robot_cfg.py`)에 넣은 값 (2026-11-03, real = route rl + rl-only 바이패스):
+기본 로봇(`training/rl_correction_waypoint/robot_cfg.py`)에 넣은 값 (2026-11-03, real = direct 경로):
 
 | 값 | 계산 | 2026-11-03 (`artifacts/rl_correction_waypoint/calibration/2026-11-03_20-34-42_real_floor` vs `…_20-22-20_sim_aa`) | `robot_cfg.py` |
 |---|---|---|---|
@@ -148,7 +144,7 @@ tensorboard --logdir artifacts/rl_correction_waypoint/training                  
 - 바닥: Isaac Lab 지형(8 m 칸: 평평 · 요철 턱 1~3 cm, 언덕 없음 · `env.ground.uneven=false`면 평면만) + env마다 바퀴 마찰 랜덤 0.7~1.1 (`env.events=null`로 끔).
 - 자이로 영점 오차: 에피소드마다 ±0.005 rad/s (방향을 자이로 적분으로 보므로 작게 · `env.gyro_bias=…`). 실기기 −0.257 같은 큰 값은 OpenCR 재부팅(가만히)으로 고친다.
 - 체크포인트는 50회마다 — 끝에서 망가져도 이전 `model_<N>.pt`를 `play`로 내보내면 된다.
-- `policy.onnx` 출력은 신경망 그대로 [-1, 1]. 로봇 corrector가 `clamp × action_scale`(0.10 · 0.60)을 한다 — **`.onnx.data`도 같이 복사**.
+- `policy.onnx` 출력은 신경망 그대로 [-1, 1]. `rl_nav_controller`가 `max_lin`·`max_ang`로 스케일한다 — **`.onnx.data`도 같이 복사**.
 
 ### 3.4b 정책 보기 — 실기기 전에
 
@@ -165,32 +161,32 @@ tensorboard --logdir artifacts/rl_correction_waypoint/training                  
 ./run-world.sh rl_correction_waypoint                       # task env + command.py — 노란 점(랜덤 웨이포인트)을 기본 제어기가 따라감 (보정 0)
 ./run-world.sh rl_correction_waypoint --calibration         # task calibration/ — CalibrationEnv + 네모
 ./run-world.sh rl_correction_waypoint --command keyboard    # 키보드로 직접 운전 (CalibrationEnv 빈 바닥)
+./run-world.sh rl_maze --command keyboard --viz             # 미로 · 사람/공 · 마찰 패치에서 직접 운전
 ./run-world.sh -h
 ```
 
-- 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · R 원점 · **F 카메라를 로봇 쪽으로** · 창 닫으면 끝
+- 키: W/A/S/D(화살표) · Shift 느리게 · X 정지 · `[`/`]` 속도 -/+ · R 처음부터 · **F 카메라를 로봇 쪽으로** · **L 라이다 점군**
+- `rl_maze`는 `direct_drive` env라 `--command keyboard`가 CalibrationEnv가 아니라 **미로 env 자체**에서 돈다.
+  `L` = 36방향 라이다 점군 (raw=청록 · inflation=마젠타 · 3.5 m 반사 없음=회색 · 마진 안=생략, 작은 점).
+  시각화는 `env.lidar_vis_rays=360`으로 촘촘히 (정책 입력은 36 그대로).
+- `debug_vis` 바퀴 위 두 줄: 아래 = 유효 마찰(파랑=미끄럼·회색=보통·빨강=끈적) · 위 = 바퀴 속도(초록=전진·마젠타=후진).
 - 카메라는 고정하지 않는다 — 마우스 휠 줌 · 오른쪽 드래그 회전 · 가운데 드래그 이동. 로봇이 화면 밖으로 가면 F.
-- `--env`는 행동이 [v, w] 명령인 env(`BaseEnv` 계열). 터미널에 0.5 s마다 명령 / 엔코더 / 자이로.
+- 터미널에 0.5 s마다 명령 / 엔코더 / 자이로.
 
-### 3.5 실기기 A/B — 같은 명령, 보정 끔(A) · 켬(B)
+### 3.5 실기기 Nav2 RL 확인
 
 ```bash
-# 준비 = 3.1과 같음: Pi 베이스 · MANUAL · route rl · PC ../ros2_ws/rl-only.sh (corrector)
-./run-make-onnx.sh artifacts/rl_correction_waypoint/training/<시각>/model_499.pt        # → exported/policy.onnx (+ .onnx.data)
-./run-real-ab.sh rl_correction_waypoint --onnx artifacts/rl_correction_waypoint/training/<시각>/exported/policy.onnx
-#   A (corrector 바이패스) → 로봇을 출발 자리로 돌려놓고 Enter → B (그 정책) → 보고서
-#   → artifacts/rl_correction_waypoint/ab/<시각>_ab/{A,B}/raw.csv · compare.png
-python3 training/rl_correction_waypoint/report.py <A 폴더> <B 폴더>                       # 보고서만 다시
+# 준비: Pi 베이스 · Nav2 지도 주행 · ros2_ws/src/tb3_bringup/config/nav2_params.yaml FollowPath.enable=true + model_path
+./run-make-onnx.sh artifacts/rl_maze/training/<시각>/model_<N>.pt   # → exported/policy.onnx (+ .onnx.data)
+# model_path를 policy.onnx로, 옆에 policy.onnx.data
+# lidar_inflation / inflation_scale을 학습 범위와 같게 (기본 0.26 / 0.50)
+./tool/run-cli node-status /controller_server   # RL/fallback · 모델 · 스캔 확인
+ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"
+# 같은 goal을 두 번 (enable=false/true) → /controller_server/FollowPath/status와 궤적 비교
 ```
 
-- 측정 실행기(`calibration/__main__.py`)와 task의 calibration 명령(네모)을 그대로 쓴다. A/B 차이는 corrector 보정 하나 —
-  RealRobot이 측정 직전에 `/rl_corrector/set_parameters`(model_path) · `/rl_corrector/toggle`을 직접 바꾼다 (A = 모델 내림 + 끔 · B = 그 ONNX + 켬).
-- 보고서 지표 (작을수록 좋음): 경로 오차 · 끝점 오차 · 직진 중 휨 — 궤적은 거리 = 엔코더 · 방향 = 자이로 (odom 궤적은 휘어도 직선이라 안 씀).
-  B 보정량이 0이면 경고 (정책이 일을 안 함).
-- **웨이포인트 정책(goal 모드)은 속도 입력(네모)을 보정하지 않는다** — 이 스크립트 대신
-  `./run-real-goal-ab.sh rl_correction_waypoint --onnx <policy.onnx> --goal 1.0,0.0`을 쓴다 (`/rl_goal` A/B · `report_goal.py`).
-- OpenCR는 로봇을 가만히 둔 채 켠다 (부팅 때 자이로 영점). 정지 중에도 자이로가 0이 아니면 정책 입력이 오염된다.
-- maze 정책(nav2 controller)의 A/B는 nav2 `/controller_server/FollowPath/toggle`로 같은 목표를 두 번 — 이 스크립트 범위 밖.
+- `FollowPath.fallback_controller`로 fallback 선택 (현재 DWB — `dwb`/`mppi`/`rpp`/`rotation_shim`).
+- 구 `rl_correction`/`rl_eval`/`rl-only`/`route rl` A/B는 제거됐다.
 
 ## 4. sim 물리 — 고친 것 · 남은 것
 

@@ -69,6 +69,8 @@ sudo apt install -y \
   espeak-ng \
   ros-lyrical-turtlebot3-msgs \
   ros-lyrical-dynamixel-sdk \
+  ros-lyrical-ament-cmake-target-dependencies \
+  ros-lyrical-ament_target_dependencies \
   python3-numpy socat
 ```
 
@@ -102,6 +104,20 @@ sudo apt install -y \
   Ubuntu 26.04의 CMake 4.x는 `cmake_minimum_required(<3.5)`를 거부 → cartographer 코어가 그대로는 configure 실패
   (`Compatibility with CMake < 3.5 has been removed`). 빌드 시 `--cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5` 필수 (4장 참조).
 - (선택) RL 모델 추론: `pip install --break-system-packages onnxruntime` — torch는 Pi에 깔지 않음.
+
+**cartographer**
+```shee
+cd ~/ros2/ros2_ws
+rm -rf build/cartographer install/cartographer
+
+colcon build --packages-select cartographer \
+  --cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+ls -l src/cartographer/docs/CMakeLists.txt 2>&1
+grep -rn "cmake_minimum_required" src/cartographer --include=CMakeLists.txt
+# cartographer가 통과하면 나머지를 이어서 빌드하세요:
+colcon build --symlink-install --cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+```
 
 ## 3. 셸 설정 (`~/.bashrc`)
 
@@ -161,7 +177,7 @@ apt로 안 되는 것만 모음. 받는 위치·버전은 저장소 파일에 �
 | `explore_lite` · `explore_lite_msgs` (+ 딸림 `multirobot_map_merge`) | 자동 맵핑 frontier 탐색 (Lyrical apt 없음) | `ros2_ws/deps.repos` — robo-friends/m-explore-ros2, 커밋 `326cf8a` | `vcs import` → 패치(`m-explore-ros2-ament-target-deps`) → `rosdep install` (image_geometry) → `colcon build` (Pi 약 2분, 경고만) | `ros2_ws/patches/m-explore-ros2-ament-target-deps.patch` (Lyrical `ament_target_dependencies` 분리 대응) |
 | `cartographer` (코어) | 2D SLAM 코어 (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `877157a` | `vcs import` → 패치 → `colcon build --cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5` (Pi 약 20분, CMake 4.x 필수) | `ros2_ws/patches/cartographer-ceres2.patch` (Ceres 2.x `Manifold` + abseil `ABSL_` 접두어) |
 | `cartographer_ros` (+`cartographer_ros_msgs`·`cartographer_rviz`) | SLAM ROS 래퍼 — `cartographer_node`·`occupancy_grid_node` (Lyrical apt 없음) | `ros2_ws/deps.repos` — 커밋 `7433452` | `vcs import` → 패치 4종 → `colcon build` (같은 `--cmake-args` 공유) | `patches/cartographer_ros-ceres2.patch` (abseil `ABSL_` 7파일) + `patches/cartographer_ros-gflags-unique.patch` (gflags 중복 정의 해소 §11) + `patches/cartographer_ros-absl-deadlock.patch` (§14) |
-| 우리 패키지 (`tb3_bringup` · `rl_correction` · `rl_eval` · `nav2_rl_controller`) | 이 프로젝트 코드 | 저장소 `ros2_ws/src/` | `colcon build` | [ros2_ws README](../../../ros2_ws/README.md) |
+| 우리 패키지 (`tb3_bringup` · `rl_nav_controller` · `rl_policy`) | 이 프로젝트 코드 | 저장소 `ros2_ws/src/` | `colcon build` | [ros2_ws README](../../../ros2_ws/README.md) |
 | OpenCR 펌웨어 `tb3_wheels` | 바퀴·부저 펌웨어 | 저장소 `firmware/opencr/` | `compile.sh` → `upload.sh` (Pi에서) | [OpenCR 세팅](../../opencr/opencr-setup-ubuntu26.04.md) |
 | arduino-cli + OpenCR 보드 패키지 | 펌웨어 빌드 도구 (arm64는 armhf 툴체인·core min/max 패치 필요) | `firmware/opencr/setup.sh`가 설치·패치 | `setup.sh` 1회 | 같음 |
 

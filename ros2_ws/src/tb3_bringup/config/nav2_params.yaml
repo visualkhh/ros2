@@ -133,119 +133,61 @@ controller_server:
       minimum_rotation_angle: 0.785
       reject_unit_path: false
     FollowPath:
-      # rl_nav_controller (ros2_ws/src/rl_nav_controller) — 학습한 주행 정책(isaac/training/rl_maze) · 안에 MPPI를 품고 바이패스
-      # 켬/끔: ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"  (기본 false = MPPI)
+      # rl_nav_controller (ros2_ws/src/rl_nav_controller) — 학습한 주행 정책(isaac/training/rl_maze) · 안에 inner controller(DWB)를 품고 바이패스
+      # 켬/끔: ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"  (기본 false = DWB)
       plugin: "rl_nav_controller::RlNavController"
-      enable: false                # 시작 때 정책 적용 (false = MPPI 그대로)
-      model_path: ""               # policy.onnx (play로 내보낸 것, 옆에 .onnx.data) — 비우면 늘 MPPI
-      inner_plugin: "nav2_mppi_controller::MPPIController"
+      enable: false                # 시작 때 정책 적용 (false = inner controller(DWB) 그대로)
+      model_path: ""               # policy.onnx (play로 내보낸 것, 옆에 .onnx.data) — 비우면 늘 DWB
+      # 바이패스 controller — dwb(이 로봇·기본) · mppi · rpp · rotation_shim 또는 전체 pluginlib 클래스명.
+      #   선택한 플러그인의 파라미터는 아래 inner.* 블록에 맞출 것.
+      fallback_controller: "dwb"
       max_lin: 0.26                # 정책 [v, w] 스케일 = 학습 env (robot_cfg.py MAX_LIN · MAX_ANG)
       max_ang: 1.82
-      inner:                       # 바이패스 controller(MPPI) 설정 — 예전 FollowPath 그대로
-        plugin: "nav2_mppi_controller::MPPIController"
-        time_steps: 56
-        model_dt: 0.05
-        model_delay_vx: 0.0
-        model_delay_vy: 0.0
-        model_delay_wz: 0.0
-        batch_size: 2000
-        open_loop: false
-        ax_max: 3.0
-        ax_min: -3.0
-        ay_max: 3.0
-        ay_min: -3.0
-        az_max: 3.5
-        vx_std: 0.2
-        vy_std: 0.2
-        wz_std: 0.4
-        vx_max: 0.26   # Waffle Pi 최대 (펌웨어 바퀴 상한 8 rad/s × 0.033 m)
-        vx_min: -0.10  # 뒤 ~135°는 라이다가 몸통에 가려 안 보임 → 후진은 천천히
-        vy_max: 0.5
-        wz_max: 1.82   # Waffle Pi 최대
-        iteration_count: 1
-        temperature: 0.3
-        gamma: 0.015
-        visualize: true
-        publish_optimal_trajectory: true
-        regenerate_noises: true
-        motion_model: "diff_drive"
-        diff_drive:
-          plugin: "mppi::DiffDriveMotionModel"
-        TrajectoryVisualizer:
-          trajectory_step: 5
-          time_step: 3
-        TrajectoryValidator:
-          # The validator can be configured with additional parameters if needed.
-          plugin: "mppi::DefaultOptimalTrajectoryValidator"
-          collision_lookahead_time: 2.0  # Time to look ahead to check for collisions
-          consider_footprint: false  # Whether to consider the full robot's footprint (or circle) in trajectory validation collision checks
-        critics:
-          [
-            "ConstraintCritic",
-            "CostCritic",
-            "GoalCritic",
-            "GoalAngleCritic",
-            "PathAlignCritic",
-            "PathFollowCritic",
-            "PathAngleCritic",
-            "PreferForwardCritic",
-          ]
-        ConstraintCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 4.0
-        GoalCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 5.0
-          threshold_to_consider: 1.4
-        GoalAngleCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 3.0
-          threshold_to_consider: 0.5
-        PreferForwardCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 5.0
-          threshold_to_consider: 0.5
-        CostCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 3.81
-          near_collision_cost: 253
-          critical_cost: 300.0
-          consider_footprint: false
-          collision_cost: 1000000.0
-          near_goal_distance: 1.0
-          trajectory_point_step: 2
-        PathAlignCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 14.0
-          max_path_occupancy_ratio: 0.05
-          trajectory_point_step: 4
-          threshold_to_consider: 0.5
-          offset_from_furthest: 20
-          use_path_orientations: false
-        PathFollowCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 5.0
-          offset_from_furthest: 5
-          threshold_to_consider: 1.4
-        PathAngleCritic:
-          enabled: true
-          cost_power: 1
-          cost_weight: 2.0
-          offset_from_furthest: 4
-          threshold_to_consider: 0.5
-          max_angle_to_furthest: 1.0
-          mode: 0
-        # TwirlingCritic:
-        #   enabled: true
-        #   twirling_cost_power: 1
-        #   twirling_cost_weight: 10.0
+      # LiDAR 인플레이션 [m] — 사용자 입력. costmap과 단위는 m, 값은 별개 (로컬 LiDAR 안전 여유).
+      #   scan_rays: r - lidar_inflation → 정책 obs 52번째 = lidar_inflation / inflation_scale
+      #   lidar_inflation = 사용자가 바꾸는 값 · inflation_scale = 관측 정규화 상수(사용자 값 아님)
+      #   학습 범위(0.20~0.24) 안이면 어느 값이든 정책이 대응. 런타임 변경:
+      #   ros2 param set /controller_server FollowPath.lidar_inflation 0.24
+      lidar_inflation: 0.22
+      inflation_scale: 0.50        # 정규화 상수 — 학습/추론 동일. 바꾸면 모델 재학습 필요 (사용자 인플레이션 값 아님)
+      # 선택은 위 fallback_controller 하나로만 한다. 아래는 그 플러그인의 파라미터.
+      inner:
+        max_vel_x: 0.26
+        min_vel_x: 0.0
+        max_vel_y: 0.0
+        min_vel_y: 0.0
+        max_vel_theta: 1.82
+        min_speed_xy: 0.0
+        max_speed_xy: 0.26
+        min_speed_theta: 0.0
+        acc_lim_x: 2.5
+        acc_lim_y: 0.0
+        acc_lim_theta: 3.2
+        decel_lim_x: -2.5
+        decel_lim_y: 0.0
+        decel_lim_theta: -3.2
+        vx_samples: 20
+        vy_samples: 5
+        vtheta_samples: 20
+        sim_time: 1.7
+        linear_granularity: 0.05
+        angular_granularity: 0.025
+        transform_tolerance: 0.2
+        xy_goal_tolerance: 0.10
+        trans_stopped_velocity: 0.25
+        short_circuit_trajectory_evaluation: true
+        stateful: true
+        critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+        BaseObstacle.scale: 0.02
+        PathAlign.scale: 32.0
+        PathAlign.forward_point_distance: 0.1
+        GoalAlign.scale: 24.0
+        GoalAlign.forward_point_distance: 0.1
+        PathDist.scale: 32.0
+        GoalDist.scale: 24.0
+        RotateToGoal.scale: 32.0
+        RotateToGoal.slowing_factor: 5.0
+        RotateToGoal.lookahead_time: -1.0
 
 local_costmap:
   local_costmap:
@@ -506,7 +448,7 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.26, 0.0, 1.82]    # Waffle Pi 최대 — MPPI vx_max·wz_max와 같게
+    max_velocity: [0.26, 0.0, 1.82]    # Waffle Pi 최대 — inner max_vel_x·max_vel_theta와 같게
     min_velocity: [-0.10, 0.0, -1.82]  # 후진은 천천히 (뒤가 안 보임)
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]

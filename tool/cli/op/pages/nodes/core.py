@@ -17,7 +17,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from .procs import RUN_DIR, WS_DIR
+from ...procs import RUN_DIR, WS_DIR
 
 NODE_DIR = RUN_DIR / 'nodes'
 

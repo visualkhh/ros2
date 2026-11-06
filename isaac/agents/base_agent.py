@@ -52,6 +52,9 @@ def check(cfg) -> None:
 class BaseAgentCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 50           # model_<N>.pt 저장 간격
     logger = "tensorboard"
+    # rsl_rl 4.x: env observation group 이름("policy")을 actor/critic에 명시한다.
+    #   비워두면 rsl_rl이 "policy를 actor/critic으로 가정"한다는 경고를 낸다 (동작은 함).
+    obs_groups = {"actor": ["policy"], "critic": ["policy"]}
     policy = POLICY
     algorithm = PPO
 

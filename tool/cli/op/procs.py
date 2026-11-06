@@ -20,13 +20,27 @@ from pathlib import Path, PurePosixPath
 TOOL_DIR = Path(__file__).resolve().parents[2]          # tool/
 REPO_DIR = TOOL_DIR.parent                               # ros2/
 WS_DIR = REPO_DIR / 'ros2_ws'
-CONFIG_DIR = TOOL_DIR / 'config'
 RUN_DIR = TOOL_DIR / '.run'
 MAP_DIR = Path(os.environ.get('TOOL_MAP_DIR', WS_DIR / 'map'))
 
-NAV_PARAMS = Path(os.environ.get('TOOL_NAV_PARAMS', CONFIG_DIR / 'nav2_params.yaml'))
-# 베이스(바퀴·odom·라이다) bringup. 기본 = 로봇만(RL 없음).
-#   RL on으로 시작: TOOL_BASE_CMD='ros2 launch tb3_bringup tb-only.launch.py rl:=true' (보통은 ./run-cli rl on)
+
+def _default_nav_params() -> Path:
+    """Nav2 파라미터 기본값 — tb3_bringup 패키지 share/config (설치 전이면 src)."""
+    env = os.environ.get('TOOL_NAV_PARAMS')
+    if env:
+        return Path(env)
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        p = Path(get_package_share_directory('tb3_bringup')) / 'config' / 'nav2_params.yaml'
+        if p.exists():
+            return p
+    except Exception:
+        pass
+    return WS_DIR / 'src' / 'tb3_bringup' / 'config' / 'nav2_params.yaml'
+
+
+NAV_PARAMS = _default_nav_params()
+# 베이스(바퀴·odom·라이다) bringup.
 BASE_CMD = os.environ.get('TOOL_BASE_CMD', 'ros2 launch tb3_bringup tb-only.launch.py')
 SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')
 # 베이스·SLAM·Nav 프로세스와 지도 파일은 로봇(Pi)에 있어야 한다. 로봇이 아닌 곳에서 run-cli를 쓰면
@@ -209,22 +223,22 @@ class Procs:
         print(f'$ {shlex.join(cmd)}')
         return subprocess.call(cmd, cwd=str(cwd))
 
-    # ------------------------------------------------------------ 개별 노드 (op/nodes.py · 로봇에서만)
+    # ------------------------------------------------------------ 개별 노드 (op/pages/nodes/core.py · 로봇에서만)
     def node_pids(self, name: str) -> list[tuple[int, list[str]]]:
-        from .nodes import find_node_procs
+        from .pages.nodes.core import find_node_procs
         return find_node_procs(name)
 
     def node_kill(self, name: str, force: bool = False) -> tuple[bool, str]:
-        from .nodes import node_kill
+        from .pages.nodes.core import node_kill
         return node_kill(name, force=force)
 
     def node_restart(self, name: str, force: bool = False) -> tuple[bool, str]:
-        from .nodes import node_restart
+        from .pages.nodes.core import node_restart
         return node_restart(name, force=force)
 
     def node_cleanup(self) -> str:
         """stop-all용 — 재시작 추적 노드 전부 종료."""
-        from .nodes import cleanup_tracked
+        from .pages.nodes.core import cleanup_tracked
         return cleanup_tracked()
 
     @staticmethod

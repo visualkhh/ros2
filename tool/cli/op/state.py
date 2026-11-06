@@ -48,19 +48,25 @@ class StateStore:
         self.joints: dict[str, tuple[float, float, float | None]] = {}  # /joint_states 이름 → (rad, rad/s, 전류 A)
         self.last_cmd: tuple[float, float] = (0.0, 0.0)
         self.st_control: str | None = None                            # state_manager /state_* (None = 수신 없음)
-        self.st_rl: bool | None = None
         self.st_estop: bool | None = None
         self.st_operation: str | None = None                       # 운행 상태 SLAM · LOCALIZATION · IDLE
         self.st_map: str | None = None                             # 적용된 지도
         self.st_time: float | None = None                         # /state_* 마지막 수신 (latched라도 base 죽으면 끊김)
         self.explore_status = ''                                   # explore_bridge /explore_status
-        self.rl_out = Rate(5)                                      # /cmd_vel_rl_out (PC RL 응답)
+        self.cmd_vel_nav = Rate(5)                                 # /cmd_vel_nav (Nav2 controller 출력)
         self.nodes_seen: dict[str, float] = {}                     # 노드 그래프에서 마지막으로 본 시각
+        self.rl_status: list[float] = []                           # controller_server FollowPath RL/MPPI 상태
+        self.rl_status_time = 0.0
 
     def on_state(self, key: str, value) -> None:
         """state_manager /state_* 수신 — 값 저장 + 수신 시각 기록 (끊김 판단용)."""
         setattr(self, f'st_{key}', value)
         self.st_time = time.monotonic()
+
+    def on_rl_status(self, data) -> None:
+        """controller_server FollowPath 상태 — [rl_active, reason, ...]."""
+        self.rl_status = list(data)
+        self.rl_status_time = time.monotonic()
 
     @staticmethod
     def yaw(q) -> float:
@@ -167,19 +173,13 @@ class StateStore:
     def robot_txt(self) -> str:
         return self.robot_parts()[1]
 
-    def route_txt(self) -> str:
-        if not self.st_rl:
-            return '경로 직결'
-        age = self.rl_out.age()
-        return '경로 RL 경유' + ('' if age is not None and age < 1.0 else ' (PC RL 응답 없음 → 정지 · PC에서 rl-only.launch.py 켜기)')
-
     def domain_txt(self) -> str:
         if self.st_control is None or self.st_time is None:
             return '상태 없음 (베이스 꺼짐?)'
         op = self.st_operation or '?'
         if self.st_map:
             op += f' (지도 {self.st_map})'
-        txt = f'제어 {self.st_control} · 운행 {op} · {self.route_txt()} · 비상정지 {"ON" if self.st_estop else "off"}'
+        txt = f'제어 {self.st_control} · 운행 {op} · 비상정지 {"ON" if self.st_estop else "off"}'
         if self.st_control == 'SLAM_AUTO_MAPPING' and self.explore_status:
             txt += f' · 탐색 {self.explore_status}'
         age = time.monotonic() - self.st_time

@@ -5,7 +5,7 @@
 
 마찰 · 모터는 여기서 넣는다. USD 관절 이름 wheel_left_joint · wheel_right_joint.
 숫자는 ROS 쪽과 같아야 한다 (바꾸면 양쪽 같이): ros2_ws/src/tb3_bringup/config/robot.yaml (바퀴) ·
-opencr_driver.wheel_speeds (8 rad/s 비례 축소) · rl_correction corrector (max_lin/max_ang).
+opencr_driver.wheel_speeds (8 rad/s 비례 축소) · rl_nav_controller (max_lin/max_ang).
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ MAX_WHEEL = 8.0        # [rad/s] 펌웨어 VEL_LIMIT_RAD_S · 드라이버 max_w
 DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tool/cli/op/bus.py DIAG_RADIUS)
 
 # 실측 바퀴 응답 — rl_correction_waypoint에서 복사 (같은 로봇 · 같은 USD). sim raw 대비 차이 (2026-11-03: isaac/artifacts/rl_correction_waypoint/calibration/2026-11-03_20-34-42_real_floor − …_20-22-20_sim_aa,
-# real은 route rl + rl-only 바이패스 = 정책을 쓸 때와 같은 경로). 이전 값(2026-11-02, route direct): gain 0.9927/0.9938 · 지연 2.
+# real은 direct 경로). 이전 값(2026-11-02, direct): gain 0.9927/0.9938 · 지연 2.
 # calibration으로 다시 재면 여기를 고친다. 학습 task는 이 값을 랜덤 범위의 중심으로 쓴다 (robots.use가 env cfg에 채움).
 RESPONSE_GAIN_LR = (0.9937, 0.9931)   # 좌/우 바퀴 gain (real ÷ sim: 0.9947/1.0010 · 0.9943/1.0012)
 RESPONSE_DELAY_STEPS = 3              # 명령 지연 [20 Hz 스텝] (real − sim: 3 − 0, real 0.173 s — PC 왕복 포함)

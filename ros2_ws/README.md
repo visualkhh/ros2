@@ -1,4 +1,4 @@
-# ros2_ws — 로봇 bringup + RL 보정 워크스페이스
+# ros2_ws — 로봇 bringup + Nav2 RL 워크스페이스
 
 TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계통도 · 명령 경로 · TF · 토픽 · 장치: **[ARCH.md](ARCH.md)**
 
@@ -7,8 +7,8 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계
 | 패키지 | 내용 |
 |---|---|
 | `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `explore_bridge`(자동 맵핑 ↔ 제어 상태) · launch 5개 · URDF |
-| `rl_correction` | `corrector` — `cmd_vel_in` → (ONNX 정책) → clip → `cmd_vel_out`. rl-only가 `/cmd_vel_rl_in` → `/cmd_vel_rl_out`으로 띄움 |
-| `rl_eval` | `eval_recorder` — 보정 전/후 cmd·odom을 CSV로 · `benchmark_onnx.py` (Pi 추론 속도) |
+| `rl_nav_controller` | Nav2 `FollowPath` 플러그인 — RL 정책(`isaac/training/rl_maze`) / inner controller(DWB) 바이패스 |
+| `rl_policy` | ONNX Runtime C++ 래퍼 (`rl_nav_controller`가 사용) |
 | `coin_d4_driver` (외부) | LDS-03 라이다 드라이버 (ROBOTIS) — 아래 `deps.repos`로 받음 |
 | `explore_lite` · `explore_lite_msgs` (외부) | 자동 맵핑 frontier 탐색 (m-explore-ros2) — 아래 `deps.repos`로 받음 |
 | `cartographer` · `cartographer_ros` (외부) | SLAM — 아래 `deps.repos` + `patches/`로 소스 빌드 |
@@ -45,22 +45,21 @@ SLAM(cartographer, 소스 빌드)·Nav2(apt)는 켜고 끄는 건 [`tool/run-cli
 
 ```bash
 cd ~/ros2/ros2_ws && source /opt/ros/lyrical/setup.bash
-colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_eval
+colcon build --symlink-install --packages-select tb3_bringup rl_policy rl_nav_controller
 ```
 
 설정·launch·URDF 파일을 **새로 추가**했는데 설치 폴더에 안 보이면: `rm -rf build/tb3_bringup install/tb3_bringup` 후 다시 빌드.
 
 ## bringup (tb3_bringup)
 
-외부 요청은 **cmd_manager**가 받아 운행 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING · 경로 직결/RL · 비상정지)를 바꾸고 바퀴 명령을 고르며,
+외부 요청은 **cmd_manager**가 받아 운행 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING · 비상정지)를 바꾸고 바퀴 명령을 고르며,
 **state_manager**는 현재 상태를 `/state_*`로 알립니다 — [ARCH.md 2장](ARCH.md#2-운행-상태--바퀴-명령-경로--cmd_manager--state_manager). 바꾸는 법(토픽·명령·메뉴): [STATE_CONTROL.md](STATE_CONTROL.md).
 
 | launch | 어디서 | 내용 |
 |---|---|---|
-| `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다(+몸통 필터·고정 칸). RL 노드는 없음 — RL off로 시작 (`rl:=true`면 on으로, 실행 중엔 `./run-cli rl on`) |
+| `tb-only.launch.py` | Pi | state_manager · cmd_manager · OpenCR 드라이버 · robot_state_publisher · 라이다(+몸통 필터·고정 칸) |
 | `explore-nav.launch.py` | Pi | SLAM 중 Nav — Nav2 `navigation_launch.py` + lifecycle_manager (Lyrical은 manager가 `bringup_launch.py`에만 있음) + explore_lite(frontier 탐색) + explore_bridge(제어 상태 ↔ 탐색). `run-cli explore start`·자동 맵핑이 씀 |
 | `cartographer.launch.py` | Pi | SLAM — cartographer_node + occupancy_grid_node (`config/cartographer_2d.lua`). `run-cli slam start`가 씀 |
-| `rl-only.launch.py` | PC | RL 노드만: corrector(`/cmd_vel_rl_in` → `/cmd_vel_rl_out`) + eval_recorder |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
 
 보통은 `tool/run-cli base start`가 `tb-only`를 띄웁니다. 직접(포그라운드) 띄우려면 — 스크립트가 ROS 환경·domain 25를 맞춘다:
@@ -68,10 +67,6 @@ colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_ev
 ```bash
 ./base-only.sh                     # Pi — = ros2 launch tb3_bringup tb-only.launch.py
 ./base-only.sh lidar:=false        # 라이다 없이
-./rl-only.sh label:=after model:=<정책.onnx>   # PC — RL 노드 + 기록 (→ ros2_ws/artifacts/real/raw.csv) · model 없으면 통과
-./route.sh rl | direct | status    # 바퀴 경로 전환 (= tool/run-cli route, rl_corrector 없으면 거부)
-./policy.sh <정책.onnx> | off | on | status   # 실행 중 정책 교체 · 켬/끔 — 한 번 실행에 A/B (= /rl_corrector/toggle · model_path)
-./rl-only.sh start|stop|restart|status|log [인자...]   # 백그라운드로 켜고 끄기 (ONNX 바꾸고 restart) — 서브명령 없이 쓰면 앞에서 돔
 ```
 
 외부에서 보내는 명령 (`/cmd_manual_*` → state_manager / cmd_manager):
@@ -80,58 +75,32 @@ colcon build --symlink-install --packages-select tb3_bringup rl_correction rl_ev
 |---|---|---|---|
 | `/cmd_manual_vel` | Twist | `teleop` · `drive` | MANUAL일 때 바퀴로 |
 | `/cmd_manual_control` | String `MANUAL`·`NAV_PLAN`·`SLAM_AUTO_MAPPING` | `control …` · `automap start/stop` | 제어 상태 (RViz Nav2 Goal → NAV_PLAN, 자동 맵핑 끝 → MANUAL) |
-| `/cmd_manual_rl` | Bool | `route direct/rl` | 경로: 직결 / PC RL 경유 (실행 중 전환) |
 | `/cmd_manual_estop` | Bool | `estop on/off` | 비상정지 |
 | `/opencr/reboot` | Empty | `reboot-motors` | 모터 에러(E) 해제 |
 
-상태는 `/state_control` · `/state_rl` · `/state_estop` (latched) 로 나옵니다.
+상태는 `/state_control` · `/state_estop` (latched) 로 나옵니다.
 
 `opencr_driver`: `/cmd_vel_base` → `C,l,r` (20 Hz 재전송), `S` → `/odom` · TF `odom→base_footprint` · `/joint_states`(effort=전류 A) ·
 `/diagnostics`(전류·온도·모터 에러) · `/battery_state`(S의 배터리 V), `I` → `/imu`(frame `imu_link`). 파라미터 `config/robot.yaml` (바퀴 반지름 0.033 · 간격 0.287 · 방향 부호 -1/-1).
 라이다: `config/lidar.yaml` (`/scan_raw` → 몸통 상자 필터 → `/scan_filtered` → 400칸 고정 → `/scan`).
 로봇 모델: `urdf/robot.urdf.xacro` — 실측 값은 파일 위쪽 property에 (`view-model.launch.py`로 확인).
 
-## RL 보정 Before / After
+## Nav2 RL controller
 
-RL은 bringup을 바꾸지 않고 **실행 중에** 켜고 끕니다. 같은 경로·같은 계측으로 두 번 수집해서 비교합니다.
-
-```bash
-# PC — RL 노드 (켤 때만 필요)
-ros2 launch tb3_bringup rl-only.launch.py enable:=false label:=before output:=/tmp/before.csv   # 보정 없이 통과
-./run-cli rl on                 # 바퀴 명령이 PC를 거치게
-#   ... 같은 경로 주행 (teleop 또는 goal) ...
-# Ctrl+C 후 정책을 켜서 다시
-ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=/path/policy.onnx label:=after output:=/tmp/after.csv
-#   ... 같은 경로 주행 ...
-./run-cli rl off                # 끝나면 직결로
-```
-
-- `enable:=false`는 보정 없이 통과 — WiFi 왕복 지연까지 같은 조건으로 "Before"를 잽니다.
-- RL on인데 rl-only가 없거나 WiFi가 끊기면 0.3초 뒤 정지 (cmd_manager 안전).
-- 정책 v2 입력은 `/odom`(엔코더) · **`/imu`(OpenCR 자이로 — 펌웨어 `I` 줄)** · 명령. 설계: [documents/isaac/task-spec.md](../documents/isaac/task-spec.md).
-- corrector는 C++ + **ONNX Runtime C++** (`rl_policy` 패키지): 한 번 `sudo apt install ros-lyrical-onnxruntime-vendor` →
-  `colcon build --packages-select rl_policy rl_correction rl_eval tb3_bringup`. `policy.onnx` 옆에 `policy.onnx.data`가 같이 있어야 한다.
-
-비교 (같은 패턴을 두 번 달린 CSV):
+`FollowPath` 플러그인(`rl_nav_controller::RlNavController`)이 학습 정책(ONNX)으로 직접 Twist를 낸다.
+`FollowPath.enable=false`(기본)면 inner controller(DWB)로 바이패스한다.
 
 ```bash
-./report.py                                      # artifacts/real/raw.csv → artifacts/real/report.png
-./report.py artifacts/real/before.csv artifacts/real/after.csv   # 맨 위 A/B 지표 표(B vs A 초록=좋아짐) + 시작을 맞춰 겹친 궤적·속도·바퀴·전류
-./report.py a.csv b.csv --out 이름.png --show     # 그림 이름 지정 · 창으로도 띄움 (기본: 첫 CSV 옆 report.png)
-#   한 CSV 안에서 policy.sh로 바꿨으면(A/B 한 번에) CSV 하나만 줘도 rl_policy 구간별로 나눠 그림
-#   "정책 켬인데 실제로는 바이패스" 구간이 있으면 경고 — 그 구간은 보정한 게 아님 (모델 경로 확인)
-#   자이로 정지 바이어스가 0.02 rad/s 넘으면 경고 — OpenCR를 가만히 둔 채 다시 켜고 재기록 (정책 입력이 오염됨)
-#   표 아래 판정 막대: ↓ 지표마다 B 개선율 (오른쪽 초록 = 좋아짐 · 왼쪽 빨강 = 나빠짐 · 회색 ±3% 비슷) + 제목에 좋아짐/나빠짐 개수
-#   핵심 지표 = "직진 중 실제 휨 (자이로)" · 궤적/끝점 오차 — 궤적은 거리 엔코더 + 방향 자이로
-#     (odom 궤적은 안 씀: 바퀴가 명령대로 돌면 실제로 휘어도 직선, B는 일부러 바퀴를 다르게 돌려 휜 것처럼 보임)
-#   "엔코더 RMS (참고)" 줄은 B가 일부러 커짐 — 좋고 나쁨 아님
-#   보정 Δv/Δω 패널 = 실제로 나간 명령 − 입력 명령 · 지연 패널 = corrector 처리(실선) + 센서 나이 Pi→PC(점선, 두 PC 시계 차 포함)
-#   matplotlib 필요 — 없으면 ../isaac/.venv/bin/python ./report.py ...
+# 켜기/끄기 (controller_server가 도는 중)
+ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"
+ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: false}"
+
+# 상태 — RL/DWB, 모델 로드, 스캔, fallback 이름
+./run-cli node-status /controller_server
 ```
 
-Pi에서 직접 추론할 경우 (탑재 전 체크):
-
-```bash
-python3 src/rl_eval/benchmark_onnx.py model.onnx --iters 1000   # 평균 50 ms 이하 권장 (10-20 Hz 루프 · Python onnxruntime 필요)
-sudo apt install ros-lyrical-onnxruntime-vendor                  # corrector · rl_nav_controller (C++)는 이것만
-```
+- 모델: `isaac/training/rl_maze` play → `policy.onnx` + `policy.onnx.data` → `ros2_ws/src/tb3_bringup/config/nav2_params.yaml`의 `FollowPath.model_path`
+- fallback: `FollowPath.fallback_controller` (`dwb` 코드 기본 · 이 로봇 설정도 `dwb`). `inner.*` 파라미터 블록을 선택한 플러그인에 맞출 것.
+- 상태 토픽: `/controller_server/FollowPath/status` — `[rl_active, reason, policy_loaded, enable, scan_ok, scan_age, scan_min, v, w, inner_kind]`
+- ONNX Runtime C++: `sudo apt install ros-lyrical-onnxruntime-vendor` → `colcon build --packages-select rl_policy rl_nav_controller`
+- 구 `rl_correction`/`rl_eval`/`rl-only`/`route rl` 경로는 제거됨.

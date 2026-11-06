@@ -9,7 +9,7 @@ task는 `__init__.py`에서 `gym.register`로 이름을 등록하고, 공식 스
 2. 학습
   → training/<task>/ 학습 (공식 train.py, rsl_rl PPO) → artifacts/<task>/training/<시각>/model_<N>.pt
   → 공식 play.py → exported/policy.onnx (신경망 출력 [-1, 1])
-  → PC rl_correction 노드 (clamp × action_scale) → /cmd_vel_rl_out → Pi cmd_manager → 모터
+  → Nav2 rl_nav_controller (FollowPath · ONNX) → /cmd_vel_nav → twist_mux → 바퀴
 ```
 
 ## 구조
@@ -18,6 +18,7 @@ task는 `__init__.py`에서 `gym.register`로 이름을 등록하고, 공식 스
 training/
 ├── __init__.py                 register() — training/ 아래 task 폴더를 import (각 __init__.py의 gym.register)
 ├── rl_nav_correction/        명령 (v, w) 추종 보정 (beebot · ml rl_nav_correction용) → rl_nav_correction/README.md
+├── rl_maze/                  Nav2 RL 주행 (현재 실기 정책) — rl_nav_controller
 └── rl_correction_waypoint/     랜덤 웨이포인트를 이탈 없이 — task 이름 RlCorrectionWaypoint
     ├── __init__.py             gym.register
     ├── env.py · env_cfg.py     RlCorrectionWaypointEnv(BaseEnv) · RlCorrectionWaypointEnvCfg(BaseEnvCfg — 로봇과 상관없음, 실측 중심은 robot_cfg.py)

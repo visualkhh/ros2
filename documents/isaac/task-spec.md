@@ -1,68 +1,47 @@
-# RL 보정 — 목적 · 설계 (v2, 2026-10-29 다시 잡음)
+# RL 주행 — 목적 · 설계 (2026-11-06)
 
-## 0. 목적 (documents·ros2_ws README "RL 보정 Before / After"에서)
+## 0. 목적
 
-> **같은 경로를 RL 끄고(Before) / 켜고(After) 달려서, 로봇이 명령대로 움직이는 정도가 좋아졌음을 수치로 보인다.**
+같은 경로·같은 goal을 **RL 끔(inner controller)** 과 **RL 켬(`rl_nav_controller`)** 으로 주행해
+추종 오차·도착 시간·충돌 없이 통과한 비율을 비교한다.
 
-- 정책은 Isaac Lab에서 학습 → ONNX → `rl_correction/corrector`가 cmd_manager의 **RL 경로**(`/cmd_vel_rl_in` → PC → `/cmd_vel_rl_out`)에서 보정.
-- 비교는 `rl_eval/eval_recorder` CSV 두 개(before/after). RL은 실행 중 `./run-cli route rl|direct`로 켜고 끈다 (bringup 그대로).
-- 범위: **이동 보정 1종(`rl_correction`)만.** Nav2 컨트롤러 단계 보정 패키지(`nav2_rl_controller`)는 **삭제(2026-10-29)**.
+```text
+A: FollowPath.enable=false → fallback controller (DWB)
+B: FollowPath.enable=true  → rl_nav_controller (ONNX 정책)
+```
 
-## 1. v1이 목적을 못 이루는 이유 (리뷰 결과)
+## 1. 범위
 
-| v1 | 문제 |
+- Nav2 `FollowPath` 컨트롤러 단계만.
+- 2026-11-06 이전의 `rl_correction`/`rl_eval`/`rl-only`/`route rl`(PC 보정 경로)은 **제거됨**.
+- 학습 task: `isaac/training/rl_maze` (관측 52 / 행동 2).
+
+## 2. 관측 · 행동
+
+```text
+관측 52 = 웨이포인트 5×2 + 라이다 36 + v/max_lin + w/max_ang + gyro/max_ang + 이전 행동 2 + inflation/0.50
+행동 2  = [v, w] ∈ [-1, 1] → × (max_lin 0.26 m/s, max_ang 1.82 rad/s)
+```
+
+- 로봇 기준 웨이포인트는 Nav2 `transformed_global_plan`에서 `wp_step` 간격으로 샘플.
+- 라이다는 `/scan`(실제 LiDAR) 또는 점구름 가상 스캔(bee 변형). 스캔은 `r - lidar_inflation` (m).
+- `lidar_inflation`은 사용자 입력(ROS 파라미터, 기본 0.22 m) — 학습 `inflation_range 0.20~0.24` 안.
+- fallback 선택: `FollowPath.fallback_controller` (DWB · MPPI · RPP · RotationShim).
+- 모델 로드 실패·`enable=false`·센서 없음·추론 실패 시 fallback controller로 자동 바이패스.
+
+## 3. 평가
+
+| 지표 | 보는 곳 |
 |---|---|
-| 시뮬 로봇 = `beebot.usda` (팔·그리퍼·수납함 달린 다른 로봇) | 질량·무게중심·관성이 우리 Waffle Pi(위판 제거·앞 라이다)와 다름 → 다른 로봇을 보정하는 법을 배움 |
-| 관측 `v_odom·w_odom` = 시뮬 몸체 **진짜 속도** | 실제 `/odom`은 **바퀴 엔코더 × 기준 반지름**. 학습에서 넣은 오차(반지름 ±5%)는 실제 엔코더 odom에 **안 보임** → 실제에선 보정 신호가 없음 |
-| 한계 0.22 / 2.84 (Burger) | 우리 0.26 m/s · 1.82 rad/s · 바퀴 8 rad/s(넘으면 두 바퀴 같은 비율 축소 — `opencr_driver.wheel_speeds`) |
-| 30 Hz · 지연 1스텝(33 ms) | 실제 cmd_manager 20 Hz · RL이 PC에서 돌아 WiFi 왕복 50~200 ms |
-| 명령 = 에피소드당 고정 (v0, w0) | 실제 오차가 가장 큰 건 **명령이 바뀌는 순간**(텔레오퍼 키·Nav2 MPPI 변화) |
+| RL/fallback 여부 | `/controller_server/FollowPath/status` · `./run-cli node-status /controller_server` |
+| 경로 추종 오차 | `/odometry/filtered` + `/plan` |
+| 도착 시간 · 성공률 | `/navigate_to_pose` 액션 결과 |
+| 충돌 | `collision_monitor` 상태 · `/cmd_vel` |
 
-## 2. 무엇을 보정하나 — 실제로 관측 가능한 것만
+상태 토픽:
 
-| 오차 원인 | 실제에서 보이나 | 보정 대상 |
-|---|---|---|
-| 모터 응답 지연 (명령 → 바퀴 속도) | ✅ 엔코더 바퀴 속도 (`S` 줄 l_vel·r_vel) | ✅ |
-| 좌우 모터 비대칭 · 저속 데드밴드 | ✅ 엔코더 | ✅ |
-| 바퀴 8 rad/s 포화 | ✅ (명령 대비 부족) | ✅ |
-| 회전 미끄러짐 · 유효 바퀴 간격 오차 | ⚠ 엔코더로는 안 보임 → **OpenCR 내장 IMU 자이로**로 보임 | ✅ (자이로 추가 시) |
-| 바퀴 반지름 오차(직진 거리) | ❌ 엔코더·자이로 모두 안 보임 (외부 기준 필요) | ✗ 범위 밖 |
-
-→ **D1 결정 (2026-10-29): 자이로 추가.** 펌웨어 별도 `I` 줄(자이로·가속도·자세, `S` 필드는 그대로) → 드라이버 `/imu` (`imu_link`).
-
-## 3. Task `rl_correct` v2
-
-| 항목 | v2 |
-|---|---|
-| 로봇 | **우리 URDF** `isaac/robots/beebot/urdf/robot.urdf.xacro` (ROS용과 같은 내용 — `isaac/robots/check_same.sh`) → USD (`robots/urdf_to_usd.py`가 변환). 바퀴만 |
-| 제어 주기 | **20 Hz** (cmd_manager와 같게). 물리 **480 Hz** · decimation 24 (`envs/base_env_cfg.py PHYSICS_HZ` — 120/240 Hz는 제자리 회전 때 바퀴가 떨림) |
-| 지연 | 명령·관측 각각 0~4 스텝(0~200 ms) 에피소드마다 무작위 (WiFi 왕복) |
-| 모터 모델 | 바퀴별 1차 지연(τ 0.05~0.25 s) · 좌우 이득 비대칭 ±10% · 데드밴드 0~0.3 rad/s · 바퀴 8 rad/s 포화(두 바퀴 같은 비율, 드라이버와 동일) |
-| 기구 오차 | 유효 바퀴 간격 ±8% · 회전 미끄러짐(자이로가 있을 때만 의미) |
-| 명령 | 에피소드(10 s) 안에서 **계단식으로 바뀜**: 텔레오퍼 패턴(w/x/a/d·사선 R=0.5 m, 설정 속도 0.1~0.26) + 부드러운 곡선(MPPI 흉내). 0.5~2 s마다 전환 |
-| obs (N=6) | `[v_cmd, w_cmd, v_enc, w_enc, w_gyro, Δt_since_change]` — 엔코더는 **기준 반지름·간격으로 계산**(실제 드라이버와 같은 식), 자이로는 진짜 각속도 + 잡음. D1을 안 하면 N=5 (`w_gyro` 없음) |
-| action (2) | `[Δv, Δw]` → 노드가 더한 뒤 clip 0.26 / 1.82 |
-| reward | `-(|v_cmd - v_true| + 0.5·|w_cmd - w_true|) - 0.01·|Δ|² - 0.05·|Δ_t - Δ_(t-1)|` (진짜 속도로 채점 — 학습 중엔 정답을 앎. 마지막 항 = 출렁임 방지) |
-| 종료 | 10 s |
-
-- 한계값·주기·지연 범위는 **한 파일**(`isaac/robots/beebot/config.py` · `isaac/envs/base_env_cfg.py`)에 두고 학습 환경·문서가 같이 씀. ROS 노드 기본값도 같은 값(0.26/1.82)으로.
-
-## 4. 평가 (Before / After)
-
-- **같은 입력**: 손 텔레오퍼 대신 **스크립트 패턴**(`run-cli drive` 단계 조합 — 직진 2 s · 제자리 회전 · 사선 · 정지 반복)을 두 번 재생.
-- 지표 (eval_recorder CSV에서): `RMS(v_cmd − v_enc)` · `RMS(w_cmd − w_gyro)`(D1) · 계단 명령 후 90% 도달 시간 · 보정량 평균.
-- 합격 기준(초안): 회전 RMS 20% 이상 감소, 직진 RMS 악화 없음.
-
-## 5. ONNX 규칙
-
-- 입력 `obs` `[1, N]` float32 → 출력 `actions` `[1, 2]`. 정규화 포함·결정적 출력 (v1 export 방식 유지). opset 18.
-- 파일명 `rl_correct_v2.onnx` → 로봇/PC `~/rl_models/`. `benchmark_onnx.py` 평균 50 ms 이하.
-- v0 · v1 ONNX는 beebot·Burger 한계로 학습 → **쓰지 않음**.
-
-## 6. 할 일 (순서)
-
-1. ✅ 펌웨어 `I` 줄 · 드라이버 `/imu` — **2026-10-30 업로드 완료**, `/imu` 20 Hz 확인 (정지: gz≈0, az≈9.98)
-2. ✅ `robots/beebot/config.py` · 우리 URDF → USD (캐스터 충돌·마찰 0, 몸체 질량 추가)
-3. ✅ v2 환경 + 물리 스모크 + 60회 학습 (트래킹 오차 0.128 → 0.090) + ONNX
-4. ✅ ROS `corrector` v2 (obs 6 · 0.26/1.82 · 정지 명령 보정 0) · eval_recorder enc/gyro 열 · `compare_csv.py` — ☐ 스크립트 주행 패턴
-5. ☐ 본학습(300회) → export v2 → Before/After 실측 → 결과를 issue-tracking에
+```text
+[rl_active, reason, policy_loaded, enable, scan_ok, scan_age, scan_min, v, w, inner_kind]
+reason: 0=RL · 1=모델 없음/로드 실패 · 2=enable=false · 3=센서 없음 · 4=추론 실패
+inner_kind: 1=DWB · 2=MPPI · 3=RPP · 4=RotationShim
+```

@@ -8,14 +8,26 @@ import numpy as np
 import torch
 
 from commands.rl_base_command import RlBaseCommand
-from training.rl_maze.maze_grid import PATHS_NPZ
+from training.rl_maze.maze_grid import GRID_NPZ, PATHS_NPZ, load
 
 
 class RlMazeCommand(RlBaseCommand):
-    def __init__(self, path: str = PATHS_NPZ):
+    START_CLEAR = 0.32   # [m] 출발점은 벽에서 이만큼 떨어진 경로만 (충돌 0.17 + 여유 — 랜덤 정책도 출발 직후 벽에 안 박게)
+    MIN_CLEAR = 0.30     # [m] 경로 전체가 벽에서 이만큼은 떨어진 것만 (inflation 최대값 + 여유)
+
+    def __init__(self, path: str = PATHS_NPZ, min_clear: float | None = None, start_clear: float | None = None):
         d = np.load(path)
-        self.pts = torch.as_tensor(d["pts"])    # [N, W, 2] (남는 자리 = 마지막 점) — sample의 device로 처음 쓸 때 옮김
-        self.lens = torch.as_tensor(d["lens"])  # [N] 실제 점 개수 (첫 점 = 출발)
+        pts, lens = d["pts"], d["lens"]    # [N, W, 2] (남는 자리 = 마지막 점) · [N] 실제 점 개수 (첫 점 = 출발)
+        g = load(GRID_NPZ)
+        x0, y0, res = g["origin"][0], g["origin"][1], g["res"]
+        ix = np.clip(((pts[..., 0] - x0) / res).astype(int), 0, g["occ"].shape[1] - 1)
+        iy = np.clip(((pts[..., 1] - y0) / res).astype(int), 0, g["occ"].shape[0] - 1)
+        clear = g["dist"][iy, ix]          # [N, W] — 경로 점마다 벽까지 거리
+        min_clear = self.MIN_CLEAR if min_clear is None else float(min_clear)
+        start_clear = self.START_CLEAR if start_clear is None else float(start_clear)
+        keep = (clear[:, 0] >= start_clear) & (clear.min(axis=1) >= min_clear)
+        self.pts = torch.as_tensor(pts[keep])
+        self.lens = torch.as_tensor(lens[keep])
 
     def sample(self, k: int, device) -> tuple[torch.Tensor, torch.Tensor]:
         """경로 k개 → (웨이포인트 [k, W, 2], 개수 [k])."""

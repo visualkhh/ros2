@@ -40,10 +40,10 @@ class BaseEnv(DirectRLEnv):
             cfg.sim.visualizer_cfgs = [KitVisualizerCfg(headless=True, origin_type=cfg.snap_origin, origin_env_index=0,
                                                         eye=cfg.snap_eye, lookat=cfg.snap_lookat)]
         super().__init__(cfg, render_mode, **kwargs)
-        self._snap_at = 0.0
         import time
 
         self._snap_t0 = time.time()
+        self._snap_at = time.monotonic()
         self._wheels, _ = self.robot.find_joints(["wheel_left_joint", "wheel_right_joint"], preserve_order=True)
         self._hold = [i for i in range(self.robot.num_joints) if i not in {int(j) for j in self._wheels}]   # 팔 · 그리퍼 등 바퀴 아닌 관절 — 기본 자세로 붙잡는다 (tb3은 없음)
         n, dev = self.num_envs, self.device

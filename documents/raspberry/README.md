@@ -34,7 +34,7 @@
 | 배포판 | Lyrical (ros-base 0.13.0) · 공식 apt | [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) |
 | apt 패키지 | nav2_bringup 1.5 · nav2 amcl/map_server · laser_filters 2.3 · robot_state_publisher · xacro · teleop_twist_keyboard · tf2_tools · turtlebot3_msgs · dynamixel_sdk · ros-dev-tools (+ libceres-dev 등 cartographer 빌드 의존) | |
 | 소스 의존 | `coin_d4_driver` (LDS-03) · `explore_lite` (자동 맵핑, 딸림 `multirobot_map_merge`는 `image_geometry` 필요) · `cartographer`+`cartographer_ros` (SLAM, CMake 4.x는 `--cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5` 필수) — 빌드는 `setup/pi/build.sh` 한 줄 · `/scan` 10 Hz | [ros2_ws README](../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
-| 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드(`~/ros2/setup/pi/build.sh`): tb3_bringup · coin_d4_driver · explore_lite · cartographer(·_ros·_msgs) · rl_correction · rl_eval | [setup/pi](../../setup/pi/README.md) · [ARCH](../../ros2_ws/ARCH.md) |
+| 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드(`~/ros2/setup/pi/build.sh`): tb3_bringup · rl_nav_controller · rl_policy · coin_d4_driver · explore_lite · cartographer(·_ros·_msgs) | [setup/pi](../../setup/pi/README.md) · [ARCH](../../ros2_ws/ARCH.md) |
 | 상시 노드 (`run-cli base start` = tb-only) | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample | [ARCH 2장](../../ros2_ws/ARCH.md) |
 | 필요할 때 (`run-cli`, 어디서나) | cartographer (`slam start`: `cartographer.launch.py` + `config/cartographer_2d.lua`) · Nav2 (`nav start` / `explore start`) — 지도 `~/ros2/ros2_ws/map/` | [tool](../../tool/README.md) |
 | `~/.bashrc` | `source /opt/ros/lyrical/setup.bash` · ros2_ws `install/setup.bash` · `ROS_DOMAIN_ID=25` · `ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET` | |

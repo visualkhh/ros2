@@ -2,7 +2,7 @@
 <package format="3">
   <name>rl_policy</name>
   <version>0.1.0</version>
-  <description>ONNX 정책 추론 (ONNX Runtime C++) — rl_correction corrector · rl_nav_controller가 같이 쓴다</description>
+  <description>ONNX 정책 추론 (ONNX Runtime C++) — rl_nav_controller가 쓴다</description>
   <maintainer email="pank@example.com">pank</maintainer>
   <license>Apache-2.0</license>
 

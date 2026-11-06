@@ -228,7 +228,7 @@ for p in "1.0 0.0 0" "1.0 1.0 90" "0 0 180"; do ./run-cli goal $p || break; done
 | 파일 | 내용 |
 |---|---|
 | `ros2_ws/src/tb3_bringup/config/cartographer_2d.lua` | SLAM(cartographer) 설정 (오도메트리 사용 · IMU 안 씀 · 사거리 0.12~8 m) |
-| `config/nav2_params.yaml` | Nav2 설정 (Waffle Pi footprint 다각형 · Twist cmd_vel · amcl `base_footprint`) |
+| `ros2_ws/src/tb3_bringup/config/nav2_params.yaml` | Nav2 설정 (Waffle Pi footprint 다각형 · Twist cmd_vel · amcl `base_footprint`) |
 | `rviz/slam.rviz` · `rviz/nav.rviz` | RViz 화면 |
 | 로봇 `~/ros2/ros2_ws/map/<이름>/` | 저장한 지도 (`map.yaml` · `map.pgm`) |
 | 로봇 `~/ros2/tool/.run/<slam·nav·…>.log` | 실행 로그 (`./run-cli slam log`) |

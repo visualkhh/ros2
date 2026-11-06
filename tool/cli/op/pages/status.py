@@ -88,7 +88,7 @@ class SayItem(MenuItem):
 
 
 class ToggleItem(MenuItem):
-    """모드·RL·비상정지 전환 — state_manager에 /cmd_manual_* 요청."""
+    """모드·비상정지 전환 — state_manager에 /cmd_manual_* 요청."""
 
     def __init__(self, app, key: str, what: str):
         super().__init__(app)
@@ -98,18 +98,12 @@ class ToggleItem(MenuItem):
     def label(self):
         st = self.state
         return {'mode': f'제어 상태 바꾸기 (지금 {st.st_control or "?"})',
-                'rl': f'경로 바꾸기 (지금 {"RL 경유" if st.st_rl else "직결"} → {"직결" if st.st_rl else "RL 경유"})',
                 'estop': f'비상정지 {"해제" if st.st_estop else "ON"}'}[self.what]
 
     def run(self):
         st = self.state
         if self.what == 'mode':
             return ModeMenu(self.app).show()
-        elif self.what == 'rl':
-            body = ['RL 경유: cmd_manager → PC rl_corrector(rl-only) → cmd_manager → opencr_driver.',
-                    'PC에서 ros2 launch tb3_bringup rl-only.launch.py 가 없으면 바퀴가 멈춥니다.']
-            if st.st_rl or self.ui.confirm('경로를 RL 경유로 바꿀까요?', body=body):
-                self.bus.cmd_route(argparse.Namespace(value='direct' if st.st_rl else 'rl'))
         elif st.st_estop:
             if self.ui.confirm('비상정지를 해제할까요?', body=['해제하면 다시 명령대로 움직입니다.']):
                 self.bus.cmd_estop(argparse.Namespace(value='off'))
@@ -153,7 +147,7 @@ class StatusMenu(Menu):
 
     def items(self):
         return [PrintStatusItem(self.app), RebootMotorsItem(self.app), ToggleItem(self.app, '3', 'mode'),
-                ToggleItem(self.app, '4', 'rl'), ToggleItem(self.app, '5', 'estop')]
+                ToggleItem(self.app, '4', 'estop')]
 
     def center(self):
         return self.bus.status_lines() + [

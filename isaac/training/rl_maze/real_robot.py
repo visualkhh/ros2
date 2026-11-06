@@ -4,13 +4,10 @@
   기록   /odom · /imu · /joint_states (wheel_left_joint · wheel_right_joint) · /cmd_vel_base (실제로 나간 명령) —
          측정 중 스텝마다 pace() 끝에 최신 값을 한 줄 쌓는다
   state  /state_control (MANUAL 등)
-  onnx   PC rl_corrector (route rl일 때 명령이 거쳐 감): onnx 경로 → model_path = 경로 + toggle on (B)
-         · 없음 → model_path = "" (모델 내림) + toggle off (A · calibration). corrector가 없으면(route direct) 그대로 진행
 """
 from __future__ import annotations
 
 import math
-import os
 import time
 
 from robots.robot_interface import RobotInterface
@@ -25,7 +22,7 @@ def _sec(ts) -> float:
 
 
 class RealRobot(RobotInterface):
-    def __init__(self, rate: float = 20.0, onnx: str | None = None):
+    def __init__(self, rate: float = 20.0):
         import rclpy
 
         if not rclpy.ok():
@@ -37,7 +34,7 @@ class RealRobot(RobotInterface):
         from std_msgs.msg import String
 
         super().__init__(1.0 / rate)
-        self.rclpy, self.Twist, self.rate, self.onnx = rclpy, Twist, rate, onnx
+        self.rclpy, self.Twist, self.rate = rclpy, Twist, rate
         self.node = node = rclpy.create_node("real_robot")
         self.s = s = {"state": None, "odom": None, "imu_w": 0.0, "imu_stamp": None, "joint_stamp": None,
                       "wl": 0.0, "wr": 0.0, "pl": 0.0, "pr": 0.0, "out": (0.0, 0.0)}
@@ -83,36 +80,6 @@ class RealRobot(RobotInterface):
             print("[real] 경고: /joint_states 없음 — 바퀴 raw가 0")
         return None
 
-    def _call(self, srv_type, name: str, req, timeout: float = 3.0):
-        cli = self.node.create_client(srv_type, name)
-        if not cli.wait_for_service(timeout_sec=timeout):
-            return None
-        fut = cli.call_async(req)
-        self.rclpy.spin_until_future_complete(self.node, fut, timeout_sec=timeout)
-        return fut.result()
-
-    def _set_correction(self) -> str | None:
-        """onnx 있으면 corrector model_path = onnx + toggle on (B) · 없으면 model_path = "" + toggle off (A). 결과를 기록 칸 rl_onnx로."""
-        from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
-        from rcl_interfaces.srv import SetParameters
-        from std_srvs.srv import SetBool
-
-        val = ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=self.onnx or "")   # 없으면 모델 내림
-        r = self._call(SetParameters, "/rl_corrector/set_parameters",
-                       SetParameters.Request(parameters=[Parameter(name="model_path", value=val)]))
-        if r is None and self.onnx:
-            return "rl_corrector 없음 — PC에서 ./rl-only.sh 띄우고 Pi route rl (--onnx는 corrector가 있어야)"
-        r = self._call(SetBool, "/rl_corrector/toggle", SetBool.Request(data=bool(self.onnx)))
-        if r is None:
-            self.tag = "direct"
-            print("[real] rl_corrector 없음 — 보정 없이 (route direct면 정상)")
-            return None
-        if self.onnx and "model=loaded" not in r.message:
-            return f"ONNX 로드 실패: {self.onnx} ({r.message}) — rl-only 로그 확인"
-        self.tag = os.path.basename(self.onnx) if self.onnx else "bypass"
-        print(f"[real] rl_corrector: {r.message}")
-        return None
-
     def stop(self):
         for _ in range(3):
             self.write(0.0, 0.0)
@@ -125,9 +92,6 @@ class RealRobot(RobotInterface):
             self.rclpy.spin_once(self.node, timeout_sec=0.1)
 
     def start(self):
-        why = self._set_correction()   # 측정 직전에만 corrector를 바꾼다 (--check-only는 안 건드림)
-        if why:
-            raise SystemExit(f"[real] 거부: {why}")
         super().start()
         self.t0 = time.monotonic()   # pace 기준 (벽시계)
 
@@ -137,8 +101,7 @@ class RealRobot(RobotInterface):
         while time.monotonic() < nxt:
             self.rclpy.spin_once(self.node, timeout_sec=min(0.01, max(0.0, nxt - time.monotonic())))
         if self.rows is not None:
-            self.rows.append({"t": round(k / self.rate, 3), "lin_raw": self.sent[0], "ang_raw": self.sent[1], **self._state(),
-                              "rl_onnx": getattr(self, "tag", "")})   # 보정: 모델 파일 이름 · bypass · direct
+            self.rows.append({"t": round(k / self.rate, 3), "lin_raw": self.sent[0], "ang_raw": self.sent[1], **self._state()})
 
     def _state(self):
         s, o = self.s, self.s["odom"]

@@ -1,7 +1,7 @@
 # tool
 
 로봇 운영 도구. **지도 만들기(SLAM, cartographer)** · **지도 주행(Nav2)** 켜고 끄기, 텔레오퍼, 지도 저장, 목표 보내기,
-제어 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING 자동 맵핑) · 경로(직결/RL) · 비상정지 전환. **ROS 토픽이 보이는 곳 어디서나** 같은 `./run-cli`로 씁니다 (로봇 Pi든 PC든).
+제어 상태(MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING 자동 맵핑) · 비상정지 전환. **ROS 토픽이 보이는 곳 어디서나** 같은 `./run-cli`로 씁니다 (로봇 Pi든 PC든).
 
 ```text
 tool/
@@ -9,8 +9,6 @@ tool/
 ├── run-cli          # 메뉴 / 한 번 명령 (어디서나)
 ├── run-rviz         # RViz: 맵핑·주행 보기 (화면 있는 곳)
 ├── peers.sh         # 로봇이 아닌 곳에서 Pi DDS 노드를 유니캐스트로 찾게 (WiFi 멀티캐스트 불안정)
-├── config/
-│   └── nav2_params.yaml    # nav2_bringup + Waffle Pi footprint · Twist cmd_vel · amcl base_footprint
 ├── rviz/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── slam.rviz           # 지도·스캔·odom·TF·포즈 그래프 (Orbit 3D, 저장된 TopDown 2D)
@@ -18,7 +16,9 @@ tool/
 ├── cli/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── robot_tool.py       # 배선 + argparse + main
-│   └── op/                 # terminal · dialogs · ui · state · procs(로컬/원격) · bus · pages/
+│   └── op/                 # terminal · dialogs · ui · state · procs(로컬/원격) · bus
+│       └── pages/          # 화면 + nodes/ (노드별 상태 feature)
+├── cli-test/               # ROS 없이 CLI/메뉴 시험 (가짜 ROS)
 └── .run/                   # (git 무시) 띄운 launch의 pid · 로그 · DDS 피어 프로필
 ```
 
@@ -26,7 +26,7 @@ tool/
 
 | 기능 | 방식 | 로봇이 아닌 곳(PC 등)에서 |
 |---|---|---|
-| 상태바 · 텔레오퍼 · drive · goal · initpose · 모드/RL/비상정지 · 모터 재부팅 | ROS 토픽·액션 | 그대로 됨 |
+| 상태바 · 텔레오퍼 · drive · goal · initpose · 모드/비상정지 · 모터 재부팅 | ROS 토픽·액션 | 그대로 됨 |
 | 베이스·SLAM·Nav 켜기/끄기/재시작 · 로그 | 로봇의 프로세스 | tool이 **SSH로 로봇의 run-cli에 넘김** (`[pak.local] …`로 표시) |
 | 지도 저장 · 목록 · 내용 | 로봇의 파일 (Nav가 거기서 읽음) | 위와 같이 SSH — 지도는 항상 **로봇** `~/ros2/ros2_ws/map/`에 |
 | 켜짐 표시 (● / ○) | 로봇: pid 파일 · 그 밖: **ROS 노드 그래프** (`opencr_driver`·`cartographer_node`·`amcl`·`bt_navigator`) | `pak.local (원격)`으로 표시 |
@@ -36,6 +36,18 @@ tool/
 "맵핑 모드로 전송" 같은 건 없고, **SLAM이 켜져 있으면 맵핑 중**입니다. RViz는 `/map`·`/scan`·TF를 받아 그릴 뿐.
 
 `ROS_DOMAIN_ID`는 **25로 통일** — `cli/start.sh`·`rviz/start.sh`가 `export ROS_DOMAIN_ID=25` (`~/.bashrc` 무관).
+
+## CLI 테스트 (ROS 없이)
+
+```bash
+./run-cli-test status
+./run-cli-test nodes
+./run-cli-test node-status /controller_server   # RL/fallback 상태
+./run-cli-test ab rl_nav_controller status      # A/B 상태
+./run-cli-test menu
+```
+
+가짜 ROS층(`cli-test/fake_ros.py`)으로 진짜 `robot_tool` 코드를 돌린다.
 
 > 지도 만들기 → 저장 → 지도로 주행 → 특정 위치로 보내기 전체 순서: **[MAP_NAV.md](MAP_NAV.md)**
 
@@ -88,8 +100,8 @@ tool/
 ./run-cli beep [Hz ms]         # OpenCR 부저 삑 (/cmd_beep · /cmd_beep_tone · 메뉴 0) 비프음 · 텔레오퍼 b)
 ./run-cli say <글>              # 타이핑삑 — 한/영 → 자모별 삑 (/cmd_say · 메뉴 0) 비프음 → 3)
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
+./run-cli ab rl_nav_controller status|on|off|record|stop|guide|history   # RL vs inner A/B
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
-./run-cli route direct|rl       # 바퀴 명령 경로: 직결 / PC RL 경유 (= rl off|on)
 ./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
 ./run-cli stop-all              # 바퀴 정지 → 띄운 것 전부 종료
 ./run-cli restart-all           # 켜져 있던 것만 전부 재시작 (nav는 같은 지도로)
@@ -118,11 +130,11 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 
 | 변수 | 기본 | 뜻 |
 |---|---|---|
-| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup. RL on으로 시작은 `… tb-only.launch.py rl:=true` (보통은 실행 중 `./run-cli rl on`) |
+| `TOOL_BASE_CMD` | `ros2 launch tb3_bringup tb-only.launch.py` | 베이스 bringup |
 | `TOOL_CMD_VEL` | `/cmd_manual_vel` | 텔레오퍼·drive가 내는 토픽 (cmd_manager 수동 입력) |
 | `TOOL_CMD_VEL_STAMPED` | `0` | `1`이면 TwistStamped로 발행 |
 | `TOOL_MAP_DIR` | `ros2_ws/map` | 지도 폴더 (`<이름>/map.yaml`) — 로봇·`TOOL_LOCAL`에서 |
-| `TOOL_NAV_PARAMS` | `config/nav2_params.yaml` | Nav2 파라미터 파일 (SLAM 설정은 `ros2_ws/src/tb3_bringup/config/cartographer_2d.lua`) |
+| `TOOL_NAV_PARAMS` | `tb3_bringup/config/nav2_params.yaml` | Nav2 파라미터 파일 기본값은 `tb3_bringup` share/config (SLAM 설정은 `tb3_bringup/config/cartographer_2d.lua`) |
 | `TOOL_USE_SIM_TIME` | `false` | Gazebo면 `true` |
 | `ROBOT_HOST` | `pak.local` | 로봇 이름 (DDS 피어 · 원격 실행 대상) |
 | `TOOL_ROBOT_SSH` | `pak@pak.local` | 원격 실행 SSH 대상 (키 인증) |
@@ -133,7 +145,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 `odom → base_footprint`는 opencr_driver, 나머지는 URDF(robot_state_publisher). 스캔은 `/scan`.
 SLAM·amcl은 `base_footprint`, costmap·footprint 다각형은 `base_link` 기준 (turtlebot3_navigation2와 같음).
 
-`config/nav2_params.yaml`은 `enable_stamped_cmd_vel: false`입니다. Lyrical Nav2 기본은 `TwistStamped`인데
+`ros2_ws/src/tb3_bringup/config/nav2_params.yaml`은 `enable_stamped_cmd_vel: false`입니다. Lyrical Nav2 기본은 `TwistStamped`인데
 cmd_manager·opencr_driver는 `Twist`를 받기 때문입니다 (안 맞으면 Nav가 경로는 내도 바퀴가 안 움직임).
 
 ## 문제 확인
@@ -153,4 +165,4 @@ ros2 run tf2_tools view_frames  # map→odom→base_link→라이다 끊긴 곳
 - 지도가 안 커짐 → `scan` 수신 확인, 라이다 TF 확인, 너무 빨리 돌면 스캔 매칭 실패 (천천히)
 - Nav 목표 거부 → `initpose` 먼저, `./run-cli nav log`
 - `[pak.local] … SSH 실패` → `ssh pak@pak.local`이 비번 없이 되는지 (켜기/끄기·지도만 SSH, 나머지는 토픽이라 됨)
-- 바퀴가 안 움직임 → 상태바 `운행`: 텔레오퍼는 MANUAL, Nav·자동 맵핑은 NAV_PLAN·SLAM_AUTO_MAPPING이어야 · `비상정지 off` · RL on이면 PC `rl-only` 떠 있는지
+- 바퀴가 안 움직임 → 상태바 `운행`: 텔레오퍼는 MANUAL, Nav·자동 맵핑은 NAV_PLAN·SLAM_AUTO_MAPPING이어야 · `비상정지 off`

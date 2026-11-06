@@ -2,7 +2,6 @@
 
 외부 요청 (누구나 보냄)
   /cmd_manual_control  (String)  MANUAL · NAV_PLAN · SLAM_AUTO_MAPPING (별칭 AUTO→NAV_PLAN, AUTO-MAPPING·MAPPING→SLAM_AUTO_MAPPING)
-  /cmd_manual_rl    (Bool)    바퀴 명령이 PC RL 보정을 거치게
   /cmd_manual_estop (Bool)    비상정지
   /cmd_beep         (Empty)   부저 삑 (기본 2000 Hz 150 ms) — 상태 무관, 그대로 전달
   /cmd_beep_tone    (Int32MultiArray [hz, ms])  부저 음 높이·길이 지정 — 상태 무관, 그대로 전달
@@ -13,10 +12,9 @@
 바퀴 명령
   /cmd_manual_vel (Twist)  수동 (텔레오퍼·tool drive) — /state_control = MANUAL일 때만
   /cmd_vel        (Twist)  Nav2 — NAV_PLAN · SLAM_AUTO_MAPPING일 때만
-  rl off:  고른 것 -> /cmd_vel_base -> opencr_driver
-  rl on:   고른 것 -> /cmd_vel_rl_in -> [PC rl_corrector] -> /cmd_vel_rl_out -> /cmd_vel_base
+  고른 것 -> /cmd_vel_base -> opencr_driver
 
-안전: 비상정지 · 고른 입력이 source_timeout 넘게 끊김 · RL on인데 보정값이 rl_timeout 넘게 끊김 → 0.
+안전: 비상정지 · 고른 입력이 source_timeout 넘게 끊김 → 0.
 rate Hz로 계속 보내서 드라이버는 늘 새 명령을 받는다 (드라이버·펌웨어도 각자 멈춤).
 """
 import time
@@ -136,30 +134,25 @@ class CmdManager(Node):
         super().__init__('cmd_manager')
         p = self.declare_parameter
         self.source_timeout = p('source_timeout', 0.5).value
-        self.rl_timeout = p('rl_timeout', 0.3).value     # WiFi 왕복 Pi -> PC -> Pi
         rate = p('rate', 20.0).value
-        self.mode, self.rl, self.estop = 'MANUAL', False, False
+        self.mode, self.estop = 'MANUAL', False
         self.last = {}   # topic -> (Twist, monotonic time)
 
         # 외부 요청 → 검사 → state_manager에 기록
         self.set_mode = self.create_publisher(String, 'state_set_control', 10)
-        self.set_rl = self.create_publisher(Bool, 'state_set_rl', 10)
         self.set_estop = self.create_publisher(Bool, 'state_set_estop', 10)
         self.create_subscription(String, 'cmd_manual_control', self.on_mode_request, 10)
-        self.create_subscription(Bool, 'cmd_manual_rl', lambda m: self.set_rl.publish(m), 10)
         self.create_subscription(Bool, 'cmd_manual_estop', self.on_estop_request, 10)
         self.create_subscription(PoseStamped, 'goal_pose', lambda _m: self.request_control('NAV_PLAN', 'RViz Nav2 Goal'), 10)
 
         # 현재 상태 (state_manager, latched)
         self.create_subscription(String, 'state_control', lambda m: setattr(self, 'mode', m.data), LATCHED)
-        self.create_subscription(Bool, 'state_rl', lambda m: setattr(self, 'rl', m.data), LATCHED)
         self.create_subscription(Bool, 'state_estop', lambda m: setattr(self, 'estop', m.data), LATCHED)
 
         # 바퀴 명령
-        for topic in ('cmd_manual_vel', 'cmd_vel', 'cmd_vel_rl_out'):
+        for topic in ('cmd_manual_vel', 'cmd_vel'):
             self.create_subscription(Twist, topic, lambda m, t=topic: self.last.__setitem__(t, (m, time.monotonic())), 10)
         self.pub_base = self.create_publisher(Twist, 'cmd_vel_base', 10)
-        self.pub_rl_in = self.create_publisher(Twist, 'cmd_vel_rl_in', 10)
 
         # 부저 — 외부 요청을 그대로 드라이버로 전달 (상태·모드 무관)
         self.pub_beep = self.create_publisher(Empty, 'opencr/beep', 10)
@@ -229,11 +222,7 @@ class CmdManager(Node):
             self.pub_base.publish(ZERO)
             return
         picked = self.fresh('cmd_manual_vel' if self.mode == 'MANUAL' else 'cmd_vel', self.source_timeout)
-        if not self.rl:
-            self.pub_base.publish(picked)
-            return
-        self.pub_rl_in.publish(picked)
-        self.pub_base.publish(self.fresh('cmd_vel_rl_out', self.rl_timeout))
+        self.pub_base.publish(picked)
 
 
 def main(args=None):

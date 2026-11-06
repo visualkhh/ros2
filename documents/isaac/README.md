@@ -1,30 +1,47 @@
 # Isaac Sim / Isaac Lab — RL 정책 만들기
 
-TurtleBot3 Waffle Pi 개조 로봇의 **RL 이동 보정** 학습 쪽 문서. 목적: 같은 경로를 RL 끄고/켜고 달려 트래킹이 좋아짐을 수치로 (Before/After).
-학습은 lab PC(x86_64 + RTX), 추론도 PC(`rl-only`, onnxruntime) — 바퀴 명령이 cmd_manager → PC → cmd_manager로 돎.
+TurtleBot3 Waffle Pi 개조 로봇의 **Nav2 주행 RL** 학습 쪽 문서.
+학습은 lab PC(x86_64 + RTX), 추론은 Nav2 `rl_nav_controller` 플러그인(ONNX Runtime C++)이 한다.
 
-
-개념(gain · 지연 · τ — 뭐고 왜 하나): [concepts.md](concepts.md)
-## 파이프라인
-
-```
-Isaac Lab (우리 URDF) → 학습 → rl_correct_v2.onnx → PC rl-only (corrector) → ./run-cli route rl
-→ eval_recorder CSV (before / after) → ros2_ws/report.py
+```text
+Isaac Lab (rl_maze) → policy.onnx + policy.onnx.data
+  → ros2_ws/src/tb3_bringup/config/nav2_params.yaml FollowPath.model_path
+  → controller_server → /cmd_vel_nav → twist_mux → 바퀴
 ```
 
-## 정책 (v2 — 이동 보정 1종)
+## 정책
 
-| 노드 | 입력 (obs 6) | 출력 | 학습 환경 |
+| 노드 | 입력 (obs 52) | 출력 | 학습 환경 |
 |---|---|---|---|
-| `rl_correction/corrector` (PC, rl-only) | `[v_cmd, w_cmd, v_enc, w_enc, w_gyro, t_change]` | `[Δv, Δw]` 물리 보정량 | 우리 URDF · 모터 지연/비대칭/데드밴드 · WiFi 지연 · 계단식 명령 |
+| `rl_nav_controller::RlNavController` (Nav2 `FollowPath`) | 웨이포인트 5×2 + 라이다 36(`r - lidar_inflation`) + v/w/gyro + 이전 행동 2 + inflation/0.5 | `[v, w]` | `isaac/training/rl_maze` |
 
-한계 0.26 m/s · 1.82 rad/s (Waffle Pi). Nav2 컨트롤러 단계 보정(`nav2_rl_controller`)은 삭제(2026-10-29) — [task-spec.md](task-spec.md) §0.
-설계·이유·평가 기준: **[task-spec.md](task-spec.md)**. 실행: [../../isaac/README.md](../../isaac/README.md).
+- 한계 0.26 m/s · 1.82 rad/s (Waffle Pi).
+- `enable=false`(기본) 또는 모델 로드 실패 시 fallback controller(DWB)로 바이패스.
+- fallback 선택: `FollowPath.fallback_controller` (현재 `dwb`; `mppi` · `rpp` · `rotation_shim` 가능).
+- `lidar_inflation` [m] — 사용자 입력. 학습 `inflation_range 0.20~0.24` 안. `ros2 param set`으로 런타임 변경.
 
 ## 로봇 쪽 연결
 
-- 모델 파일: `isaac/export/rl_correct/<이름>.onnx` (git 제외). Pi에서 직접 돌릴 땐 `~/rl_models/`로 scp + `benchmark_onnx.py`
-- 실행: PC `ros2 launch tb3_bringup rl-only.launch.py enable:=true model:=<onnx>` (PC에 onnxruntime) → `./run-cli route rl`
-- 계측: `rl_eval/eval_recorder` → `before.csv` vs `after.csv` → `ros2_ws/report.py` (report.png)
+```bash
+# ros2_ws/src/tb3_bringup/config/nav2_params.yaml
+FollowPath:
+  enable: true
+  model_path: "/path/policy.onnx"   # 옆에 policy.onnx.data
+  fallback_controller: "dwb"        # 또는 mppi/RPP/RotationShim
+  lidar_inflation: 0.22             # [m] 학습 env.inflation_range(0.20~0.24) 안
+  inflation_scale: 0.50             # 정규화 상수 — 사용자 값 아님, 학습/추론 동일
+```
 
-관련: [ros2_ws README](../../ros2_ws/README.md) · [Lyrical 세팅](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [Isaac sim ROS 2 토픽 계획](../../isaac/README.md#5-sim-ros-브리지-계획--미구현)
+```bash
+ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"
+./run-cli node-status /controller_server   # RL/fallback · 모델 · 스캔 확인
+```
+
+상태: `/controller_server/FollowPath/status`
+`[rl_active, reason, policy_loaded, enable, scan_ok, scan_age, scan_min, v, w, inner_kind]`
+
+## 관련
+
+- 학습 task: [../../isaac/training/rl_maze/README.md](../../isaac/training/rl_maze/README.md)
+- 실행: [../../isaac/README.md](../../isaac/README.md)
+- 설계 기록: [task-spec.md](task-spec.md) — 2026-11-06 이전 `rl_correction`/`rl_eval` 구조는 제거됨.
