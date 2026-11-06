@@ -88,7 +88,8 @@ tool/
 ./run-cli {base|slam|nav|explore} {start|stop|restart|status|log}
 ./run-cli nav start [지도이름|폴더|yaml]
 ./run-cli map list
-./run-cli map save [이름]       # 기본 이름: 날짜_시각
+./run-cli map save [이름]       # 기본 이름: 날짜_시각 · 저장 후 그 지도로 LOCALIZATION 전환을 물음
+./run-cli map save [이름] --no-switch   # 저장만 (전환 질문 없음)
 ./run-cli teleop [--linear 0.15 --angular 0.8]   # w/x/a/d · q/e/z/c 사선 · s 정지 · -/= 속도 · b 삑 · Esc 종료
 ./run-cli drive forward|back|left|right|stop [--speed --angular --duration]
 ./run-cli initpose x y [yaw°]

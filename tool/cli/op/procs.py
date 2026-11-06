@@ -428,7 +428,8 @@ class RemoteProcs(Procs):
 
     def save_map(self, name: str) -> tuple[bool, str]:
         self._maps = (0.0, [])
-        rc, out = self._cli('map', 'save', name)
+        # --no-switch: 로봇 쪽은 저장만 (SSH라 TTY 프롬프트 불가) — 전환은 이 PC CLI가 묻는다
+        rc, out = self._cli('map', 'save', name, '--no-switch')
         return rc == 0, f'[{self.host}] {out}'
 
 

@@ -155,6 +155,8 @@ def build_parser() -> argparse.ArgumentParser:
     m = sub.add_parser('map', help='지도 파일 목록·저장')
     m.add_argument('action', type=str.lower, choices=('list', 'save'))
     m.add_argument('name', nargs='?', help='save 이름 (기본: 날짜_시각)')
+    m.add_argument('--no-switch', action='store_true',
+                   help='save 후 저장한 지도로 LOCALIZATION 전환을 묻지 않음')
 
     t = sub.add_parser('teleop', help='키보드 수동 주행')
     t.add_argument('--linear', type=_positive, default=0.15, help='선속도 [m/s] (기본 0.15 · -/=로 ±, 최대 0.26)')

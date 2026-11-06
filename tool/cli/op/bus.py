@@ -258,10 +258,12 @@ class Bus:
     def default_map_name() -> str:
         return time.strftime('%Y%m%d_%H%M%S')
 
-    def after_map_save(self, name: str, ok: bool) -> int:
+    def after_map_save(self, name: str, ok: bool, switch: bool = True) -> int:
         """지도 저장 뒤 — SLAM(맵핑)이면 저장한 지도로 LOCALIZATION(Nav/amcl) 전환을 물어본다."""
         if not ok:
             return 1
+        if not switch:   # 원격 저장(로봇 쪽)은 PC CLI가 전환을 묻는다 — 중복 프롬프트 방지
+            return 0
         if not self.procs.running('slam'):
             print(f'저장한 지도: ./run-cli nav start {name}')
             return 0
@@ -299,7 +301,7 @@ class Bus:
         if not IS_ROBOT:   # 로봇의 run-cli가 저장 (지도는 로봇에 — Nav가 거기서 씀)
             ok, msg = self.procs.save_map(name)
             print(msg)
-            return self.after_map_save(name, ok)
+            return self.after_map_save(name, ok, switch=not getattr(args, 'no_switch', False))
         end = time.monotonic() + 5.0   # 막 켠 프로세스(원격 저장)는 latched /map을 받기까지 몇 초
         while self.state.map.age() is None and time.monotonic() < end:
             self._poll(0.2)
@@ -310,7 +312,7 @@ class Bus:
             print(self.term.paint('주의: SLAM이 꺼져 있음 — /map을 내는 노드(map_server 등)가 있어야 저장됩니다', YELLOW))
         ok, msg = self.procs.save_map(name)
         print(msg)
-        return self.after_map_save(name, ok)
+        return self.after_map_save(name, ok, switch=not getattr(args, 'no_switch', False))
 
     # ------------------------------------------------------------- 상태 요청 (cmd_manager가 판단 → state_manager가 알림)
     def request(self, key: str, value) -> bool:

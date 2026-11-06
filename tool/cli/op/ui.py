@@ -347,9 +347,13 @@ class Ui:
             return self.term.paint(f'{label} {rate.hz():.0f}Hz', GREEN)
 
         map_txt = dot(st.map, 'map')
-        if st.map_info:
-            w, h, res = st.map_info
-            map_txt += f' {w * res:.1f}x{h * res:.1f}m'
+        name = (st.st_map or '').strip()
+        if name == '(SLAM 작성 중)':
+            name = 'SLAM'
+        if name:
+            if len(name) > 20:
+                name = name[:19] + '…'
+            map_txt += ' ' + self.term.paint(name, DIM)
         lines.append(f'  {dot(st.odom, "odom")} | {dot(st.scan, "scan")} | {map_txt}'
                      + (f' | 목표 {st.goal_status}' if st.goal_status else ''))
         # 로봇(OpenCR) 상태: opencr_driver의 /diagnostics — 연결·모터 에러·온도·전류
