@@ -139,14 +139,15 @@ void RlNavController::load_model(const std::string & path)
   try {
     rl_policy::OnnxPolicy m;
     m.load(path);
-    const int64_t want = 2 * lookahead_ + lidar_rays_ + 5;
-    if (m.inputs() != want || m.outputs() != 2) {
-      RCLCPP_ERROR(logger_, "정책 입력 %ld · 출력 %ld — 기대 %ld · 2 (lookahead · lidar_rays 확인): %s",
-        long(m.inputs()), long(m.outputs()), long(want), path.c_str());
+    // 51 = inflation 입력 없음(예전 모델) · 52 = + inflation/lidar_inflation (현재 학습)
+    const int64_t base = 2 * lookahead_ + lidar_rays_ + 5;
+    if ((m.inputs() != base && m.inputs() != base + 1) || m.outputs() != 2) {
+      RCLCPP_ERROR(logger_, "정책 입력 %ld · 출력 %ld — 기대 %ld(51) 또는 %ld(52) · 2 (lookahead · lidar_rays 확인): %s",
+        long(m.inputs()), long(m.outputs()), long(base), long(base + 1), path.c_str());
       return;
     }
     policy_ = std::move(m);
-    RCLCPP_INFO(logger_, "ONNX loaded: %s (obs %ld → 2)", path.c_str(), long(want));
+    RCLCPP_INFO(logger_, "ONNX loaded: %s (obs %ld → 2)", path.c_str(), long(policy_.inputs()));
   } catch (const std::exception & e) {
     RCLCPP_ERROR(logger_, "%s", e.what());
   }

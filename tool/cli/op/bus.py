@@ -11,7 +11,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped
 from std_msgs.msg import Empty
 
-from .procs import SERVICES
+from .procs import IS_ROBOT, SERVICES
 from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 
 # 수동 주행 명령은 cmd_manager(mux)의 수동 입력으로 — /state_control=MANUAL일 때만 바퀴로 감 (ARCH.md)
@@ -158,7 +158,7 @@ class Bus:
                 print(self.term.paint('주의: ' + warn, YELLOW))
         ok, msg = self.procs.start(name, map_yaml, model_path)
         print(msg)
-        if ok and name == 'nav':
+        if ok and name == 'nav' and IS_ROBOT:   # 원격은 로봇 CLI가 이미 안내를 출력한다
             if model_path:
                 print(self.term.paint(f'RL 모델: {model_path} (enable=true)', DIM))
             self._nav_init_hint()
