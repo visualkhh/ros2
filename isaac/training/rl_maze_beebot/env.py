@@ -1,14 +1,13 @@
-"""RlMazeBeebotEnv — beebot 미로 주행. rl_maze env를 그대로 쓰고 센서만 point cloud 가상 스캔에 맞춘다.
+"""RlMazeBeebotEnv — beebot 미로 주행. rl_maze env를 그대로 쓰고 센서만 nvblox height slice에 맞춘다.
 
-  beebot `rl_nav_controller.cpp`의 points 경로:
-    /pole_front_cam/depth/color/points_filtered → base 변환 → 36방향 빈의 최소거리.
-  여기서는 미로 격자 raycast를 같은 36방향에 대해 수행하되, pole_front_cam FOV(55°) 밖은
-  lidar_max로 둔다 (카메라에 안 보이는 방향 = 점이 없음 = plugin의 best 기본값).
-  관측은 51차원 — inflation 입력 없이 raw 스캔 (beebot plugin과 같은 계약).
+  beebot `rl_nav_controller.cpp`의 points 경로 (배포 설정):
+    /nvblox_node/static_esdf_pointcloud (2D ESDF, z 0.03~0.6 m, 0.05 m voxel)
+    → base 변환 → 360방향 빈의 최소거리.
+  여기서는 미로 격자 raycast를 같은 360방향에 대해 수행한다. 0.05 m voxel·3.5 m에서
+  1°(360방향)가 의미 있는 최대 해상도라 360으로 쓴다 (720은 voxel보다 촘촘해 이득 없음).
+  관측은 375차원 — inflation 입력 없이 raw 스캔 (beebot plugin과 같은 계약).
 """
 from __future__ import annotations
-
-import math
 
 import torch
 
@@ -19,18 +18,8 @@ from training.rl_maze_beebot.env_cfg import RlMazeBeebotEnvCfg
 class RlMazeBeebotEnv(RlMazeEnv):
     cfg: RlMazeBeebotEnvCfg
 
-    def lidar(self, xy: torch.Tensor, yaw: torch.Tensor,
-              angles: torch.Tensor | None = None) -> torch.Tensor:
-        raw = super().lidar(xy, yaw, angles)
-        a = self.ray_ang if angles is None else angles
-        rel = torch.remainder(a + math.pi, 2.0 * math.pi) - math.pi
-        half = math.radians(float(self.cfg.camera_fov_deg)) / 2.0
-        mask = rel.abs() <= half
-        return torch.where(mask[None, :], raw,
-                           torch.full_like(raw, float(self.cfg.lidar_max)))
-
     def toggle_lidar_vis(self, on: bool | None = None) -> bool:
-        """L — beebot 전방 카메라 point cloud를 켜고 끈다 (360° LiDAR 링 아님)."""
+        """L — nvblox height slice point cloud(360°·z=0.3)를 켜고 끈다."""
         if getattr(self, "lidar_markers", None) is None:
             if not self.cfg.debug_vis:
                 return False
@@ -38,27 +27,22 @@ class RlMazeBeebotEnv(RlMazeEnv):
             self.lidar_markers = LidarMarkers("/Visuals/BeebotPointCloud")
         self.lidar_vis = (not self.lidar_vis) if on is None else bool(on)
         self.lidar_markers.set_visible(self.lidar_vis)
-        print(f"[vis] beebot front point cloud {'ON' if self.lidar_vis else 'OFF'} · "
-              f"{self.cfg.camera_fov_deg:.0f}° FOV · {self.cfg.pointcloud_vis_rays} rays × "
-              f"{self.cfg.pointcloud_vis_z} z (raw=청록 · 3.5m=회색)", flush=True)
+        print(f"[vis] nvblox height slice {'ON' if self.lidar_vis else 'OFF'} · "
+              f"360° · {self.cfg.lidar_vis_rays} rays · z=0.30 m "
+              f"(raw=청록 · 3.5m=회색)", flush=True)
         return self.lidar_vis
 
     def lidar_points(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """beebot point cloud — 전방 FOV dense ray × 여러 높이 z. LiDAR 360° 링이 아니다."""
+        """nvblox 2D ESDF slice와 같은 360° height point cloud (z=0.30 m)."""
         xy, yaw = self.pose()
         n = self.num_envs
-        half = math.radians(float(self.cfg.camera_fov_deg)) / 2.0
-        ang = torch.linspace(-half, half, int(self.cfg.pointcloud_vis_rays), device=self.device)
-        raw = self.lidar(xy, yaw, ang)                         # [n, R] FOV 안
-        zs = torch.linspace(0.05, 0.85, int(self.cfg.pointcloud_vis_z), device=self.device)
-        r = raw[:, None, :].expand(n, len(zs), -1)             # [n, Z, R]
-        a = yaw[:, None, None] + ang[None, None, :]
-        z = zs[None, :, None].expand(n, len(zs), len(ang))
-        pts = torch.stack([xy[:, 0, None, None] + r * torch.cos(a),
-                           xy[:, 1, None, None] + r * torch.sin(a), z], dim=-1).reshape(n, -1, 3)
-        dist = r.reshape(n, -1)
-        infl = torch.zeros_like(dist)                          # magenta 없음 — raw point cloud만
-        return pts, pts, dist, infl
+        raw = self.lidar(xy, yaw, self.vis_ang)                # [n, R] 360°
+        ang = yaw[:, None] + self.vis_ang[None]
+        z = torch.full_like(raw, 0.30)
+        pts = torch.stack([xy[:, 0, None] + raw * torch.cos(ang),
+                           xy[:, 1, None] + raw * torch.sin(ang), z], dim=-1)
+        infl = torch.zeros_like(raw)                           # raw만 — magenta inflation 없음
+        return pts, pts, raw, infl
 
     def _get_observations(self) -> dict:
         c = self.cfg
