@@ -204,7 +204,7 @@ class AbTest:
         bag = BAG_DIR / name
         RECORD_LOG.parent.mkdir(parents=True, exist_ok=True)
         log = open(RECORD_LOG, 'ab')
-        cmd = ['ros2', 'bag', 'record', '-o', str(bag), *TOPICS]
+        cmd = ['ros2', 'bag', 'record', '-o', str(bag), '-a']
         try:
             proc = subprocess.Popen(cmd, stdout=log, stderr=log, start_new_session=True)
         except OSError as exc:
