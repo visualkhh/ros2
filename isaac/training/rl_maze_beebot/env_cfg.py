@@ -1,7 +1,7 @@
 """rl_maze_beebot — beebot으로 미로 주행 (rl_maze의 미로·보상·동적 장애물 그대로, 로봇만 beebot).
 
   - 로봇: beebot USD(Lv2_bee_Assignment) + rl_nav_correction에서 실측한 RESPONSE_*
-  - 센서: nvblox `combined_esdf_pointcloud`(static+dynamic 2D ESDF height slice, 0.03~0.6 m)를 360방향으로.
+  - 센서: nvblox `combined_esdf_pointcloud`(static+dynamic 2D ESDF height slice, 0.03~0.30 m)를 360방향으로.
           beebot `rl_nav_controller.cpp`의 points 경로와 같은 360방향 가상 스캔.
   - 관측 375 = [웨이포인트 10, 스캔 360, v/w/gyro 3, 이전 행동 2] — beebot plugin과 같은 계약.
   - nvblox를 dynamic mapping으로 올려 사람/공도 combined ESDF slice에 포함한다.

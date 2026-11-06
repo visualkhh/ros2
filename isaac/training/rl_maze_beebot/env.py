@@ -1,7 +1,7 @@
 """RlMazeBeebotEnv — beebot 미로 주행. rl_maze env를 그대로 쓰고 센서만 nvblox height slice에 맞춘다.
 
   beebot `rl_nav_controller.cpp`의 points 경로 (배포 설정):
-    /nvblox_node/combined_esdf_pointcloud (static+dynamic 2D ESDF, z 0.03~0.6 m, 0.05 m voxel)
+    /nvblox_node/combined_esdf_pointcloud (static+dynamic 2D ESDF, z 0.03~0.30 m, 0.05 m voxel)
     → base 변환 → 360방향 빈의 최소거리.
   여기서는 미로 격자 raycast를 같은 360방향에 대해 수행한다. 0.05 m voxel·3.5 m에서
   1°(360방향)가 의미 있는 최대 해상도라 360으로 쓴다 (720은 voxel보다 촘촘해 이득 없음).
@@ -28,17 +28,17 @@ class RlMazeBeebotEnv(RlMazeEnv):
         self.lidar_vis = (not self.lidar_vis) if on is None else bool(on)
         self.lidar_markers.set_visible(self.lidar_vis)
         print(f"[vis] nvblox height slice {'ON' if self.lidar_vis else 'OFF'} · "
-              f"360° · {self.cfg.lidar_vis_rays} rays · z=0.30 m "
+              f"360° · {self.cfg.lidar_vis_rays} rays · z=0.10 m "
               f"(raw=청록 · 3.5m=회색)", flush=True)
         return self.lidar_vis
 
     def lidar_points(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """nvblox 2D ESDF slice와 같은 360° height point cloud (z=0.30 m)."""
+        """nvblox 2D ESDF slice와 같은 360° height point cloud (z=0.10 m)."""
         xy, yaw = self.pose()
         n = self.num_envs
         raw = self.lidar(xy, yaw, self.vis_ang)                # [n, R] 360°
         ang = yaw[:, None] + self.vis_ang[None]
-        z = torch.full_like(raw, 0.30)
+        z = torch.full_like(raw, 0.10)
         pts = torch.stack([xy[:, 0, None] + raw * torch.cos(ang),
                            xy[:, 1, None] + raw * torch.sin(ang), z], dim=-1)
         infl = torch.zeros_like(raw)                           # raw만 — magenta inflation 없음
