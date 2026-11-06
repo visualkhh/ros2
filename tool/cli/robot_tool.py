@@ -145,6 +145,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser('menu', help='대화형 메뉴 (인자 없이 실행했을 때 기본값)')
     sub.add_parser('status', help='프로세스·토픽 상태')
 
+    st = sub.add_parser('start', help='베이스 + Nav/RL 시작 (기본: 최근 지도)')
+    st.add_argument('target', nargs='?', default='all',
+                    help='base | nav | all (생략=all) · 또는 지도 이름')
+    st.add_argument('map', nargs='?', help='Nav 지도 이름 (target=nav/all)')
+    st.add_argument('--model', metavar='ONNX',
+                    help='RL 정책 .onnx (생략하면 설치된 share 모델 자동 사용)')
+
     for name, svc in SERVICES.items():
         p = sub.add_parser(name, help=f'{svc.label} — {svc.desc}')
         p.add_argument('action', type=str.lower, choices=('start', 'stop', 'restart', 'status', 'log'))

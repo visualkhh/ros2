@@ -11,6 +11,7 @@
 # 자주 쓰는 것:
 #   ./run-cli status                         프로세스 · 로봇 · 모드/비상정지 · odom·scan·map
 #   ./run-cli base start                     바퀴·odom·라이다 (tb-only)
+#   ./run-cli start [지도] [--model ...]    베이스 + Nav/RL 한 번에 (start base | start nav)
 #   ./run-cli slam start | map save office | slam stop
 #   ./run-cli nav start office | initpose 0 0 0 | goal 1.0 0.5 90
 #   ./run-cli nav start office --model <policy.onnx>   # RL 정책으로 시작 (PC 경로는 로봇으로 복사)

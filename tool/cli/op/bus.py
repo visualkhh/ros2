@@ -144,6 +144,59 @@ class Bus:
             'AMCL 초기 자세: 기본 (0,0,0) — 실제 위치가 다르면 '
             './run-cli initpose <x> <y> <yaw> 또는 RViz 2D Pose Estimate로 보정', DIM))
 
+    def _wait_base(self, timeout: float = 20.0) -> bool:
+        """base가 살아 있고 odom/scan이 실제로 흐를 때까지 — Nav bringup 실패 방지."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            self._poll(0.2)
+            odom = self.state.odom.age()
+            scan = self.state.scan.age()
+            if odom is not None and scan is not None and odom < 3.0 and scan < 3.0:
+                return True
+        print(self.term.paint('베이스 odom/scan 수신 대기 시간 초과 — base 로그 확인', RED))
+        return False
+
+    def cmd_start(self, args) -> int:
+        """`start` — base+nav(기본 최근 지도) · `start base` · `start nav [지도]`."""
+        target = getattr(args, 'target', None) or 'all'
+        map_arg = getattr(args, 'map', None)
+        model = getattr(args, 'model', None)
+        if target not in ('all', 'base', 'nav'):   # start <지도이름> = all + 그 지도
+            map_arg, target = target, 'all'
+
+        if target in ('all', 'base'):
+            if self.procs.running('base'):
+                print('베이스: 이미 실행 중')
+            elif self.start('base'):
+                return 1
+            if not self._wait_base():
+                return 1
+            if target == 'base':
+                return 0
+
+        if not self.procs.running('base'):
+            print(self.term.paint('베이스가 꺼져 있음 — 먼저 ./run-cli start base', RED))
+            return 1
+        if not self._wait_base(5.0):
+            return 1
+        if self.procs.running('nav'):
+            print('Nav: 이미 실행 중 — 재시작: ./run-cli nav restart')
+            return 0
+        path = self.procs.resolve_map(map_arg)
+        if path is None:
+            print(f'지도 없음: {map_arg or "(최근 지도)"} — {self.procs.map_dir_txt} 확인 · `map list`',
+                  file=sys.stderr)
+            return 1
+        rc = self.start('nav', str(path), model)
+        if rc:
+            return rc
+        if self.request('control', 'NAV_PLAN'):
+            print('제어: NAV_PLAN')
+        else:
+            print(self.term.paint('제어 NAV_PLAN 전환 실패 — control 메뉴에서 확인', YELLOW))
+        print(self.term.paint('RViz: 2D Pose Estimate로 초기 위치를 먼저 찍으세요', DIM))
+        return 0
+
     def start(self, name: str, map_yaml: str | None = None,
               model_path: str | None = None) -> int:
         if name != 'base' and not self.base_ready():

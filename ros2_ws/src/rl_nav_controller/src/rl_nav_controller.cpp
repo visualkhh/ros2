@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <filesystem>
 
+#include "ament_index_cpp/get_package_share_path.hpp"
 #include "nav2_ros_common/node_utils.hpp"
 #include "pluginlib/class_list_macros.hpp"
 #include "tf2/utils.hpp"
@@ -65,7 +67,19 @@ void RlNavController::configure(
   else if (inner.find("MPPIController") != std::string::npos) inner_kind_ = 2;
   else if (inner.find("RegulatedPurePursuit") != std::string::npos) inner_kind_ = 3;
   else if (inner.find("RotationShim") != std::string::npos) inner_kind_ = 4;
-  const auto model = param<std::string>(node, name + ".model_path", "");
+  std::string model = param<std::string>(node, name + ".model_path", "");
+  if (model.empty()) {   // ros2_ws/model/rl_nav_controller → install/share/... 로 설치된 기본 모델
+    try {
+      const auto installed = ament_index_cpp::get_package_share_path("rl_nav_controller") / "model" / "policy.onnx";
+      if (std::filesystem::exists(installed)) {
+        model = installed.string();
+        RCLCPP_INFO(logger_, "[%s] model_path 비어 있음 — 설치된 모델 사용: %s",
+                    name.c_str(), model.c_str());
+      }
+    } catch (const std::exception & e) {
+      RCLCPP_DEBUG(logger_, "[%s] 설치 모델 경로 확인 실패: %s", name.c_str(), e.what());
+    }
+  }
   enable_requested_ = param<bool>(node, name + ".enable", false);
   enable_ = enable_requested_;
   const auto scan_topic = param<std::string>(node, name + ".scan_topic", "scan");

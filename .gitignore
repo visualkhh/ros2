@@ -19,3 +19,4 @@ build/
 /isaac/.venv/
 /.claude/
 /ros2_ws/artifacts/
+/ros2_ws/model/

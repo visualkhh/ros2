@@ -7,7 +7,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 set(deps rclcpp rclcpp_lifecycle nav2_core nav2_util nav2_costmap_2d nav2_ros_common pluginlib
-  geometry_msgs nav_msgs sensor_msgs std_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs rl_policy)
+  ament_index_cpp geometry_msgs nav_msgs sensor_msgs std_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs rl_policy)
 foreach(d ${deps})
   find_package(${d} REQUIRED)
 endforeach()
@@ -18,6 +18,7 @@ target_include_directories(rl_nav_controller PUBLIC
 target_link_libraries(rl_nav_controller PUBLIC
   rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle nav2_core::nav2_core nav2_util::nav2_util_core
   nav2_costmap_2d::nav2_costmap_2d_core nav2_ros_common::nav2_ros_common pluginlib::pluginlib
+  ament_index_cpp::ament_index_cpp
   tf2::tf2 tf2_ros::tf2_ros tf2_geometry_msgs::tf2_geometry_msgs rl_policy::rl_policy
   ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} ${std_srvs_TARGETS})
 
@@ -25,6 +26,16 @@ pluginlib_export_plugin_description_file(nav2_core rl_nav_controller.xml)
 
 install(TARGETS rl_nav_controller ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
+
+# ros2_ws/model/rl_nav_controller/policy.onnx(+.data) — gitignore된 배포 모델.
+# 있으면 share/rl_nav_controller/model/로 설치해 플러그인이 model_path 없이 자동 사용.
+set(RL_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../model/rl_nav_controller")
+if(EXISTS "${RL_MODEL_DIR}/policy.onnx")
+  install(FILES "${RL_MODEL_DIR}/policy.onnx" DESTINATION share/${PROJECT_NAME}/model)
+endif()
+if(EXISTS "${RL_MODEL_DIR}/policy.onnx.data")
+  install(FILES "${RL_MODEL_DIR}/policy.onnx.data" DESTINATION share/${PROJECT_NAME}/model)
+endif()
 
 ament_export_include_directories(include)
 ament_export_libraries(rl_nav_controller)

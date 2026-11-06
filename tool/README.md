@@ -85,6 +85,7 @@ tool/
 ```bash
 ./run-cli                       # 대화형 메뉴 (TTY 아니면 status)
 ./run-cli status                # 프로세스 + odom·scan·map·amcl 수신 상태
+./run-cli start [지도]          # 베이스 + Nav/RL 한 번에 (start base | start nav)
 ./run-cli {base|slam|nav|explore} {start|stop|restart|status|log}
 ./run-cli nav start [지도이름|폴더|yaml] [--model <policy.onnx>]   # --model: RL 정책으로 시작
 ./run-cli map list
