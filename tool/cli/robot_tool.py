@@ -209,7 +209,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('value', nargs='*', help='예: 4000 300')
     p = sub.add_parser('say', help='타이핑삑 — 한/영 문자열을 자모별 주파수 삑으로 (/cmd_say)')
     p.add_argument('text', nargs='+', help='예: say 안녕 hello')
-    sub.add_parser('stop-all', help='띄운 것 전부 종료 (바퀴 정지 먼저)')
+    sub.add_parser('stop', help='띄운 것 전부 종료 (바퀴 정지 먼저)')
+    sub.add_parser('stop-all', help=argparse.SUPPRESS)   # 예전 이름 호환
     sub.add_parser('restart-all', help='켜져 있던 서비스만 같은 순서로 전부 재시작 (nav는 같은 지도로)')
 
     b = sub.add_parser('build', help='colcon build (로봇 Pi · PC는 SSH 경유) — --full은 setup/pi/build.sh')

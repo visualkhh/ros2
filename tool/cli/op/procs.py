@@ -237,7 +237,7 @@ class Procs:
         return node_restart(name, force=force)
 
     def node_cleanup(self) -> str:
-        """stop-all용 — 재시작 추적 노드 전부 종료."""
+        """stop용 — 재시작 추적 노드 전부 종료."""
         from .pages.nodes.core import cleanup_tracked
         return cleanup_tracked()
 
@@ -384,7 +384,7 @@ class RemoteProcs(Procs):
         return rc == 0, f'[{self.host}] {out}'
 
     def stop_all(self) -> tuple[bool, str]:
-        rc, out = self._cli('stop-all')
+        rc, out = self._cli('stop')
         return rc == 0, f'[{self.host}] {out}'
 
     def restart_all(self) -> tuple[bool, str]:

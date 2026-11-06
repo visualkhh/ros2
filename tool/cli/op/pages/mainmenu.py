@@ -37,5 +37,5 @@ class MainMenu(Menu):
         while super().show() == MAIN:  # 하위 화면의 m = 여기로 돌아옴
             pass
         self.term.clear()
-        print('robot_tool 종료 (띄운 SLAM·Nav는 계속 돕니다 — 끄려면 ./run-cli stop-all)')
+        print('robot_tool 종료 (띄운 SLAM·Nav는 계속 돕니다 — 끄려면 ./run-cli stop)')
         return 0

@@ -4,8 +4,8 @@ ros2 launch는 Node마다 별도 OS 프로세스로 띄운다. PID는 argv의 `-
 토큰으로 찾고, 토큰이 없으면(launch에 name= 없음) 실행 파일명으로 찾는다.
 kill 후 kill 전 argv 그대로 다시 실행한다.
 launch 파일에 respawn이 없어서(전부 없음) kill한 노드는 그냥 죽은 채로 남는다.
-재시작한 노드는 launch의 자식이 아니라서 서비스 stop-all에 안 걸리므로
-.run/nodes/<이름>.pid로 추적하고 stop-all 때 같이 정리한다.
+재시작한 노드는 launch의 자식이 아니라서 서비스 stop에 안 걸리므로
+.run/nodes/<이름>.pid로 추적하고 stop 때 같이 정리한다.
 
 PC에서는 RemoteProcs가 SSH로 로봇의 run-cli node-kill/node-restart에 넘긴다.
 """
@@ -182,7 +182,7 @@ def tracked_nodes() -> dict[str, int]:
 
 
 def cleanup_tracked() -> str:
-    """stop-all용 — 재시작 추적 노드 전부 종료."""
+    """stop용 — 재시작 추적 노드 전부 종료."""
     found = tracked_nodes()
     if not found:
         return '재시작 추적 노드 없음'

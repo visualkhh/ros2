@@ -3,7 +3,8 @@
 #
 #   ./run-cli                      대화형 메뉴 (TTY 아니면 status)
 #   ./run-cli <명령> [...]          한 번 실행 — 명령 목록·옵션: 아래 (또는 ./run-cli <명령> --help)
-#   ./run-cli stop                 CLI 프로그램만 종료 (로봇의 ROS는 계속 돔 — ROS까지 끄려면 stop-all)
+#   ./run-cli stop                 ROS 전부 끄기: 바퀴 정지 → Nav·SLAM·베이스 종료
+#   ./run-cli exit                 CLI 프로그램만 종료 (로봇의 ROS는 계속 돔)
 #   ./run-cli restart              CLI 프로세스 재시작
 #   ./run-cli -h | --help          이 도움말
 #
@@ -15,7 +16,7 @@
 #   ./run-cli teleop                         w/x/a/d · q/e/z/c 사선 · s 정지 · -/= 속도 · b 삑 · Esc 종료
 #   ./run-cli control manual|nav-plan · estop on|off · automap start|stop
 #   ./run-cli ab nodes | ab rl_nav_controller status|on|off|record|stop|guide|history   # RL vs inner A/B
-#   ./run-cli stop-all                       ROS 전부 끄기: 바퀴 정지 → Nav·SLAM·베이스 종료 (base|slam|nav stop = 하나씩)
+#   ./run-cli stop                           ROS 전부 끄기 (base|slam|nav stop = 하나씩)
 #   ./run-cli restart-all                    켜져 있던 것만 전부 재시작 (nav는 같은 지도로)
 #   ./run-cli build [--full] [colcon 옵션]   colcon build (PC면 로봇 Pi에서 SSH로) — --full은 vcs·패치·rosdep 포함
 #
@@ -35,6 +36,10 @@ case "$cmd" in
     exec "$HERE/cli/start.sh" "$@"
     ;;
   stop)
+    [ $# -gt 0 ] && shift
+    exec "$HERE/cli/start.sh" stop "$@"
+    ;;
+  exit|quit)
     exec "$HERE/cli/stop.sh"
     ;;
   restart)

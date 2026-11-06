@@ -185,7 +185,7 @@ class Bus:
 
     def cmd_stop_all(self, args) -> int:
         self.send_velocity(0.0, 0.0)
-        if hasattr(self.procs, 'stop_all'):   # 원격: 로봇의 stop-all이 pid로 확실히 끔
+        if hasattr(self.procs, 'stop_all'):   # 원격: 로봇의 stop이 pid로 확실히 끔
             ok, msg = self.procs.stop_all()
             print(msg)
             return 0 if ok else 1
@@ -195,6 +195,10 @@ class Bus:
         print(self.procs.node_cleanup())   # 재시작 추적 노드도 같이 정리
         print('전부 종료')
         return 0
+
+    def cmd_stop(self, args) -> int:
+        """`./run-cli stop` — 바퀴 정지 → 띄운 서비스 전부 종료."""
+        return self.cmd_stop_all(args)
 
     # ------------------------------------------------------------- 빌드
     def cmd_build(self, args) -> int:

@@ -157,7 +157,7 @@ class NodeActionMenu(Menu):
         if base(self._name) in CRITICAL:
             lines.append(self.term.paint(' 제어 핵심 노드 (state/cmd/opencr)', YELLOW))
         lines += ['', ' 중지: OS 프로세스 kill (launch respawn 없음 → 멈춤 유지)',
-                  ' 재시작: kill → 같은 명령 재실행 (추적됨 · stop-all 때 정리)']
+                  ' 재시작: kill → 같은 명령 재실행 (추적됨 · stop 때 정리)']
         return lines
 
 
