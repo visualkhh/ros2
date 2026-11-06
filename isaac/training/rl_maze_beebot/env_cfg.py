@@ -24,6 +24,6 @@ class RlMazeBeebotEnvCfg(RlMazeEnvCfg):
     lidar_rays = 360                                      # nvblox 0.05 m voxel / 3.5 m → 1°(360)가 최대 의미 해상도
     lidar_vis_rays = 360                                  # L 시각화도 같은 360방향
     collide_r = 0.18                                      # beebot Nav2 robot_radius
-    # 인플레이션은 실기 파라미터(lidar_inflation)와 같은 단위. 학습은 거의 raw에 가까운 0~2 cm만.
-    inflation_range = (0.0, 0.02)
+    # 인플레이션은 실기 파라미터(lidar_inflation)와 같은 단위. 학습은 거의 raw에 가까운 5 mm~2 cm만.
+    inflation_range = (0.005, 0.02)
     path_margin = 0.32                                    # max(inflation) + 0.32 = 경로 최소 0.34 m 유지
