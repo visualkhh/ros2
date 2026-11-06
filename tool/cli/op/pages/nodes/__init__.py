@@ -247,7 +247,7 @@ class NodeParamMenu(Menu):
         full = f'/{self.nodename}' if self.nodens in ('/', '') else \
             f'{self.nodens.rstrip("/")}/{self.nodename}'
         rows = self._fetch()
-        lines = [f'[노드] {full}', ' 파라미터 — Enter로 값 변경 · 1초 갱신', '']
+        lines = [f'[노드] {full}', ' ↑↓ 선택 → 오른쪽 상세 · Enter 수정 · 1초 갱신', '']
         if rows:
             idx = max(0, min(getattr(self.ui, '_sel_idx', 0), len(rows) - 1))
             n, v, d = rows[idx]
