@@ -29,20 +29,22 @@ class RlMazeBeebotEnv(RlMazeEnv):
         self.lidar_markers.set_visible(self.lidar_vis)
         print(f"[vis] nvblox height slice {'ON' if self.lidar_vis else 'OFF'} · "
               f"360° · {self.cfg.lidar_vis_rays} rays · z=0.10 m "
-              f"(raw=청록 · 3.5m=회색)", flush=True)
+              f"(raw=청록 · inflation=마젠타 0~0.02 m · 3.5m=회색)", flush=True)
         return self.lidar_vis
 
     def lidar_points(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """nvblox 2D ESDF slice와 같은 360° height point cloud (z=0.10 m)."""
+        """nvblox 2D ESDF slice와 같은 360° height point cloud (z=0.10 m) — raw + inflation."""
         xy, yaw = self.pose()
         n = self.num_envs
         raw = self.lidar(xy, yaw, self.vis_ang)                # [n, R] 360°
+        infl = (raw - self.inflation[:, None]).clamp(0.0, self.cfg.lidar_max)
         ang = yaw[:, None] + self.vis_ang[None]
         z = torch.full_like(raw, 0.10)
-        pts = torch.stack([xy[:, 0, None] + raw * torch.cos(ang),
-                           xy[:, 1, None] + raw * torch.sin(ang), z], dim=-1)
-        infl = torch.zeros_like(raw)                           # raw만 — magenta inflation 없음
-        return pts, pts, raw, infl
+        raw_pts = torch.stack([xy[:, 0, None] + raw * torch.cos(ang),
+                               xy[:, 1, None] + raw * torch.sin(ang), z], dim=-1)
+        infl_pts = torch.stack([xy[:, 0, None] + infl * torch.cos(ang),
+                                xy[:, 1, None] + infl * torch.sin(ang), z], dim=-1)
+        return raw_pts, infl_pts, raw, infl
 
     def _get_observations(self) -> dict:
         c = self.cfg
