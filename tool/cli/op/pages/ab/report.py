@@ -166,7 +166,9 @@ def _seg_dist(px, py, ax, ay, bx, by):
 
 
 def _path_stats(odom, amcl, start, route):
-    pts = [(x, y) for _, x, y in amcl] or [(x, y) for _, _, _, x, y in odom]
+    map_pts = [(t, x, y) for t, x, y in amcl] or \
+        [(t, x, y) for t, _, _, x, y in odom]
+    pts = [(x, y) for _, x, y in map_pts]
     if not pts:
         return dict(lat_rms=None, lat_max=None, goal_err=None, efficiency=None,
                     drive_time=0.0, stop_frac=None, alpha=None)
@@ -181,6 +183,9 @@ def _path_stats(odom, amcl, start, route):
     dist = sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
                for i in range(1, len(pts)))
     goal = goals[-1]
+    t_end = map_pts[-1][0]
+    near = [(x, y) for t, x, y in map_pts if t_end - t <= 1.5] or [pts[-1]]
+    goal_err = min(math.hypot(x - goal[0], y - goal[1]) for x, y in near)
     moving = [o for o in odom if abs(o[1]) > 0.01]
     drive_time = (moving[-1][0] - moving[0][0]) if len(moving) > 1 else (
         odom[-1][0] - odom[0][0] if len(odom) > 1 else 0.0)
@@ -191,7 +196,7 @@ def _path_stats(odom, amcl, start, route):
         if 1e-3 < dt < 0.5:
             alphas.append(abs(odom[i][2] - odom[i - 1][2]) / dt)
     alpha = sum(alphas) / len(alphas) if alphas else None
-    return dict(lat_rms=rms, lat_max=max(errs), goal_err=math.hypot(pts[-1][0] - goal[0], pts[-1][1] - goal[1]),
+    return dict(lat_rms=rms, lat_max=max(errs), goal_err=goal_err,
                 efficiency=(straight / dist * 100.0) if dist > 1e-6 else None,
                 drive_time=drive_time, stop_frac=stop_frac, alpha=alpha)
 
@@ -199,8 +204,13 @@ def _path_stats(odom, amcl, start, route):
 def _pct(a, b, lower: bool) -> float | None:
     if a is None or b is None:
         return None
-    base = max(abs(b), 1e-6)
-    return ((b - a) / base * 100.0) if lower else ((a - b) / base * 100.0)
+    if lower:
+        if a <= b:
+            return (b - a) / max(abs(b), 1e-6) * 100.0
+        return -(a - b) / max(abs(a), 1e-6) * 100.0
+    if a >= b:
+        return (a - b) / max(abs(b), 1e-6) * 100.0
+    return -(b - a) / max(abs(a), 1e-6) * 100.0
 
 
 def _row(name, a, b, *, lower=None, fmt='{:.2f}', unit='', word=''):
@@ -275,14 +285,17 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
         ('정지 비율', a['stop_frac'], b['stop_frac'], True, 10),
     ]
     aw = bw = 0
-    for _, av, bv, lower, w in scored:
+    a_wins, b_wins = [], []
+    for name, av, bv, lower, w in scored:
         p = _pct(av, bv, lower)
         if p is None:
             continue
         if p > 3.0:
             aw += w
+            a_wins.append(name)
         elif p < -3.0:
             bw += w
+            b_wins.append(name)
     total = aw + bw
     if total == 0:
         verdict, vcls = '비슷', 'neutral'
@@ -305,6 +318,8 @@ def generate_report(a_path: Path, b_path: Path, label: str | None = None,
         who = 'A(RL)' if p > 0 else 'B(inner)'
         highlights.append(f'{who}가 {name} {abs(p):.0f}% {word}')
     summary = ' · '.join(highlights[:4]) if highlights else '주요 지표 차이 3% 이내 — 비슷'
+    wins_html = (f'<p class="muted">A 우세: {", ".join(a_wins) or "없음"}'
+                 f' · B 우세: {", ".join(b_wins) or "없음"}</p>')
 
     score_bar = ''
     if total:
@@ -338,6 +353,7 @@ td:first-child,th:first-child{{text-align:left}} td:nth-child(4){{text-align:lef
 <div class="hero">
   <div class="verdict {vcls}">종합: {verdict}</div>
   <div>{_esc(summary)}</div>
+  {wins_html}
   {score_bar}
 </div>
 <h2>지표 비교</h2>
