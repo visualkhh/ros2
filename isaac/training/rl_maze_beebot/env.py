@@ -1,7 +1,7 @@
 """RlMazeBeebotEnv — beebot 미로 주행. rl_maze env를 그대로 쓰고 센서만 nvblox height slice에 맞춘다.
 
   beebot `rl_nav_controller.cpp`의 points 경로 (배포 설정):
-    /nvblox_node/static_esdf_pointcloud (2D ESDF, z 0.03~0.6 m, 0.05 m voxel)
+    /nvblox_node/combined_esdf_pointcloud (static+dynamic 2D ESDF, z 0.03~0.6 m, 0.05 m voxel)
     → base 변환 → 360방향 빈의 최소거리.
   여기서는 미로 격자 raycast를 같은 360방향에 대해 수행한다. 0.05 m voxel·3.5 m에서
   1°(360방향)가 의미 있는 최대 해상도라 360으로 쓴다 (720은 voxel보다 촘촘해 이득 없음).
