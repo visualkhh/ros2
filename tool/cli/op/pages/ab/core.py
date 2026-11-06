@@ -44,6 +44,8 @@ class AbTest:
         self.state = bus.state
         self.term = bus.term
         self._toggle_cli = None
+        self._cfg: tuple[str, bool] | None = None
+        self._cfg_at = 0.0
 
     # --------------------------------------------------------------- 상태 파일
     @staticmethod
@@ -121,11 +123,37 @@ class AbTest:
             'cmd_hz': self.state.cmd_vel_nav.hz(),
         }
 
+    def configured(self) -> tuple[str, bool] | None:
+        """주행 전에도 controller_server 파라미터로 모델/enable 확인 (5초 캐시)."""
+        now = time.monotonic()
+        if now - self._cfg_at < 5.0:
+            return self._cfg
+        self._cfg_at = now
+        self._cfg = None
+        try:
+            target = self.bus.param_target('controller_server')
+            if not target:
+                return None
+            cli = self.bus.param_client(*target)
+            if cli is None or not cli.services_are_ready():
+                return None
+            vals = self.bus.param_get_vals(cli, ['FollowPath.model_path', 'FollowPath.enable'])
+            if vals and len(vals) >= 2:
+                self._cfg = (vals[0].string_value, bool(vals[1].bool_value))
+        except Exception:
+            pass
+        return self._cfg
+
     def status_lines(self) -> list[str]:
         st = self.status()
         lines = ['[RL/fallback A/B · rl_nav_controller]']
         if not st['fresh']:
             lines.append(' 상태 없음 — 주행 중이 아니거나 controller_server가 꺼짐')
+            cfg = self.configured()
+            if cfg:
+                model, enable = cfg
+                lines.append(f' 설정: 모델 {Path(model).name if model else "없음"}'
+                             f' · enable {"on" if enable else "off"} (주행 전 파라미터)')
         else:
             mode = 'RL 적용' if st['enabled'] else f'{st["inner"]} 바이패스'
             why = REASONS.get(st['reason'], f'reason {st["reason"]}')
@@ -335,6 +363,7 @@ class AbTest:
             return 2
         action = action or 'status'
         if action == 'status':
+            self.bus._poll(1.0)   # 노드/파라미터 서비스 발견 시간
             print('\n'.join(self.status_lines()))
             return 0
         if action in ('on', 'off'):
