@@ -159,8 +159,9 @@ controller_server:
       #   lidar_inflation = 사용자가 바꾸는 값 · inflation_scale = 관측 정규화 상수(사용자 값 아님)
       #   학습 범위(0.20~0.24) 안이면 어느 값이든 정책이 대응. 런타임 변경:
       #   ros2 param set /controller_server FollowPath.lidar_inflation 0.24
-      lidar_inflation: 0.22
-      inflation_scale: 0.50        # 정규화 상수 — 학습/추론 동일. 바꾸면 모델 재학습 필요 (사용자 인플레이션 값 아님)
+      #   학습 범위(0.20~0.24)의 최소 — 가장 좁게.
+      lidar_inflation: 0.20
+      inflation_scale: 0.50        # 정규화 상수 (사용자 값 아님) — 학습/추론 동일해야 함
       # 선택은 위 fallback_controller 하나로만 한다. 아래는 그 플러그인의 파라미터.
       inner:
         max_vel_x: 0.26
