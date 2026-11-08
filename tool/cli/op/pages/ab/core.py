@@ -312,6 +312,13 @@ class AbTest:
             return True
         return False
 
+    def robot_pose(self) -> dict | None:
+        """지금 로봇 자세 — 기다리지 않음 (지도 화면이 0.3초마다 부른다). amcl_pose가 아직 없으면 None."""
+        try:
+            return self.current_pose()
+        except RuntimeError:
+            return None
+
     def current_pose(self) -> dict:
         """지금 로봇 map 자세 (amcl_pose) — TUI '지금 위치를 goal로' 등. 없으면 RuntimeError."""
         if self.state.amcl is None:

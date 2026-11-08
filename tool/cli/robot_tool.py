@@ -84,8 +84,8 @@ class RobotTool(Node):
             raise SystemExit(0)
         self.poll(seconds)
 
-    def _on_navigate(self, name: str):
-        page = self.screen(name)
+    def _on_navigate(self, name: str, params: dict):
+        page = self.screen(name, **params)
         return page.show() if page is not None else STAY
 
     def _wire(self):
@@ -105,8 +105,11 @@ class RobotTool(Node):
         from op.pages.nodes import wire_all
         wire_all(self)
 
-    def screen(self, name: str):
+    def screen(self, name: str, **params):
+        """화면 인스턴스. params = 화면에 넘기는 값 (웹 쿼리처럼 — 예: map 화면의 mode·source)."""
         from op import pages
+        if name == 'map':
+            return pages.MapPage(self, **params)
         return {
             '1': pages.StatusMenu, '2': pages.BaseMenu, '3': pages.SlamMenu, '4': pages.NavMenu,
             '5': pages.DriveMenu, '6': pages.MapMenu, '7': pages.ExploreMenu, '8': pages.NodesMenu,

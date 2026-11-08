@@ -186,17 +186,65 @@ def _(s):
         s.step(ENTER, 'A/B 테스트 · rl_nav_controller')
         s.step(b'1', wait=0.2)
         s.step(ENTER, 'A/B 경로 편집')
-        s.step(b'4', wait=0.2)
+        s.step(b'5', wait=0.2)
         s.step(ENTER, 'goal 추가')
         s.step(b'1.5 0.5 90' + ENTER, '저장:')   # 좌표 입력 → route.json 저장 (결과창)
         s.step(ENTER, 'G1')
         assert route.is_file() and '1.5' in route.read_text(), 'route.json 저장 안 됨'
-        s.step(b'5', wait=0.2)
+        s.step(b'6', wait=0.2)
         s.step(ENTER, 'route.json 삭제')           # 마지막 goal 삭제 → 파일 삭제
         s.step(ENTER, 'A/B 경로 편집')
         assert not route.exists(), 'route.json이 안 지워짐'
     finally:
         route.unlink(missing_ok=True)
+
+
+@scenario('ab-route-map-pick')
+def _(s):
+    route = Path(__file__).resolve().parents[1] / 'bags' / 'ab' / 'route.json'
+    if route.exists():
+        print('SKIP ab-route-map-pick: 지정한 route.json이 이미 있음 — 지우지 않으려고 건너뜀')
+        return
+    try:
+        for _ in range(9):                    # b) A/B
+            s.step(DOWN, wait=0.3)
+        s.step(ENTER, 'A/B 테스트 (노드별)')
+        s.step(ENTER, 'A/B 테스트 · rl_nav_controller')
+        s.step(b'1', wait=0.2)
+        s.step(ENTER, 'A/B 경로 편집')
+        s.step(b'1', wait=0.2)                # 1) 지도에서 찍기
+        s.send(ENTER)
+        s.expect('A/B 경로 — 지도에서 찍기', timeout=20)     # 현재 위치 TF(최대 5초) · /map을 받은 뒤에 열림
+        s.step(b'+', '한 칸 =')                              # 지도가 포커스를 받아 바로 확대 (중앙 = 지도)
+        s.step(ENTER, 'G1 추가')                             # 십자선 위치(지도 가운데)에 goal
+        s.step(RIGHT * 2, '자유이동')                       # 방향키 = 지도를 밂 → 로봇 따라가기가 풀림
+        s.step(b']', wait=0.2)                               # 방향 +15°
+        s.step(ENTER, 'G2 추가')
+        s.step(b'-', wait=0.3)                               # 축소
+        s.step(b'r', '따라가기')                         # 다시 로봇 중심
+        s.step(ESC, 'Tab 중앙')                              # Esc → 왼쪽 메뉴로 (힌트에 'Tab 중앙')
+        s.step(b'9', wait=0.3)
+        s.step(ENTER, '저장:')                               # 9) 저장하고 나가기 → route.json 저장
+        import json
+        goals = json.loads(route.read_text())['route']
+        assert len(goals) == 2 and goals[1]['yaw_deg'] == 15.0, goals
+    finally:
+        route.unlink(missing_ok=True)
+
+
+@scenario('map-pose-pick')
+def _(s):
+    s.step(b'6', wait=0.3)                    # 6) 지도/위치
+    s.step(ENTER, '·  지도/위치')
+    s.step(b'p', wait=0.2)                    # p) 초기 위치 지정 (지도에서 찍기)
+    s.send(ENTER)
+    s.expect('로봇 위치 지정', timeout=20)    # 지도 화면 (mode=pose) — 열리는 동안 busy 창
+    s.step(b']', '방향 +15°')                 # 방향 +15° (지도 포커스의 키)
+    s.step(ENTER, '로봇 위치로 지정할까요?')   # 십자선 위치 → 확인창
+    s.step(b'y', '위치 지정')                 # /initialpose 발행 (가짜 ROS) → 화면 아래 메시지
+    s.step(ESC, 'Tab 중앙')                   # Esc → 왼쪽 메뉴로 (힌트에 'Tab 중앙') · 한 번 더 Esc → 지도/위치 메뉴로
+    s.step(ESC, '·  지도/위치')
+    s.finish()
 
 
 @scenario('input-validate')

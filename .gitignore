@@ -22,3 +22,6 @@ build/
 /ros2_ws/artifacts/
 /ros2_ws/model/
 /tool/bags/
+
+# macOS
+.DS_Store

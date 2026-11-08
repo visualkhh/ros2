@@ -65,6 +65,7 @@ tool/
 ./run-cli-test ab rl_nav_controller status      # A/B 상태
 ./run-cli-test menu
 python3 cli-test/scenarios.py      # pty 키 입력 시나리오 (ROS 불필요)
+python3 cli-test/test_map_view.py  # 터미널 지도(map_view) 단위 시험
 ```
 
 가짜 ROS층(`cli-test/fake_ros.py`)으로 진짜 `robot_tool` 코드를 돌린다.
