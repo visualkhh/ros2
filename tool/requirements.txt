@@ -1,0 +1,3 @@
+# tool/ Python 의존성 (ROS 밖 패키지만) — setting-venv.sh가 tool/.venv에 설치한다.
+# rclpy·메시지·rosbag2_py는 ROS setup.bash가 준다 (venv는 --system-site-packages로 그대로 보게 만듦).
+PyYAML       # 지도 yaml 읽기 (cli/op/procs.py) · A/B 리포트 (pages/ab/rl_nav_controller/report.py)

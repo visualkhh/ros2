@@ -2,10 +2,15 @@
 
 - terminal: 터미널 원자 연산 (크기·색·너비)
 - defs: 메뉴 내비게이션 상수
-- dialogs: 키 읽기 · 확인/입력/결과창 · 메뉴 루프 (키 규약)
-- ui: Ui — 4분할 프레임 + 상태바 + 다이얼로그 진입점
+- keys: 키 읽기 (cbreak · 방향키)
+- component: Component — 화면 부품 최상위 부모
+- window: Window — 조합·그리기·키 루프·신호 (키 규약)
+- menu_bar: MenuBar → LeftSideMenuBar · ChoiceItem
+- state_bar: State(칸) · StateBar · TopStateBar
+- dialog: Dialog 최상위 부모 + Input·Key·Pager·Busy·Teleop
+- ui: Ui — 창 진입점 · 터미널 모드 · ui.window
 - state: StateStore — ROS 상태 보관 (odom·scan·map·amcl)
 - procs: Procs — tool이 띄우는 launch(베이스·SLAM·Nav) 관리 + 지도 파일
 - bus: Bus — 발행·액션·명령 실행
-- pages: Page(기반) → Menu(선택 루프) → 각 메뉴 화면
+- pages: Page(기반) → Menu(Window.run) → 각 메뉴 화면
 """

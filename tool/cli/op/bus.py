@@ -11,6 +11,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped
 from std_msgs.msg import Empty
 
+from .dialog import MAX_ANG, MAX_LIN, TeleopDialog
 from .procs import IS_ROBOT, SERVICES
 from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 
@@ -18,16 +19,8 @@ from .terminal import DIM, GREEN, RED, YELLOW, Terminal
 CMD_VEL = os.environ.get('TOOL_CMD_VEL', '/cmd_manual_vel')
 # Nav2(Lyrical)는 TwistStamped를 낸다. cmd_manager·드라이버가 Twist라 0.
 CMD_VEL_STAMPED = os.environ.get('TOOL_CMD_VEL_STAMPED', '0') == '1'
-# 수동 주행 속도 상한 (텔레오퍼 e · 메뉴 속도 설정) — Waffle Pi 사양 = 펌웨어 바퀴 상한 8 rad/s × 0.033 m
-MAX_LIN, MAX_ANG = 0.26, 1.82
-# 텔레오퍼 키 → (전후, 회전) 방향. 사선(둘 다 0 아님) = 설정 선속도 그대로 + 반경 DIAG_RADIUS 원호
-#   (ω = v / R → 속도를 바꿔도 휘는 모양이 같음). 0.20 m/s까지 속도 그대로, 그 위는 바깥 바퀴가 상한이라
-#   opencr_driver가 두 바퀴를 같은 비율로 줄임 (모양 유지).
-# 후진 사선은 회전 부호 반대 (teleop_twist_keyboard와 같음: z = 뒤로 가며 왼쪽으로 휘어짐)
-TELEOP_MOVES = {'w': (1, 0), 'x': (-1, 0), 'a': (0, 1), 'd': (0, -1), 's': (0, 0),
-                'q': (1, 1), 'e': (1, -1), 'z': (-1, -1), 'c': (-1, 1)}
 CURRENT_FULL_A = 1.5  # 전류 막대 끝 (XM430 정지 전류 대략) — 눈금일 뿐 한계 아님
-DIAG_RADIUS = 0.5   # [m] 사선 원호 반경
+STOP_LEG, STOP_ALL = 141, 142   # send_goal(stop_keys=True)의 반환 — 사용자가 s / q로 멈춤
 DRIVER_MISSING = 'opencr_driver 없음 — 베이스(tb-only)가 떠 있는지 확인'
 
 
@@ -511,57 +504,14 @@ class Bus:
         print(f'{args.direction} 완료 → 정지 ({CMD_VEL})')
         return 0
 
-    def cmd_teleop(self, args) -> int:
+    def cmd_teleop(self, args, on_mark=None) -> int:
         if not sys.stdin.isatty():
             print('거부: teleop은 터미널에서 실행해야 합니다', file=sys.stderr)
             return 2
         if not self.ensure_manual():
             return 1
-        from .dialogs import Dialog, KeyReader
-        move = (0, 0)   # (전후, 회전) 방향 — 속도는 lin_speed·ang_speed를 곱해서 (속도를 바꾸면 달리는 중에도 바로 반영)
-        lin_speed, ang_speed = min(args.linear, MAX_LIN), min(args.angular, MAX_ANG)
-        last_send = 0.0
-        last_key, key_count = '-', 0
-        box = Dialog(self.ui, f'텔레오퍼 → {CMD_VEL}', [])   # 공용 박스 — console로 그려 캡처를 우회
-        alias = {'up': 'w', 'down': 'x', 'left': 'a', 'right': 'd', ' ': 's'}
         try:
-            with KeyReader(self.term) as keys:
-                while rclpy.ok():
-                    linear = move[0] * lin_speed
-                    angular = move[1] * (lin_speed / DIAG_RADIUS if move[0] else ang_speed)
-                    key_txt = f'키 {last_key} ×{key_count}' if key_count else '키 입력 대기 중'
-                    box.lines = [box.title,
-                                f'명령 v={linear:+.2f} m/s ω={angular:+.2f} rad/s',
-                                f'odom {self.state.odom_txt()}',
-                                self.wheel_summary(),
-                                f'scan {self.state.scan_txt()}',
-                                f'map  {self.state.map_txt()}',
-                                f'{key_txt} · 설정 v {lin_speed:.2f} m/s · ω {ang_speed:.2f} rad/s',
-                                self.term.paint('w/x/a/d·방향키 이동 · q/e/z/c 사선 · s/space 정지', DIM),
-                                self.term.paint('-/= 속도± · b 삑 · Esc 종료', DIM)]
-                    box.draw('key')
-                    now = time.monotonic()
-                    if now - last_send >= 0.1:
-                        self.send_velocity(linear, angular)
-                        last_send = now
-                    key = keys.read(0.1)
-                    self._poll(0.01)
-                    self.ui.refresh_top(box._geom)   # 창 뒤 상태바·바퀴 표(가리지 않은 줄) 갱신
-                    if key is None:
-                        continue
-                    if key in ('esc', 'eof', '\x03'):
-                        break
-                    key = alias.get(key, key)
-                    key_count += 1
-                    last_key = 'space' if key == 's' else key
-                    if key in TELEOP_MOVES:
-                        move = TELEOP_MOVES[key]
-                    elif key == 'b':
-                        self._beep_pub.publish(Empty())
-                    elif key in ('=', '+'):   # 상한 = Waffle Pi 사양
-                        lin_speed, ang_speed = min(lin_speed + 0.05, MAX_LIN), min(ang_speed + 0.3, MAX_ANG)
-                    elif key in ('-', '_'):
-                        lin_speed, ang_speed = max(lin_speed - 0.05, 0.05), max(ang_speed - 0.3, 0.2)
+            TeleopDialog(self, f'텔레오퍼 → {CMD_VEL}', args.linear, args.angular, on_mark).run()
         finally:
             for _ in range(3):
                 self.send_velocity(0.0, 0.0)
@@ -640,7 +590,8 @@ class Bus:
             self._nav_client = ActionClient(self.node, NavigateToPose, 'navigate_to_pose')
         return self._nav_client
 
-    def send_goal(self, x: float, y: float, yaw_deg: float, wait: bool = True) -> int:
+    def send_goal(self, x: float, y: float, yaw_deg: float, wait: bool = True, stop_keys: bool = False) -> int:
+        """Nav2 목표 한 점. stop_keys=True면 기다리는 동안 s(이 구간 중지)=STOP_LEG · q(전체 중단)=STOP_ALL을 돌려준다 (목표는 취소)."""
         from nav2_msgs.action import NavigateToPose
         client = self._client()
         end = time.monotonic() + 5.0
@@ -684,6 +635,10 @@ class Bus:
         try:
             while not res_fut.done() and rclpy.ok():
                 self._poll(0.2)
+                key = self.ui.poll_key() if stop_keys else None
+                if key in ('s', 'S', 'q', 'Q'):
+                    self.cancel_goal()
+                    return STOP_LEG if key in ('s', 'S') else STOP_ALL
         except KeyboardInterrupt:
             self.cancel_goal()
             return 130

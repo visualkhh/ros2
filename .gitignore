@@ -17,6 +17,7 @@ build/
 /temp/
 /isaac/artifacts/
 /isaac/.venv/
+.venv/
 /.claude/
 /ros2_ws/artifacts/
 /ros2_ws/model/

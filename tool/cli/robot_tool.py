@@ -15,8 +15,13 @@
 
 구조 (OOP 분리):
   op/terminal.py  터미널 원자 연산
-  op/dialogs.py   키 읽기 · 다이얼로그 · 메뉴 루프
-  op/ui.py        화면 전부 (프레임 + 상태바)
+  op/keys.py      키 읽기 (cbreak · 방향키 · UTF-8)
+  op/component.py Component — 화면 부품 최상위 부모 (focusable · activate)
+  op/window/      Window — 상태바·메뉴 막대·중앙·힌트 조합 · 키 루프 · 신호
+  op/menu_bar/    MenuBar → LeftSideMenuBar · ChoiceItem
+  op/state_bar/   State(칸) · StateBar · TopStateBar
+  op/dialog/      Dialog 최상위 부모 + Input·Key·Pager·Busy·Teleop
+  op/ui.py        Ui — 터미널 모드 · 창 진입점 · ui.window
   op/state.py     StateStore — ROS 상태 보관
   op/procs.py     Procs — launch 프로세스 · 지도 파일
   op/bus.py       Bus — 발행·액션·명령 실행
@@ -42,6 +47,7 @@ from sensor_msgs.msg import LaserScan
 from diagnostic_msgs.msg import DiagnosticArray
 
 from op.bus import Bus
+from op.defs import STAY
 from op.procs import SERVICES, make_procs
 from op.state import StateStore
 from op.terminal import Terminal
@@ -59,9 +65,12 @@ class RobotTool(Node):
         self.term = Terminal()
         self.state = StateStore()
         self.procs = make_procs(self)   # 로봇이 아니면 RemoteProcs (SSH + 노드 그래프)
-        self.ui = Ui(self.term, self.state, self.procs, self.poll)
+        self.ui = Ui(self.term, self.state, self.procs)
         self.bus = Bus(self, self.state, self.ui, self.term)
         self.drive_cfg = {'linear': 0.15, 'angular': 0.8, 'duration': 1.0}
+        # 화면 틀(Window) 신호 — ROS 폴링은 'tick', 이름으로 화면 열기는 'navigate'
+        self.ui.window.connect('tick', self._on_tick)
+        self.ui.window.connect('navigate', self._on_navigate)
         self._wire()
 
     def poll(self, seconds: float = 0.2):
@@ -69,6 +78,15 @@ class RobotTool(Node):
         end = time.monotonic() + max(0.0, seconds)
         while time.monotonic() < end and rclpy.ok():
             rclpy.spin_once(self, timeout_sec=min(0.05, max(0.01, end - time.monotonic())))
+
+    def _on_tick(self, seconds: float):
+        if not rclpy.ok():   # 종료 신호 — 메뉴 루프를 끝낸다
+            raise SystemExit(0)
+        self.poll(seconds)
+
+    def _on_navigate(self, name: str):
+        page = self.screen(name)
+        return page.show() if page is not None else STAY
 
     def _wire(self):
         self.create_subscription(Odometry, '/odom', self.state.on_odom, 10)

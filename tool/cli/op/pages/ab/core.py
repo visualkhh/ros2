@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import signal
 import subprocess
@@ -17,6 +18,8 @@ import time
 from pathlib import Path
 
 import rclpy
+
+from ...bus import STOP_ALL, STOP_LEG
 
 AB_NODES = (
     ('rl_nav_controller', 'Nav2 FollowPath (RL vs inner controller)'),
@@ -29,9 +32,18 @@ BAG_DIR = TOOL_DIR / 'bags' / 'ab'
 STATE = Path.home() / '.cache' / 'robot_tool' / 'ab.json'
 RECORD_LOG = BAG_DIR / 'record.log'
 PLAN = Path(__file__).resolve().parent / NODE / 'command.json'
+ROUTE = BAG_DIR / 'route.json'  # TUI·RViz로 지정한 start·route — 있으면 command.json의 start·route보다 우선
 INNER = {1: 'DWB', 2: 'MPPI', 3: 'RPP', 4: 'RotationShim'}
 REASONS = {0: '', 1: '모델 없음/로드 실패', 2: 'enable=false', 3: '/scan 없음', 4: '추론 실패'}
 LEGACY_ACTIONS = ('status', 'on', 'off', 'record', 'stop', 'guide', 'history')
+
+class LegStopped(Exception):
+    """주행 중 s — 지금 구간(leg)만 멈추고 다음으로."""
+
+
+class AbortAll(Exception):
+    """주행 중 q — A/B 전체 중단."""
+
 
 # controller 출력 + 실제 움직임 + Nav2 계획/TF
 TOPICS = ('/cmd_vel_nav', '/cmd_vel', '/odometry/filtered', '/odom', '/imu',
@@ -261,7 +273,61 @@ class AbTest:
         data.setdefault('pause_between', False)
         data.setdefault('move_to_start', False)
         data.setdefault('return_to_start', False)
+        data['route_path'] = str(p)
+        if path is None and ROUTE.is_file():   # TUI·RViz로 지정한 경로가 command.json보다 우선
+            try:
+                raw = json.loads(ROUTE.read_text())
+                route = [self._pose(g, f'route.json route[{i}]') for i, g in enumerate(raw.get('route') or [])]
+                start = None if raw.get('start') is None else self._pose(raw['start'], 'route.json start')
+            except (ValueError, RuntimeError) as exc:
+                raise RuntimeError(f'route.json 읽기 실패: {ROUTE} ({exc}) — TUI 경로 편집에서 지우거나 다시 지정') from None
+            if not route:
+                raise RuntimeError(f'route.json에 goal이 없음: {ROUTE}')
+            data.update(start=start, route=route, route_path=str(ROUTE))
         return data
+
+    @staticmethod
+    def _pose(g, where: str) -> dict:
+        try:
+            x, y, yaw = float(g['x']), float(g['y']), float(g.get('yaw_deg', 0.0))
+        except (TypeError, ValueError, KeyError):
+            raise RuntimeError(f'{where}: x·y(숫자) 필요') from None
+        if not all(math.isfinite(v) for v in (x, y, yaw)):
+            raise RuntimeError(f'{where}: 유한한 숫자가 아님')
+        return {'x': x, 'y': y, 'yaw_deg': yaw}
+
+    def save_route(self, start: dict | None, route: list[dict]) -> Path:
+        """TUI·RViz로 지정한 경로 저장 → 이후 guide가 이걸 쓴다."""
+        ROUTE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = ROUTE.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'frame_id': 'map', 'start': start, 'route': route,
+                                   'saved': time.strftime('%Y-%m-%d %H:%M:%S')}, ensure_ascii=False, indent=1))
+        tmp.replace(ROUTE)
+        return ROUTE
+
+    def clear_route(self) -> bool:
+        """route.json 지우기 → command.json 기본 경로로."""
+        if ROUTE.is_file():
+            ROUTE.unlink()
+            return True
+        return False
+
+    def current_pose(self) -> dict:
+        """지금 로봇 map 자세 (amcl_pose) — TUI '지금 위치를 goal로' 등. 없으면 RuntimeError."""
+        if self.state.amcl is None:
+            raise RuntimeError('amcl_pose 없음 — Nav(지도 주행)가 떠 있고 초기 위치가 잡혔는지 확인')
+        x, y, th = self.state.amcl
+        return {'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(math.degrees(th), 1)}
+
+    def plan_summary(self, path: str | None = None) -> str:
+        try:
+            plan = self.load_plan(path)
+        except RuntimeError as exc:
+            return f'계획: 없음/오류 — {exc}'
+        start = (f'({plan["start"]["x"]:.2f}, {plan["start"]["y"]:.2f})' if plan.get('start') else '현재 자세')
+        src = ('route.json (TUI·RViz 지정)' if plan['route_path'] == str(ROUTE)
+               else f'{Path(plan["route_path"]).name} (기본)')
+        return f'경로: {src} · goal {len(plan["route"])}개 · {plan["repeats"]}회 · 시작 {start}'
 
     @staticmethod
     def _goal_xy(g: dict) -> tuple[float, float, float]:
@@ -269,7 +335,11 @@ class AbTest:
 
     def _nav_goal(self, g: dict, why: str) -> None:
         x, y, yaw = self._goal_xy(g)
-        rc = self.bus.send_goal(x, y, yaw, wait=True)
+        rc = self.bus.send_goal(x, y, yaw, wait=True, stop_keys=True)
+        if rc == STOP_LEG:
+            raise LegStopped(f'{why}: 사용자가 중지 (s)')
+        if rc == STOP_ALL:
+            raise AbortAll(f'{why}: 사용자가 전체 중단 (q)')
         if rc != 0:
             raise RuntimeError(f'{why}: ({x:.2f}, {y:.2f}) 주행 실패')
 
@@ -308,6 +378,9 @@ class AbTest:
                 print(f'A{r} RL 녹화: {rec["bag"]}')
                 try:
                     self._route(plan, f'A{r}')
+                except LegStopped as exc:
+                    print(f'중지: {exc} — 다음 단계로')
+                    ok_all = False
                 except RuntimeError as exc:
                     print(f'FAIL: {exc}', file=sys.stderr)
                     ok_all = False
@@ -345,6 +418,9 @@ class AbTest:
                 print(f'B{r} inner 녹화: {rec["bag"]}')
                 try:
                     self._route(plan, f'B{r}')
+                except LegStopped as exc:
+                    print(f'중지: {exc} — 다음 단계로')
+                    ok_all = False
                 except RuntimeError as exc:
                     print(f'FAIL: {exc}', file=sys.stderr)
                     ok_all = False
@@ -356,7 +432,7 @@ class AbTest:
                     raise RuntimeError(f'RL 복귀 실패: {msg}')
                 if not ok_all:
                     break
-        except (RuntimeError, OSError) as exc:
+        except (RuntimeError, OSError, AbortAll, LegStopped) as exc:   # q = AbortAll · 시작 이동 중 s = LegStopped
             print(f'FAIL: {exc}', file=sys.stderr)
             ok_all = False
         finally:
@@ -377,7 +453,7 @@ class AbTest:
             print('A/B bag을 찾지 못함 — 먼저 guide 또는 record로 녹화하세요', file=sys.stderr)
             return 1
         try:
-            from .report import generate_report
+            from .rl_nav_controller.report import generate_report
             start = route = None
             try:
                 plan = self.load_plan()

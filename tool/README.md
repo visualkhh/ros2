@@ -7,18 +7,29 @@
 tool/
 ├── README.md · MAP_NAV.md  # MAP_NAV = 지도 만들기 → 저장 → 주행 → 목표 순서
 ├── run-cli          # 메뉴 / 한 번 명령 (어디서나)
+├── setting-venv.sh  # tool/.venv 만들기 (처음 한 번) · requirements.txt
+├── requirements.txt # ROS 밖 Python 패키지 (PyYAML)
 ├── run-rviz         # RViz: 맵핑·주행 보기 (화면 있는 곳)
 ├── peers.sh         # 로봇이 아닌 곳에서 Pi DDS 노드를 유니캐스트로 찾게 (WiFi 멀티캐스트 불안정)
 ├── rviz/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── slam.rviz           # 지도·스캔·odom·TF·포즈 그래프 (Orbit 3D, 저장된 TopDown 2D)
-│   └── nav.rviz            # nav2 화면 (코스트맵·경로 · 2D Pose Estimate · 2D Goal Pose)
+│   ├── nav.rviz            # nav2 화면 (코스트맵·경로 · 2D Pose Estimate · 2D Goal Pose)
+│   └── ab.rviz             # nav.rviz와 같고 2D Goal Pose가 /ab/goal_pose (A/B 경로 지정 — 로봇 안 움직임)
 ├── cli/
 │   ├── start.sh · stop.sh · restart.sh
+│   ├── DEVELOP.md          # 개발자용 — TUI 구조 · 화면 흐름 규약 · 메뉴 추가 · 시험
 │   ├── robot_tool.py       # 배선 + argparse + main
-│   └── op/                 # terminal · dialogs · ui · state · procs(로컬/원격) · bus
+│   └── op/                 # 실제 구현
+│       ├── terminal · keys · defs · state · procs(로컬/원격) · bus
+│       ├── component.py    # Component — 화면 부품 최상위 부모 (focusable · on_key · activate)
+│       ├── window/         # Window — 상태바·메뉴 막대·중앙·힌트 조합 · 키 루프 · 신호 (키 규약)
+│       ├── menu_bar/       # MenuBar → LeftSideMenuBar · ChoiceItem
+│       ├── state_bar/      # State(칸) · StateBar · TopStateBar
+│       ├── dialog/         # Dialog 최상위 부모 + Input·Key·Pager·Busy·Teleop (한 파일에 한 클래스)
+│       ├── ui.py           # Ui — 창 진입점 · 터미널 모드 · ui.window
 │       └── pages/          # 화면 + nodes/ (노드별 상태 feature)
-├── cli-test/               # ROS 없이 CLI/메뉴 시험 (가짜 ROS)
+├── cli-test/               # ROS 없이 CLI/메뉴 시험 (가짜 ROS) · scenarios.py = pty 키 입력 시나리오
 └── .run/                   # (git 무시) 띄운 launch의 pid · 로그 · DDS 피어 프로필
 ```
 
@@ -37,6 +48,14 @@ tool/
 
 `ROS_DOMAIN_ID`는 **25로 통일** — `cli/start.sh`·`rviz/start.sh`가 `export ROS_DOMAIN_ID=25` (`~/.bashrc` 무관).
 
+## Python venv (처음 한 번)
+
+```bash
+./setting-venv.sh        # tool/.venv 만들고 requirements.txt 설치 (--system-site-packages — rclpy는 ROS 것을 그대로 봄)
+```
+
+`run-cli`·`run-cli-test`는 `tool/.venv`가 있으면 그 파이썬을, 없으면 시스템 `python3`을 씁니다. `.venv`는 git에 안 올립니다.
+
 ## CLI 테스트 (ROS 없이)
 
 ```bash
@@ -45,6 +64,7 @@ tool/
 ./run-cli-test node-status /controller_server   # RL/fallback 상태
 ./run-cli-test ab rl_nav_controller status      # A/B 상태
 ./run-cli-test menu
+python3 cli-test/scenarios.py      # pty 키 입력 시나리오 (ROS 불필요)
 ```
 
 가짜 ROS층(`cli-test/fake_ros.py`)으로 진짜 `robot_tool` 코드를 돌린다.
@@ -121,7 +141,7 @@ tool/
 CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
 로그: `./run-cli slam log` (어디서나 — 원격이면 SSH로 로봇의 `.run/slam.log`).
 
-메뉴 키 규약 (참고: `cli/op/dialogs.py` 맨 위):
+메뉴 키 규약 (참고: `cli/op/window/window.py` 맨 위):
 
 | 화면 | 키 |
 |---|---|

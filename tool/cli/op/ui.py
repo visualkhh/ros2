@@ -1,6 +1,6 @@
-"""화면 전부 — 4분할 프레임 + 방향키 선택 + 모달 입력.
+"""Ui — 터미널 모드 · 창(dialog) 띄우기 · print 가로채기. 화면 틀(조합·그리기·키 루프)은 self.window (op/window).
 
-term=Terminal, state=StateStore(상태바용), procs=Procs(상태바용), poll=ROS 콜백 돌리기.
+term=Terminal, state=StateStore(상태바용), procs=Procs(상태바용). ROS 폴링은 window 신호 'tick'으로 앱이 연결.
 """
 from __future__ import annotations
 
@@ -11,25 +11,21 @@ import signal
 import sys
 import time
 
-from .dialogs import Dialog, run_select, set_cbreak
-from .terminal import BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW, Terminal
+from .dialog import BusyDialog, InputDialog, KeyDialog, PagerDialog
+from .keys import KeyReader, set_cbreak
+from .terminal import CYAN, DIM, Terminal
+from .window import Window
 
 
 class Ui:
-    def __init__(self, term: Terminal, state, procs, poll):
+    def __init__(self, term: Terminal, state, procs):
         self.term = term
         self.procs = procs
         # 화면 그리기 전용 — capture()가 sys.stdout을 가로채도 UI는 여기로 쓴다
         self.term.out = self.console = sys.stdout
         self.state = state
-        self._poll = poll
-        self._sel_idx = 0
-        self._frame_size = None
         self._busy = None   # 지금 떠 있는 처리 중 창 (메뉴 항목 실행 동안)
-        self._title = None  # 마지막으로 그린 화면 제목 (창이 떠 있는 동안 상단 상태바만 다시 그리기용)
-        self._top_at = 0.0
-        self.center_fn = None   # 지금 메뉴의 center() — 창이 떠 있는 동안 중앙(가리지 않은 줄) 다시 그리기용
-        self._lw = None         # 마지막 프레임의 왼쪽 메뉴 폭
+        self.window = Window(self)  # 화면 틀 — 상태바·메뉴 막대·중앙·힌트 조합 · 키 루프 · 신호
         if hasattr(procs, 'on_wait'):
             procs.on_wait = self._remote_wait
         # 화면 아래에서 깜빡이는 실제 커서를 숨긴다 (입력은 다이얼로그의 '▏'로 표시).
@@ -141,10 +137,6 @@ class Ui:
             return current, False
         return (float(raw) if raw.strip() else current), True
 
-    def reset_selection(self) -> None:
-        """메뉴 진입 시 포커스 초기화 (항상 첫 항목)."""
-        self._sel_idx = 0
-
     def _erase_rect(self, left: int, top: int, w: int, h: int) -> None:
         """박스 잔상 지우기 (리사이즈 전 위치)."""
         blank = ' ' * w
@@ -154,56 +146,30 @@ class Ui:
 
     def modal_input(self, title: str, body: list[str], prompt: str,
                     default: str = '', validate=None) -> str | None:
-        """한 줄 입력 — Enter 확인 · Esc/◀ 취소(None). validate는 Dialog.input 참고."""
-        return Dialog(self, title, body).input(prompt, default, validate)
+        """한 줄 입력 — Enter 확인 · Esc/◀ 취소(None). validate는 InputDialog 참고."""
+        return InputDialog(self, title, body, prompt, default, validate).run()
 
     def busy(self, label: str) -> None:
         """누르자마자 '처리 중' 창 — 기다리지 않음 (원격 SSH·ROS 대기로 몇 초 걸려도 눌린 걸 알게)."""
         if not self.console.isatty():   # sys.stdout 아님 — 하위 메뉴 안에선 capture()가 바꿔치기해서 늘 False였음
             return
-        self._busy = Dialog(self, '처리 중…', [label, self.term.paint('요청을 보냈습니다. 결과가 나오면 창이 바뀝니다.', DIM), ''])
-        self._busy.draw('key')
+        self._busy = BusyDialog(self, label)
+        self._busy.draw()
 
     def step(self, text: str) -> None:
         """처리 중 창의 단계 줄 (예: '1/3 SLAM 켜는 중') — 여러 단계를 거치는 작업용. 메뉴 밖이면 무시."""
         dlg = self._busy
         if dlg is None:
             return
-        dlg.lines[3] = self.term.paint(f'▶ {text}', CYAN)
-        dlg.lines[4] = ''
-        dlg.draw('key')
+        dlg.step(self.term.paint(f'▶ {text}', CYAN))
 
     def tick(self, seconds: float, geom: tuple | None = None) -> None:
-        """창(결과·확인·입력)이 떠 있는 동안: ROS 폴링 + 상단 상태바·중앙 수치를 0.5초마다 갱신 (창 밑 화면이 멈춰 보이지 않게)."""
-        self._poll(seconds)
-        self.refresh_top(geom)
+        """창(결과·확인·입력)이 떠 있는 동안: ROS 폴링('tick' 신호) + 상단 상태바·중앙 수치를 0.5초마다 갱신 (창 밑 화면이 멈춰 보이지 않게)."""
+        self.window.emit('tick', seconds)
+        self.window.refresh_top(geom)
 
     def refresh_top(self, geom: tuple | None = None) -> None:
-        """상단 상태바 + 중앙에서 창(geom = left, top, w, h)에 가리지 않은 줄만 다시 그림 — 창은 건드리지 않음."""
-        cols, rows = self.term.size()
-        if self._title is None or self._frame_size != (cols, rows) or cols < 70 or rows < 18:
-            return   # 메뉴 화면을 아직 안 그렸거나 좁은 화면(세로 쌓기)
-        now = time.monotonic()
-        if now - self._top_at < 0.5:
-            return
-        self._top_at = now
-        top = self.top_lines(self._title, cols)
-        covered = range(geom[1], geom[1] + geom[3] + 1) if geom else range(0)
-        for i, ln in enumerate(top):
-            if i + 1 not in covered:
-                self.console.write(f'\033[{i + 1};1H\033[K' + self.term.fit(ln, cols))
-        if self.center_fn is not None and self._lw is not None:
-            try:
-                center = self.center_fn()
-            except Exception:   # 그리기 보조라 실패해도 창은 계속
-                center = []
-            cw = cols - self._lw - 4
-            body_h = max(1, rows - 1 - len(top) - 2)
-            for i, ln in enumerate(center[:body_h]):
-                row = len(top) + 1 + i
-                if row not in covered:
-                    self.console.write(f'\033[{row};{self._lw + 4}H' + self.term.fit(ln, cw))
-        self.console.flush()
+        self.window.refresh_top(geom)
 
     def progress(self, text: str) -> None:
         """처리 중 창 맨 아래 줄을 갱신 (오래 걸리는 단계가 지금 뭘 기다리는지). 메뉴 밖(명령줄)이면 무시."""
@@ -211,158 +177,30 @@ class Ui:
         if dlg is None:
             return
         spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[int(time.monotonic() * 4) % 10]
-        dlg.lines[4] = self.term.paint(f'{spin} {text}', DIM)
         self.refresh_top(dlg._geom)   # 상태바 먼저 → 창이 위에 (겹치는 줄이 있어도 창이 이김)
-        dlg.draw('key')
+        dlg.progress(self.term.paint(f'{spin} {text}', DIM))
 
     def _remote_wait(self, elapsed: float) -> None:
         """SSH로 로봇에서 실행되는 동안 (로봇 run-cli는 ~8초 걸림)."""
         self.progress(f'로봇({self.procs.host})에서 실행 중 … {elapsed:.0f}초 (보통 8~15초)')
 
+    def poll_key(self) -> str | None:
+        """오래 걸리는 작업 중 눌린 키 하나 — 기다리지 않음 (없으면 None). TTY가 아니면(명령줄·파이프) 늘 None.
+        예: A/B 자동 주행 중 s(이 leg 중지)·q(전체 중단)."""
+        if not (self.console.isatty() and sys.stdin.isatty()):
+            return None
+        with KeyReader(self.term, flush=False) as keys:
+            return keys.read(0)
+
     def modal_key(self, title: str, body: list[str]) -> str | None:
         """단일 키 확인 — Enter='enter' · Esc/◀=None · 문자 그대로."""
-        return Dialog(self, title, body).key()
+        return KeyDialog(self, title, body).run()
 
     def pager(self, title: str, text: str) -> str:
         """결과 페이저 — ↑↓ 스크롤 · Enter/Esc/◀ 닫기 (메뉴·종료 이동 없음)."""
-        return Dialog(self, title, text.splitlines() or ['(출력 없음)']).pager()
+        return PagerDialog(self, title, text.splitlines()).run()
 
     def select(self, title: str, items: list[tuple[str, str]], center: list[str],
-                   back: bool = True, main: bool = True,
-                   timeout: float | None = None) -> str:
-        """메뉴 선택 — 키 규약은 dialogs.py docstring."""
-        return run_select(self, title, items, center, back, main, timeout)
-
-    def draw(self, title: str, left: list[str], center: list[str],
-                 back: bool = True, main: bool = True, poll: bool = True, focus: int | None = None):
-        """4분할 화면: 상단 타이틀+상태바 고정 · 왼쪽 메뉴 · 중앙 내용 · 하단 힌트+입력.
-
-        터미널 크기에 맞춰 다시 계산하므로 창을 늘리면 다음 그리기부터 넓어진다.
-        폭이 좁으면(<70) 세로로 쌓는다.
-        전체 지우기 없이 커서를 맨 위로 옮겨 제자리에서 다시 그려 깜빡이지 않는다
-        (처음·크기 변경 때만 전체 지우기).
-        poll=False면 ROS 폴링을 건너뛴다 (방향키 연속 입력 때 0.3초 지연 방지).
-        focus: 왼쪽 메뉴에서 고른 줄 — 메뉴가 화면보다 길면 그 줄이 보이게 위아래로 스크롤한다.
-        """
-        if poll:
-            self._poll(0.3)
-        self._title = title
-        cols, rows = self.term.size()
-        size = (cols, rows)
-        if cols < 70 or rows < 18:
-            self.term.clear()
-            for line in self.top_lines(title, cols):
-                self.console.write(self.term.fit(line, cols) + '\n')
-            for line in left:
-                self.console.write(self.term.fit(line, cols) + '\n')
-            for line in center:
-                self.console.write(self.term.fit(line, cols) + '\n')
-            self.console.write('-' * cols + '\n')
-            self.console.write(self.term.fit(self.hints_line(back=back, main=main), cols) + '\n')
-            self.console.flush()
-            self._frame_size = size
-            return
-        if self._frame_size != size:
-            self.term.clear()
-            self._frame_size = size
-        else:
-            self.console.write('\033[H')
-            self.console.flush()
-        top = [self.term.fit(ln, cols) for ln in self.top_lines(title, cols)]
-        # 왼쪽(메뉴) 폭은 라벨에 맞춘다 — 최소 24, 최대 화면 절반
-        lw = max(24, min(cols // 2, max([self.term.disp_len(l) for l in left] + [0]) + 1))
-        cw = cols - lw - 4
-        self._lw = lw
-        body_h = max(1, rows - 1 - len(top) - 2)
-        left_lines = list(left)
-        center_lines = list(center)
-        if len(left_lines) > body_h:
-            left_lines = self._scroll(left_lines, body_h, focus)
-        if len(center_lines) > body_h:
-            center_lines = center_lines[:body_h - 1] + [f' … 외 {len(center_lines) - body_h + 1}줄']
-        frame = list(top)
-        for i in range(body_h):
-            l = self.term.fit(left_lines[i] if i < len(left_lines) else '', lw)
-            c = self.term.fit(center_lines[i] if i < len(center_lines) else '', cw)
-            frame.append(f' {l}| {c}')
-        frame.append('-' * cols)
-        frame.append(self.term.fit(self.hints_line(back=back, main=main), cols))
-        # 항상 rows-1줄로 정규화 → 짧아진 프레임의 남은 줄 흔적이 남지 않는다.
-        if len(frame) > rows - 1:
-            frame = frame[:rows - 1]
-        else:
-            frame += [''] * (rows - 1 - len(frame))
-        for ln in frame:
-            self.console.write('\033[K' + ln if ln else '\033[K')
-            self.console.write('\n')
-        self.console.flush()
-
-    @staticmethod
-    def _scroll(lines: list[str], height: int, focus: int | None) -> list[str]:
-        """height줄 창으로 자르기 — focus 줄이 창 안에 오게, 잘린 쪽은 '↑ 위 N줄'·'↓ 아래 N줄'로 표시."""
-        if height < 3:
-            return lines[:height]
-        f = 0 if focus is None else max(0, min(focus, len(lines) - 1))
-        room = height - 2  # 위·아래 표시 줄 자리
-        start = max(0, min(f - room // 2, len(lines) - room))
-        view = lines[start:start + room]
-        above, below = start, len(lines) - start - len(view)
-        return ([f'  ↑ 위 {above}줄' if above else ''] + view +
-                [f'  ↓ 아래 {below}줄 (↓로 내리기)' if below else ''])
-
-    def hints_line(self, back: bool = True, main: bool = True) -> str:
-        """하단 고정 키 안내 — 모든 메뉴 공통 (최상위면 뒤로·메인 없음)."""
-        hints = ['↑↓ 이동', 'Enter 실행', '번호 포커스']
-        if back:
-            hints.append('Esc/◀ 뒤로')
-        if main:
-            hints.append('m 메인')
-        hints += ['r 새로고침', 'q 종료']
-        return '  ' + ' · '.join(hints)
-
-    def top_lines(self, title: str, width: int = 64) -> list[str]:
-        """상단 고정 영역: 타이틀 3 + 상태바 2 + 구분선 1."""
-        from .procs import SERVICES
-        bold = BOLD if self.term.color else ''
-        reset = RESET if self.term.color else ''
-        lines = [
-            f'{bold}{"=" * width}{reset}',
-            f'{bold}  Robot Tool  ·  {title}{reset}',
-            f'{bold}{"=" * width}{reset}',
-        ]
-        procs = []
-        for name, svc in SERVICES.items():
-            on = self.procs.running(name)
-            procs.append(self.term.paint(f'{svc.label} {"ON" if on else "off"}',
-                                         GREEN + BOLD if on else DIM))
-        lines.append('  ' + ' | '.join(procs))
-        st = self.state
-
-        def dot(rate, label):
-            age = rate.age()
-            if age is None:
-                return self.term.paint(f'{label} ✗', RED)
-            if age > 3.0:
-                return self.term.paint(f'{label} {age:.0f}s', YELLOW)
-            return self.term.paint(f'{label} {rate.hz():.0f}Hz', GREEN)
-
-        map_txt = dot(st.map, 'map')
-        name = (st.st_map or '').strip()
-        if name == '(SLAM 작성 중)':
-            name = 'SLAM'
-        if name:
-            if len(name) > 20:
-                name = name[:19] + '…'
-            map_txt += ' ' + self.term.paint(name, DIM)
-        lines.append(f'  {dot(st.odom, "odom")} | {dot(st.scan, "scan")} | {map_txt}'
-                     + (f' | 목표 {st.goal_status}' if st.goal_status else ''))
-        # 로봇(OpenCR) 상태: opencr_driver의 /diagnostics — 연결·모터 에러·온도·전류
-        level, summary = st.robot_parts()
-        color = {0: GREEN, 1: YELLOW, 2: RED + BOLD}.get(level, YELLOW)
-        mark = {0: '●', 1: '▲', 2: '✗'}.get(level, '?')
-        hint = ' → 상태 메뉴 2) 모터 재부팅' if level == 2 and 'motor error' in st.robot_msg else ''
-        lines.append(f'  {self.term.paint(f"로봇 {mark} {summary}{hint}", color)}')
-        dom_color = RED + BOLD if st.st_estop else (YELLOW if st.st_control is None else CYAN)
-        lines.append(f'  {self.term.paint(st.domain_txt(), dom_color)}')
-        lines.append('-' * width)
-        return lines
+               back: bool = True, main: bool = True, timeout: float | None = None) -> str:
+        """(key, label) 고르기 — Window.select (키 규약은 op/window/window.py docstring)."""
+        return self.window.select(title, items, center, back, main, timeout)

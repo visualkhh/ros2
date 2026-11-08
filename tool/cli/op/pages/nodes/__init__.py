@@ -249,7 +249,7 @@ class NodeParamMenu(Menu):
         rows = self._fetch()
         lines = [f'[노드] {full}', ' ↑↓ 선택 → 오른쪽 상세 · Enter 수정 · 1초 갱신', '']
         if rows:
-            idx = max(0, min(getattr(self.ui, '_sel_idx', 0), len(rows) - 1))
+            idx = max(0, min(self.ui.window.menu_bar.idx, len(rows) - 1))   # 포커스된 항목
             n, v, d = rows[idx]
             ptype = getattr(d, 'type', None)
             lines.append('[선택한 파라미터]')
