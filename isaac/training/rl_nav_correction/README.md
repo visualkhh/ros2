@@ -60,8 +60,8 @@ python3 training/rl_nav_correction/calibration/report.py artifacts/rl_nav_correc
 ```
 
 - **계획 JSON 만들기** (로봇 쪽 재생기가 읽는 파일 — sim과 같은 명령): `./run-calibration.sh rl_nav_correction --robot plan --out wheel_square.json`
-  (`calibration/command.py`의 CalibrationCommand를 20 Hz로 펼친 `{dt, label, steps[[v, w]...]}` — 로봇의 `tool/calibration/wheel_square.json`이 이걸로 만든 것. `--speed --turn --side`로 다른 경로)
-- real = PC가 sim과 같은 네모 명령을 계획(JSON)으로 만들어 `bee@bee.local`로 보내고, 로봇의 `./run-cli calibrate wheel`(Lv2_bee_Assignment `tool/` · 메뉴 13 → 바퀴)가 수동 경로 `/cmd/manual/cmd_vel`로 재생하며 `/odom` · `/imu` · `/joint_states` · `/cmd_vel`을 기록한 `raw.csv`를 PC가 가져옵니다. 수동 경로는 `rl_nav_correction`을 건너뛰므로 보정 없는 순수 응답입니다.
+  (`calibration/command.py`의 CalibrationCommand를 20 Hz로 펼친 `{dt, label, steps[[v, w]...]}` — 로봇의 `tools/calibration/wheel_square.json`이 이걸로 만든 것. `--speed --turn --side`로 다른 경로)
+- real = PC가 sim과 같은 네모 명령을 계획(JSON)으로 만들어 `bee@bee.local`로 보내고, 로봇의 `./run-cli calibrate wheel`(Lv2_bee_Assignment `tools/` · 메뉴 13 → 바퀴)가 수동 경로 `/cmd/manual/cmd_vel`로 재생하며 `/odom` · `/imu` · `/joint_states` · `/cmd_vel`을 기록한 `raw.csv`를 PC가 가져옵니다. 수동 경로는 `rl_nav_correction`을 건너뛰므로 보정 없는 순수 응답입니다.
 - 준비: 로봇에서 bringup · `./run-cli mode manual` · 사방 약 1.5 m 비움 (팔이 시작 자세가 아니면 로봇이 재생 전에 자동으로 보냄). 멈추려면 Ctrl+C 또는 `./run-cli estop on`.
 - 환경변수: `BEE_HOST`(기본 bee@bee.local) · `BEE_TOOL`(로봇의 tool 폴더) · `BEE_ENV`(로봇 ROS 환경 — 기본 도메인 88 · 로컬 DDS).
 

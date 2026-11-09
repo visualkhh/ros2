@@ -79,8 +79,8 @@ sudo apt install -y \
 
 | 패키지 | 쓰는 곳 |
 |---|---|
-| `cartographer` (코어+ROS 래퍼, 소스 빌드) | `tool/run-cli slam start` (지도 만들기) — apt 없음, 아래 "apt에 없는 것" 참조 |
-| `nav2-bringup` · `nav2-amcl` · `nav2-map-server` | `tool/run-cli nav start` · `explore start` · `map save` (bringup의 launch 파일을 그대로 씀 → 빼면 안 됨) |
+| `cartographer` (코어+ROS 래퍼, 소스 빌드) | `tools/run-cli slam start` (지도 만들기) — apt 없음, 아래 "apt에 없는 것" 참조 |
+| `nav2-bringup` · `nav2-amcl` · `nav2-map-server` | `tools/run-cli nav start` · `explore start` · `map save` (bringup의 launch 파일을 그대로 씀 → 빼면 안 됨) |
 | `robot-state-publisher` | 로봇 TF (`base_link → 라이다`) |
 | `teleop-twist-keyboard` · `tf2-tools` | 수동 조종 · `view_frames` 디버그 |
 | `turtlebot3-msgs` · `dynamixel-sdk` | 베이스 드라이버(OpenCR) 작업용 |
@@ -164,7 +164,7 @@ source install/setup.bash
 ```
 
 갱신 흐름: PC에서 고치고 push → Pi에서 `cd ~/ros2 && git pull` →
-`ros2_ws`를 바꿨으면 다시 `colcon build`, `tool/`만 바꿨으면 빌드 불필요,
+`ros2_ws`를 바꿨으면 다시 `colcon build`, `tools/`만 바꿨으면 빌드 불필요,
 `firmware/`를 바꿨으면 [OpenCR 문서](../../opencr/opencr-setup-ubuntu26.04.md)의 compile·upload.
 
 ### 4-1. 소스로 받거나 직접 빌드하는 것 (전체 목록)
@@ -204,7 +204,7 @@ apt로 안 되는 것만 모음. 받는 위치·버전은 저장소 파일에 �
   `explore-nav.launch.py`는 PC에서 안 뜸 — Pi 전용.
 
 **PC 추가분** (RViz로 보기·시험): `ros-lyrical-desktop` 또는 `ros-lyrical-rviz2` + 위 2장 목록.
-PC 셸도 `ROS_DOMAIN_ID=25`여야 Pi가 보입니다 (`tool/run-rviz`는 자동으로 25).
+PC 셸도 `ROS_DOMAIN_ID=25`여야 Pi가 보입니다 (`tools/run-rviz`는 자동으로 25).
 
 ## 5. 검증
 
@@ -226,8 +226,8 @@ ros2 topic echo /chatter
 ```
 
 **사내 WiFi는 멀티캐스트를 버려서 자동 탐색이 불안정** (ping은 되는데 노드가 안 보이거나 보였다 사라짐 — 2026-10-27 실측).
-PC 쪽에서 Pi를 유니캐스트로 직접 찾게 하면 해결 (한쪽만 지정해도 양방향): `tool/peers.sh`가 Fast DDS 프로필을 만들어
-Pi IP의 참가자 슬롯 0~31을 찾게 함 — `run-cli`·`run-rviz`는 자동, 터미널에선 `export ROS_DOMAIN_ID=25 && source tool/peers.sh`.
+PC 쪽에서 Pi를 유니캐스트로 직접 찾게 하면 해결 (한쪽만 지정해도 양방향): `tools/peers.sh`가 Fast DDS 프로필을 만들어
+Pi IP의 참가자 슬롯 0~31을 찾게 함 — `run-cli`·`run-rviz`는 자동, 터미널에선 `export ROS_DOMAIN_ID=25 && source tools/peers.sh`.
 (`ROS_STATIC_PEERS`는 슬롯 0~3만 찾아서 Pi에 노드가 많으면 일부가 안 보임)
 
 그래도 안 보이면: 같은 WiFi인지 · 양쪽 `ROS_DOMAIN_ID=25` · `ROS_AUTOMATIC_DISCOVERY_RANGE`가 `LOCALHOST`가 아닌지 ·

@@ -74,7 +74,7 @@ ros_env() {
   source /opt/ros/lyrical/setup.bash
   export ROS_DOMAIN_ID=25
   export ROS_AUTOMATIC_DISCOVERY_RANGE="${ROS_AUTOMATIC_DISCOVERY_RANGE:-SUBNET}"
-  source "$REPO/tool/peers.sh"
+  source "$REPO/tools/peers.sh"
   set -u
 }
 

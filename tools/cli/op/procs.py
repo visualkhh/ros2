@@ -1,0 +1,513 @@
+"""Procs — tool이 직접 띄우는 launch 프로세스 관리 (start/stop/상태/로그).
+
+tool이 `ros2 launch`를 자기 세션(setsid)으로
+띄우고 pid를 tools/.run/<이름>.pid 에 적는다. 끌 때는 프로세스 그룹 전체에
+SIGINT → (10초) SIGTERM → (3초) SIGKILL. 로그는 tools/.run/<이름>.log.
+
+CLI를 껐다 켜도 pid 파일로 다시 찾으므로 SLAM·Nav는 계속 돈다.
+"""
+from __future__ import annotations
+
+import os
+import shlex
+import socket
+import signal
+import subprocess
+import time
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+
+TOOL_DIR = Path(__file__).resolve().parents[2]          # tools/
+REPO_DIR = TOOL_DIR.parent                               # ros2/
+WS_DIR = REPO_DIR / 'ros2_ws'
+RUN_DIR = TOOL_DIR / '.run'
+MAP_DIR = Path(os.environ.get('TOOL_MAP_DIR', WS_DIR / 'map'))
+
+
+def _default_nav_params() -> Path:
+    """Nav2 파라미터 기본값 — tb3_bringup 패키지 share/config (설치 전이면 src)."""
+    env = os.environ.get('TOOL_NAV_PARAMS')
+    if env:
+        return Path(env)
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        p = Path(get_package_share_directory('tb3_bringup')) / 'config' / 'nav2_params.yaml'
+        if p.exists():
+            return p
+    except Exception:
+        pass
+    return WS_DIR / 'src' / 'tb3_bringup' / 'config' / 'nav2_params.yaml'
+
+
+NAV_PARAMS = _default_nav_params()
+# 베이스(바퀴·odom·라이다) bringup.
+BASE_CMD = os.environ.get('TOOL_BASE_CMD', 'ros2 launch tb3_bringup tb-only.launch.py')
+SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')
+# 베이스·SLAM·Nav 프로세스와 지도 파일은 로봇(Pi)에 있어야 한다. 로봇이 아닌 곳에서 run-cli를 쓰면
+# RemoteProcs가 켜기/끄기·지도 저장/목록·로그를 SSH로 로봇의 run-cli에 넘기고, 켜짐 여부는 ROS 노드 그래프로 본다
+# (그래서 토픽이 보이는 곳 어디서나 같은 CLI). PC 시뮬레이션(로컬에 띄우기)은 TOOL_LOCAL=1.
+ROBOT_HOST = os.environ.get('ROBOT_HOST', 'pak.local')
+ROBOT_TOOL_DIR = os.environ.get('TOOL_ROBOT_DIR', '~/ros2/tool')   # 로봇의 tool 위치
+ROBOT_REPO_DIR = os.environ.get('TOOL_ROBOT_REPO', '~/ros2')        # 로봇의 저장소 루트
+ROBOT_SSH = os.environ.get('TOOL_ROBOT_SSH', f'pak@{ROBOT_HOST}')   # SSH 대상 (키 인증 필요)
+IS_ROBOT = socket.gethostname() == ROBOT_HOST.removesuffix('.local') or os.environ.get('TOOL_LOCAL') == '1'
+# run-cli build — Pi 4 메모리: 기본 2개, CMake 4.x 정책 옵션 (setup/pi/build.sh와 같은 값)
+BUILD_WORKERS = os.environ.get('TOOL_BUILD_WORKERS', '2')
+BUILD_POLICY_MIN = os.environ.get('TOOL_CMAKE_POLICY_MIN', '3.5')
+ROS_SETUP = os.environ.get('TOOL_ROS_SETUP', '/opt/ros/lyrical/setup.bash')
+
+
+@dataclass
+class Service:
+    name: str
+    label: str
+    desc: str
+    conflicts: tuple[str, ...] = ()
+
+    def command(self, map_yaml: str | None = None,
+                params_file: Path | str | None = None) -> list[str]:
+        if self.name == 'base':
+            return shlex.split(BASE_CMD)
+        if self.name == 'slam':
+            return ['ros2', 'launch', 'tb3_bringup', 'cartographer.launch.py',
+                    f'use_sim_time:={SIM}']
+        if self.name == 'nav':
+            if not map_yaml:
+                raise ValueError('nav는 지도(map.yaml)가 필요합니다')
+            return ['ros2', 'launch', 'nav2_bringup', 'bringup_launch.py',
+                    f'map:={map_yaml}', f'params_file:={params_file or NAV_PARAMS}',
+                    f'use_sim_time:={SIM}', 'autostart:=true']
+        if self.name == 'explore':
+            # SLAM이 /map·map→odom을 내는 중에 Nav2 주행만 (지도 없이, amcl 없이) + lifecycle_manager
+            return ['ros2', 'launch', 'tb3_bringup', 'explore-nav.launch.py',
+                    f'params_file:={NAV_PARAMS}', f'use_sim_time:={SIM}']
+        raise ValueError(self.name)
+
+
+SERVICES: dict[str, Service] = {s.name: s for s in (
+    Service('base', '베이스', '바퀴·odom·라이다 bringup (TOOL_BASE_CMD)'),
+    Service('slam', 'SLAM 맵핑', 'cartographer (tb3_bringup cartographer.launch) — /map 생성', ('nav',)),
+    Service('nav', 'Nav (지도 주행)', 'nav2 bringup — map_server + amcl + 주행', ('slam', 'explore')),
+    Service('explore', 'SLAM 중 Nav', 'nav2 navigation만 — SLAM 지도 위 목표 주행', ('nav',)),
+)}
+
+
+class Procs:
+    def __init__(self):
+        RUN_DIR.mkdir(parents=True, exist_ok=True)
+        self.map_dir_txt = str(MAP_DIR)   # 화면 표시용 (원격이면 로봇:경로)
+
+    # ------------------------------------------------------------ pid 파일
+    @staticmethod
+    def _pidfile(name: str) -> Path:
+        return RUN_DIR / f'{name}.pid'
+
+    @staticmethod
+    def logfile(name: str) -> Path:
+        return RUN_DIR / f'{name}.log'
+
+    def pid(self, name: str) -> int | None:
+        """살아 있는 launch pid · 없거나 죽었으면 None (죽은 pid 파일은 지운다)."""
+        f = self._pidfile(name)
+        try:
+            pid = int(f.read_text().split()[0])
+        except (OSError, ValueError, IndexError):
+            return None
+        try:
+            os.kill(pid, 0)
+            cmd = Path(f'/proc/{pid}/cmdline').read_bytes()
+        except (OSError, ProcessLookupError):
+            f.unlink(missing_ok=True)
+            return None
+        if b'ros2' not in cmd and b'launch' not in cmd:
+            f.unlink(missing_ok=True)  # pid 재사용 — 다른 프로세스
+            return None
+        return pid
+
+    def running(self, name: str) -> bool:
+        return self.pid(name) is not None
+
+    def info(self, name: str) -> str:
+        """pid 파일 두 번째 줄 = 시작 때 남긴 메모 (예: 지도 경로)."""
+        try:
+            lines = self._pidfile(name).read_text().splitlines()
+            return lines[1] if len(lines) > 1 else ''
+        except OSError:
+            return ''
+
+    def model_info(self, name: str) -> str:
+        """pid 파일 세 번째 줄 = 시작 때 쓴 RL 모델 경로 (nav만)."""
+        try:
+            lines = self._pidfile(name).read_text().splitlines()
+            return lines[2] if len(lines) > 2 else ''
+        except OSError:
+            return ''
+
+    def uptime(self, name: str) -> float | None:
+        try:
+            return time.time() - self._pidfile(name).stat().st_mtime if self.running(name) else None
+        except OSError:
+            return None
+
+    # ------------------------------------------------------------ start/stop
+    @staticmethod
+    def nav_params_with_model(model_path: str) -> Path:
+        """NAV_PARAMS 사본에 FollowPath.model_path + enable=true를 넣어 임시 파일로.
+
+        rl_nav_controller는 configure() 때만 모델을 읽으므로, 실행 중 ros2 param set으로는
+        바꿀 수 없다 — nav를 띄울 때 params_file로 넘겨야 한다.
+        """
+        import yaml
+        model = Path(model_path).expanduser().resolve()
+        if not model.is_file():
+            raise ValueError(f'모델 파일 없음: {model}')
+        src = Path(NAV_PARAMS).expanduser()
+        if not src.is_file():
+            raise ValueError(f'Nav2 파라미터 파일 없음: {src}')
+        data = yaml.safe_load(src.read_text()) or {}
+        try:
+            follow = data['controller_server']['ros__parameters']['FollowPath']
+        except (KeyError, TypeError) as exc:
+            raise ValueError(f'controller_server.FollowPath 설정이 없음: {src}') from exc
+        follow['model_path'] = str(model)
+        follow['enable'] = True
+        RUN_DIR.mkdir(parents=True, exist_ok=True)
+        out = RUN_DIR / f'nav_params_rl_{time.strftime("%Y%m%d_%H%M%S")}.yaml'
+        out.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+        return out
+
+    def start(self, name: str, map_yaml: str | None = None,
+              model_path: str | None = None) -> tuple[bool, str]:
+        svc = SERVICES[name]
+        if self.running(name):
+            return False, f'{svc.label}: 이미 실행 중 (pid {self.pid(name)})'
+        busy = [c for c in svc.conflicts if self.running(c)]
+        stopped = []
+        for c in busy:
+            self.stop(c)
+            stopped.append(SERVICES[c].label)
+        params_file = None
+        if name == 'nav' and model_path:
+            try:
+                params_file = self.nav_params_with_model(model_path)
+            except (OSError, ValueError) as exc:
+                return False, f'{svc.label}: RL 모델 설정 실패 — {exc}'
+        try:
+            cmd = svc.command(map_yaml, params_file)
+        except ValueError as exc:
+            return False, f'{svc.label}: {exc}'
+        log = open(self.logfile(name), 'w')
+        log.write(f'$ {shlex.join(cmd)}\n')
+        log.flush()
+        p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                             start_new_session=True, cwd=str(WS_DIR if WS_DIR.is_dir() else TOOL_DIR))
+        self._pidfile(name).write_text(f'{p.pid}\n{map_yaml or ""}\n{model_path or ""}\n')
+        time.sleep(1.5)  # 바로 죽는 경우(패키지 없음·파라미터 오류) 잡기
+        if p.poll() is not None:
+            self._pidfile(name).unlink(missing_ok=True)
+            return False, f'{svc.label}: 시작 직후 종료 (code {p.returncode}) — 로그: {self.logfile(name)}\n' \
+                          + self.tail(name, 15)
+        auto = f'({" · ".join(stopped)} 자동 정지 →) ' if stopped else ''
+        return True, f'{auto}{svc.label}: 시작 (pid {p.pid}) · 로그 {self.logfile(name)}'
+
+    def stop(self, name: str, timeout: float = 10.0) -> tuple[bool, str]:
+        svc = SERVICES[name]
+        pid = self.pid(name)
+        if pid is None:
+            return True, f'{svc.label}: 실행 중 아님'
+        for sig, wait in ((signal.SIGINT, timeout), (signal.SIGTERM, 3.0), (signal.SIGKILL, 1.0)):
+            try:
+                os.killpg(pid, sig)
+            except ProcessLookupError:
+                break
+            end = time.monotonic() + wait
+            while time.monotonic() < end and self._group_alive(pid):
+                time.sleep(0.2)
+            if not self._group_alive(pid):
+                break
+        self._pidfile(name).unlink(missing_ok=True)
+        return True, f'{svc.label}: 종료 (pid {pid})'
+
+    def restart(self, name: str) -> tuple[bool, str]:
+        info = self.info(name) or None   # nav: 같은 지도로
+        model = self.model_info(name) or None   # nav: 같은 RL 모델로
+        _, msg = self.stop(name)
+        ok, msg2 = self.start(name, info, model)
+        return ok, f'{msg}\n{msg2}'
+
+    def restart_all(self) -> tuple[bool, str]:
+        """켜져 있던 서비스만 같은 순서로 전부 재시작 (nav는 같은 지도·모델로)."""
+        running = [n for n in SERVICES if self.running(n)]
+        if not running:
+            return False, '실행 중인 서비스 없음'
+        info = {n: (self.info(n) or None, self.model_info(n) or None) for n in running}
+        msgs = []
+        for n in reversed(running):
+            msgs.append(self.stop(n)[1])
+        for n in running:
+            ok, m = self.start(n, info[n][0], info[n][1])
+            msgs.append(m)
+            if not ok:
+                return False, '\n'.join(msgs)
+        return True, '\n'.join(msgs)
+
+    # ------------------------------------------------------------ 빌드 (run-cli build)
+    def build(self, extra: list[str] | None = None, full: bool = False) -> int:
+        """colcon build. full=True면 setup/pi/build.sh (vcs import·패치·rosdep 포함)."""
+        extra = list(extra or [])
+        if full:
+            cmd = [str(REPO_DIR / 'setup' / 'pi' / 'build.sh'), *extra]
+            cwd = REPO_DIR
+        else:
+            cmd = ['colcon', 'build', '--symlink-install', '--parallel-workers', BUILD_WORKERS,
+                   *extra,
+                   '--cmake-args', f'-DCMAKE_POLICY_VERSION_MINIMUM={BUILD_POLICY_MIN}']
+            cwd = WS_DIR
+        print(f'$ {shlex.join(cmd)}')
+        return subprocess.call(cmd, cwd=str(cwd))
+
+    # ------------------------------------------------------------ 개별 노드 (op/pages/nodes/core.py · 로봇에서만)
+    def node_pids(self, name: str) -> list[tuple[int, list[str]]]:
+        from .pages.nodes.core import find_node_procs
+        return find_node_procs(name)
+
+    def node_kill(self, name: str, force: bool = False) -> tuple[bool, str]:
+        from .pages.nodes.core import node_kill
+        return node_kill(name, force=force)
+
+    def node_restart(self, name: str, force: bool = False) -> tuple[bool, str]:
+        from .pages.nodes.core import node_restart
+        return node_restart(name, force=force)
+
+    def node_cleanup(self) -> str:
+        """stop용 — 재시작 추적 노드 전부 종료."""
+        from .pages.nodes.core import cleanup_tracked
+        return cleanup_tracked()
+
+    @staticmethod
+    def _group_alive(pgid: int) -> bool:
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    def tail(self, name: str, n: int = 40) -> str:
+        try:
+            lines = self.logfile(name).read_text(errors='replace').splitlines()
+        except OSError:
+            return '(로그 없음)'
+        return '\n'.join(lines[-n:])
+
+    # ------------------------------------------------------------ 지도 파일
+    @staticmethod
+    def maps() -> list[tuple[str, Path]]:
+        """MAP_DIR/<이름>/map.yaml 목록 (최신 먼저)."""
+        if not MAP_DIR.is_dir():
+            return []
+        found = [(d.name, d / 'map.yaml') for d in MAP_DIR.iterdir() if (d / 'map.yaml').is_file()]
+        return sorted(found, key=lambda x: x[1].stat().st_mtime, reverse=True)
+
+    @staticmethod
+    def read_map(path) -> str:
+        return Path(path).read_text(errors='replace')
+
+    @staticmethod
+    def resolve_map(name_or_path: str | None) -> Path | None:
+        """지도 이름·폴더·yaml 경로 → map.yaml. None이면 가장 최근 지도."""
+        if not name_or_path:
+            maps = Procs.maps()
+            return maps[0][1] if maps else None
+        p = Path(name_or_path).expanduser()
+        for cand in (p, p / 'map.yaml', MAP_DIR / name_or_path / 'map.yaml'):
+            if cand.is_file() and cand.suffix == '.yaml':
+                return cand.resolve()
+        return None
+
+    @staticmethod
+    def save_map(name: str) -> tuple[bool, str]:
+        """지금 /map을 MAP_DIR/<name>/map.{pgm,yaml}로 저장 (nav2 map_saver_cli)."""
+        out = MAP_DIR / name
+        out.mkdir(parents=True, exist_ok=True)
+        cmd = ['ros2', 'run', 'nav2_map_server', 'map_saver_cli', '-f', str(out / 'map'),
+               '--ros-args', '-p', 'save_map_timeout:=10.0']
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=40)
+        except subprocess.TimeoutExpired:
+            return False, '시간 초과 — /map이 발행되고 있는지 확인 (SLAM 실행 중?)'
+        text = (r.stdout + r.stderr).strip()
+        ok = r.returncode == 0 and (out / 'map.yaml').is_file()
+        if not ok and not any(out.iterdir()):
+            out.rmdir()
+        return ok, (f'저장: {out}/map.yaml · map.pgm' if ok else '저장 실패') + '\n' + text[-1500:]
+
+
+# 켜짐 판단에 쓰는 노드 (ROS 그래프 — 연결된 곳 어디서나 보임)
+MARKER_NODES = {'base': ('opencr_driver',), 'slam': ('cartographer_node',),
+                'nav': ('amcl',)}   # explore는 running()이 따로 (bt_navigator 있고 amcl 없음)
+
+
+class RemoteProcs(Procs):
+    """로봇이 아닌 곳: 켜기/끄기·지도·로그는 SSH로 로봇의 run-cli에, 켜짐 여부는 노드 그래프로."""
+
+    def __init__(self, node):
+        super().__init__()
+        self.node = node
+        self.host = ROBOT_HOST
+        self.map_dir_txt = f'{ROBOT_HOST}:{ROBOT_TOOL_DIR}/../ros2_ws/map'
+        self._maps: tuple[float, list] = (0.0, [])
+        self._discovered = False
+        self.on_wait = None   # (경과 초) → 화면 갱신 — Ui가 연결
+
+    def _ssh(self, remote_cmd: str, timeout: float = 120) -> tuple[int, str]:
+        cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ROBOT_SSH, remote_cmd]
+        r = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        t0 = time.monotonic()
+        while True:   # 로봇 쪽 run-cli는 rclpy 띄우느라 ~8초 — 그동안 경과 시간을 보여줌
+            try:
+                text = r.communicate(timeout=0.25)[0]   # 반복 호출해도 출력은 안에서 계속 모임 (파이프 막힘 없음)
+                break
+            except subprocess.TimeoutExpired:
+                if time.monotonic() - t0 > timeout:
+                    r.kill()
+                    r.communicate()
+                    return 124, f'{self.host}: 시간 초과 ({timeout:.0f}s)'
+                if self.on_wait:
+                    self.on_wait(time.monotonic() - t0)
+        out = '\n'.join(ln for ln in text.splitlines()
+                        if not ln.startswith(('ROS_DOMAIN_ID=', 'DDS 피어', 'ROS_STATIC_PEERS')))
+        if r.returncode == 255:
+            out += f'\n(SSH 실패 — `ssh {ROBOT_SSH}`가 비번 없이 되는지 확인: documents/ai/ai-passwordless-robot-access.md)'
+        return r.returncode, out.strip()
+
+    def _cli(self, *args: str, timeout: float = 120) -> tuple[int, str]:
+        return self._ssh(f'cd {ROBOT_TOOL_DIR} && ./run-cli {shlex.join(args)}', timeout)
+
+    def running(self, name: str) -> bool:
+        if not self._discovered:   # 막 켠 CLI는 아직 로봇 노드를 못 봄 → 처음 한 번 탐색 시간을 줌
+            self.node.poll(2.5)
+            self._discovered = True
+        names = {n for n, _ in self.node.get_node_names_and_namespaces()}
+        if name == 'explore':   # SLAM 중 Nav = 주행부는 있는데 amcl은 없음
+            return 'bt_navigator' in names and 'amcl' not in names
+        return any(m in names for m in MARKER_NODES[name])
+
+    def pid(self, name: str) -> int | None:
+        return None
+
+    def uptime(self, name: str) -> float | None:
+        return None
+
+    def info(self, name: str) -> str:
+        return ''
+
+    def logfile(self, name: str) -> str:
+        return f'{self.host}:{ROBOT_TOOL_DIR}/.run/{name}.log'
+
+    def _push_model(self, model_path: str) -> str:
+        """PC 경로면 .onnx(+.onnx.data)를 로봇으로 복사하고 로봇 경로를 돌려준다.
+
+        이미 로봇 경로면(로컬에 없음) 그대로 넘긴다.
+        """
+        p = Path(model_path).expanduser()
+        if not p.is_file():
+            return model_path
+        tag = p.parent.parent.name if p.parent.name == 'exported' else p.parent.name
+        dest = f'{ROBOT_REPO_DIR}/temp/models/{tag}'
+        rc, out = self._ssh(f'mkdir -p {dest}', 15)
+        if rc != 0:
+            raise RuntimeError(f'로봇 디렉터리 생성 실패: {out.strip()[-300:]}')
+        files = [p]
+        data = Path(str(p) + '.data')
+        if data.is_file():
+            files.append(data)
+        for f in files:
+            r = subprocess.run(
+                ['scp', '-q', '-o', 'BatchMode=yes', str(f), f'{ROBOT_SSH}:{dest}/'],
+                capture_output=True, text=True, timeout=120)
+            if r.returncode != 0:
+                raise RuntimeError(f'scp {f.name} 실패: {r.stderr.strip()[-300:]}')
+        return f'{dest}/{p.name}'
+
+    def start(self, name: str, map_yaml: str | None = None,
+              model_path: str | None = None) -> tuple[bool, str]:
+        extra: list[str] = []
+        if name == 'nav' and model_path:
+            try:
+                model_path = self._push_model(model_path)
+            except Exception as exc:
+                return False, f'[{self.host}] RL 모델 전송 실패: {exc}'
+            extra = ['--model', model_path]
+        rc, out = self._cli(name, 'start', *([map_yaml] if map_yaml else []), *extra)
+        return rc == 0, f'[{self.host}] {out}'
+
+    def stop(self, name: str, timeout: float = 10.0) -> tuple[bool, str]:
+        rc, out = self._cli(name, 'stop')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def restart(self, name: str) -> tuple[bool, str]:
+        rc, out = self._cli(name, 'restart')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def node_kill(self, name: str, force: bool = False) -> tuple[bool, str]:
+        rc, out = self._cli('node-kill', name, *(['--force'] if force else []))
+        return rc == 0, f'[{self.host}] {out}'
+
+    def node_restart(self, name: str, force: bool = False) -> tuple[bool, str]:
+        rc, out = self._cli('node-restart', name, *(['--force'] if force else []))
+        return rc == 0, f'[{self.host}] {out}'
+
+    def stop_all(self) -> tuple[bool, str]:
+        rc, out = self._cli('stop')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def restart_all(self) -> tuple[bool, str]:
+        rc, out = self._cli('restart-all')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def build(self, extra: list[str] | None = None, full: bool = False) -> int:
+        """로봇(Pi)에서 빌드 — 출력은 그대로 스트리밍한다 (빌드는 길어서 capture하지 않음)."""
+        extra = list(extra or [])
+        if full:
+            remote = f'cd {ROBOT_REPO_DIR} && ' + shlex.join(['setup/pi/build.sh', *extra])
+        else:
+            colcon = ['colcon', 'build', '--symlink-install', '--parallel-workers', BUILD_WORKERS,
+                      *extra, '--cmake-args', f'-DCMAKE_POLICY_VERSION_MINIMUM={BUILD_POLICY_MIN}']
+            remote = (f'source {ROS_SETUP} >/dev/null 2>&1 && cd {ROBOT_REPO_DIR}/ros2_ws && '
+                      + shlex.join(colcon))
+        print(f'[{self.host}] $ {remote}')
+        return subprocess.call(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ROBOT_SSH, remote])
+
+    def tail(self, name: str, n: int = 40) -> str:
+        return self._ssh(f'tail -n {int(n)} {ROBOT_TOOL_DIR}/.run/{name}.log 2>&1', 15)[1]
+
+    def maps(self) -> list[tuple[str, PurePosixPath]]:
+        # 메뉴가 2초마다 다시 그리므로 5초 캐시 (SSH 왕복)
+        if time.monotonic() - self._maps[0] < 5.0:
+            return self._maps[1]
+        rc, out = self._ssh(f'ls -1t {ROBOT_TOOL_DIR}/../ros2_ws/map/*/map.yaml 2>/dev/null', 15)
+        paths = [PurePosixPath(ln) for ln in out.splitlines() if ln.endswith('/map.yaml')]
+        found = [(p.parent.name, p) for p in paths]
+        self._maps = (time.monotonic(), found)
+        return found
+
+    def read_map(self, path) -> str:
+        return self._ssh(f'cat {shlex.quote(str(path))}', 15)[1]
+
+    def resolve_map(self, name_or_path: str | None):
+        maps = self.maps()
+        if not name_or_path:
+            return maps[0][1] if maps else None
+        return next((p for n, p in maps if name_or_path in (n, str(p))), None)
+
+    def save_map(self, name: str) -> tuple[bool, str]:
+        self._maps = (0.0, [])
+        # --no-switch: 로봇 쪽은 저장만 (SSH라 TTY 프롬프트 불가) — 전환은 이 PC CLI가 묻는다
+        rc, out = self._cli('map', 'save', name, '--no-switch')
+        return rc == 0, f'[{self.host}] {out}'
+
+
+def make_procs(node) -> Procs:
+    return Procs() if IS_ROBOT else RemoteProcs(node)

@@ -7,7 +7,7 @@
 #   ./base-only.sh lidar:=false    라이다 없이
 #   ./base-only.sh port:=/dev/ttyACM0
 #
-# - Ctrl+C로 끝낸다. 백그라운드로 띄우고 관리하려면 tool/run-cli base start (같은 launch) — 둘을 같이 띄우지 말 것.
+# - Ctrl+C로 끝낸다. 백그라운드로 띄우고 관리하려면 tools/run-cli base start (같은 launch) — 둘을 같이 띄우지 말 것.
 # - ROS_DOMAIN_ID=25.
 #
 #   -h, --help   이 도움말
@@ -24,6 +24,6 @@ fi
 source "/opt/ros/${ROS_DISTRO_NAME:-lyrical}/setup.bash"
 source "$WS/install/setup.bash"
 export ROS_DOMAIN_ID=25
-source "$REPO/tool/peers.sh"   # Pi 자신에서는 아무것도 안 함
+source "$REPO/tools/peers.sh"   # Pi 자신에서는 아무것도 안 함
 
 exec ros2 launch tb3_bringup tb-only.launch.py "$@"

@@ -8,7 +8,7 @@
        → scan_resample(고정 400칸: LDS-03 점 개수가 매번 달라 SLAM이 버림) → /scan
 
 명령 경로 (ARCH.md): /cmd_manual_vel(텔레오퍼)·/cmd_vel(Nav2) → cmd_manager → /cmd_vel_base → 드라이버.
-SLAM·Nav는 tool/run-cli가 따로 띄운다 (TOOL_BASE_CMD로 이 launch를 지정).
+SLAM·Nav는 tools/run-cli가 따로 띄운다 (TOOL_BASE_CMD로 이 launch를 지정).
 """
 import os
 

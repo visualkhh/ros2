@@ -2,9 +2,9 @@
 
 로봇 = TurtleBot3 Waffle Pi 개조형 (맨 위 판 제거, LDS-03 라이다 1층 앞).
 **Pi(`pak`)는 움직이는 것**(드라이버·라이다·SLAM·Nav), **PC는 화면·Nav2 RL 정책**. 둘은 같은 WiFi + `ROS_DOMAIN_ID=25`로 토픽을 주고받습니다
-(WiFi가 멀티캐스트를 버려서 PC 쪽은 `tool/peers.sh`가 Pi를 유니캐스트로 찾음). 조작(`tool/run-cli`)은 토픽이 보이는 곳 어디서나.
+(WiFi가 멀티캐스트를 버려서 PC 쪽은 `tools/peers.sh`가 Pi를 유니캐스트로 찾음). 조작(`tools/run-cli`)은 토픽이 보이는 곳 어디서나.
 
-- 사용법: [README.md](README.md) · 운영 도구: [../tool/README.md](../tool/README.md) · 펌웨어 프로토콜: [../firmware/opencr/README.md](../firmware/opencr/README.md)
+- 사용법: [README.md](README.md) · 운영 도구: [../tools/README.md](../tools/README.md) · 펌웨어 프로토콜: [../firmware/opencr/README.md](../firmware/opencr/README.md)
 
 ## 1. 어디서 무엇이 도나
 
@@ -30,7 +30,7 @@ flowchart LR
   end
 
   subgraph PC["PC (개발 · RL · 화면)"]
-    RVIZ["RViz<br/>(tool/run-rviz)"]
+    RVIZ["RViz<br/>(tools/run-rviz)"]
   end
 
   TELE -->|"/cmd_manual_vel"| CM
@@ -172,6 +172,6 @@ flowchart TD
 | `cartographer` · `cartographer_ros` (외부) | SLAM — `deps.repos` + `patches/*.patch`로 소스 빌드 (Lyrical apt 없음) |
 | apt | nav2_bringup · laser_filters · robot_state_publisher · xacro |
 
-SLAM·Nav2는 `ros2_ws` launch가 아니라 `tool/run-cli`가 켜고 끕니다 — 베이스(tb-only)는 켜 둔 채
+SLAM·Nav2는 `ros2_ws` launch가 아니라 `tools/run-cli`가 켜고 끕니다 — 베이스(tb-only)는 켜 둔 채
 맵핑 ↔ 지도 주행을 바꿔 켜기 때문. 프로세스는 항상 Pi에 뜨고(로봇이 아닌 곳에서 실행하면 tool이 SSH로 Pi에 넘김),
 켜짐 여부는 노드 그래프로 봅니다. 설정은 `tb3_bringup/config/cartographer_2d.lua` · `tb3_bringup/config/nav2_params.yaml`.

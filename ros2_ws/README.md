@@ -13,7 +13,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계
 | `explore_lite` · `explore_lite_msgs` (외부) | 자동 맵핑 frontier 탐색 (m-explore-ros2) — 아래 `deps.repos`로 받음 |
 | `cartographer` · `cartographer_ros` (외부) | SLAM — 아래 `deps.repos` + `patches/`로 소스 빌드 |
 
-SLAM(cartographer, 소스 빌드)·Nav2(apt)는 켜고 끄는 건 [`tool/run-cli`](../tool/README.md)가 합니다 (토픽이 보이는 곳 어디서나).
+SLAM(cartographer, 소스 빌드)·Nav2(apt)는 켜고 끄는 건 [`tools/run-cli`](../tools/README.md)가 합니다 (토픽이 보이는 곳 어디서나).
 
 ## deps.repos — apt에 없는 외부 소스
 
@@ -62,7 +62,7 @@ colcon build --symlink-install --packages-select tb3_bringup rl_policy rl_nav_co
 | `cartographer.launch.py` | Pi | SLAM — cartographer_node + occupancy_grid_node (`config/cartographer_2d.lua`). `run-cli slam start`가 씀 |
 | `view-model.launch.py` | PC | URDF 확인 (robot_state_publisher + joint_state_publisher + RViz) |
 
-보통은 `tool/run-cli base start`가 `tb-only`를 띄웁니다. 직접(포그라운드) 띄우려면 — 스크립트가 ROS 환경·domain 25를 맞춘다:
+보통은 `tools/run-cli base start`가 `tb-only`를 띄웁니다. 직접(포그라운드) 띄우려면 — 스크립트가 ROS 환경·domain 25를 맞춘다:
 
 ```bash
 ./base-only.sh                     # Pi — = ros2 launch tb3_bringup tb-only.launch.py

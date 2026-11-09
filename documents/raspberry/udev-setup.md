@@ -46,6 +46,6 @@ udevadm info -q property -n /dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID'   
 - 이름이 안 생김 → USB ID가 다름 (`lsusb`로 확인 후 규칙 수정) · 다시 `install-udev.sh`.
 - **CP2102는 흔한 USB-시리얼 칩**이라 같은 칩의 다른 장치를 꽂으면 그것도 `/dev/tb3_lidar`가 될 수 있음. 그럴 땐 규칙에
   `ATTRS{serial}=="…"`(`udevadm info -a -n /dev/ttyUSB0 | grep serial`)을 추가해 이 라이다만 집어낸다.
-- 포트를 다른 프로그램이 잡고 있으면 펌웨어 업로드·`test-firmware`가 거부 → `tool/run-cli stop-all`.
+- 포트를 다른 프로그램이 잡고 있으면 펌웨어 업로드·`test-firmware`가 거부 → `tools/run-cli stop-all`.
 
 관련: [OpenCR 세팅](../opencr/opencr-setup-ubuntu26.04.md) · [Lyrical (Pi)](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [노드 계통도](../../ros2_ws/ARCH.md)

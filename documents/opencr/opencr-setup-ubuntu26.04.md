@@ -40,18 +40,18 @@ cd ~/ros2/firmware/opencr
 
 `/dev/opencr` 고정 이름과 권한은 udev 규칙으로 만듭니다 → **[udev 세팅](../raspberry/udev-setup.md)** (라이다 `/dev/tb3_lidar`도 같이).
 
-- 포트를 다른 프로그램(베이스 드라이버·시리얼 모니터)이 잡고 있으면 `upload.sh`·`test-firmware`가 거부 → `tool/run-cli stop-all`.
+- 포트를 다른 프로그램(베이스 드라이버·시리얼 모니터)이 잡고 있으면 `upload.sh`·`test-firmware`가 거부 → `tools/run-cli stop-all`.
 
 ## 4. 바퀴 ID · 방향 점검 (새 로봇 · 모터 교체 · 배선 변경 후 1회)
 
 ROS 없이 펌웨어만으로 **바퀴 하나씩** 돌려서 두 가지를 따로 확인합니다. 로봇을 들어 **바퀴를 띄우고**, 베이스는 끈 상태에서.
 
 ```bash
-~/ros2/tool/run-cli base stop            # 포트 비우기 (opencr_driver가 /dev/opencr를 잡고 있음)
+~/ros2/tools/run-cli base stop            # 포트 비우기 (opencr_driver가 /dev/opencr를 잡고 있음)
 cd ~/ros2/firmware/opencr
 ./test-firmware --wheel 0.5 0 --yes      # C의 첫 값 = 왼쪽만 돌아야 함 (2초)
 ./test-firmware --wheel 0 0.5 --yes      # 둘째 값 = 오른쪽만
-~/ros2/tool/run-cli base start
+~/ros2/tools/run-cli base start
 ```
 
 | 결과 | 원인 | 고칠 곳 |

@@ -100,7 +100,7 @@ def _phonemes_to_tones(pho: str) -> list[tuple[int, int]]:
 
 
 def _table_tones(text: str) -> list[tuple[int, int]]:
-    """예비용 자모·알파벳 직매핑 (espeak-ng 없을 때). tool/cli/op/bus.py와 같은 표."""
+    """예비용 자모·알파벳 직매핑 (espeak-ng 없을 때). tools/cli/op/bus.py와 같은 표."""
     tones: list[tuple[int, int]] = []
     for ch in text:
         o = ord(ch)

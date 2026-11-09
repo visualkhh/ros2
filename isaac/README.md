@@ -85,9 +85,9 @@ cd ../ros2_ws && colcon build --packages-select rl_policy rl_nav_controller tb3_
 
 ```bash
 # 로봇: 베이스 (Pi에서 또는 PC tool로)
-./tool/run-cli base start
+./tools/run-cli base start
 # MANUAL
-./tool/run-cli control manual
+./tools/run-cli control manual
 cd isaac
 ./run-calibration.sh rl_correction_waypoint --robot real --check-only     # 움직이지 않고 상태만 확인 (state=MANUAL)
 ./run-calibration.sh rl_correction_waypoint --robot real --label real_floor
@@ -180,7 +180,7 @@ tensorboard --logdir artifacts/rl_correction_waypoint/training                  
 ./run-make-onnx.sh artifacts/rl_maze/training/<시각>/model_<N>.pt   # → exported/policy.onnx (+ .onnx.data)
 # model_path를 policy.onnx로, 옆에 policy.onnx.data
 # lidar_inflation / inflation_scale을 학습 범위와 같게 (기본 0.26 / 0.50)
-./tool/run-cli node-status /controller_server   # RL/fallback · 모델 · 스캔 확인
+./tools/run-cli node-status /controller_server   # RL/fallback · 모델 · 스캔 확인
 ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"
 # 같은 goal을 두 번 (enable=false/true) → /controller_server/FollowPath/status와 궤적 비교
 ```

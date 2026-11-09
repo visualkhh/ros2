@@ -36,7 +36,7 @@
 | 소스 의존 | `coin_d4_driver` (LDS-03) · `explore_lite` (자동 맵핑, 딸림 `multirobot_map_merge`는 `image_geometry` 필요) · `cartographer`+`cartographer_ros` (SLAM, CMake 4.x는 `--cmake-args -DCMAKE_POLICY_VERSION_MINIMUM=3.5` 필수) — 빌드는 `setup/pi/build.sh` 한 줄 · `/scan` 10 Hz | [ros2_ws README](../../ros2_ws/README.md#depsrepos--apt에-없는-외부-소스) |
 | 워크스페이스 | `~/ros2` (GitHub clone, pull 전용) · `~/ros2/ros2_ws` 빌드(`~/ros2/setup/pi/build.sh`): tb3_bringup · rl_nav_controller · rl_policy · coin_d4_driver · explore_lite · cartographer(·_ros·_msgs) | [setup/pi](../../setup/pi/README.md) · [ARCH](../../ros2_ws/ARCH.md) |
 | 상시 노드 (`run-cli base start` = tb-only) | state_manager · cmd_manager · opencr_driver · robot_state_publisher · coin_d4_driver · scan_filter · scan_resample | [ARCH 2장](../../ros2_ws/ARCH.md) |
-| 필요할 때 (`run-cli`, 어디서나) | cartographer (`slam start`: `cartographer.launch.py` + `config/cartographer_2d.lua`) · Nav2 (`nav start` / `explore start`) — 지도 `~/ros2/ros2_ws/map/` | [tool](../../tool/README.md) |
+| 필요할 때 (`run-cli`, 어디서나) | cartographer (`slam start`: `cartographer.launch.py` + `config/cartographer_2d.lua`) · Nav2 (`nav start` / `explore start`) — 지도 `~/ros2/ros2_ws/map/` | [tool](../../tools/README.md) |
 | `~/.bashrc` | `source /opt/ros/lyrical/setup.bash` · ros2_ws `install/setup.bash` · `ROS_DOMAIN_ID=25` · `ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET` | |
 
 ### 장치 · 펌웨어
@@ -52,7 +52,7 @@
 
 - [x] `coin_d4_driver` 받아서 빌드 → `/scan` 10 Hz (뒤 135°는 몸통에 가려 안 보임 — 정상)
 - [x] 바퀴 ID·방향 확인 (펌웨어 ID 2=왼쪽·1=오른쪽, dir -1/-1)
-- [ ] 실기 SLAM → 지도 저장 → Nav 목표 주행 ([MAP_NAV](../../tool/MAP_NAV.md))
+- [ ] 실기 SLAM → 지도 저장 → Nav 목표 주행 ([MAP_NAV](../../tools/MAP_NAV.md))
 - [ ] 몸통 필터 범위 확인 (앞 최근접 0.17~0.2 m 점이 몸통인지)
 - [ ] URDF 실측 값 (`lidar_x` · `lidar_y` · `lidar_z` · `lidar_yaw`) — `ros2_ws/src/tb3_bringup/urdf/robot.urdf.xacro`
 
@@ -66,11 +66,11 @@
 | 4 | USB 장치 고정 이름 | [udev-setup.md](udev-setup.md) | `/dev/opencr` · `/dev/tb3_lidar` |
 | 5 | ROS 2 Lyrical + 프로젝트 패키지 · `ros2_ws` 빌드 (`~/ros2/setup/pi/build.sh`) | [../ros/lyrical/lyrical-setup-ubuntu26.04.md](../ros/lyrical/lyrical-setup-ubuntu26.04.md) · [setup/pi](../../setup/pi/README.md) | `./run-cli status` |
 | 6 | OpenCR 펌웨어 (툴체인 · 컴파일 · 업로드) | [../opencr/opencr-setup-ubuntu26.04.md](../opencr/opencr-setup-ubuntu26.04.md) | `./test-firmware`에 `S` 줄 |
-| 7 | 운영 (베이스 · SLAM · Nav · 텔레오퍼) | [../../tool/README.md](../../tool/README.md) | 지도 만들기 |
+| 7 | 운영 (베이스 · SLAM · Nav · 텔레오퍼) | [../../tools/README.md](../../tools/README.md) | 지도 만들기 |
 
 - 시스템 구성(노드·TF·토픽): [../../ros2_ws/ARCH.md](../../ros2_ws/ARCH.md)
 - 코드 갱신: PC에서 push → `ssh pak 'cd ~/ros2 && git pull'` (ros2_ws를 바꿨으면 `~/ros2/setup/pi/build.sh` 후 `./run-cli base restart`)
-- 운영은 토픽이 보이는 곳 어디서나 `tool/run-cli` (켜기/끄기·지도는 tool이 SSH로 Pi에 넘김)
+- 운영은 토픽이 보이는 곳 어디서나 `tools/run-cli` (켜기/끄기·지도는 tool이 SSH로 Pi에 넘김)
 - `ROS_DOMAIN_ID=25` (PC·Pi·docker 공통). PC 시험대(Docker): [../docker/README.md](../docker/README.md)
 
 ## 3. 이 폴더

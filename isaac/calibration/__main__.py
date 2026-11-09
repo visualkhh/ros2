@@ -104,7 +104,7 @@ LABELS = {"sim": "sim_sensor_floor", "real": "real", "dummy": "dummy", "plan": "
 
 def export_plan(cmd, rate: float, out: str, label: str = "real") -> str:
     """명령(BaseCommand, 끝이 있는 것) → 계획 JSON {"dt", "label", "steps": [[v, w], ...]}.
-    sim · real이 같은 명령을 쓰게 하는 한 곳 — 로봇 쪽 재생기(예: Lv2_bee_Assignment tool/ run-cli calibrate wheel)가 이 파일을 읽는다."""
+    sim · real이 같은 명령을 쓰게 하는 한 곳 — 로봇 쪽 재생기(예: Lv2_bee_Assignment tools/ run-cli calibrate wheel)가 이 파일을 읽는다."""
     dt = 1.0 / rate
     steps = [[round(v, 6), round(w, 6)] for v, w in (cmd(k * dt) for k in range(int(round(cmd.total / dt))))]
     spec = ", ".join(f"{k}={getattr(cmd, k):g}" for k in ("speed", "turn", "side") if hasattr(cmd, k))

@@ -17,7 +17,7 @@ WHEEL_SEP = 0.287      # [m] (드라이버 기준값)
 MAX_LIN = 0.26         # [m/s]
 MAX_ANG = 1.82         # [rad/s]
 MAX_WHEEL = 8.0        # [rad/s] 펌웨어 VEL_LIMIT_RAD_S · 드라이버 max_wheel_speed
-DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tool/cli/op/bus.py DIAG_RADIUS)
+DIAG_RADIUS = 0.5      # [m] 텔레오퍼 사선 원호 (tools/cli/op/bus.py DIAG_RADIUS)
 
 # 실측 바퀴 응답 — sim raw 대비 차이 (2026-11-03: isaac/artifacts/rl_correction_waypoint/calibration/2026-11-03_20-34-42_real_floor − …_20-22-20_sim_aa,
 # real은 direct 경로). 이전 값(2026-11-02, direct): gain 0.9927/0.9938 · 지연 2.
