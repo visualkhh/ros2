@@ -28,10 +28,17 @@ set -euo pipefail
 ISAAC=$(cd "$(dirname "$0")" && pwd)
 ISAACLAB="${ISAACLAB_DIR:-/home/pank/pa-course/IsaacLab-6.1}"
 
-# 창은 기본 끔 (headless) — --viz 뒤에 visualizer 이름(kit · newton_gl · newton_rtx · none · rerun · viser, CSV 가능)이 없으면 --viz kit
+# 창은 기본 켬 (run-world = 보는 용도 · --headless 붙여야 headless) — --viz 뒤에 visualizer 이름
+# (kit · newton_gl · newton_rtx · none · rerun · viser, CSV 가능)이 없으면 --viz kit
 viz_args() {
   local names='^(kit|newton_gl|newton_rtx|none|rerun|viser)(,(kit|newton_gl|newton_rtx|none|rerun|viser))*$'
   VIZ_ARGS=()
+  local seen_viz=0 seen_headless=0
+  for a in "$@"; do
+    [[ "$a" == "--viz" || "$a" == "--visualizer" ]] && seen_viz=1
+    [[ "$a" == "--headless" ]] && seen_headless=1
+  done
+  if [[ $seen_viz -eq 0 && $seen_headless -eq 0 ]]; then VIZ_ARGS+=(--viz kit); fi
   while [[ $# -gt 0 ]]; do
     if [[ "$1" == "--viz" || "$1" == "--visualizer" ]] && ! [[ "${2:-}" =~ $names ]]; then VIZ_ARGS+=("$1" kit)
     else VIZ_ARGS+=("$1"); fi
