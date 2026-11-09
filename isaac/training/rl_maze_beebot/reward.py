@@ -29,6 +29,7 @@ def compute_rewards(env) -> torch.Tensor:
                     / inflate_span).clamp(0.0, 1.0) * active
     dyn_inflate = ((c.collide_r + env.inflation - env.dyn_clearance).clamp(min=0.0)
                    / inflate_span).clamp(0.0, 1.0) * active
+    action_over = env.action_raw - env.action_raw.clamp(-1.0, 1.0)
 
     terms = {
         "progress": c.w_progress * env.progress.clamp(-0.25, 0.25),
@@ -38,6 +39,7 @@ def compute_rewards(env) -> torch.Tensor:
         "collision": -c.w_collide * env.collided.float(),
         "inflate": -float(getattr(c, "w_inflate", 0.5)) * wall_inflate,
         "dyn_inflate": -float(getattr(c, "w_dynamic_inflate", 0.5)) * dyn_inflate,
+        "action": -float(getattr(c, "w_action", 0.1)) * action_over.square().sum(-1),
         "smooth": -c.w_smooth * (env.action - env.prev_action).square().sum(-1),
         "back": -c.w_back * (-v_enc).clamp(min=0.0),
     }

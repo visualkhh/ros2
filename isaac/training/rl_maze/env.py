@@ -69,6 +69,7 @@ class RlMazeEnv(BaseEnv):
         self.prev_dist = torch.zeros(n, device=dev)
         self.progress = torch.zeros(n, device=dev)
         self.action = torch.zeros(n, 2, device=dev)
+        self.action_raw = torch.zeros(n, 2, device=dev)   # 정책 원출력 (clamp 전) — beebot 보상
         self.prev_action = torch.zeros(n, 2, device=dev)
         self.inflation = torch.full((n,), float(sum(c.inflation_range) / 2.0), device=dev)   # 사용자 입력 (m)
         self.reached = torch.zeros(n, dtype=torch.bool, device=dev)
@@ -147,6 +148,7 @@ class RlMazeEnv(BaseEnv):
         self.grace_steps = (self.grace_steps - 1).clamp(min=0)
         self.dynamic.update(self.policy_dt)
         self.prev_action = self.action
+        self.action_raw = actions
         self.action = actions.clamp(-1.0, 1.0)
         v = (self.action[:, 0] * c.max_lin).clamp(min=c.v_min_ratio * c.max_lin)
         super()._pre_physics_step(torch.stack([v, self.action[:, 1] * c.max_ang], dim=-1))
@@ -259,6 +261,7 @@ class RlMazeEnv(BaseEnv):
         self.wp_idx[ids] = 1
         self.prev_dist[ids] = torch.linalg.norm(first - start, dim=-1)
         self.action[ids] = 0.0
+        self.action_raw[ids] = 0.0
         self.prev_action[ids] = 0.0
         self.progress[ids] = 0.0
         self.reached[ids] = False

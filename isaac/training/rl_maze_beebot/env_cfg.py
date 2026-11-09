@@ -32,6 +32,8 @@ class RlMazeBeebotEnvCfg(RlMazeEnvCfg):
     # 충돌 반경(collide_r)은 로봇 반경이라 보상용 임의 여유가 아니다.
     w_inflate = 0.5
     w_dynamic_inflate = 0.5
+    # 정책 원출력이 [-1, 1]을 넘은 크기 — env가 clamp해도 mean이 무한히 커지지 않게
+    w_action = 0.1
     # 중간 웨이포인트 보상 — 기본 2.0보다 크게 (경로를 끝까지 따라가게)
     w_reach = 5.0
     # 실사형 동적 장애물 — 충돌하면 에피소드 종료(재스폰 없음), 로봇 앞 텔레포트도 없음.
