@@ -8,6 +8,7 @@
       이 점이 겹치는 경계 = collide_r + inflation.
     - 0.24/0.30 같은 임의의 보상 여유는 두지 않는다.
     - 중간 웨이포인트 보상은 크게(기본 5.0), 최종 goal은 100.
+    - 사람·공 회피: 가까워지면 감점 · 멀어지면 가점인 potential 차이 (avoid). 충돌 −N만으로는 초반 정책이 피할 방향을 못 배운다.
 """
 from __future__ import annotations
 
@@ -31,6 +32,14 @@ def compute_rewards(env) -> torch.Tensor:
                    / inflate_span).clamp(0.0, 1.0) * active
     action_over = env.action_raw - env.action_raw.clamp(-1.0, 1.0)
 
+    # 사람·공 회피 — potential φ = −((near − d)/(near − collide_r))²  (d = 로봇 중심 → 가장 가까운 사람/공 표면, 접촉 = collide_r)
+    #   보상 = w_avoid × (γ·φ_t − φ_{t−1}): 접근하면 −, 멀어지면 +, 가만히 있으면 거의 0 (제자리에 서 있어서 얻는 이득 없음 — potential-based라
+    #   최적 정책은 안 바뀌고 학습만 빨라진다). 사람·공이 없으면 d = 1e6이라 0.
+    phi = -(((c.avoid_near - env.dyn_clearance) / (c.avoid_near - c.collide_r)).clamp(0.0, 1.0)).square()
+    prev_phi = torch.where(env.episode_length_buf <= 1, phi, getattr(env, "_dyn_phi", phi))   # 리셋 직후엔 이전 값 없음
+    env._dyn_phi = phi
+    avoid = c.w_avoid * (0.99 * phi - prev_phi) * active
+
     terms = {
         "progress": c.w_progress * env.progress.clamp(-0.25, 0.25),
         "reach": c.w_reach * env.reached.float(),
@@ -39,6 +48,7 @@ def compute_rewards(env) -> torch.Tensor:
         "collision": -c.w_collide * env.collided.float(),
         "inflate": -float(getattr(c, "w_inflate", 0.5)) * wall_inflate,
         "dyn_inflate": -float(getattr(c, "w_dynamic_inflate", 0.5)) * dyn_inflate,
+        "avoid": avoid,
         "action": -float(getattr(c, "w_action", 0.1)) * action_over.square().sum(-1),
         "smooth": -c.w_smooth * (env.action - env.prev_action).square().sum(-1),
         "back": -c.w_back * (-v_enc).clamp(min=0.0),
@@ -60,3 +70,28 @@ def compute_rewards(env) -> torch.Tensor:
     log["Metrics/dyn_inflate_overlap"] = dyn_inflate.mean().item()
     log["Metrics/inflation"] = env.inflation.mean().item()
     return r
+
+
+if __name__ == "__main__":   # 자체 확인 (회피 항의 부호) — isaac/에서: PYTHONPATH=. <Isaac venv python> training/rl_maze_beebot/reward.py
+    from types import SimpleNamespace as NS
+
+    cfg = NS(avoid_near=1.0, collide_r=0.18, w_avoid=5.0, w_progress=0, w_reach=0, w_goal=0, w_time=0, w_collide=0, w_smooth=0, w_back=0,
+             w_inflate=0, w_dynamic_inflate=0, w_action=0)
+
+    def avoid(prev_d, d, first=False):
+        """프레임 두 개를 실제 compute_rewards에 넣어 Reward/avoid를 읽는다."""
+        z, b = torch.zeros(1), torch.zeros(1, dtype=torch.bool)
+        env = NS(cfg=cfg, encoders=lambda: (z, z), grace_steps=z, inflation=z + 0.03, wall_clearance=z + 5, action_raw=torch.zeros(1, 2),
+                 action=torch.zeros(1, 2), prev_action=torch.zeros(1, 2), progress=z, reached=b, goal_done=b, collided=b, wall_hit=b, dyn_hit=b,
+                 wp_idx=z, extras={}, episode_length_buf=torch.tensor([10]), dyn_clearance=torch.tensor([prev_d]))
+        compute_rewards(env)                                   # 이전 프레임 (φ 저장)
+        env.dyn_clearance, env.episode_length_buf = torch.tensor([d]), torch.tensor([1 if first else 11])
+        compute_rewards(env)
+        return env.extras["log"]["Reward/avoid"]
+
+    assert avoid(1.00, 0.90) < 0                 # 접근 = 감점
+    assert avoid(0.60, 0.70) > 0                 # 멀어짐 = 가점
+    assert avoid(5.0, 5.0) == 0                  # 멀리 있으면 0
+    assert abs(avoid(0.5, 0.5)) < 0.06           # 같은 거리 유지 = 거의 0 (γ 때문에 아주 조금)
+    assert abs(avoid(1e6, 0.5, first=True)) < 0.06   # 리셋 직후엔 이전 값 없음
+    print("ok — avoid 항: 접근 −, 이탈 +, 먼 곳 0")
