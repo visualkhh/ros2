@@ -19,7 +19,7 @@
 #   --max_iterations N    학습 반복 (기본: agent.py 500). 1회 = envs × 64스텝 수집 + PPO 업데이트
 #   --viz [kit|...]       창으로 보기 (기본은 창 없음 · --viz만 쓰면 kit)
 #   --video               영상 녹화 (logs/…/videos)
-#   --resume --checkpoint <model_N.pt>   이어서 학습
+#   --checkpoint <model_N.pt>            이어서 학습 (Isaac Lab 6.1은 --resume 없이 --checkpoint만 — 그 모델을 읽고 새 run 폴더에서 계속)
 # ─── cfg 덮어쓰기 (Hydra: env.<필드>=값 · agent.<필드>=값) ──────────────────────
 #   env.ground.uneven=false      요철 칸 끔 = 평면만 (기본 true: 평평 + 턱 1~3 cm 칸)
 #   env.ground.friction_patches=0   마찰 패치 끔 (기본 env마다 8개: 노랑 끈적 · 파랑 미끄럼)
