@@ -504,33 +504,33 @@ class RemoteProcs(Procs):
 
     def local_map(self, path) -> Path | None:
         """로봇의 저장 지도(map.yaml + pgm)를 PC 캐시로 내려받아 지도 화면에서 연다."""
-        remote = PurePosixPath(path)
-        if not remote.name.endswith('.yaml'):
-            remote = remote / 'map.yaml'
-        name = remote.parent.name or 'map'
-        cache = Path.home() / '.cache' / 'beebot' / 'maps' / name
-        cache.mkdir(parents=True, exist_ok=True)
-        local_yaml = cache / 'map.yaml'
-        r = subprocess.run(
-            ['scp', '-q', '-o', 'BatchMode=yes', f'{ROBOT_SSH}:{remote}', str(local_yaml)],
-            capture_output=True, text=True, timeout=60)
-        if r.returncode != 0:
-            return None
         try:
+            remote = PurePosixPath(path)
+            if not remote.name.endswith('.yaml'):
+                remote = remote / 'map.yaml'
+            name = remote.parent.name or 'map'
+            cache = Path.home() / '.cache' / 'beebot' / 'maps' / name
+            cache.mkdir(parents=True, exist_ok=True)
+            local_yaml = cache / 'map.yaml'
+            r = subprocess.run(
+                ['scp', '-q', '-o', 'BatchMode=yes', f'{ROBOT_SSH}:{remote}', str(local_yaml)],
+                capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                return None
             text = local_yaml.read_text()
-        except OSError:
+            image = next((ln.split(':', 1)[1].strip().strip('"\'')
+                          for ln in text.splitlines() if ln.strip().startswith('image:')), '')
+            if not image:
+                return local_yaml
+            img = PurePosixPath(image)
+            remote_img = img if img.is_absolute() else remote.parent / img
+            local_img = cache / img.name
+            r = subprocess.run(
+                ['scp', '-q', '-o', 'BatchMode=yes', f'{ROBOT_SSH}:{remote_img}', str(local_img)],
+                capture_output=True, text=True, timeout=60)
+            return local_yaml if r.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError):
             return None
-        image = next((ln.split(':', 1)[1].strip().strip('"\'')
-                      for ln in text.splitlines() if ln.strip().startswith('image:')), '')
-        if not image:
-            return local_yaml
-        img = PurePosixPath(image)
-        remote_img = img if img.is_absolute() else remote.parent / img
-        local_img = cache / img.name
-        r = subprocess.run(
-            ['scp', '-q', '-o', 'BatchMode=yes', f'{ROBOT_SSH}:{remote_img}', str(local_img)],
-            capture_output=True, text=True, timeout=60)
-        return local_yaml if r.returncode == 0 else None
 
     def resolve_map(self, name_or_path: str | None):
         maps = self.maps()
