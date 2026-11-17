@@ -8,13 +8,14 @@ from __future__ import annotations
 import math
 
 from ..view import View
-from .grid import FREE, OCC, OUT, UNKNOWN, MapGrid
+from .grid import FREE, OCC, OUT, UNKNOWN, CostGrid, MapGrid
 from .viewport import Viewport
 
 RGB = {UNKNOWN: (70, 70, 78), FREE: (205, 205, 210), OCC: (18, 18, 24)}   # 칸 색 — OUT은 색 없음 (터미널 바탕)
 MAP_RGB, ODOM_RGB = (90, 220, 255), (255, 150, 40)   # map 원점 M · odom 원점 O
 PATH_RGB, ROBOT_RGB, GOAL_RGB, START_RGB, CURSOR_RGB = (240, 190, 40), (235, 60, 60), (60, 200, 90), (70, 150, 255), (255, 80, 220)
 PREVIEW_RGB, PLAN_RGB, LOCAL_PLAN_RGB = (0, 200, 120), (20, 90, 255), (170, 0, 255)
+COST_INFLATED, COST_LETHAL = (125, 85, 25), (175, 35, 35)   # costmap 팽창 / 내접·치명
 BRAILLE = {(0, 0): 0x01, (0, 1): 0x02, (0, 2): 0x04, (1, 0): 0x08, (1, 1): 0x10, (1, 2): 0x20, (0, 3): 0x40, (1, 3): 0x80}
 YAW_LEN, YAW_GAP, HEAD_LEN = 16, 3, 5   # 방향선 길이 · 십자선에서 비우는 거리 · 화살표 머리 길이 (점 단위 — 점자 한 글자 = 2×4점)
 FRAME_LEN, FRAME_GAP, FRAME_HEAD = 10, 3, 4   # M·O·로봇 방향 화살표 — 십자선보다 짧게
@@ -63,7 +64,7 @@ class MapView(View):
 
     focusable = True
     hints = ('↑↓←→ 지도 이동 · +/- 확대·축소 · f 전체 · r 로봇 따라가기 · '
-             'm M · o O · v 예상경로 · p Nav2경로 · [ ] 방향 15° · { } 1° · Enter 찍기')
+             'm M · o O · v 예상경로 · p Nav2경로 · c costmap · [ ] 방향 15° · { } 1° · Enter 찍기')
 
     def __init__(self, grid: MapGrid, color: bool = True, extra_key=None):
         self.grid, self.color = grid, color
@@ -78,6 +79,8 @@ class MapView(View):
         self.show_robot = True      # 로봇 진행 방향 화살표 (기본 표시)
         self.preview: list[tuple[float, float]] = []   # v — planner 예상 경로 (로봇 안 움직임)
         self.plans: list[tuple[list[tuple[float, float]], tuple]] = []  # p — Nav2 /plan · /local_plan
+        self.cost: CostGrid | None = None   # c — costmap 겹침
+        self.show_cost = False
         self.start: tuple[float, float] | None = None
         self.goals: list[dict] = []
         self.yaw = 0.0
@@ -86,6 +89,7 @@ class MapView(View):
         self.extra_key = extra_key  # 지도가 모르는 키(goal 추가 등)를 넘길 곳: fn(k) → 처리했으면 True
         self._key = None
         self._codes: list[list[int]] = []
+        self._cost_codes: list[list[int]] | None = None
 
     @property
     def center(self) -> tuple[float, float]:
@@ -132,11 +136,17 @@ class MapView(View):
             vp.cx, vp.cy = self.robot
 
     def _base(self, cols: int, subrows: int) -> list[list[int]]:
-        key = (self.vp.k, round(self.vp.cx, 6), round(self.vp.cy, 6), cols, subrows)
+        key = (self.vp.k, round(self.vp.cx, 6), round(self.vp.cy, 6), cols, subrows,
+               self.show_cost, id(self.cost) if self.cost is not None else None)
         if key != self._key:
             vp, g = self.vp, self.grid
             self._codes = [[g.code(vp.k, *vp.to_world(c + 0.5, r + 0.5, cols, subrows)) for c in range(cols)]
                            for r in range(subrows)]
+            if self.show_cost and self.cost is not None:
+                self._cost_codes = [[self.cost.code(*vp.to_world(c + 0.5, r + 0.5, cols, subrows))
+                                     for c in range(cols)] for r in range(subrows)]
+            else:
+                self._cost_codes = None
             self._key = key
         return self._codes
 
@@ -147,6 +157,7 @@ class MapView(View):
         vp = self.vp
         self._follow(cols, sub)
         codes = self._base(cols, sub)
+        cost_codes = self._cost_codes
         dots: dict[tuple[int, int], tuple] = {}      # 화면 칸 → 색 (경로 점)
         labels: dict[tuple[int, int], tuple] = {}    # 글자 칸 → (글자, 색)
 
@@ -235,6 +246,10 @@ class MapView(View):
                 if self.color:
                     tc = dots.get((c, 2 * tr)) or (RGB.get(top) if top != OUT else None)
                     bc = dots.get((c, 2 * tr + 1)) or (RGB.get(bot) if bot != OUT else None)
+                    if cost_codes and (c, 2 * tr) not in dots and (c, 2 * tr + 1) not in dots:
+                        ct = max(cost_codes[2 * tr][c], cost_codes[2 * tr + 1][c])
+                        if ct and top != OCC and bot != OCC:   # 벽은 지도 색 그대로
+                            tc = bc = COST_LETHAL if ct == 2 else COST_INFLATED
                     if lab:
                         bg = bc or tc or (0, 0, 0)
                         f = lab[1]
@@ -260,6 +275,10 @@ class MapView(View):
                     on_path = ((c, 2 * tr) in dots or (c, 2 * tr + 1) in dots
                                or (c, tr) in braille or (c, tr) in rays)
                     ch = lab[0] if lab else (':' if on_path else {OCC: '#', FREE: '.', UNKNOWN: ' ', OUT: ' '}[code])
+                    if cost_codes and not lab and not on_path:
+                        ct = max(cost_codes[2 * tr][c], cost_codes[2 * tr + 1][c])
+                        if ct and code != OCC:
+                            ch = 'x' if ct == 2 else '~'
                     row.append(ch)
             out.append(''.join(row) + ('\033[0m' if self.color else ''))
         return out

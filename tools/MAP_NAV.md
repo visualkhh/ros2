@@ -145,13 +145,14 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ```text
 Enter         웨이포인트 추가 (십자선)        g  주행 (1개=NavigateToPose, 여러 개=한 번에)
 Backspace     마지막 웨이포인트 취소          d  전체 지우기
-i             십자선을 초기 위치로            x  주행 취소
+i             십자선을 초기 위치로            x  주행 취소 + 예상경로/경로·웨이포인트 지움
 v / V         예상 경로 계산 / 지우기         p  Nav2 /plan·/local_plan 겹쳐 보기
+c             costmap 겹침 (OFF → GLOBAL → LOCAL)
 m / o         map 원점 M / odom 원점 O 표시   [ ] { }  방향 15° / 1°
 + - f r       확대·축소 / 전체 보기 / 로봇 따라가기
 ```
 
-로봇은 빨간 `●`와 진행 방향 화살표, `M`은 map 원점, `O`은 odom 원점이다. `v`는 로봇을 움직이지 않고 planner에 경로만 물어본다.
+로봇은 빨간 `●`와 진행 방향 화살표, `M`은 map 원점, `O`은 odom 원점이다. `v`는 로봇을 움직이지 않고 planner에 경로만 물어본다. `c`는 코스트맵(전역/지역)을 겹쳐 본다.
 
 ### ③ 초기 위치 — **반드시 먼저**
 

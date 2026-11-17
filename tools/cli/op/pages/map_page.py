@@ -20,7 +20,7 @@ from ..defs import BACK, MAIN, QUIT, STAY
 from ..dialog import fmt_pose
 from ..terminal import DIM
 from ..menus import ActionItem, Menu
-from ..views.map import FREE, OCC, UNKNOWN, MapGrid, MapView
+from ..views.map import FREE, OCC, UNKNOWN, CostGrid, MapGrid, MapView
 from ..views.map.map_view import LOCAL_PLAN_RGB, PLAN_RGB
 
 YAW_STEP = 15.0
@@ -55,9 +55,12 @@ class MapPage(Menu):
         self.show_map = False        # m — map 원점 M
         self.show_odom = False       # o — odom 원점 O
         self.plan_on = False         # p — Nav2 /plan · /local_plan 겹침
+        self.cost_mode = 0           # c — 0 OFF · 1 global · 2 local
         self._preview = None         # v — planner 예상 경로
         self._plans: dict[str, tuple[float, list[tuple[float, float]]] | None] = {
             'plan': None, 'local_plan': None}
+        self._cost: dict[str, CostGrid | None] = {'global': None, 'local': None}
+        self._cost_at: dict[str, float] = {'global': 0.0, 'local': 0.0}
 
     # ---------------------------------------------------------------- 동작 (키 · 메뉴 공용)
     def pick(self) -> None:
@@ -171,6 +174,9 @@ class MapPage(Menu):
                 self.ui._busy = None
             text = (out.getvalue() + err.getvalue()).strip().splitlines()
             self.goals.clear()
+            self._preview = None                 # v 예상 경로도 같이 지움
+            self._plans = {'plan': None, 'local_plan': None}
+            self.plan_on = False                 # p 경로 겹침도 끔
             self.msg = text[-1] if text else 'Nav2 주행 취소'
         except Exception as exc:
             self.ui._busy = None
@@ -215,6 +221,38 @@ class MapPage(Menu):
             return
         self.plan_on = not self.plan_on
         self.msg = 'Nav2 경로 겹침 ' + ('● ON — /plan(파랑) · /local_plan(보라)' if self.plan_on else '○ OFF')
+
+    COST_LABELS = {0: 'OFF', 1: 'GLOBAL (전역 계획)', 2: 'LOCAL (로봇 주변)'}
+
+    def toggle_cost(self) -> None:
+        if self.source:
+            self.msg = '저장 지도에는 costmap이 없음 — 지금 지도(live)에서만'
+            return
+        self.cost_mode = (self.cost_mode + 1) % 3
+        self.msg = 'costmap 겹침 ' + self.COST_LABELS[self.cost_mode]
+        if self.cost_mode and self._cost_grid() is None:
+            self.msg += ' — 아직 수신 없음'
+
+    def _on_cost(self, kind: str, msg) -> None:
+        try:
+            self._cost[kind] = CostGrid.from_msg(msg)
+            self._cost_at[kind] = time.monotonic()
+        except Exception:
+            pass
+
+    def _cost_grid(self) -> CostGrid | None:
+        if self.source or not self.cost_mode:
+            return None
+        kind = 'global' if self.cost_mode == 1 else 'local'
+        grid = self._cost.get(kind)
+        if grid is None:
+            return None
+        if grid.frame_id not in ('', 'map'):
+            odom = self._odom_origin()
+            if odom is None:
+                return None
+            grid.set_parent(odom[0][0], odom[0][1], math.radians(odom[1]))
+        return grid
 
     def preview_path(self) -> None:
         """v — 찍어 둔 웨이포인트로 planner에 경로만 계산 (로봇은 움직이지 않음)."""
@@ -286,6 +324,8 @@ class MapPage(Menu):
                 self.clear_preview()
         elif k in ('p', 'P'):
             self.toggle_plan()
+        elif k in ('c', 'C'):
+            self.toggle_cost()
         elif k in ('m', 'M'):
             self.toggle_map_origin()
         elif k in ('o', 'O'):
@@ -316,7 +356,8 @@ class MapPage(Menu):
                  (lambda: f'로봇 따라가기 (r) — {"켜짐" if v.following else "꺼짐"}', self.toggle_follow),
                  (lambda: f'M map 원점 (m) — {"●" if self.show_map else "○"}', self.toggle_map_origin),
                  (lambda: f'O odom 원점 (o) — {"●" if self.show_odom else "○"}', self.toggle_odom),
-                 (lambda: f'Nav2 경로 겹쳐 보기 (p) — {"●" if self.plan_on else "○"}', self.toggle_plan)]
+                 (lambda: f'Nav2 경로 겹쳐 보기 (p) — {"●" if self.plan_on else "○"}', self.toggle_plan),
+                 (lambda: f'costmap 겹쳐 보기 (c) — {self.COST_LABELS[self.cost_mode]}', self.toggle_cost)]
         if self.mode != 'view':
             rows += [(f'좌회전 +{YAW_STEP:.0f}° ([) · 미세 +1° = {{', lambda: self.turn(YAW_STEP)),
                      (f'우회전 -{YAW_STEP:.0f}° (]) · 미세 -1° = }}', lambda: self.turn(-YAW_STEP))]
@@ -348,6 +389,8 @@ class MapPage(Menu):
         v.show_map, v.show_odom = self.show_map, self.show_odom
         v.preview = self._preview or []
         v.plans = self._plan_lines()
+        v.cost = self._cost_grid()
+        v.show_cost = v.cost is not None
         v.start = None
         v.goals, v.yaw = self.goals, self.yaw
         if not self._fitted:
@@ -370,6 +413,9 @@ class MapPage(Menu):
         if self.plan_on:
             plans = self._plan_lines()
             status.append('Nav2 경로 ' + (f'{sum(len(p) for p, _ in plans)}점 (파랑/보라)' if plans else '대기'))
+        if self.cost_mode:
+            status.append('costmap ' + self.COST_LABELS[self.cost_mode]
+                          + ('' if self._cost_grid() is not None else ' — 수신 대기'))
         status.append(f'M map {"●" if self.show_map else "○"} · O odom {"●" if self.show_odom else "○"}')
         if self.state.goal_status:
             status.append(f'목표: {self.state.goal_status}')
@@ -428,6 +474,11 @@ class MapPage(Menu):
             for topic, kind in (('/plan', 'plan'), ('/local_plan', 'local_plan')):
                 subs.append(self.app.create_subscription(
                     Path, topic, lambda m, k=kind: self._on_path(k, m), 10))
+            from nav_msgs.msg import OccupancyGrid
+            for topic, kind in (('/global_costmap/costmap', 'global'),
+                                ('/local_costmap/costmap', 'local')):
+                subs.append(self.app.create_subscription(
+                    OccupancyGrid, topic, lambda m, k=kind: self._on_cost(k, m), 10))
         except Exception:
             pass
         try:

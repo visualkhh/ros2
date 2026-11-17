@@ -87,3 +87,44 @@ class MapGrid:
     @property
     def size_m(self) -> tuple[float, float]:
         return self.w * self.res, self.h * self.res
+
+
+class CostGrid:
+    """nav_msgs/OccupancyGrid 비용 지도 — 0 자유/모름, 1 팽창, 2 내접/치명.
+
+    /global_costmap/costmap 값은 0~100 (99=내접, 100=치명), -1=모름.
+    지도 화면에서 코스트맵을 겹쳐 볼 때만 쓴다.
+    """
+
+    def __init__(self, width: int, height: int, res: float, ox: float, oy: float, data,
+                 frame_id: str = 'map'):
+        self.w, self.h, self.res, self.ox, self.oy = width, height, res, ox, oy
+        self.data = data
+        self.frame_id = frame_id
+        self.parent: tuple[float, float, float] | None = None   # map 기준 (x, y, yaw[rad])
+
+    @classmethod
+    def from_msg(cls, m) -> 'CostGrid':
+        i = m.info
+        frame = getattr(getattr(m, 'header', None), 'frame_id', '') or 'map'
+        return cls(int(i.width), int(i.height), float(i.resolution), float(i.origin.position.x),
+                   float(i.origin.position.y), m.data, frame)
+
+    def set_parent(self, x: float, y: float, yaw: float) -> None:
+        """이 격자의 프레임 → map 변환 (map 기준 x, y, yaw). local costmap은 odom이라 필요하다."""
+        self.parent = (float(x), float(y), float(yaw))
+
+    def code(self, wx: float, wy: float) -> int:
+        if self.parent is not None:   # map → 이 프레임 (역변환)
+            px, py, yaw = self.parent
+            dx, dy = wx - px, wy - py
+            wx = math.cos(yaw) * dx + math.sin(yaw) * dy
+            wy = -math.sin(yaw) * dx + math.cos(yaw) * dy
+        c = math.floor((wx - self.ox) / self.res)
+        r = math.floor((wy - self.oy) / self.res)
+        if not (0 <= c < self.w and 0 <= r < self.h):
+            return 0
+        v = self.data[r * self.w + c]
+        if v < 0 or v == 0:
+            return 0
+        return 2 if v >= 99 else 1
