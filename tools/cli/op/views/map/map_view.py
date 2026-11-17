@@ -183,6 +183,12 @@ class MapView(View):
             draw_path(self.preview, PREVIEW_RGB)
 
         cur = (cols // 2, (sub // 2) // 2)
+        robot_cell = None
+        if self.robot:
+            c, r = scr(self.robot)
+            if 0 <= c < cols and 0 <= r < sub:
+                robot_cell = (c, r // 2)
+                labels[robot_cell] = ('●' if self.color else '@', ROBOT_RGB)
 
         def mark(p, ch, rgb):
             """글자 칸이 이미 로봇·십자선·다른 글자면 옆 빈 칸으로 밀어서라도 보이게."""
@@ -207,12 +213,6 @@ class MapView(View):
             mark((0.0, 0.0), 'M', MAP_RGB)
         if self.show_odom and self.odom:
             mark(self.odom, 'O', ODOM_RGB)
-        robot_cell = None
-        if self.robot:
-            c, r = scr(self.robot)
-            if 0 <= c < cols and 0 <= r < sub:
-                robot_cell = (c, r // 2)
-                labels[robot_cell] = ('●' if self.color else '@', ROBOT_RGB)
 
         # M·O·로봇 방향 화살표 — 점자 점으로 가늘게. 글자(M·O·●)가 있는 칸은 글자가 우선.
         rays: dict[tuple[int, int], tuple[int, tuple]] = {}
