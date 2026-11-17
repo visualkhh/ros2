@@ -60,6 +60,8 @@ class StateStore:
         self.nodes_seen: dict[str, float] = {}                     # 노드 그래프에서 마지막으로 본 시각
         self.rl_status: list[float] = []                           # controller_server FollowPath RL/MPPI 상태
         self.rl_status_time = 0.0
+        self.rl_enabled: bool | None = None                        # 마지막 toggle 결과/status enable
+        self.rl_enabled_at = 0.0
 
     def on_state(self, key: str, value) -> None:
         """state_manager /state_* 수신 — 값 저장 + 수신 시각 기록 (끊김 판단용)."""
@@ -84,9 +86,12 @@ class StateStore:
         return f'{txt}({polygon})' if txt and polygon else txt
 
     def on_rl_status(self, data) -> None:
-        """controller_server FollowPath 상태 — [rl_active, reason, ...]."""
+        """controller_server FollowPath 상태 — [rl_active, reason, policy_loaded, enable, ...]."""
         self.rl_status = list(data)
         self.rl_status_time = time.monotonic()
+        if len(data) > 3:
+            self.rl_enabled = bool(data[3] >= 0.5)
+            self.rl_enabled_at = self.rl_status_time
 
     @staticmethod
     def yaw(q) -> float:

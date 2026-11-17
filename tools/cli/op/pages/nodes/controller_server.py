@@ -147,6 +147,11 @@ class ServiceMenu(Menu):
 class ControllerServerFeature(NodeFeature):
     node = 'controller_server'
 
+    def __init__(self):
+        self._cfg: dict = {}
+        self._cfg_at = 0.0
+        self._paths: dict[str, tuple[float, int]] = {}
+
     def wire(self, tool) -> None:
         tool.create_subscription(
             Float32MultiArray, '/controller_server/FollowPath/status',
@@ -155,6 +160,43 @@ class ControllerServerFeature(NodeFeature):
         tool.create_subscription(
             TwistStamped, '/cmd_vel_nav',
             lambda _m: tool.state.cmd_vel_nav.tick(), LIVE)
+        try:
+            from nav_msgs.msg import Path
+            tool.create_subscription(Path, '/plan',
+                                     lambda m: self._on_path('plan', m), 10)
+            tool.create_subscription(Path, '/local_plan',
+                                     lambda m: self._on_path('local_plan', m), 10)
+        except Exception:
+            pass
+
+    def _on_path(self, kind: str, msg) -> None:
+        if getattr(getattr(msg, 'header', None), 'frame_id', '') in ('map', ''):
+            self._paths[kind] = (time.monotonic(), len(msg.poses))
+
+    def _config(self, bus) -> dict:
+        now = time.monotonic()
+        if self._cfg and now - self._cfg_at < 2.0:
+            return self._cfg
+        target = bus.param_target('controller_server')
+        if target is None:
+            return {}
+        cli = bus.param_client(*target)
+        if cli is None:
+            return self._cfg
+        names = ['FollowPath.fallback_controller', 'FollowPath.enable',
+                 'FollowPath.model_path', 'FollowPath.lidar_inflation',
+                 'FollowPath.max_lin', 'FollowPath.max_ang']
+        vals = bus.param_get_vals(cli, names, timeout=0.8)
+        if not vals:
+            return self._cfg
+        out = {}
+        for n, v in zip(names, vals):
+            try:
+                out[n] = bus.param_display_value(v.type, v)
+            except Exception:
+                pass
+        self._cfg, self._cfg_at = out, now
+        return out
 
     def services(self, bus, name: str) -> list[dict]:
         """controller_server가 제공하는 서비스 카탈로그 — discovery + 전용 힌트."""
@@ -176,7 +218,10 @@ class ControllerServerFeature(NodeFeature):
             return []
 
         def enabled_now() -> bool | None:
-            """현재 FollowPath.enable — 주행 중이면 status, 아니면 파라미터에서 읽는다."""
+            """현재 FollowPath.enable — 최근 toggle 결과 → status → 파라미터 순서."""
+            if (bus.state.rl_enabled is not None
+                    and time.monotonic() - bus.state.rl_enabled_at <= 10.0):
+                return bus.state.rl_enabled
             st = bus.state.rl_status
             age = time.monotonic() - bus.state.rl_status_time if st else None
             if st and age is not None and age <= 2.0 and len(st) > 3:
@@ -207,6 +252,8 @@ class ControllerServerFeature(NodeFeature):
             ok, result = bus.call_service(
                 '/controller_server/FollowPath/toggle', 'std_srvs/srv/SetBool', {'data': target})
             if ok:
+                bus.state.rl_enabled = target
+                bus.state.rl_enabled_at = time.monotonic()
                 print(f'FollowPath.toggle(data={str(target).lower()})')
                 print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
             else:
@@ -264,44 +311,44 @@ class ControllerServerFeature(NodeFeature):
         return bus.state.cmd_vel_nav.hz()
 
     def status_lines(self, bus, name: str, summary: bool = False) -> list[str]:
-        st = bus.state.rl_status
-        age = time.monotonic() - bus.state.rl_status_time if st else None
-        cmd_hz = self._cmd_hz(bus)
-        fresh = bool(st) and age is not None and age <= 1.0
-        try:
-            has_status = bus.node.count_publishers('/controller_server/FollowPath/status') > 0
-        except Exception:  # fake_ros 처럼 count_publishers가 없는 환경
-            has_status = bool(st)
-
+        cfg = self._config(bus)
+        fallback = cfg.get('FollowPath.fallback_controller', '?')
+        enabled = bus.state.rl_enabled
+        if enabled is None:
+            enabled = cfg.get('FollowPath.enable')
+        onoff = '?' if enabled is None else ('ON' if enabled else 'OFF')
+        model = cfg.get('FollowPath.model_path') or '설치본 (policy.onnx)'
+        stat = bus.state.rl_status
+        age = time.monotonic() - bus.state.rl_status_time if stat else None
+        fresh = bool(stat) and age is not None and age <= 1.0
+        inner = INNER.get(2 if fallback == 'mppi' else 1, fallback)
         if summary:
-            if fresh:
-                inner = INNER.get(int(st[9]) if len(st) > 9 else 0, '기본 제어기')
-                mode = 'RL 적용' if st[0] >= 0.5 else f'{inner} 바이패스'
-                return [f' RL: {mode} (controller_server)']
-            return [f' RL: 대기 (controller_server{"" if has_status else " · status 없음"})']
-
-        lines = ['[RL 주행]']
-        if not fresh:
-            if cmd_hz > 0:
-                lines.append(f' RL/MPPI 판별 불가 (status 없음 · cmd_vel_nav {cmd_hz:.1f}Hz)')
-            else:
-                lines.append(' 대기 — 주행 중 아님'
-                             + (' (status 발행 대기)' if has_status else ' (status 토픽 없음)'))
-            if not has_status:
-                lines.append(' status 토픽 없음: rl_nav_controller 재빌드 후 controller_server 재시작 필요')
-            return lines
-
-        v = list(st) + [0.0] * (10 - len(st))
-        rl_active, reason, loaded, enable, scan_ok, scan_age, scan_min, v_out, w_out, inner_kind = v[:10]
-        inner = INNER.get(int(inner_kind), '기본 제어기')
-        mode = 'RL 적용' if rl_active >= 0.5 else f'{inner} 바이패스'
-        why = REASONS.get(int(reason), f'reason {int(reason)}')
-        lines.append(f' {mode}' + (f' — {why}' if why else ''))
-        lines.append(
-            f' 모델 {"loaded" if loaded else "none"} · enable {"on" if enable else "off"}'
-            f' · scan {"ok" if scan_ok else "none"}'
-            + (f' ({scan_age:.2f}s)' if scan_age >= 0 else ''))
-        lines.append(f' cmd_vel_nav {cmd_hz:.1f}Hz · v {v_out:.2f} w {w_out:.2f}')
-        if 0.0 < scan_min < 3.49:
-            lines.append(f' 전방 최소거리 {scan_min:.2f} m')
+            now = 'RL' if fresh and stat[0] >= 0.5 else inner
+            return [f' {now} · fallback={fallback} · toggle={onoff}']
+        lines = [f'[FollowPath] fallback={fallback} → {inner}',
+                 f' toggle: {onoff} · enable={onoff}',
+                 f' 모델: {model}',
+                 f' lidar_inflation: {cfg.get("FollowPath.lidar_inflation", "?")} m'
+                 f' · v {cfg.get("FollowPath.max_lin", "?")} / ω {cfg.get("FollowPath.max_ang", "?")}']
+        if fresh:
+            v = list(stat) + [0.0] * (10 - len(stat))
+            rl_active, reason, loaded, en, scan_ok, scan_age, scan_min, v_out, w_out, inner_kind = v[:10]
+            why = REASONS.get(int(reason), f'reason {int(reason)}')
+            lines.append(f' 지금: {"RL 적용" if rl_active >= 0.5 else inner + " 바이패스"}'
+                         + (f' — {why}' if why else ''))
+            lines.append(f' scan {"ok" if scan_ok else "none"}'
+                         + (f' ({scan_age:.2f}s)' if scan_age >= 0 else '')
+                         + f' · cmd_vel_nav {self._cmd_hz(bus):.1f}Hz'
+                         + f' · v {v_out:.2f} w {w_out:.2f}')
+        else:
+            lines.append(' 지금: 대기 — 주행 중 아님 (status 발행 대기)')
+        now = time.monotonic()
+        paths = []
+        for kind, label in (('plan', '/plan'), ('local_plan', '/local_plan')):
+            got = self._paths.get(kind)
+            if got and now - got[0] <= 15.0:
+                paths.append(f'{label} {got[1]}점')
+        lines.append(' 경로: ' + (' · '.join(paths) if paths else '없음'))
+        if bus.state.goal_status:
+            lines.append(f' 목표: {bus.state.goal_status}')
         return lines

@@ -1054,7 +1054,8 @@ class Bus:
         else:
             alive, age = row[1], row[2]
             lines.append(' 실행: ' + ('그래프에 보임' if alive else f'그래프에 안 보임 ({age:.0f}초 전 확인)'))
-        lines += self.node_feature_lines(name)
+        feature_lines = self.node_feature_lines(name)
+        lines += feature_lines
         short, ns = self._node_parts(name)
         try:
             pubs = self.node.get_publisher_names_and_types_by_node(short, ns)
@@ -1067,7 +1068,7 @@ class Bus:
         for n, lv, msg in diags[:8]:
             mark = {0: 'OK', 1: 'WARN', 2: 'ERR', 3: 'STALE'}.get(lv, '?')
             lines.append(f' 진단 {self.diag_short(n)}: {mark} {msg}')
-        if not diags:
+        if not diags and not feature_lines:
             lines.append(' 진단: 이 노드 항목 없음')
         return lines
 
