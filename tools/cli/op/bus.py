@@ -196,16 +196,23 @@ class Bus:
             'AMCL 초기 자세: 기본 (0,0,0) — 실제 위치가 다르면 '
             './run-cli initpose <x> <y> <yaw> 또는 RViz 2D Pose Estimate로 보정', DIM))
 
-    def _wait_base(self, timeout: float = 20.0) -> bool:
+    def _wait_base(self, timeout: float = 40.0) -> bool:
         """base가 살아 있고 odom/scan이 실제로 흐를 때까지 — Nav bringup 실패 방지."""
-        end = time.monotonic() + timeout
+        start = time.monotonic()
+        end = start + timeout
+        next_note = 0.0
         while time.monotonic() < end:
             self._poll(0.2)
             odom = self.state.odom.age()
             scan = self.state.scan.age()
             if odom is not None and scan is not None and odom < 3.0 and scan < 3.0:
                 return True
-        print(self.term.paint('베이스 odom/scan 수신 대기 시간 초과 — base 로그 확인', RED))
+            elapsed = time.monotonic() - start
+            if elapsed >= next_note:
+                self.ui.progress(f'베이스 odom/scan 대기 … {elapsed:.0f}/{timeout:.0f}초 (처음엔 10~30초 걸릴 수 있음)')
+                next_note += 5.0
+        print(self.term.paint(
+            f'베이스 odom/scan 수신 대기 시간 초과 ({timeout:.0f}초) — 로그: {self.procs.logfile("base")}', RED))
         return False
 
     def cmd_start(self, args) -> int:
@@ -233,7 +240,8 @@ class Bus:
         if not self.procs.running('base'):
             print(self.term.paint('베이스가 꺼져 있음 — 먼저 ./run-cli start base', RED))
             return 1
-        if not self._wait_base(5.0):
+        # 방금 base를 띄웠으면 opencr/라이다 첫 데이터까지 10~40초 걸릴 수 있다.
+        if not self._wait_base(40.0):
             return 1
         path = self.procs.resolve_map(map_arg)
         if path is None:
