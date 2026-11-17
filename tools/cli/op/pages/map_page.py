@@ -337,7 +337,7 @@ class MapPage(Menu):
     def center(self) -> list[str]:
         v = self.view
         cw, ch = self.ui.window.center_size()
-        rows = max(3, ch - 6)
+        rows = max(3, ch - 9)   # 아래 상태·메시지·범례까지 화면에 남긴다
         v.show_yaw = self.mode != 'view'
         v.robot = self._pose()
         v.robot_yaw = self._robot_yaw
