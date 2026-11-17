@@ -16,8 +16,8 @@ Isaac Lab (rl_maze) → policy.onnx + policy.onnx.data
 | `rl_nav_controller::RlNavController` (Nav2 `FollowPath`) | 웨이포인트 5×2 + 라이다 36(`r - lidar_inflation`) + v/w/gyro + 이전 행동 2 + inflation/0.5 | `[v, w]` | `isaac/training/rl_maze` |
 
 - 한계 0.26 m/s · 1.82 rad/s (Waffle Pi).
-- `enable=false`(기본) 또는 모델 로드 실패 시 fallback controller(DWB)로 바이패스.
-- fallback 선택: `FollowPath.fallback_controller` (현재 `dwb`; `mppi` · `rpp` · `rotation_shim` 가능).
+- `enable=false`(기본) 또는 모델 로드 실패 시 fallback controller(MPPI)로 바이패스.
+- fallback 선택: `FollowPath.fallback_controller` (현재 `mppi`; `dwb` · `rpp` · `rotation_shim` 가능).
 - `lidar_inflation` [m] — 사용자 입력. 학습 `inflation_range 0.20~0.24` 안. `ros2 param set`으로 런타임 변경.
 
 ## 로봇 쪽 연결
@@ -27,7 +27,7 @@ Isaac Lab (rl_maze) → policy.onnx + policy.onnx.data
 FollowPath:
   enable: true
   model_path: "/path/policy.onnx"   # 옆에 policy.onnx.data
-  fallback_controller: "dwb"        # 또는 mppi/RPP/RotationShim
+  fallback_controller: "mppi"       # 또는 dwb/RPP/RotationShim
   lidar_inflation: 0.22             # [m] 학습 env.inflation_range(0.20~0.24) 안
   inflation_scale: 0.50             # 정규화 상수 — 사용자 값 아님, 학습/추론 동일
 ```

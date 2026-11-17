@@ -62,6 +62,7 @@ sudo apt install -y \
   ros-lyrical-nav2-bringup \
   ros-lyrical-nav2-amcl \
   ros-lyrical-nav2-map-server \
+  ros-lyrical-nav2-mppi-controller \
   ros-lyrical-robot-state-publisher \
   ros-lyrical-teleop-twist-keyboard \
   ros-lyrical-tf2-tools \
@@ -81,6 +82,7 @@ sudo apt install -y \
 |---|---|
 | `cartographer` (코어+ROS 래퍼, 소스 빌드) | `tools/run-cli slam start` (지도 만들기) — apt 없음, 아래 "apt에 없는 것" 참조 |
 | `nav2-bringup` · `nav2-amcl` · `nav2-map-server` | `tools/run-cli nav start` · `explore start` · `map save` (bringup의 launch 파일을 그대로 씀 → 빼면 안 됨) |
+| `nav2-mppi-controller` | RL 정책이 꺼졌을 때 기본 주행 제어기 — `FollowPath.fallback_controller: mppi` (nav2 메타패키지에 포함되지만 명시) |
 | `robot-state-publisher` | 로봇 TF (`base_link → 라이다`) |
 | `teleop-twist-keyboard` · `tf2-tools` | 수동 조종 · `view_frames` 디버그 |
 | `turtlebot3-msgs` · `dynamixel-sdk` | 베이스 드라이버(OpenCR) 작업용 |

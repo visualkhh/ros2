@@ -1,12 +1,12 @@
 # rl_nav_controller — nav2 controller 플러그인 (학습한 주행 정책 + 바이패스)
 
 `rl_nav_controller::RlNavController : nav2_core::Controller`. nav2 planner가 준 경로를 isaac/training/rl_maze에서 학습한 정책으로 따라간다.
-안에 기본 controller(DWB)를 품고 있어서 **toggle 끔(기본) = DWB 그대로 · 켬 = 정책**.
+안에 기본 controller(MPPI)를 품고 있어서 **toggle 끔(기본) = MPPI 그대로 · 켬 = 정책**.
 
 ```bash
 # 정책 켬/끔 (nav 도는 중에)
 ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"    # 정책
-ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: false}"   # DWB (바이패스)
+ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: false}"   # MPPI (바이패스)
 ```
 
 상태는 매 제어 주기 `/controller_server/FollowPath/status`로도 나온다.
@@ -25,8 +25,8 @@ inner_kind: 1=DWB · 2=MPPI · 3=RPP · 4=RotationShim · 0=기타
 |---|---|---|
 | `plugin` | `rl_nav_controller::RlNavController` | |
 | `enable` | `false` | 시작 때 정책 적용 |
-| `model_path` | `""` | `policy.onnx` — 비우면 늘 DWB (켜려 해도 거부) |
-| `fallback_controller` | `dwb` (코드 기본 · 이 설정도 `dwb`) | 바이패스 controller: `dwb`·`mppi`·`rpp`·`rotation_shim` 또는 전체 pluginlib 클래스명 · 설정은 `FollowPath.inner.*` |
+| `model_path` | `""` | `policy.onnx` — 비우면 늘 fallback(MPPI) (켜려 해도 거부) |
+| `fallback_controller` | `mppi` (코드 기본 · 이 설정도 `mppi`) | 바이패스 controller: `mppi`·`dwb`·`rpp`·`rotation_shim` 또는 전체 pluginlib 클래스명 · 설정은 `FollowPath.inner.*` |
 | `inner_plugin` | (예전 이름) | `fallback_controller`가 비었을 때만 사용하는 호환 파라미터 |
 | `max_lin` · `max_ang` · `v_min_ratio` | 0.26 · 1.82 · -0.2 | 정책 [v, w] 스케일 = 학습 env |
 | `lookahead` · `wp_step` · `wp_scale` | 5 · 0.30 · 2.0 | 웨이포인트 관측 = 학습 env |

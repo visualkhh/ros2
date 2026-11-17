@@ -6,7 +6,7 @@
 추종 오차·도착 시간·충돌 없이 통과한 비율을 비교한다.
 
 ```text
-A: FollowPath.enable=false → fallback controller (DWB)
+A: FollowPath.enable=false → fallback controller (MPPI)
 B: FollowPath.enable=true  → rl_nav_controller (ONNX 정책)
 ```
 
@@ -26,7 +26,7 @@ B: FollowPath.enable=true  → rl_nav_controller (ONNX 정책)
 - 로봇 기준 웨이포인트는 Nav2 `transformed_global_plan`에서 `wp_step` 간격으로 샘플.
 - 라이다는 `/scan`(실제 LiDAR) 또는 점구름 가상 스캔(bee 변형). 스캔은 `r - lidar_inflation` (m).
 - `lidar_inflation`은 사용자 입력(ROS 파라미터, 기본 0.22 m) — 학습 `inflation_range 0.20~0.24` 안.
-- fallback 선택: `FollowPath.fallback_controller` (DWB · MPPI · RPP · RotationShim).
+- fallback 선택: `FollowPath.fallback_controller` (MPPI · DWB · RPP · RotationShim).
 - 모델 로드 실패·`enable=false`·센서 없음·추론 실패 시 fallback controller로 자동 바이패스.
 
 ## 3. 평가

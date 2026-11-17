@@ -185,7 +185,7 @@ ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{da
 # 같은 goal을 두 번 (enable=false/true) → /controller_server/FollowPath/status와 궤적 비교
 ```
 
-- `FollowPath.fallback_controller`로 fallback 선택 (현재 DWB — `dwb`/`mppi`/`rpp`/`rotation_shim`).
+- `FollowPath.fallback_controller`로 fallback 선택 (현재 MPPI — `mppi`/`dwb`/`rpp`/`rotation_shim`).
 - 구 `rl_correction`/`rl_eval`/`rl-only`/`route rl` A/B는 제거됐다.
 
 ## 4. sim 물리 — 고친 것 · 남은 것

@@ -115,8 +115,8 @@ ros2 param set /controller_server FollowPath.lidar_inflation 0.24
 
 ## 실기기 (nav2 controller)
 
-`ros2_ws/src/rl_nav_controller` — nav2 `FollowPath` 플러그인. 안에 fallback controller(기본 DWB)를 품고
-`enable=false`(기본) = fallback · `true` = 이 정책. `nav2_params.yaml`의 `fallback_controller: dwb|mppi|rpp|rotation_shim`.
+`ros2_ws/src/rl_nav_controller` — nav2 `FollowPath` 플러그인. 안에 fallback controller(기본 MPPI)를 품고
+`enable=false`(기본) = fallback · `true` = 이 정책. `nav2_params.yaml`의 `fallback_controller: mppi|dwb|rpp|rotation_shim`.
 ```bash
 ./run-training.sh rl_maze --play --checkpoint artifacts/rl_maze/training/<시각>/model_N.pt --num_envs 1
 #   → exported/policy.onnx (+ .onnx.data) → nav2_params FollowPath.model_path

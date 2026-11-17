@@ -7,7 +7,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · ROS 2 Lyrical). 노드 계
 | 패키지 | 내용 |
 |---|---|
 | `tb3_bringup` | 로봇 bringup. `state_manager`(상태) · `cmd_manager`(바퀴 명령 mux) · `opencr_driver`(OpenCR 시리얼) · `scan_resample`(LDS-03 고정 칸) · `explore_bridge`(자동 맵핑 ↔ 제어 상태) · launch 5개 · URDF |
-| `rl_nav_controller` | Nav2 `FollowPath` 플러그인 — RL 정책(`isaac/training/rl_maze`) / inner controller(DWB) 바이패스 |
+| `rl_nav_controller` | Nav2 `FollowPath` 플러그인 — RL 정책(`isaac/training/rl_maze`) / inner controller(MPPI) 바이패스 |
 | `rl_policy` | ONNX Runtime C++ 래퍼 (`rl_nav_controller`가 사용) |
 | `coin_d4_driver` (외부) | LDS-03 라이다 드라이버 (ROBOTIS) — 아래 `deps.repos`로 받음 |
 | `explore_lite` · `explore_lite_msgs` (외부) | 자동 맵핑 frontier 탐색 (m-explore-ros2) — 아래 `deps.repos`로 받음 |
@@ -88,19 +88,19 @@ colcon build --symlink-install --packages-select tb3_bringup rl_policy rl_nav_co
 ## Nav2 RL controller
 
 `FollowPath` 플러그인(`rl_nav_controller::RlNavController`)이 학습 정책(ONNX)으로 직접 Twist를 낸다.
-`FollowPath.enable=false`(기본)면 inner controller(DWB)로 바이패스한다.
+`FollowPath.enable=false`(기본)면 inner controller(MPPI)로 바이패스한다.
 
 ```bash
 # 켜기/끄기 (controller_server가 도는 중)
 ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: true}"
 ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{data: false}"
 
-# 상태 — RL/DWB, 모델 로드, 스캔, fallback 이름
+# 상태 — RL/MPPI, 모델 로드, 스캔, fallback 이름
 ./run-cli node-status /controller_server
 ```
 
 - 모델: `isaac/training/rl_maze` play → `policy.onnx` + `policy.onnx.data` → `ros2_ws/src/tb3_bringup/config/nav2_params.yaml`의 `FollowPath.model_path`
-- fallback: `FollowPath.fallback_controller` (`dwb` 코드 기본 · 이 로봇 설정도 `dwb`). `inner.*` 파라미터 블록을 선택한 플러그인에 맞출 것.
+- fallback: `FollowPath.fallback_controller` (`mppi` 코드 기본 · 이 로봇 설정도 `mppi`). `inner.*` 파라미터 블록을 선택한 플러그인에 맞출 것.
 - 상태 토픽: `/controller_server/FollowPath/status` — `[rl_active, reason, policy_loaded, enable, scan_ok, scan_age, scan_min, v, w, inner_kind]`
 - ONNX Runtime C++: `sudo apt install ros-lyrical-onnxruntime-vendor` → `colcon build --packages-select rl_policy rl_nav_controller`
 - 구 `rl_correction`/`rl_eval`/`rl-only`/`route rl` 경로는 제거됨.
