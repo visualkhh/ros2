@@ -2,7 +2,7 @@
 
 키 규약 (모든 화면 공통):
   메뉴     ↑↓ 이동 · Enter 실행 · 항목 키(숫자·글자) 포커스 · Esc/◀/b 뒤로 · m 메인 · r 새로고침 · q 종료
-  상태바   Tab 들어가기 · ←→ 칸 이동 · Enter 열기 · Tab/Esc 메뉴로  (focusable 칸이 있을 때만)
+  상태바   Tab/Shift+Tab 들어가기 · ←→ 칸 이동 · Enter 열기 · Tab/Esc 메뉴로  (focusable 칸이 있을 때만)
   확인     y 예 · n/Esc/◀ 아니오 · Enter 기본값
   입력     Enter 확인(검증 실패면 창 안에 사유, 그대로 다시 입력) · Esc/◀ 취소
   결과창   ↑↓/PgUp/PgDn 스크롤 · Enter/Esc/◀ 닫기
@@ -150,8 +150,10 @@ class Window:
                         continue
                     order = [self.menu_bar] + ([self.center_comp] if self.center_comp is not None else []) \
                         + ([self.top_bar] if self.top_bar.focusable else [])
-                    if k == 'tab' and len(order) > 1:   # Tab = 다음 부품으로 포커스 (메뉴 → 중앙 → 상태바 → 메뉴)
-                        self.focus = order[(order.index(self.focus) + 1) % len(order)]
+                    if k in ('tab', 'backtab') and len(order) > 1:
+                        # Tab = 다음 부품 · Shift+Tab = 이전 부품 (메뉴 ↔ 중앙 ↔ 상태바)
+                        step = 1 if k == 'tab' else -1
+                        self.focus = order[(order.index(self.focus) + step) % len(order)]
                         if keys.pending():
                             continue   # 눌린 키가 더 있으면 그리지 말고 먼저 처리 (꾹 누를 때 밀리지 않게)
                         break
@@ -216,14 +218,14 @@ class Window:
     def hints_line(self) -> str:
         """하단 고정 키 안내 — 포커스된 막대에 맞춰 (최상위면 뒤로·메인 없음)."""
         if self.focus is self.top_bar:
-            return '  ' + ' · '.join(['←→ 칸 이동', 'Enter 열기', 'Tab/Esc 메뉴로', 'q 종료'])
+            return '  ' + ' · '.join(['←→ 칸 이동', 'Enter 열기', 'Tab/Shift+Tab/Esc 메뉴로', 'q 종료'])
         if self.center_comp is not None and self.focus is self.center_comp:
-            return '  ' + (self.center_comp.hints or '') + ' · Tab/Esc 메뉴로 · q 종료'
+            return '  ' + (self.center_comp.hints or '') + ' · Tab/Shift+Tab 메뉴로 · q 종료'
         hints = ['↑↓ 이동', 'Enter 실행', '번호 포커스']
         if self.center_comp is not None:
-            hints.append('Tab 중앙')
+            hints.append('Tab/Shift+Tab 중앙')
         if self.top_bar.focusable:
-            hints.append('Tab 상태바')
+            hints.append('Tab/Shift+Tab 상태바')
         if self.back:
             hints.append('Esc/◀ 뒤로')
         if self.main:

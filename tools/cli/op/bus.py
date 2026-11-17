@@ -49,6 +49,8 @@ class Bus:
                      'estop': (node.create_publisher(Bool, '/cmd_manual_estop', 10), Bool)}
         self._nav_client = None
         self._through_client = None
+        self._path_client = None
+        self._path_through_client = None
         self._goal_handle = None
 
     def _poll(self, seconds: float = 0.2):
@@ -706,6 +708,78 @@ class Bus:
         self._goal_handle = None
         print(f'결과: {txt}')
         return 0 if code == 4 else 1
+
+    def _wait_action(self, fut, timeout: float, on_wait=None) -> bool:
+        start = time.monotonic()
+        while not fut.done():
+            if time.monotonic() - start > timeout:
+                return False
+            self._poll(0.1)
+            if on_wait:
+                on_wait(time.monotonic() - start)
+        return True
+
+    def preview_path(self, poses: list[dict], frame_id: str = 'map', on_wait=None) -> list[tuple[float, float]]:
+        """이동 없이 planner에 경로만 계산 — [(x, y), …] · 1개는 ComputePathToPose, 여러 개는 ComputePathThroughPoses."""
+        poses = [dict(p) for p in poses]
+        if not poses:
+            raise RuntimeError('웨이포인트 없음')
+        from geometry_msgs.msg import PoseStamped
+        from nav2_msgs.action import ComputePathThroughPoses, ComputePathToPose
+        from rclpy.action import ActionClient
+        stamp = self.node.get_clock().now().to_msg()
+
+        def ps(p):
+            m = PoseStamped()
+            m.header.frame_id = frame_id
+            m.header.stamp = stamp
+            m.pose.position.x = float(p['x'])
+            m.pose.position.y = float(p['y'])
+            qz, qw = yaw_quat(math.radians(float(p.get('yaw_deg', 0.0))))
+            m.pose.orientation.z, m.pose.orientation.w = qz, qw
+            return m
+
+        if len(poses) > 1:
+            if self._path_through_client is None:
+                self._path_through_client = ActionClient(
+                    self.node, ComputePathThroughPoses, '/compute_path_through_poses')
+            cli = self._path_through_client
+            end = time.monotonic() + 5.0
+            while not cli.server_is_ready() and time.monotonic() < end:
+                self._poll(0.2)
+            if not cli.server_is_ready():
+                raise RuntimeError('/compute_path_through_poses 서버 없음 — planner_server 확인')
+            goal = ComputePathThroughPoses.Goal()
+            goal.goals.header.frame_id = frame_id
+            goal.goals.header.stamp = stamp
+            goal.goals.goals = [ps(p) for p in poses]
+            goal.use_start = False
+        else:
+            if self._path_client is None:
+                self._path_client = ActionClient(self.node, ComputePathToPose, '/compute_path_to_pose')
+            cli = self._path_client
+            end = time.monotonic() + 5.0
+            while not cli.server_is_ready() and time.monotonic() < end:
+                self._poll(0.2)
+            if not cli.server_is_ready():
+                raise RuntimeError('/compute_path_to_pose 서버 없음 — planner_server 확인')
+            goal = ComputePathToPose.Goal()
+            goal.goal = ps(poses[0])
+            goal.use_start = False
+
+        send = cli.send_goal_async(goal)
+        if not self._wait_action(send, 5.0, on_wait):
+            raise RuntimeError('planner goal 응답 시간 초과')
+        handle = send.result()
+        if handle is None or not handle.accepted:
+            raise RuntimeError('planner가 goal을 거부')
+        res = handle.get_result_async()
+        if not self._wait_action(res, 20.0, on_wait):
+            raise RuntimeError('planner 응답 시간 초과')
+        out = res.result()
+        if out is None:
+            raise RuntimeError('planner 응답 없음')
+        return [(p.pose.position.x, p.pose.position.y) for p in out.result.path.poses]
 
     def _watch_goal(self, handle, label: str) -> None:
         """wait=False로 보낸 목표의 완료를 콜백으로 기록 — 상단 '목표' 칸·취소 가능 여부."""

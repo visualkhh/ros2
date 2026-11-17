@@ -132,7 +132,7 @@ tools/
 ② `조작`(MANUAL·NAV·SLAM_AUTO) · `지도:`(MAPPING·LOCALIZATION·NONE + 이름) · `위치 x=… y=… yaw=…` · `E-STOP` · `충돌감시` · `연결`
 ③ `odom`·`스캔` 수신 Hz · `목표` · `주행`(RL/DWB) · `진단`(OK/주의)
 ④ `모터` — opencr_driver `/diagnostics` (● ok / ✗ motor error·no S line / ? 수신 없음 · 온도·전류) · `전원`(배터리)
-모터 에러면 `1) 상태 → 2) 모터 재부팅`. 충돌감시 칸은 Enter로 켜고 끌 수 있다 (`run-cli collision`).
+모터 에러면 `1) 상태 → 2) 모터 재부팅`. 충돌감시 칸은 Enter로 켜고 끌 수 있고, 세부 설정은 `4) Nav → c) 충돌 감시 설정` 또는 `run-cli collision`.
 
 CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
 로그: `./run-cli slam log` (어디서나 — 원격이면 SSH로 로봇의 `.run/slam.log`).

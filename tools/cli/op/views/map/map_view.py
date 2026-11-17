@@ -12,13 +12,17 @@ from .grid import FREE, OCC, OUT, UNKNOWN, MapGrid
 from .viewport import Viewport
 
 RGB = {UNKNOWN: (70, 70, 78), FREE: (205, 205, 210), OCC: (18, 18, 24)}   # 칸 색 — OUT은 색 없음 (터미널 바탕)
+MAP_RGB, ODOM_RGB = (90, 220, 255), (255, 150, 40)   # map 원점 M · odom 원점 O
 PATH_RGB, ROBOT_RGB, GOAL_RGB, START_RGB, CURSOR_RGB = (240, 190, 40), (235, 60, 60), (60, 200, 90), (70, 150, 255), (255, 80, 220)
+PREVIEW_RGB, PLAN_RGB, LOCAL_PLAN_RGB = (0, 200, 120), (20, 90, 255), (170, 0, 255)
 BRAILLE = {(0, 0): 0x01, (0, 1): 0x02, (0, 2): 0x04, (1, 0): 0x08, (1, 1): 0x10, (1, 2): 0x20, (0, 3): 0x40, (1, 3): 0x80}
 YAW_LEN, YAW_GAP, HEAD_LEN = 16, 3, 5   # 방향선 길이 · 십자선에서 비우는 거리 · 화살표 머리 길이 (점 단위 — 점자 한 글자 = 2×4점)
+FRAME_LEN, FRAME_GAP, FRAME_HEAD = 10, 3, 4   # M·O·로봇 방향 화살표 — 십자선보다 짧게
 PAN_KEYS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0)}
 
 
-def _yaw_dots(cx: int, cy: int, yaw_deg: float) -> set[tuple[int, int]]:
+def _yaw_dots(cx: int, cy: int, yaw_deg: float,
+              length: int = YAW_LEN, gap: int = YAW_GAP, head: int = HEAD_LEN) -> set[tuple[int, int]]:
     """점자 점 좌표(가로 2점/칸 · 세로 4점/줄 — 점은 정사각형)에서 (cx, cy)로부터 yaw 방향 선 + 화살표 머리."""
     rad = math.radians(yaw_deg)
     pts = set()
@@ -28,10 +32,10 @@ def _yaw_dots(cx: int, cy: int, yaw_deg: float) -> set[tuple[int, int]]:
         while t <= b:
             pts.add((int(round(x0 + t * math.cos(ang))), int(round(y0 - t * math.sin(ang)))))
             t += 0.5
-    ray(cx, cy, rad, YAW_GAP, YAW_LEN)
-    tip = (cx + YAW_LEN * math.cos(rad), cy - YAW_LEN * math.sin(rad))
+    ray(cx, cy, rad, gap, length)
+    tip = (cx + length * math.cos(rad), cy - length * math.sin(rad))
     for side in (-1, 1):   # 머리 = 끝에서 뒤로 ±28° 두 줄
-        ray(tip[0], tip[1], rad + math.pi + side * math.radians(28), 0, HEAD_LEN)
+        ray(tip[0], tip[1], rad + math.pi + side * math.radians(28), 0, head)
     return pts
 
 
@@ -58,13 +62,22 @@ class MapView(View):
     """grid를 vp(Viewport)로 잘라 cols × rows 글자 영역으로 그린다. robot·start·goals는 밖(페이지)이 갱신, 키는 on_key."""
 
     focusable = True
-    hints = '↑↓←→ 지도 이동 · +/- 확대·축소 · f 전체 · r 로봇 따라가기 · [ ] 방향 15° · { } 1° · Enter 찍기'
+    hints = ('↑↓←→ 지도 이동 · +/- 확대·축소 · f 전체 · r 로봇 따라가기 · '
+             'm M · o O · v 예상경로 · p Nav2경로 · [ ] 방향 15° · { } 1° · Enter 찍기')
 
     def __init__(self, grid: MapGrid, color: bool = True, extra_key=None):
         self.grid, self.color = grid, color
         self.vp = Viewport(grid)
         self.following = True
         self.robot: tuple[float, float] | None = None
+        self.robot_yaw: float | None = None   # 로봇 진행 방향 [deg] — ●에서 화살표
+        self.odom: tuple[float, float] | None = None   # map 기준 odom 프레임 원점
+        self.odom_yaw: float | None = None             # map 기준 odom 프레임 방향 [deg]
+        self.show_map = False       # m — map 원점 M
+        self.show_odom = False      # o — odom 원점 O
+        self.show_robot = True      # 로봇 진행 방향 화살표 (기본 표시)
+        self.preview: list[tuple[float, float]] = []   # v — planner 예상 경로 (로봇 안 움직임)
+        self.plans: list[tuple[list[tuple[float, float]], tuple]] = []  # p — Nav2 /plan · /local_plan
         self.start: tuple[float, float] | None = None
         self.goals: list[dict] = []
         self.yaw = 0.0
@@ -78,6 +91,15 @@ class MapView(View):
     def center(self) -> tuple[float, float]:
         """십자선이 가리키는 세계 좌표 = 화면 한가운데."""
         return self.vp.cx, self.vp.cy
+
+    # 예전 테스트/호출 호환 — M·O를 한 번에 켜고 끄는 이름
+    @property
+    def show_frames(self) -> bool:
+        return self.show_map or self.show_odom
+
+    @show_frames.setter
+    def show_frames(self, on: bool) -> None:
+        self.show_map = self.show_odom = self.show_robot = bool(on)
 
     # ---------------------------------------------------------------- 키
     def on_key(self, k) -> bool:
@@ -138,6 +160,17 @@ class MapView(View):
                 if 0 <= c < cols and 0 <= r < sub:
                     dots[(c, r)] = PATH_RGB
 
+        def draw_path(path, rgb):
+            for a, b in zip(path, path[1:]):
+                for c, r in _line(scr(a), scr(b)):
+                    if 0 <= c < cols and 0 <= r < sub:
+                        dots[(c, r)] = rgb
+
+        for pl, rgb in self.plans:   # Nav2 /plan · /local_plan
+            draw_path(pl, rgb)
+        if self.preview:             # v — planner 예상 경로
+            draw_path(self.preview, PREVIEW_RGB)
+
         def mark(p, ch, rgb):
             c, r = scr(p)
             if 0 <= c < cols and 0 <= r < sub:
@@ -146,6 +179,10 @@ class MapView(View):
             mark(self.start, 'S', START_RGB)
         for i, g in enumerate(self.goals, 1):
             mark((g['x'], g['y']), str(i % 10), GOAL_RGB)
+        if self.show_map:
+            mark((0.0, 0.0), 'M', MAP_RGB)
+        if self.show_odom and self.odom:
+            mark(self.odom, 'O', ODOM_RGB)
         robot_cell = None
         if self.robot:
             c, r = scr(self.robot)
@@ -153,7 +190,29 @@ class MapView(View):
                 robot_cell = (c, r // 2)
                 labels[robot_cell] = ('●' if self.color else '@', ROBOT_RGB)
         cur = (cols // 2, (sub // 2) // 2)
-        braille: dict[tuple[int, int], int] = {}   # 글자 칸 → 점자 점 비트 (방향선)
+
+        # M·O·로봇 방향 화살표 — 점자 점으로 가늘게. 글자(M·O·●)가 있는 칸은 글자가 우선.
+        rays: dict[tuple[int, int], tuple[int, tuple]] = {}
+
+        def add_ray(p, yaw_deg, rgb):
+            pc, pr = scr(p)
+            if not (0 <= pc < cols and 0 <= pr < sub):
+                return
+            for dx, dy in _yaw_dots(pc * 2 + 1, (pr // 2) * 4 + 2, yaw_deg,
+                                    FRAME_LEN, FRAME_GAP, FRAME_HEAD):
+                c, r = dx // 2, dy // 4
+                if 0 <= c < cols and 0 <= r < rows and (c, r) != cur and (c, r) not in labels:
+                    bits, _ = rays.get((c, r), (0, rgb))
+                    rays[(c, r)] = (bits | BRAILLE[(dx % 2, dy % 4)], rgb)
+
+        if self.show_map:
+            add_ray((0.0, 0.0), 0.0, MAP_RGB)
+        if self.show_odom and self.odom and self.odom_yaw is not None:
+            add_ray(self.odom, self.odom_yaw, ODOM_RGB)
+        if self.show_robot and self.robot and self.robot_yaw is not None:
+            add_ray(self.robot, self.robot_yaw, ROBOT_RGB)
+
+        braille: dict[tuple[int, int], int] = {}   # 글자 칸 → 점자 점 비트 (십자선 방향선)
         if self.show_yaw:
             for dx, dy in _yaw_dots(cur[0] * 2 + 1, cur[1] * 4 + 2, self.yaw):
                 c, r = dx // 2, dy // 4
@@ -186,6 +245,11 @@ class MapView(View):
                         bg = bc or tc or (0, 0, 0)
                         put(f'\033[1;38;2;{CURSOR_RGB[0]};{CURSOR_RGB[1]};{CURSOR_RGB[2]}m'
                             f'\033[48;2;{bg[0]};{bg[1]};{bg[2]}m', chr(0x2800 + braille[(c, tr)]))
+                    elif (c, tr) in rays:       # M·O·로봇 방향 화살표 — 각자 색
+                        bits, rgb = rays[(c, tr)]
+                        bg = bc or tc or (0, 0, 0)
+                        put(f'\033[1;38;2;{rgb[0]};{rgb[1]};{rgb[2]}m'
+                            f'\033[48;2;{bg[0]};{bg[1]};{bg[2]}m', chr(0x2800 + bits))
                     elif tc is None and bc is None:
                         put('\033[0m', ' ')
                     else:
@@ -193,7 +257,8 @@ class MapView(View):
                         put(f'\033[22;38;2;{t[0]};{t[1]};{t[2]}m\033[48;2;{b[0]};{b[1]};{b[2]}m', '▀')
                 else:
                     code = max(top, bot) if OUT not in (top, bot) else min(top, bot)
-                    on_path = (c, 2 * tr) in dots or (c, 2 * tr + 1) in dots or (c, tr) in braille
+                    on_path = ((c, 2 * tr) in dots or (c, 2 * tr + 1) in dots
+                               or (c, tr) in braille or (c, tr) in rays)
                     ch = lab[0] if lab else (':' if on_path else {OCC: '#', FREE: '.', UNKNOWN: ' ', OUT: ' '}[code])
                     row.append(ch)
             out.append(''.join(row) + ('\033[0m' if self.color else ''))

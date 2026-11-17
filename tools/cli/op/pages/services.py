@@ -11,7 +11,8 @@ import subprocess
 from ..defs import BACK, STAY
 from ..procs import RUN_DIR, SERVICES, TOOL_DIR
 from ..terminal import DIM, GREEN, YELLOW
-from ..menus import Menu, MenuItem
+from ..menus import GoMenu, Menu, MenuItem
+from .collision import CollisionMenu
 from .drive import TeleopItem
 
 
@@ -349,8 +350,9 @@ class NavMenu(ServiceMenu):
     def items(self):
         return [MapStartItem(self.app), NavMapItem(self.app),
                 StopItem(self.app, '1', self.name),
-                RestartItem(self.app, '2', self.name), RvizItem(self.app, 'nav'),
-                LogItem(self.app, 'l', self.name)]
+                RestartItem(self.app, '2', self.name),
+                GoMenu(self.app, 'c', '충돌 감시 설정 (collision_monitor)', CollisionMenu(self.app)),
+                RvizItem(self.app, 'nav'), LogItem(self.app, 'l', self.name)]
 
     def hint(self):
         info = self.bus.procs.info('nav')

@@ -11,6 +11,7 @@ Enter = mode의 동작(웨이포인트 추가 · 위치 지정). Tab/Esc로 왼�
 """
 from __future__ import annotations
 
+import math
 import sys
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from ..dialog import fmt_pose
 from ..terminal import DIM
 from ..menus import ActionItem, Menu
 from ..views.map import FREE, OCC, UNKNOWN, MapGrid, MapView
+from ..views.map.map_view import LOCAL_PLAN_RGB, PLAN_RGB
 
 YAW_STEP = 15.0
 CELL_TXT = {UNKNOWN: '미확인', FREE: '빈 곳', OCC: '벽'}
@@ -45,8 +47,17 @@ class MapPage(Menu):
         self.yaw = 0.0
         self.msg = ''
         self._robot = None
+        self._robot_yaw = None
         self._robot_at = 0.0
+        self._odom = None
+        self._odom_yaw = None
         self._fitted = False
+        self.show_map = False        # m — map 원점 M
+        self.show_odom = False       # o — odom 원점 O
+        self.plan_on = False         # p — Nav2 /plan · /local_plan 겹침
+        self._preview = None         # v — planner 예상 경로
+        self._plans: dict[str, tuple[float, list[tuple[float, float]]] | None] = {
+            'plan': None, 'local_plan': None}
 
     # ---------------------------------------------------------------- 동작 (키 · 메뉴 공용)
     def pick(self) -> None:
@@ -178,6 +189,82 @@ class MapPage(Menu):
     def fit(self) -> None:
         self.view.on_key('f')
 
+    def _odom_origin(self):
+        """map 기준 odom 원점·방향 — 같은 순간의 map 자세(amcl)와 odom 자세로 계산."""
+        if self.state.amcl is None or self.state.pose is None:
+            return None
+        xm, ym, tm = self.state.amcl
+        xo, yo, to = self.state.pose
+        d = tm - to
+        c, s = math.cos(d), math.sin(d)
+        return (xm - (c * xo - s * yo), ym - (s * xo + c * yo)), math.degrees(d)
+
+    def toggle_map_origin(self) -> None:
+        self.show_map = not self.show_map
+        self.msg = 'M(map 원점) ' + ('● 표시' if self.show_map else '○ 숨김')
+
+    def toggle_odom(self) -> None:
+        self.show_odom = not self.show_odom
+        self.msg = 'O(odom 원점) ' + ('● 표시' if self.show_odom else '○ 숨김')
+        if self.show_odom and self._odom_origin() is None:
+            self.msg += ' — amcl/TF 대기'
+
+    def toggle_plan(self) -> None:
+        if self.source:
+            self.msg = '저장 지도에는 Nav2 경로가 없음 — 지금 지도(live)에서만'
+            return
+        self.plan_on = not self.plan_on
+        self.msg = 'Nav2 경로 겹침 ' + ('● ON — /plan(파랑) · /local_plan(보라)' if self.plan_on else '○ OFF')
+
+    def preview_path(self) -> None:
+        """v — 찍어 둔 웨이포인트로 planner에 경로만 계산 (로봇은 움직이지 않음)."""
+        if not self.goals:
+            self.msg = '웨이포인트 없음 — Enter로 먼저 찍으세요'
+            return
+        if self.source:
+            self.msg = '저장 지도에는 planner가 없음 — 지금 지도(live)에서만'
+            return
+        try:
+            self.ui.busy('예상 경로 계산')
+            self.ui.progress('Nav2 planner에 경로 요청 중… (로봇은 움직이지 않음)')
+            try:
+                pts = self.bus.preview_path(
+                    self.goals, on_wait=lambda sec: self.ui.progress(f'Nav2 planner 계산 중… {sec:.1f}s'))
+            finally:
+                self.ui._busy = None
+            if len(pts) < 2:
+                self.msg = 'planner가 경로를 내지 않음 (출발/목표 확인)'
+                return
+            self._preview = pts
+            self.msg = f'예상 경로 {len(pts)}점 (초록) — 전송은 g'
+        except Exception as exc:  # noqa: BLE001 — 화면에 이유를 남긴다
+            self.ui._busy = None
+            self.msg = f'FAIL: {exc}'
+
+    def clear_preview(self) -> None:
+        if self._preview is None:
+            self.msg = '예상 경로 없음'
+            return
+        self._preview = None
+        self.msg = '예상 경로 지움'
+
+    def _on_path(self, kind: str, msg) -> None:
+        if getattr(getattr(msg, 'header', None), 'frame_id', '') not in ('map', ''):
+            return
+        self._plans[kind] = (time.monotonic(),
+                             [(p.pose.position.x, p.pose.position.y) for p in msg.poses])
+
+    def _plan_lines(self):
+        """(점들, 색) 목록 — plan_on일 때 15초 안에 받은 /plan·/local_plan만."""
+        if not self.plan_on or self.source:
+            return []
+        now, out = time.monotonic(), []
+        for kind, rgb in (('plan', PLAN_RGB), ('local_plan', LOCAL_PLAN_RGB)):
+            got = self._plans.get(kind)
+            if got and now - got[0] <= 15.0 and len(got[1]) > 1:
+                out.append((got[1], rgb))
+        return out
+
     def _extra_key(self, k) -> bool:
         """지도가 모르는 키."""
         if k in ('enter', ' '):
@@ -192,6 +279,17 @@ class MapPage(Menu):
             self.cancel_nav()
         elif k in ('i', 'I') and self.mode == 'nav':
             self.set_initial_pose_here()
+        elif k in ('v', 'V') and self.mode == 'nav':
+            if k == 'v':
+                self.preview_path()
+            else:
+                self.clear_preview()
+        elif k in ('p', 'P'):
+            self.toggle_plan()
+        elif k in ('m', 'M'):
+            self.toggle_map_origin()
+        elif k in ('o', 'O'):
+            self.toggle_odom()
         elif k in ('[', ']', '{', '}') and self.mode != 'view':   # [ ] = 15° · { } = 1° (미세)
             self.turn({'[': YAW_STEP, ']': -YAW_STEP, '{': 1.0, '}': -1.0}[k])
         else:
@@ -207,13 +305,18 @@ class MapPage(Menu):
                     ('목표로 주행 — 한 점/여러 점 (g)', self.send_waypoints),
                     ('웨이포인트 전체 지우기 (d)', self.clear_goals),
                     ('로봇 초기 위치 지정 — 십자선 (i)', self.set_initial_pose_here),
-                    ('Nav2 주행 취소 (x)', self.cancel_nav)],
+                    ('Nav2 주행 취소 (x)', self.cancel_nav),
+                    ('예상 경로 미리보기 — 계산만 (v)', self.preview_path),
+                    ('예상 경로 지우기 (V)', self.clear_preview)],
             'pose': [('로봇 위치로 지정 — 십자선 위치 (Enter)', self.pick)],
             'view': [],
         }[self.mode]
         rows += [('확대 (+)', lambda: self.zoom(+1)), ('축소 (-)', lambda: self.zoom(-1)),
                  ('전체 보기 (f)', self.fit),
-                 (lambda: f'로봇 따라가기 (r) — {"켜짐" if v.following else "꺼짐"}', self.toggle_follow)]
+                 (lambda: f'로봇 따라가기 (r) — {"켜짐" if v.following else "꺼짐"}', self.toggle_follow),
+                 (lambda: f'M map 원점 (m) — {"●" if self.show_map else "○"}', self.toggle_map_origin),
+                 (lambda: f'O odom 원점 (o) — {"●" if self.show_odom else "○"}', self.toggle_odom),
+                 (lambda: f'Nav2 경로 겹쳐 보기 (p) — {"●" if self.plan_on else "○"}', self.toggle_plan)]
         if self.mode != 'view':
             rows += [(f'좌회전 +{YAW_STEP:.0f}° ([) · 미세 +1° = {{', lambda: self.turn(YAW_STEP)),
                      (f'우회전 -{YAW_STEP:.0f}° (]) · 미세 -1° = }}', lambda: self.turn(-YAW_STEP))]
@@ -228,6 +331,7 @@ class MapPage(Menu):
             self._robot_at = now
             p = self.bus.robot_pose()
             self._robot = (p['x'], p['y']) if p else None
+            self._robot_yaw = p['yaw_deg'] if p else None
         return self._robot
 
     def center(self) -> list[str]:
@@ -236,6 +340,14 @@ class MapPage(Menu):
         rows = max(3, ch - 6)
         v.show_yaw = self.mode != 'view'
         v.robot = self._pose()
+        v.robot_yaw = self._robot_yaw
+        odom = self._odom_origin()
+        if odom is not None:
+            self._odom, self._odom_yaw = odom
+        v.odom, v.odom_yaw = self._odom, self._odom_yaw
+        v.show_map, v.show_odom = self.show_map, self.show_odom
+        v.preview = self._preview or []
+        v.plans = self._plan_lines()
         v.start = None
         v.goals, v.yaw = self.goals, self.yaw
         if not self._fitted:
@@ -253,9 +365,15 @@ class MapPage(Menu):
         status = [f'십자선 ({x:+.2f}, {y:+.2f}) m · {CELL_TXT.get(code, "지도 밖")}',
                   f'한 칸 = {v.vp.scale * 100:.0f} cm · {"따라가기" if v.following else "자유이동"}',
                   mode_txt]
+        if self._preview:
+            status.append(f'예상 경로 {len(self._preview)}점 (초록)')
+        if self.plan_on:
+            plans = self._plan_lines()
+            status.append('Nav2 경로 ' + (f'{sum(len(p) for p, _ in plans)}점 (파랑/보라)' if plans else '대기'))
+        status.append(f'M map {"●" if self.show_map else "○"} · O odom {"●" if self.show_odom else "○"}')
         if self.state.goal_status:
             status.append(f'목표: {self.state.goal_status}')
-        legend = self.term.paint('● 로봇 + 십자선 S 출발 1 2 goal', DIM)
+        legend = self.term.paint('● 로봇 → 방향 · + 십자선 · S 출발 · 1 2 goal · M map · O odom', DIM)
         return lines + status + [self.msg, legend]
 
     # ---------------------------------------------------------------- 실행
@@ -303,6 +421,22 @@ class MapPage(Menu):
             print('FAIL: /map을 못 받음 — 지도 서버(map_server)·Nav가 떠 있는지 확인', file=sys.stderr)
             return STAY
         self.view = MapView(grid, self.term.color, extra_key=self._extra_key)
-        result = self.ui.window.run(self.title, self.items, self.center, back=True, main=True,
-                                    center_comp=self.view, focus_center=True)
+        self._plans = {'plan': None, 'local_plan': None}
+        subs = []
+        try:
+            from nav_msgs.msg import Path
+            for topic, kind in (('/plan', 'plan'), ('/local_plan', 'local_plan')):
+                subs.append(self.app.create_subscription(
+                    Path, topic, lambda m, k=kind: self._on_path(k, m), 10))
+        except Exception:
+            pass
+        try:
+            result = self.ui.window.run(self.title, self.items, self.center, back=True, main=True,
+                                        center_comp=self.view, focus_center=True)
+        finally:
+            for sub in subs:
+                try:
+                    self.app.destroy_subscription(sub)
+                except Exception:
+                    pass
         return result if result in (MAIN, QUIT) else BACK
