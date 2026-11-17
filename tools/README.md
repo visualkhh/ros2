@@ -128,7 +128,7 @@ tools/
 상단 상태바 (Lv2 CLI와 같은 용어):
 ① 프로세스 `베이스 · SLAM · Nav · SLAM Nav` (로봇: pid · 그 밖: 노드 그래프로 `pak.local (원격)`)
 ② `조작`(MANUAL·NAV·SLAM_AUTO) · `지도:`(MAPPING·LOCALIZATION·NONE + 이름) · `위치 x=… y=… yaw=…` · `E-STOP` · `충돌감시` · `연결`
-③ `odom`·`스캔`·`amcl` 수신 Hz · `목표` · `주행`(RL/DWB) · `진단`(OK/주의)
+③ `odom`·`스캔` 수신 Hz · `목표` · `주행`(RL/DWB) · `진단`(OK/주의)
 ④ `모터` — opencr_driver `/diagnostics` (● ok / ✗ motor error·no S line / ? 수신 없음 · 온도·전류) · `전원`(배터리)
 모터 에러면 `1) 상태 → 2) 모터 재부팅`. 충돌감시 칸은 Enter로 켜고 끌 수 있다 (`run-cli collision`).
 

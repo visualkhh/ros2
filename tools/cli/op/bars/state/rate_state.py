@@ -1,4 +1,4 @@
-"""RateState — 토픽 수신 상태 한 칸 (✗ 없음 · 3초 넘게 끊김 빨강 · 수신 Hz 초록). odom·scan·map의 부모."""
+"""RateState — 토픽 수신 상태 한 칸 (✗ 없음 · 3초 넘게 끊김 빨강 · 수신 Hz 초록). odom·스캔의 부모."""
 from __future__ import annotations
 
 from ...terminal import GREEN, RED

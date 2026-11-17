@@ -19,14 +19,14 @@ from .state_bar import StateBar
 
 
 class TopStateBar(StateBar):
-    """줄 1 프로세스(서비스마다) · 줄 2 조작·지도·위치·E-STOP·충돌감시·연결 · 줄 3 odom·스캔·amcl·목표·주행·진단 · 줄 4 모터·전원."""
+    """줄 1 프로세스(서비스마다) · 줄 2 조작·지도·위치·E-STOP·충돌감시·연결 · 줄 3 odom·스캔·목표·주행·진단 · 줄 4 모터·전원."""
 
     def __init__(self, ui):
         super().__init__(ui, [
             [ProcState(ui, name, svc.label) for name, svc in SERVICES.items()],
             [OperationState(ui), MapState(ui), PoseState(ui), EstopState(ui),
              CollisionState(ui), ConnectionState(ui)],
-            [RateState(ui, 'odom', 'odom'), RateState(ui, 'scan', '스캔'), RateState(ui, 'amcl_rate', 'amcl'),
+            [RateState(ui, 'odom', 'odom'), RateState(ui, 'scan', '스캔'),
              GoalState(ui), ControllerState(ui), DiagState(ui)],
             [RobotState(ui), PowerState(ui)],
         ])
