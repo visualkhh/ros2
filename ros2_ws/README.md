@@ -101,6 +101,7 @@ ros2 service call /controller_server/FollowPath/toggle std_srvs/srv/SetBool "{da
 
 - 모델: `isaac/training/rl_maze` play → `policy.onnx` + `policy.onnx.data` → `ros2_ws/src/tb3_bringup/config/nav2_params.yaml`의 `FollowPath.model_path`
 - fallback: `FollowPath.fallback_controller` (`mppi` 코드 기본 · 이 로봇 설정도 `mppi`). `inner.*` 파라미터 블록을 선택한 플러그인에 맞출 것.
+- fallback 변경: `./tools/run-cli fallback mppi|dwb|rpp|rotation_shim` — 설정 저장 · tb3_bringup 빌드 · Nav 재시작. TUI에서는 `8) 노드 → controller_server → c) 바이패스 controller 변경`.
 - 상태 토픽: `/controller_server/FollowPath/status` — `[rl_active, reason, policy_loaded, enable, scan_ok, scan_age, scan_min, v, w, inner_kind]`
 - ONNX Runtime C++: `sudo apt install ros-lyrical-onnxruntime-vendor` → `colcon build --packages-select rl_policy rl_nav_controller`
 - 구 `rl_correction`/`rl_eval`/`rl-only`/`route rl` 경로는 제거됨.

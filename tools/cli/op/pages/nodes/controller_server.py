@@ -31,7 +31,7 @@ INNER = {1: 'DWB', 2: 'MPPI', 3: 'RPP', 4: 'RotationShim'}
 
 SERVICE_HINTS = {
     '/controller_server/FollowPath/toggle': {
-        'label': 'FollowPath 토글 (RL↔DWB)',
+        'label': 'FollowPath 토글 (RL↔fallback)',
         'default': '{"data": true}',
     },
     '/controller_server/set_parameters': {
@@ -200,7 +200,7 @@ class ControllerServerFeature(NodeFeature):
             enabled = enabled_now()
             target = (not enabled) if enabled is not None else True
             now = '?' if enabled is None else ('ON' if enabled else 'OFF')
-            body = [f'현재: {now}', f'바꿀 상태: {"ON (정책)" if target else "OFF (DWB)"}',
+            body = [f'현재: {now}', f'바꿀 상태: {"ON (정책)" if target else "OFF (MPPI fallback)"}',
                     '서비스: /controller_server/FollowPath/toggle']
             if not app.ui.confirm('FollowPath.toggle을 보낼까요?', default=False, body=body):
                 return
@@ -212,10 +212,47 @@ class ControllerServerFeature(NodeFeature):
             else:
                 print(f'실패: {result}')
 
+        def fallback_now() -> str:
+            target_node = bus.param_target('controller_server')
+            if target_node is not None:
+                cli = bus.param_client(*target_node)
+                if cli is not None:
+                    vals = bus.param_get_vals(cli, ['FollowPath.fallback_controller'], timeout=1.0)
+                    if vals:
+                        try:
+                            return str(vals[0].string_value)
+                        except Exception:
+                            pass
+            return '?'
+
+        def change_fallback():
+            names = {'1': 'mppi', '2': 'dwb', '3': 'rpp', '4': 'rotation_shim'}
+            cur = fallback_now()
+            choice = app.ui.select(
+                'RL 바이패스 controller',
+                [('1', 'mppi (기본 · 부드러운 주행)'), ('2', 'dwb (가볍고 단순)'),
+                 ('3', 'rpp (Regulated Pure Pursuit)'), ('4', 'rotation_shim (회전 보조)')],
+                [f'현재: {cur}', 'Nav를 재시작해야 적용됩니다 (주행 중이면 멈춤)',
+                 '설정 파일에 저장 → tb3_bringup 빌드 → nav restart'])
+            if choice not in names:
+                return
+            name_new = names[choice]
+            if name_new == cur:
+                print(f'이미 fallback={cur} — 바꾸지 않음')
+                return
+            if not app.ui.confirm(f'fallback을 {cur} → {name_new}로 바꿀까요?', default=False,
+                                  body=['설정: ros2_ws/src/tb3_bringup/config/nav2_params.yaml',
+                                        '저장 후 tb3_bringup을 빌드하고 Nav를 재시작합니다.',
+                                        '주행 중이면 로봇이 멈춥니다.']):
+                return
+            ok, msg = bus.set_fallback(name_new)
+            print(('적용: ' if ok else '실패: ') + msg)
+
         return [
             GoMenu(app, 'a', '서비스 목록 · 호출 (테스트)',
                    ServiceMenu(app, name, self.services(bus, name))),
-            ActionItem(app, 'b', '서비스: FollowPath.toggle (RL↔DWB)', toggle),
+            ActionItem(app, 'b', '서비스: FollowPath.toggle (RL↔MPPI fallback)', toggle),
+            ActionItem(app, 'c', '바이패스 controller 변경 (MPPI/DWB/RPP) — Nav 재시작', change_fallback),
         ]
 
     @staticmethod

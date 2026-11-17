@@ -17,6 +17,7 @@
 #   ./run-cli nav start office --model <policy.onnx>   # RL 정책으로 시작 (PC 경로는 로봇으로 복사)
 #   ./run-cli teleop                         w/x/a/d · q/e/z/c 사선 · s 정지 · -/= 속도 · b 삑 · Esc 종료
 #   ./run-cli control manual|nav-plan · estop on|off · automap start|stop
+#   ./run-cli fallback mppi|dwb|rpp|rotation_shim   # RL 바이패스 controller (설정 저장 · 빌드 · Nav 재시작)
 #   ./run-cli bag start|stop|status       rosbag2(MCAP) 토픽 녹화 (+ CPU·메모리·GPU sys.csv) · 메뉴 t
 #   ./run-cli stop                           ROS 전부 끄기 (base|slam|nav stop = 하나씩)
 #   ./run-cli restart-all                    켜져 있던 것만 전부 재시작 (nav는 같은 지도로)

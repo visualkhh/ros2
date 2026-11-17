@@ -1225,6 +1225,16 @@ class Bus:
               ' · 멈추려면 run-cli bag stop')
         return 0
 
+    # ------------------------------------------------------------- fallback controller
+    def set_fallback(self, name: str) -> tuple[bool, str]:
+        """RL 바이패스 controller 변경 — 설정 파일 저장·빌드·Nav 재시작 (PC는 SSH)."""
+        return self.procs.set_fallback(name)
+
+    def cmd_fallback(self, args) -> int:
+        ok, msg = self.set_fallback(args.name)
+        print(msg)
+        return 0 if ok else 1
+
     # ------------------------------------------------------------- 자세
     def current_pose(self) -> dict:
         """지금 로봇 map 자세 (amcl_pose) — 없으면 RuntimeError."""

@@ -117,6 +117,7 @@ tools/
 ./run-cli say <글>              # 타이핑삑 — 한/영 → 자모별 삑 (/cmd_say · 메뉴 0) 비프음 → 3)
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
 ./run-cli collision on|off|status   # 충돌 감시 (collision_monitor) — 상단 '충돌감시' 칸 Enter와 같음
+./run-cli fallback mppi|dwb|rpp|rotation_shim   # RL 바이패스 controller 변경 (설정 저장 · 빌드 · Nav 재시작)
 ./run-cli bag start [--label 이름] [--topics /a /b ...] [--no-sys]   # rosbag2(MCAP) 녹화
 ./run-cli bag stop | bag status     # 녹화 중지·확인 (메뉴 t) 토픽 · bag
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL

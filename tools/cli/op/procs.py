@@ -9,6 +9,7 @@ CLI를 껐다 켜도 pid 파일로 다시 찾으므로 SLAM·Nav는 계속 돈�
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import socket
 import signal
@@ -251,6 +252,49 @@ class Procs:
                 return False, '\n'.join(msgs)
         return True, '\n'.join(msgs)
 
+    # ------------------------------------------------------------ fallback controller
+    FALLBACKS = ('mppi', 'dwb', 'rpp', 'rotation_shim')
+
+    @staticmethod
+    def nav_params_source() -> Path:
+        """fallback 설정을 저장할 파일 — 설치본이면 src의 원본을 고쳐 다시 빌드한다."""
+        p = Path(NAV_PARAMS)
+        src = WS_DIR / 'src' / 'tb3_bringup' / 'config' / 'nav2_params.yaml'
+        return src if src.is_file() else p
+
+    def configured_fallback(self) -> str:
+        try:
+            text = self.nav_params_source().read_text()
+        except OSError:
+            return '?'
+        m = re.search(r'(?m)^\s*fallback_controller:\s*["\']?([^"\'\s#]+)', text)
+        return m.group(1) if m else '?'
+
+    def set_fallback(self, name: str) -> tuple[bool, str]:
+        """RL 바이패스 controller를 설정 파일에 저장 → tb3_bringup 빌드 → Nav 재시작."""
+        name = (name or '').strip().lower()
+        if name not in self.FALLBACKS:
+            return False, f'fallback은 {", ".join(self.FALLBACKS)} 중 하나'
+        path = self.nav_params_source()
+        try:
+            text = path.read_text()
+        except OSError as exc:
+            return False, f'설정 파일을 못 읽음: {path} ({exc})'
+        new, n = re.subn(r'''(?m)^(\s*fallback_controller:\s*["'])[^"']+(["'])''',
+                         rf'\g<1>{name}\g<2>', text, count=1)
+        if not n:
+            return False, f'fallback_controller 줄을 못 찾음: {path}'
+        if new != text:
+            path.write_text(new)
+        print(f'fallback_controller → {name}  ({path})')
+        rc = self.build(['--packages-select', 'tb3_bringup'])
+        if rc != 0:
+            return False, f'빌드 실패 (exit {rc}) — 설정은 저장됨. 로그를 확인하세요'
+        if not self.running('nav'):
+            return True, f'fallback {name} 저장 · 빌드 완료 (Nav 꺼짐 — 다음 시작 때 적용)'
+        ok, msg = self.restart('nav')
+        return ok, f'fallback {name} 저장 · 빌드 완료\n{msg}'
+
     # ------------------------------------------------------------ 빌드 (run-cli build)
     def build(self, extra: list[str] | None = None, full: bool = False) -> int:
         """colcon build. full=True면 setup/pi/build.sh (vcs import·패치·rosdep 포함)."""
@@ -471,6 +515,10 @@ class RemoteProcs(Procs):
 
     def restart_all(self) -> tuple[bool, str]:
         rc, out = self._cli('restart-all')
+        return rc == 0, f'[{self.host}] {out}'
+
+    def set_fallback(self, name: str) -> tuple[bool, str]:
+        rc, out = self._cli('fallback', name, timeout=240)
         return rc == 0, f'[{self.host}] {out}'
 
     def build(self, extra: list[str] | None = None, full: bool = False) -> int:

@@ -18,6 +18,7 @@ Isaac Lab (rl_maze) → policy.onnx + policy.onnx.data
 - 한계 0.26 m/s · 1.82 rad/s (Waffle Pi).
 - `enable=false`(기본) 또는 모델 로드 실패 시 fallback controller(MPPI)로 바이패스.
 - fallback 선택: `FollowPath.fallback_controller` (현재 `mppi`; `dwb` · `rpp` · `rotation_shim` 가능).
+- fallback 변경: `./tools/run-cli fallback mppi|dwb|rpp|rotation_shim` (설정 저장 · 빌드 · Nav 재시작).
 - `lidar_inflation` [m] — 사용자 입력. 학습 `inflation_range 0.20~0.24` 안. `ros2 param set`으로 런타임 변경.
 
 ## 로봇 쪽 연결
