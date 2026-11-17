@@ -182,10 +182,23 @@ class MapView(View):
         if self.preview:             # v — planner 예상 경로
             draw_path(self.preview, PREVIEW_RGB)
 
+        cur = (cols // 2, (sub // 2) // 2)
+
         def mark(p, ch, rgb):
+            """글자 칸이 이미 로봇·십자선·다른 글자면 옆 빈 칸으로 밀어서라도 보이게."""
             c, r = scr(p)
-            if 0 <= c < cols and 0 <= r < sub:
-                labels[(c, r // 2)] = (ch, rgb)
+            if not (0 <= c < cols and 0 <= r < sub):
+                return
+            base = (c, r // 2)
+            for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
+                           (1, 1), (-1, 1), (1, -1), (-1, -1)):
+                q = (base[0] + dx, base[1] + dy)
+                if (0 <= q[0] < cols and 0 <= q[1] < rows
+                        and q != cur and q not in labels):
+                    labels[q] = (ch, rgb)
+                    return
+            labels[base] = (ch, rgb)   # 빈 칸이 없으면 원래 자리 (다른 글자가 덮음)
+
         if self.start:
             mark(self.start, 'S', START_RGB)
         for i, g in enumerate(self.goals, 1):
@@ -200,7 +213,6 @@ class MapView(View):
             if 0 <= c < cols and 0 <= r < sub:
                 robot_cell = (c, r // 2)
                 labels[robot_cell] = ('●' if self.color else '@', ROBOT_RGB)
-        cur = (cols // 2, (sub // 2) // 2)
 
         # M·O·로봇 방향 화살표 — 점자 점으로 가늘게. 글자(M·O·●)가 있는 칸은 글자가 우선.
         rays: dict[tuple[int, int], tuple[int, tuple]] = {}
@@ -229,7 +241,7 @@ class MapView(View):
                 c, r = dx // 2, dy // 4
                 if 0 <= c < cols and 0 <= r < rows and (c, r) != cur:
                     braille[(c, r)] = braille.get((c, r), 0) | BRAILLE[(dx % 2, dy % 4)]
-        labels[cur] = ('+', CURSOR_RGB)   # 십자선 = 화면 한가운데 (찍을 자리)
+        labels[cur] = (('⊕', ROBOT_RGB) if robot_cell == cur else ('+', CURSOR_RGB))   # 십자선·로봇 겹침
 
         out = []
         for tr in range(rows):

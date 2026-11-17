@@ -205,15 +205,32 @@ class MapPage(Menu):
         c, s = math.cos(d), math.sin(d)
         return (xm - (c * xo - s * yo), ym - (s * xo + c * yo)), math.degrees(d)
 
+    def _on_screen(self, p: tuple[float, float]) -> bool:
+        """그 세계 좌표가 지금 지도 화면 안에 있나 — M/O가 안 보이는 이유를 알려 주려고."""
+        if self.view is None:
+            return False
+        cols, rows = self.view.size
+        c, r = self.view.vp.to_screen(p[0], p[1], cols, rows * 2)
+        return 0 <= c < cols and 0 <= r < rows * 2
+
     def toggle_map_origin(self) -> None:
         self.show_map = not self.show_map
-        self.msg = 'M(map 원점) ' + ('● 표시' if self.show_map else '○ 숨김')
+        self.msg = 'M(map 원점) ' + ('● 표시 (0.00, 0.00)' if self.show_map else '○ 숨김')
+        if self.show_map and not self._on_screen((0.0, 0.0)):
+            self.msg += ' — 화면 밖, f 전체 보기'
 
     def toggle_odom(self) -> None:
         self.show_odom = not self.show_odom
+        odom = self._odom_origin()
         self.msg = 'O(odom 원점) ' + ('● 표시' if self.show_odom else '○ 숨김')
-        if self.show_odom and self._odom_origin() is None:
-            self.msg += ' — amcl/TF 대기'
+        if self.show_odom:
+            if odom is None:
+                self.msg += ' — amcl/odom 대기'
+            else:
+                self._odom, self._odom_yaw = odom
+                self.msg += f' ({odom[0][0]:+.2f}, {odom[0][1]:+.2f})'
+                if not self._on_screen(odom[0]):
+                    self.msg += ' — 화면 밖, f 전체 보기'
 
     def toggle_plan(self) -> None:
         if self.source:
@@ -416,7 +433,13 @@ class MapPage(Menu):
         if self.cost_mode:
             status.append('costmap ' + self.COST_LABELS[self.cost_mode]
                           + ('' if self._cost_grid() is not None else ' — 수신 대기'))
-        status.append(f'M map {"●" if self.show_map else "○"} · O odom {"●" if self.show_odom else "○"}')
+        mo = [f'M map {"●" if self.show_map else "○"}']
+        if self.show_map:
+            mo.append('(0.00,0.00)')
+        mo.append(f'O odom {"●" if self.show_odom else "○"}')
+        if self.show_odom and self._odom:
+            mo.append(f'({self._odom[0]:+.2f},{self._odom[1]:+.2f})')
+        status.append(' '.join(mo))
         if self.state.goal_status:
             status.append(f'목표: {self.state.goal_status}')
         legend = self.term.paint('● 로봇 → 방향 · + 십자선 · S 출발 · 1 2 goal · M map · O odom', DIM)
