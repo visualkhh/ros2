@@ -209,7 +209,10 @@ class Bus:
                 return True
             elapsed = time.monotonic() - start
             if elapsed >= next_note:
-                self.ui.progress(f'베이스 odom/scan 대기 … {elapsed:.0f}/{timeout:.0f}초 (처음엔 10~30초 걸릴 수 있음)')
+                note = f'베이스 odom/scan 대기 … {elapsed:.0f}/{timeout:.0f}초 (처음엔 10~30초 걸릴 수 있음)'
+                self.ui.progress(note)
+                if getattr(self.ui, '_busy', None) is None:
+                    print('  ' + note, flush=True)
                 next_note += 5.0
         print(self.term.paint(
             f'베이스 odom/scan 수신 대기 시간 초과 ({timeout:.0f}초) — 로그: {self.procs.logfile("base")}', RED))
