@@ -139,7 +139,7 @@ class MapPage(Menu):
             return
         body = [f'{i}) {fmt_pose(g)}' for i, g in enumerate(self.goals, 1)]
         how = '한 점씩' if len(self.goals) == 1 else 'NavigateThroughPoses 한 번에'
-        if not self.ui.confirm(f'웨이포인트 {len(self.goals)}개를 {how} 보낼까요?', body=body):
+        if not self.ui.confirm(f'웨이포인트 {len(self.goals)}개를 {how} 보낼까요?', default=True, body=body):
             self.msg = '전송 취소'
             return
         try:
