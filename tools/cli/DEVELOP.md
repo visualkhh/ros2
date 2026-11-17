@@ -19,7 +19,7 @@ cli/
     ├── bars/menu/      # MenuBar → LeftSideMenuBar · ChoiceItem
     ├── views/map/      # 터미널 지도 — MapGrid(벽 우선 피라미드) · Viewport(중심·확대) · MapView(포커스 가능 Component)
     ├── bars/state/     # 상단 상태바 — State(칸) 하위 클래스들 + StateBar(줄로 그림) + TopStateBar(기본 구성)
-    ├── dialog/        # 창 — Dialog(dialog.py) 최상위 부모 + 하위 클래스 한 파일에 하나 (Input·Key·Pager·Busy·Teleop·RouteRviz)
+    ├── dialog/        # 창 — Dialog(dialog.py) 최상위 부모 + 하위 클래스 한 파일에 하나 (Input·Key·Pager·Busy·Teleop)
     ├── ui.py          # Ui — 터미널 모드 · print 가로채기 · confirm/modal_input/pager/select 진입점 · ui.window
     ├── state.py       # StateStore — 구독한 ROS 상태 보관 (화면은 여기만 읽음)
     ├── procs.py       # Procs — launch 프로세스(로컬/SSH 원격) · 지도 파일
@@ -27,7 +27,7 @@ cli/
     ├── defs.py        # BACK/MAIN/QUIT/STAY/TIMEOUT · MENU_REFRESH_S
     └── pages/         # Page → Menu → 각 화면 (MenuItem 객체)
         ├── nodes/     # 노드별 추가 상태 (feature.py + <node>.py)
-        └── ab/        # A/B 화면 + core.py + <node>/{command.json, report.py}
+        └── topics/    # 토픽 · bag (rosbag2 녹화·재생·부하 기록)
 ```
 
 `./run-cli status`처럼 인자가 있으면 `Bus.cmd_*`만 돌고 화면은 없습니다. 인자가 없고 TTY면 `MainMenu`가 뜹니다.
@@ -70,8 +70,7 @@ Dialog (op/dialog/dialog.py)   박스 그리기 · 크기 · 지우기 · 키 �
  ├─ KeyDialog       키 하나 (y/n)                       ← ui.confirm · modal_key
  ├─ PagerDialog     결과창 스크롤                       ← ui.pager
  ├─ BusyDialog      처리 중 창 (키 루프 없음)           ← ui.busy · step · progress
- ├─ TeleopDialog    텔레오퍼                            ← bus.cmd_teleop (A/B 경로 goal 찍기는 on_mark로 같은 창)
- └─ RouteRvizDialog A/B RViz goal 찍기                  ← pages/ab 경로 편집
+ └─ TeleopDialog    텔레오퍼                            ← bus.cmd_teleop
 ```
 
 새 창은 `op/dialog/<이름>_dialog.py`에 `Dialog`를 상속해 위 메서드만 채우고 `dialog/__init__.py`에 넣는다.
@@ -114,12 +113,12 @@ StateBar — State를 줄(row)로 받아 ' | '로 이어 그림 · add(state, ro
 
 ## 5. 지도 화면 (MapPage) — 파라미터로 쓰임이 바뀌는 화면
 
-`pages/map_page.py` 하나가 **보기 · A/B 경로 goal 찍기 · 로봇 위치 지정**을 다 한다. 웹 페이지처럼 이름과 파라미터로 연다:
+`pages/map_page.py` 하나가 **보기 · 목표/초기위치 · 로봇 위치 지정**을 다 한다. 웹 페이지처럼 이름과 파라미터로 연다:
 
 ```python
 self.ui.window.navigate('map', mode='view')                                   # 지금 /map 보기 (로봇 ● 표시)
 self.ui.window.navigate('map', mode='view', source=map_yaml)                  # 저장된 지도 파일 보기
-self.ui.window.navigate('map', mode='goals', start=…, goals=…, on_save=cb)    # A/B 경로 — 저장하면 cb(goals)
+self.ui.window.navigate('map', mode='nav')                                    # 목표·초기위치·취소 (한 화면)
 self.ui.window.navigate('map', mode='pose', on_pose=fn)                       # 위치 지정 — Enter → fn(x, y, yaw_deg)
 ```
 

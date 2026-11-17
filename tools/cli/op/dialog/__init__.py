@@ -5,8 +5,7 @@
   KeyDialog     key_dialog.py     키 하나 (확인창 y/n)
   PagerDialog   pager_dialog.py   결과창 스크롤
   BusyDialog    busy_dialog.py    처리 중 창 (키 루프 없음)
-  TeleopDialog  teleop_dialog.py  텔레오퍼 (on_mark: g로 goal 찍기)
-  RouteRvizDialog  route_rviz_dialog.py  A/B 경로 — RViz goal 찍기
+  TeleopDialog  teleop_dialog.py  텔레오퍼
 
 쓰는 곳: XxxDialog(ui, ...).run() — 결과를 돌려받아 다음 동작을 정한다. 하위 클래스가 정하는 것은 dialog.py 참고.
 """
@@ -15,8 +14,8 @@ from .dialog import CONTINUE, Dialog
 from .input_dialog import InputDialog
 from .key_dialog import KeyDialog
 from .pager_dialog import PagerDialog
-from .route_rviz_dialog import RVIZ_GOAL_TOPIC, RouteRvizDialog, fmt_pose
+from .pose import fmt_pose
 from .teleop_dialog import DIAG_RADIUS, MAX_ANG, MAX_LIN, TELEOP_MOVES, TeleopDialog
 
 __all__ = ['BusyDialog', 'CONTINUE', 'DIAG_RADIUS', 'Dialog', 'InputDialog', 'KeyDialog', 'MAX_ANG', 'MAX_LIN',
-           'PagerDialog', 'RVIZ_GOAL_TOPIC', 'RouteRvizDialog', 'TELEOP_MOVES', 'TeleopDialog', 'fmt_pose']
+           'PagerDialog', 'TELEOP_MOVES', 'TeleopDialog', 'fmt_pose']

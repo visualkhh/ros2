@@ -11,6 +11,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped
 from std_msgs.msg import Empty
 
+from . import bagrec
 from .dialog import MAX_ANG, MAX_LIN, TeleopDialog
 from .procs import IS_ROBOT, SERVICES
 from .terminal import DIM, GREEN, RED, YELLOW, Terminal
@@ -49,8 +50,6 @@ class Bus:
         self._nav_client = None
         self._through_client = None
         self._goal_handle = None
-        from .pages.ab.core import AbTest
-        self.ab = AbTest(self)
 
     def _poll(self, seconds: float = 0.2):
         self.node.poll(seconds)
@@ -562,14 +561,14 @@ class Bus:
         print(f'{args.direction} 완료 → 정지 ({CMD_VEL})')
         return 0
 
-    def cmd_teleop(self, args, on_mark=None) -> int:
+    def cmd_teleop(self, args) -> int:
         if not sys.stdin.isatty():
             print('거부: teleop은 터미널에서 실행해야 합니다', file=sys.stderr)
             return 2
         if not self.ensure_manual():
             return 1
         try:
-            TeleopDialog(self, f'텔레오퍼 → {CMD_VEL}', args.linear, args.angular, on_mark).run()
+            TeleopDialog(self, f'텔레오퍼 → {CMD_VEL}', args.linear, args.angular).run()
         finally:
             for _ in range(3):
                 self.send_velocity(0.0, 0.0)
@@ -1126,5 +1125,43 @@ class Bus:
         print('\n'.join(names) if names else '노드 없음 (같은 ROS_DOMAIN_ID인지 확인)')
         return 0
 
-    def cmd_ab(self, args) -> int:
-        return self.ab.cmd(args)
+    # ------------------------------------------------------------- bag
+    def cmd_bag(self, args) -> int:
+        """rosbag2(MCAP) 녹화 + 시스템 부하 기록 — start · stop · status."""
+        if args.action == 'status':
+            cur = bagrec.current()
+            print(f'녹화 중: {bagrec.describe(cur)}' if cur else '녹화 중 아님')
+            return 0
+        if args.action == 'stop':
+            rec = bagrec.stop()
+            if rec is None:
+                print('녹화 중 아님')
+                return 0
+            print(f'녹화 중지: {bagrec.describe(rec)}')
+            return 0
+        try:
+            rec = bagrec.start(label=args.label, topics=args.topics or None,
+                               regex=args.regex, sys_on=not args.no_sys)
+        except RuntimeError as exc:
+            print(f'녹화 시작 실패: {exc}', file=sys.stderr)
+            return 1
+        print(f'녹화 시작: {rec["bag"]}')
+        print(f'  {"선택 " + str(len(args.topics)) + "개" if args.topics else "진단 프리셋"}'
+              f' · 부하 기록 {"켬 (sys.csv)" if rec["sys"] else "끔"}'
+              ' · 멈추려면 run-cli bag stop')
+        return 0
+
+    # ------------------------------------------------------------- 자세
+    def current_pose(self) -> dict:
+        """지금 로봇 map 자세 (amcl_pose) — 없으면 RuntimeError."""
+        if self.state.amcl is None:
+            raise RuntimeError('amcl_pose 없음 — Nav(지도 주행)가 떠 있고 초기 위치가 잡혔는지 확인')
+        x, y, th = self.state.amcl
+        return {'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(math.degrees(th), 1)}
+
+    def robot_pose(self) -> dict | None:
+        """지도 화면용 — 기다리지 않는 자세 조회 (없으면 None)."""
+        try:
+            return self.current_pose()
+        except RuntimeError:
+            return None

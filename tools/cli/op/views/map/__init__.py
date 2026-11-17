@@ -4,7 +4,7 @@
   Viewport  viewport.py  중심(=화면 한가운데) · 확대 단계(scale = res × 2^k) · 세계↔화면 좌표 · zoom · pan
   MapView   map_view.py  포커스 가능한 View — 지도 위에 로봇(●)·goal·경로·십자선(+)을 겹쳐 그림 · 로봇 따라가기 · 방향키로 이동
 
-쓰는 곳: pages/map_page.py (지도 보기 · A/B 경로 찍기 · 위치 지정).
+쓰는 곳: pages/map_page.py (지도 보기 · 목표/초기위치 · 위치 지정).
 """
 from .grid import FREE, OCC, OUT, UNKNOWN, MapGrid
 from .map_view import MapView

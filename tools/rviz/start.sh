@@ -2,7 +2,6 @@
 # tools/rviz 시작 — PC에서 로봇(Pi)의 /map·/scan·TF를 본다.
 #   ./start.sh            # slam.rviz (맵핑 보기: 지도·스캔·odom·궤적)
 #   ./start.sh nav        # nav.rviz  (주행 보기: 지도·코스트맵·경로 · 2D Pose Estimate / Goal)
-#   ./start.sh ab         # ab.rviz   (A/B 경로 지정 — 2D Goal Pose가 /ab/goal_pose, 로봇 안 움직임)
 set -eo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -11,7 +10,7 @@ ROS_SETUP="/opt/ros/${ROS_DISTRO_NAME:-lyrical}/setup.bash"
 
 preset="${1:-slam}"
 case "$preset" in
-  slam|nav|ab) [ $# -gt 0 ] && shift ;;
+  slam|nav) [ $# -gt 0 ] && shift ;;
   *) preset=slam ;;
 esac
 config="$HERE/$preset.rviz"

@@ -127,7 +127,7 @@ class OperatorTool(Node):
         return {
             '1': pages.StatusMenu, '2': pages.BaseMenu, '3': pages.SlamMenu, '4': pages.NavMenu,
             '5': pages.DriveMenu, '6': pages.MapMenu, '7': pages.ExploreMenu, '8': pages.NodesMenu,
-            'b': pages.AbMenu, '9': pages.StopAllPage, '0': pages.BeepMenu,
+            't': pages.TopicBagMenu, '9': pages.StopAllPage, '0': pages.BeepMenu,
         }[name](self)
 
     # ------------------------------------------------------------- CLI 진입
@@ -229,16 +229,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser('node-status', help='노드 하나의 상태·발행/구독·진단 (예: /controller_server)')
     p.add_argument('name', help='노드 이름 (예: /controller_server)')
 
-    ab = sub.add_parser('ab', help='A/B 테스트 — ab nodes | ab <노드> <동작>')
-    ab.add_argument('node', nargs='?', default='nodes',
-                    help='노드 이름 (예: rl_nav_controller) 또는 nodes')
-    ab.add_argument('action', nargs='?', default=None,
-                    choices=('status', 'on', 'off', 'record', 'stop', 'guide', 'report', 'history'),
-                    help='status · on · off · record · stop · guide · report · history (생략 시 status)')
-    ab.add_argument('--label', '-l', default=None, help='record/guide/report: bag 이름·보고서 라벨')
-    ab.add_argument('--out', default=None, help='report: HTML 출력 경로')
-    ab.add_argument('--config', default=None,
-                    help='guide: command.json 경로 (기본 op/pages/ab/rl_nav_controller/command.json)')
+    bag = sub.add_parser('bag', help='rosbag2(MCAP) 녹화 — bag start | stop | status (메뉴 t)')
+    bag.add_argument('action', type=str.lower, choices=('start', 'stop', 'status'))
+    bag.add_argument('--label', '-l', default=None, help='start: 폴더 이름에 붙일 라벨 (예: manual)')
+    bag.add_argument('--topics', nargs='*', default=None, help='start: 이 토픽만 (생략하면 진단 프리셋)')
+    bag.add_argument('--regex', default=None, help='start: 토픽 정규식 (프리셋 대신)')
+    bag.add_argument('--no-sys', action='store_true', help='start: 부하(sys.csv) 기록 끔')
     for cmd, help_ in (('node-kill', '개별 노드 중지 — OS 프로세스 kill (로봇에서 실행 · PC는 SSH 경유)'),
                        ('node-restart', '개별 노드 재시작 — kill 후 같은 명령으로 재실행 · 추적됨')):
         p = sub.add_parser(cmd, help=help_)
@@ -302,6 +298,12 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         return 130
     finally:
+        if args.command == 'menu':   # TUI가 켠 녹화는 TUI와 같이 끝 (q · Ctrl+C · SSH 끊김)
+            try:
+                from op import bagrec
+                bagrec.stop_mine()
+            except Exception:
+                pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

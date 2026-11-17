@@ -1,0 +1,5 @@
+# ros2 bag record --qos-profile-overrides-path — /tf는 volatile로 받아야 함 (bagrec.py)
+#   rosbag2가 /tf 발행자 중 하나(transient_local)의 QoS를 따라가면 volatile 발행자(map→odom · odom→base)를
+#   전부 놓친다 — /tf는 volatile로 받아야 함
+/tf: {history: keep_last, depth: 100, reliability: reliable, durability: volatile}
+/tf_static: {history: keep_last, depth: 100, reliability: reliable, durability: transient_local}

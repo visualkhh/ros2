@@ -14,8 +14,9 @@ tools/
 ├── rviz/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── slam.rviz           # 지도·스캔·odom·TF·포즈 그래프 (Orbit 3D, 저장된 TopDown 2D)
-│   ├── nav.rviz            # nav2 화면 (코스트맵·경로 · 2D Pose Estimate · 2D Goal Pose)
-│   └── ab.rviz             # nav.rviz와 같고 2D Goal Pose가 /ab/goal_pose (A/B 경로 지정 — 로봇 안 움직임)
+│   └── nav.rviz            # nav2 화면 (코스트맵·경로 · 2D Pose Estimate · 2D Goal Pose)
+├── bag/
+│   └── sysmon.py           # bag 녹화와 같이 CPU·메모리·GPU 부하를 sys.csv로
 ├── cli/
 │   ├── start.sh · stop.sh · restart.sh
 │   ├── DEVELOP.md          # 개발자용 — TUI 구조 · 화면 흐름 규약 · 메뉴 추가
@@ -34,14 +35,14 @@ tools/
 │       ├── menus/          # MenuItem · ActionItem · GoMenu · InfoItem · Menu
 │       ├── dialog/         # Dialog 최상위 부모 + Input·Key·Pager·Busy·Teleop (한 파일에 한 클래스)
 │       ├── ui.py           # Ui — 창 진입점 · 터미널 모드 · ui.window
-│       └── pages/          # 화면 + nodes/ (노드별 상태 feature)
+│       └── pages/          # 화면 + nodes/ (노드별 상태 feature) · topics/ (토픽 · bag)
 └── .run/                   # (git 무시) 띄운 launch의 pid · 로그 · DDS 피어 프로필
 
 ## 어디서나 — 어떻게 동작하나
 
 | 기능 | 방식 | 로봇이 아닌 곳(PC 등)에서 |
 |---|---|---|
-| 상태바 · 텔레오퍼 · drive · goal · initpose · 모드/비상정지 · 모터 재부팅 | ROS 토픽·액션 | 그대로 됨 |
+| 상태바 · 텔레오퍼 · drive · goal · initpose · 모드/비상정지 · 모터 재부팅 · 토픽 bag | ROS 토픽·액션 | 그대로 됨 (bag은 이 컴퓨터에 저장) |
 | 베이스·SLAM·Nav 켜기/끄기/재시작 · 로그 | 로봇의 프로세스 | tools가 **SSH로 로봇의 run-cli에 넘김** (`[pak.local] …`로 표시) |
 | 지도 저장 · 목록 · 내용 | 로봇의 파일 (Nav가 거기서 읽음) | 위와 같이 SSH — 지도는 항상 **로봇** `~/ros2/ros2_ws/map/`에 |
 | 켜짐 표시 (● / ○) | 로봇: pid 파일 · 그 밖: **ROS 노드 그래프** (`opencr_driver`·`cartographer_node`·`amcl`·`bt_navigator`) | `pak.local (원격)`으로 표시 |
@@ -116,7 +117,8 @@ tools/
 ./run-cli say <글>              # 타이핑삑 — 한/영 → 자모별 삑 (/cmd_say · 메뉴 0) 비프음 → 3)
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
 ./run-cli collision on|off|status   # 충돌 감시 (collision_monitor) — 상단 '충돌감시' 칸 Enter와 같음
-./run-cli ab rl_nav_controller status|on|off|record|stop|guide|report|history   # RL vs inner A/B
+./run-cli bag start [--label 이름] [--topics /a /b ...] [--no-sys]   # rosbag2(MCAP) 녹화
+./run-cli bag stop | bag status     # 녹화 중지·확인 (메뉴 t) 토픽 · bag
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
 ./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
 ./run-cli stop                  # 바퀴 정지 → 띄운 것 전부 종료

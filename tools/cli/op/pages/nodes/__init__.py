@@ -189,7 +189,7 @@ class ParamItem(MenuItem):
         if n.endswith('FollowPath.model_path'):
             print('model_path는 controller_server가 configure될 때만 읽습니다 — nav restart 후 적용')
         elif n.endswith('FollowPath.enable'):
-            print('enable 파라미터는 configure 때만 읽습니다 — 실제 토글은 ab rl_nav_controller on/off')
+            print('enable 파라미터는 configure 때만 읽습니다 — 실제 토글은 노드 메뉴 3) 서비스의 FollowPath.toggle')
         elif n.endswith('FollowPath.lidar_inflation'):
             print('다음 제어 주기부터 적용됩니다 (재시작 불필요)')
 

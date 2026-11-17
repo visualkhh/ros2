@@ -186,7 +186,7 @@ class Ui:
 
     def poll_key(self) -> str | None:
         """오래 걸리는 작업 중 눌린 키 하나 — 기다리지 않음 (없으면 None). TTY가 아니면(명령줄·파이프) 늘 None.
-        예: A/B 자동 주행 중 s(이 leg 중지)·q(전체 중단)."""
+        예: 목표 주행 중 s(이 구간 중지)·q(전체 중단)."""
         if not (self.console.isatty() and sys.stdin.isatty()):
             return None
         with KeyReader(self.term, flush=False) as keys:
