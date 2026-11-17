@@ -7,7 +7,7 @@ rosbag2는 노드 단위가 아니라 **토픽 단위**다. 노드별로 묶고 
   u = 시스템 부하(CPU · 메모리 · GPU) 같이 기록 켜기/끄기 — bag 폴더에 sys.csv · tegrastats.log
   p = 최근 bag 재생/중지
   x = 선택 해제
-  숫자/↑↓ = 토픽 선택 토글
+  숫자/↑↓ = 토픽으로 포커스 · Enter = 선택 토글
 """
 from __future__ import annotations
 
