@@ -6,9 +6,11 @@ from .state import State
 
 
 class ProcState(State):
+    SHORT = {'base': '베이스', 'slam': 'SLAM', 'nav': 'Nav', 'explore': 'SLAM Nav'}
+
     def __init__(self, ui, name: str, label: str):
         super().__init__(ui)
-        self.name, self.label = name, label
+        self.name, self.label = name, self.SHORT.get(name, label)
 
     def text(self) -> str:
         on = self.ui.procs.running(self.name)

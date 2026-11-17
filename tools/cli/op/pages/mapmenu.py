@@ -5,7 +5,7 @@ from pathlib import Path
 
 from ..defs import STAY
 from ..menus import InfoItem, Menu, MenuItem
-from .services import SaveMapItem
+from .services import NavMapItem, SaveMapItem
 
 
 class MapInfoItem(MenuItem):
@@ -21,8 +21,15 @@ class MapInfoItem(MenuItem):
     shows_busy = False   # 지도 화면을 연다
 
     def run(self):
-        if Path(self.path).is_file():   # 이 컴퓨터에 파일이 있으면 터미널 지도 화면으로 (웹 페이지 이동처럼 source를 넘김)
-            self.ui.window.navigate('map', mode='view', source=self.path)
+        # PC에서 보는 경우 로봇의 지도(map.yaml+pgm)를 캐시로 내려받아 터미널 지도 화면으로 연다.
+        self.ui.busy('지도 내려받는 중 …')
+        try:
+            local = self.bus.procs.local_map(self.path)
+        finally:
+            self.ui._busy = None
+        if local is not None:
+            self.ui.window.navigate('map', mode='view', source=local)
+            return STAY
         print(f'{self.path}\n')
         print(self.bus.procs.read_map(self.path))
         print(f'\nNav로 쓰기: ./run-cli nav start {self.name}')
@@ -58,9 +65,12 @@ class MapMenu(Menu):
         save.key = 's'
         maps = self.bus.procs.maps()
         rows = [MapInfoItem(self.app, str(i), n, p) for i, (n, p) in enumerate(maps, 1)]
-        return [MapShowItem(self.app, 'v', 'view'), MapShowItem(self.app, 'p', 'pose'), save] + (rows or [InfoItem(self.app, '저장된 지도 없음')])
+        return [MapShowItem(self.app, 'v', 'view'), MapShowItem(self.app, 'p', 'pose'),
+                NavMapItem(self.app, 'g'), save] + (rows or [InfoItem(self.app, '저장된 지도 없음')])
 
     def center(self):
         return [f'[지도 폴더] {self.bus.procs.map_dir_txt}', ' <이름>/map.yaml + map.pgm', '',
-                ' v) 지도 보기 · p) 초기 위치 지정 (amcl)', ' s) 지금 /map 저장 (SLAM 실행 중일 때)', ' 번호) 저장된 지도 보기 (+ yaml 내용)',
+                ' v) 지금 /map 보기 · g) 목표·초기위치·취소 (한 화면)',
+                ' p) 초기 위치 지정 (amcl) · s) 지금 /map 저장',
+                ' 번호) 저장된 지도 보기 (PC는 로봇에서 내려받아 표시)',
                 '', f' 지도 /map: {self.state.map_txt()}']

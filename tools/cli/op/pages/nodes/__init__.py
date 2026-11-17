@@ -312,6 +312,9 @@ class NodeActionMenu(Menu):
             n, ns = self._target
             items.append(GoMenu(self.app, '3', '파라미터 설정 · 진단 (live · 1초 갱신)',
                                 NodeParamMenu(self.app, n, ns)))
+        feature = feature_for(self._name)
+        if feature is not None:
+            items += feature.actions(self.app, self.bus, self._name)
         return items
 
     def _refresh_status(self):
@@ -392,7 +395,7 @@ class SelectNodeItem(MenuItem):
 
 
 class PrintNodesItem(MenuItem):
-    key = '2'
+    key = 'p'
 
     def label(self):
         return '목록 출력'
@@ -420,7 +423,12 @@ class NodesMenu(Menu):
 
     def items(self):
         self._refresh()
-        return [SelectNodeItem(self.app), PrintNodesItem(self.app)]
+        items: list[MenuItem] = [NodePickItem(self.app, str(i + 1), r)
+                                 for i, r in enumerate(self._rows)]
+        if not items:
+            items.append(InfoItem(self.app, '노드 없음 — 베이스/SLAM/Nav가 꺼졌거나 ROS_DOMAIN_ID가 다름'))
+        items.append(PrintNodesItem(self.app))
+        return items
 
     def center(self):
         self._refresh()

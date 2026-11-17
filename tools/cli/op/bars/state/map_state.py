@@ -1,21 +1,22 @@
-"""MapState — map 수신 상태 + 지도 이름 (RateState 하위)."""
+"""MapState — 지도 모드(MAPPING / LOCALIZATION / NONE) + 적용된 지도 이름 칸."""
 from __future__ import annotations
 
-from ...terminal import DIM
-from .rate_state import RateState
+from ...terminal import DIM, GREEN, YELLOW
+from .state import State
 
 
-class MapState(RateState):
-    def __init__(self, ui):
-        super().__init__(ui, 'map', 'map')
+class MapState(State):
+    COLORS = {'MAPPING': YELLOW, 'LOCALIZATION': GREEN, 'NONE': DIM}
 
     def text(self) -> str:
-        txt = super().text()
+        op = self.state.st_operation
+        if op is None:
+            return '지도: ' + self.term.paint('-', DIM)
+        mode = {'SLAM': 'MAPPING', 'LOCALIZATION': 'LOCALIZATION'}.get(op, 'NONE')
+        txt = '지도: ' + self.term.paint(mode, self.COLORS.get(mode, DIM))
         name = (self.state.st_map or '').strip()
         if name == '(SLAM 작성 중)':
             name = 'SLAM'
         if name:
-            if len(name) > 20:
-                name = name[:19] + '…'
-            txt += ' ' + self.term.paint(name, DIM)
+            txt += ' ' + self.term.paint(name if len(name) <= 20 else name[:19] + '…', DIM)
         return txt

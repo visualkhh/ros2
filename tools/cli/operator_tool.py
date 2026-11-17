@@ -68,6 +68,7 @@ class OperatorTool(Node):
         self.ui = Ui(self.term, self.state, self.procs)
         self.bus = Bus(self, self.state, self.ui, self.term)
         self.drive_cfg = {'linear': 0.15, 'angular': 0.8, 'duration': 1.0}
+        self._collision_at = 0.0
         # 화면 틀(Window) 신호 — ROS 폴링은 'tick', 이름으로 화면 열기는 'navigate'
         self.ui.window.connect('tick', self._on_tick)
         self.ui.window.connect('navigate', self._on_navigate)
@@ -83,6 +84,13 @@ class OperatorTool(Node):
         if not rclpy.ok():   # 종료 신호 — 메뉴 루프를 끝낸다
             raise SystemExit(0)
         self.poll(seconds)
+        now = time.monotonic()
+        if now - self._collision_at > 5.0:   # collision_monitor enabled 파라미터 — 상단 칸용 캐시
+            self._collision_at = now
+            try:
+                self.bus.poll_collision_enabled()
+            except Exception:
+                pass
 
     def _on_navigate(self, name: str, params: dict):
         page = self.screen(name, **params)
@@ -101,6 +109,12 @@ class OperatorTool(Node):
             self.create_subscription(typ, f'/state_{key}',
                                      lambda m, k=key: self.state.on_state(k, m.data), LATCHED)
         self.create_subscription(String, '/explore_status', lambda m: setattr(self.state, 'explore_status', m.data), 10)
+        try:
+            from nav2_msgs.msg import CollisionMonitorState
+            self.create_subscription(CollisionMonitorState, '/collision_monitor_state',
+                                     self.state.on_collision_state, 10)
+        except Exception:
+            pass   # fake/docker 등 nav2_msgs가 없는 환경
         # 노드별 추가 상태·기능 (예: controller_server RL/MPPI)
         from op.pages.nodes import wire_all
         wire_all(self)
@@ -238,6 +252,8 @@ def build_parser() -> argparse.ArgumentParser:
                                  ('estop', ('on', 'off'), '비상정지 (/cmd_manual_estop)')):
         p = sub.add_parser(name, help=help_)
         p.add_argument('value', type=str.lower, choices=choices)
+    p = sub.add_parser('collision', help='충돌 감시 (collision_monitor) 켜기/끄기/상태')
+    p.add_argument('state', type=str.lower, choices=('on', 'off', 'status'), nargs='?', default='status')
     sub.add_parser('reboot-motors', help='모터 에러 해제 — 두 바퀴 재부팅 (/opencr/reboot)')
     p = sub.add_parser('beep', help='OpenCR 부저 — 삑 또는 beep <Hz 100~8000> <ms 10~2000>')
     p.add_argument('value', nargs='*', help='예: 4000 300')

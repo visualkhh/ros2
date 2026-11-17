@@ -52,6 +52,9 @@ class StateStore:
         self.st_operation: str | None = None                       # 운행 상태 SLAM · LOCALIZATION · IDLE
         self.st_map: str | None = None                             # 적용된 지도
         self.st_time: float | None = None                         # /state_* 마지막 수신 (latched라도 base 죽으면 끊김)
+        self.st_wall = 0.0                                         # 마지막 /state_* 수신 벽시계 (연결 칸 표시)
+        self.collision: tuple[tuple[int, str], float] | None = None  # /collision_monitor_state (action_type, polygon), 시각
+        self.collision_enabled: bool | None = None                 # /collision_monitor enabled 파라미터 (5초 캐시)
         self.explore_status = ''                                   # explore_bridge /explore_status
         self.cmd_vel_nav = Rate(5)                                 # /cmd_vel_nav (Nav2 controller 출력)
         self.nodes_seen: dict[str, float] = {}                     # 노드 그래프에서 마지막으로 본 시각
@@ -62,6 +65,23 @@ class StateStore:
         """state_manager /state_* 수신 — 값 저장 + 수신 시각 기록 (끊김 판단용)."""
         setattr(self, f'st_{key}', value)
         self.st_time = time.monotonic()
+        self.st_wall = time.time()
+
+    def on_collision_state(self, msg) -> None:
+        """/collision_monitor_state — 지금 작동 중인 폴리곤·동작 (없으면 DO_NOTHING)."""
+        self.collision = ((int(msg.action_type), str(msg.polygon_name)), time.monotonic())
+
+    COLLISION_ACTIONS = {0: '', 1: '정지', 2: '감속', 3: '접근정지', 4: '속도제한'}
+
+    def collision_action(self) -> str:
+        """지금 충돌 감시 동작 — 5초 넘게 새 상태가 없으면 빈 문자열."""
+        if self.collision is None:
+            return ''
+        (kind, polygon), at = self.collision
+        if time.monotonic() - at > 5.0:
+            return ''
+        txt = self.COLLISION_ACTIONS.get(kind, str(kind))
+        return f'{txt}({polygon})' if txt and polygon else txt
 
     def on_rl_status(self, data) -> None:
         """controller_server FollowPath 상태 — [rl_active, reason, ...]."""
@@ -155,9 +175,9 @@ class StateStore:
         """(레벨, 요약) — 레벨 -1 = 수신 없음/끊김. 요약: 메시지 · 온도 · 전류."""
         age = self.robot.age()
         if age is None:
-            return -1, '로봇 상태 대기 중 (1초 주기 · 계속 없으면 베이스 꺼짐?)'
+            return -1, '모터 상태 대기 중 (1초 주기 · 계속 없으면 베이스 꺼짐?)'
         if age > 3.0:
-            return -1, f'로봇 {age:.0f}초 끊김'
+            return -1, f'모터 {age:.0f}초 끊김'
         v = self.robot_vals
 
         def f(key, fmt):

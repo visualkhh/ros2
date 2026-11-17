@@ -315,6 +315,12 @@ class Procs:
         return Path(path).read_text(errors='replace')
 
     @staticmethod
+    def local_map(path) -> Path | None:
+        """이 컴퓨터에서 바로 열 수 있는 map.yaml — 원격이면 RemoteProcs가 내려받는다."""
+        p = Path(path)
+        return p if p.is_file() else None
+
+    @staticmethod
     def resolve_map(name_or_path: str | None) -> Path | None:
         """지도 이름·폴더·yaml 경로 → map.yaml. None이면 가장 최근 지도."""
         if not name_or_path:
@@ -495,6 +501,36 @@ class RemoteProcs(Procs):
 
     def read_map(self, path) -> str:
         return self._ssh(f'cat {shlex.quote(str(path))}', 15)[1]
+
+    def local_map(self, path) -> Path | None:
+        """로봇의 저장 지도(map.yaml + pgm)를 PC 캐시로 내려받아 지도 화면에서 연다."""
+        remote = PurePosixPath(path)
+        if not remote.name.endswith('.yaml'):
+            remote = remote / 'map.yaml'
+        name = remote.parent.name or 'map'
+        cache = Path.home() / '.cache' / 'beebot' / 'maps' / name
+        cache.mkdir(parents=True, exist_ok=True)
+        local_yaml = cache / 'map.yaml'
+        r = subprocess.run(
+            ['scp', '-q', '-o', 'BatchMode=yes', f'{ROBOT_SSH}:{remote}', str(local_yaml)],
+            capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return None
+        try:
+            text = local_yaml.read_text()
+        except OSError:
+            return None
+        image = next((ln.split(':', 1)[1].strip().strip('"\'')
+                      for ln in text.splitlines() if ln.strip().startswith('image:')), '')
+        if not image:
+            return local_yaml
+        img = PurePosixPath(image)
+        remote_img = img if img.is_absolute() else remote.parent / img
+        local_img = cache / img.name
+        r = subprocess.run(
+            ['scp', '-q', '-o', 'BatchMode=yes', f'{ROBOT_SSH}:{remote_img}', str(local_img)],
+            capture_output=True, text=True, timeout=60)
+        return local_yaml if r.returncode == 0 else None
 
     def resolve_map(self, name_or_path: str | None):
         maps = self.maps()

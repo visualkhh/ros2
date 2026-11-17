@@ -34,6 +34,7 @@ class StateManager(Node):
         for key in self.values:
             self.publish(key)
         self.create_timer(2.0, self.watch_operation)
+        self.create_timer(1.0, self.heartbeat)   # /state_* 하트비트 — CLI 상단 '연결' 칸이 끊김을 판단
 
     def set(self, key: str, value) -> None:
         if self.values[key] != value:
@@ -44,6 +45,11 @@ class StateManager(Node):
     def publish(self, key: str) -> None:
         value = self.values[key]
         self.pubs[key].publish(String(data=value) if isinstance(value, str) else Bool(data=value))
+
+    def heartbeat(self) -> None:
+        """값이 안 바뀌어도 1초마다 다시 발행 — CLI가 /state_* 수신 시각으로 연결을 판단한다."""
+        for key in self.values:
+            self.publish(key)
 
     def watch_operation(self) -> None:
         names = {n for n, _ in self.get_node_names_and_namespaces()}

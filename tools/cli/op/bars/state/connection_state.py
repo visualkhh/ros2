@@ -1,4 +1,4 @@
-"""ConnectionState — /state/* 통신이 끊기면 상단에 빨강으로 표시한다."""
+"""ConnectionState — /state/* 통신 상태 (마지막 수신 뒤 경과 · 벽시계 시각 · 재연결 대기)."""
 from __future__ import annotations
 
 import time
@@ -13,8 +13,14 @@ class ConnectionState(State):
         if last is None:
             return self.term.paint('연결 ✗ 상태 없음 — bringup 확인', RED + BOLD)
         age = time.monotonic() - last
-        if age <= 3.0:   # /state/* 하트비트 + 여유
-            return self.term.paint(f'연결 ● 정상 {age:.1f}s', GREEN)
+        wall = getattr(self.state, 'st_wall', 0.0)
+        when = time.strftime('%H:%M:%S', time.localtime(wall)) if wall > 0 else '-'
+        status = getattr(self.ui, '_reconnect_status', None)
+        retry = status() if status is not None else None
+        if retry is not None:
+            return self.term.paint(f'연결 ✗ {age:.0f}s — {retry} · 마지막 {when}', RED + BOLD)
+        if age <= 3.0:   # /state_* 하트비트 + 여유
+            return self.term.paint(f'연결 ● 정상 {age:.1f}s · 마지막 {when}', GREEN)
         if age <= 6.0:
-            return self.term.paint(f'연결 ▲ {age:.1f}s 지연', YELLOW)
-        return self.term.paint(f'연결 ✗ {age:.0f}s 끊김 — bringup 확인', RED + BOLD)
+            return self.term.paint(f'연결 ▲ {age:.1f}s 지연 · 마지막 {when}', YELLOW)
+        return self.term.paint(f'연결 ✗ {age:.0f}s 끊김 · 마지막 {when} — bringup 확인', RED + BOLD)

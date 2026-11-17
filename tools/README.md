@@ -115,6 +115,7 @@ tools/
 ./run-cli beep [Hz ms]         # OpenCR 부저 삑 (/cmd_beep · /cmd_beep_tone · 메뉴 0) 비프음 · 텔레오퍼 b)
 ./run-cli say <글>              # 타이핑삑 — 한/영 → 자모별 삑 (/cmd_say · 메뉴 0) 비프음 → 3)
 ./run-cli control manual|nav-plan|slam-auto-mapping   # 제어 상태 (텔레오퍼·drive는 MANUAL 아니면 물어봄 · goal·RViz Goal은 NAV로)
+./run-cli collision on|off|status   # 충돌 감시 (collision_monitor) — 상단 '충돌감시' 칸 Enter와 같음
 ./run-cli ab rl_nav_controller status|on|off|record|stop|guide|report|history   # RL vs inner A/B
 ./run-cli automap start|stop    # 자동 맵핑: SLAM·SLAM 중 Nav 켜고 SLAM_AUTO_MAPPING → 다 찾으면 MANUAL
 ./run-cli estop on|off          # 비상정지 (on은 바로, 메뉴에서 해제는 확인)
@@ -124,10 +125,12 @@ tools/
 ./run-cli exit                  # CLI 프로세스만 종료 (SLAM·Nav는 계속 돔)
 ```
 
-상단 상태바: ① 프로세스 (로봇: pid · 그 밖: 노드 그래프로 `pak.local (원격)`) ② `odom`·`scan`·`map` 수신 Hz ③ **로봇** — opencr_driver의 `/diagnostics`
-(● ok / ✗ motor error·no S line / ? 수신 없음 · 바퀴 온도 좌/우 · 전류 좌/우). 모터 에러면 `1) 상태 → 2) 모터 재부팅`.
-그 아래 줄 = state_manager의 `/state_*`: `제어 MANUAL · 운행 LOCALIZATION (지도 office) · 경로 직결 · 비상정지 off`
-(제어 = 누가 바퀴를 움직이나 · 운행 = SLAM/LOCALIZATION/IDLE · 비상정지면 빨강). 전환은 `1) 상태 → 3·4·5`.
+상단 상태바 (Lv2 CLI와 같은 용어):
+① 프로세스 `베이스 · SLAM · Nav · SLAM Nav` (로봇: pid · 그 밖: 노드 그래프로 `pak.local (원격)`)
+② `조작`(MANUAL·NAV·SLAM_AUTO) · `지도:`(MAPPING·LOCALIZATION·NONE + 이름) · `위치 x=… y=… yaw=…` · `E-STOP` · `충돌감시` · `연결`
+③ `odom`·`스캔`·`amcl` 수신 Hz · `목표` · `주행`(RL/DWB) · `진단`(OK/주의)
+④ `모터` — opencr_driver `/diagnostics` (● ok / ✗ motor error·no S line / ? 수신 없음 · 온도·전류) · `전원`(배터리)
+모터 에러면 `1) 상태 → 2) 모터 재부팅`. 충돌감시 칸은 Enter로 켜고 끌 수 있다 (`run-cli collision`).
 
 CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`). 다시 켜면 그대로 이어서 보입니다.
 로그: `./run-cli slam log` (어디서나 — 원격이면 SSH로 로봇의 `.run/slam.log`).

@@ -1,11 +1,11 @@
-"""MapPage — 터미널 지도 화면 (Menu 하위). 중앙 = MapView(포커스 가능), 왼쪽 = 동작 메뉴. 웹 페이지처럼 파라미터를 받는다.
+"""MapPage — 터미널 지도 화면 (Menu 하위). 중앙 = MapView(포커스 가능), 왼쪽 = 동작 메뉴.
 
   window.navigate('map', mode=…, source=…, …)  또는  MapPage(app, …)
     mode    'view'  지도 보기만 (기본)
             'goals' A/B 경로 goal 찍기 — start·goals(이미 있는 경로) · 저장하면 on_save(goals)
             'pose'  로봇 위치 지정 — 십자선 위치(+방향)를 on_pose(x, y, yaw_deg)로 보냄
+            'nav'   한 화면에서 목표·초기위치·취소 — Enter로 웨이포인트, g 주행, x 취소, i 초기위치
     source  None = 지금 /map(live · 로봇 점 표시) · 경로 = 저장된 지도 yaml(map_server 형식)
-    title   화면 제목 (기본 = mode에 따라)
 
 열면 지도를 받아 중앙에 올린다 (Window.run의 center_comp) — 처음엔 지도가 포커스를 받아 방향키로 지도 이동 · +/- 확대·축소 ·
 Enter = mode의 동작(goal 추가 · 위치 지정). Tab/Esc로 왼쪽 메뉴(같은 동작)와 오간다. Esc/b = 나가기.
@@ -19,23 +19,30 @@ from pathlib import Path
 
 from ..defs import BACK, MAIN, QUIT, STAY
 from ..dialog import fmt_pose
-from ..views.map import FREE, OCC, UNKNOWN, MapGrid, MapView
 from ..terminal import DIM
 from ..menus import ActionItem, Menu
+from ..views.map import FREE, OCC, UNKNOWN, MapGrid, MapView
 
 YAW_STEP = 15.0
 CELL_TXT = {UNKNOWN: '미확인', FREE: '빈 곳', OCC: '벽'}
-TITLES = {'view': '지도 보기', 'goals': 'A/B 경로 — 지도에서 찍기', 'pose': '로봇 위치 지정'}
+TITLES = {
+    'view': '지도 보기',
+    'goals': 'A/B 경로 — 지도에서 찍기',
+    'pose': '로봇 위치 지정',
+    'nav': '지도 주행 — 목표·초기위치·취소',
+}
 
 
 class MapPage(Menu):
-    def __init__(self, app, mode: str = 'view', source=None, start: dict | None = None, goals: list[dict] | None = None,
-                 on_save=None, on_pose=None, title: str | None = None):
+    def __init__(self, app, mode: str = 'view', source=None, start: dict | None = None,
+                 goals: list[dict] | None = None, on_save=None, on_pose=None, title: str | None = None):
         super().__init__(app)
         if mode not in TITLES:
             raise ValueError(f'mode는 {"/".join(TITLES)} 중 하나: {mode!r}')
-        self.mode, self.source, self.on_save, self.on_pose = mode, (Path(source) if source else None), on_save, on_pose
-        self.title = title or (TITLES[mode] + (f' · {self.source.parent.name}' if self.source else ''))
+        self.mode = mode
+        self.source = Path(source) if source and not isinstance(source, str) else source
+        self.on_save, self.on_pose = on_save, on_pose
+        self.title = title or (TITLES[mode] + (f' · {Path(str(self.source)).parent.name}' if self.source else ''))
         self.start = start
         self.goals = [dict(g) for g in (goals or [])]
         self._initial = [dict(g) for g in self.goals]
@@ -49,32 +56,123 @@ class MapPage(Menu):
 
     # ---------------------------------------------------------------- 동작 (키 · 메뉴 공용)
     def pick(self) -> None:
-        """십자선 위치에서 mode의 동작 — goals: goal 추가 · pose: 로봇 위치 지정 · view: 없음."""
+        """십자선 위치에서 mode의 동작 — goals/nav: 웨이포인트 추가 · pose: 로봇 위치 지정 · view: 없음."""
         x, y = self.view.center
         if self.mode == 'view':
-            self.msg = '보기 전용 — 찍는 화면은 A/B 경로 · 위치 지정에서'
+            self.msg = '보기 전용 — 목표·초기위치는 Nav(4) 또는 지도/위치(6)에서'
         elif self.view.grid.code(self.view.vp.k, x, y) == OCC:
             self.msg = '벽 위에는 못 찍음 — 십자선을 옮기세요'
-        elif self.mode == 'goals':
+        elif self.mode in ('goals', 'nav'):
             self.goals.append({'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(self.yaw, 1)})
-            self.msg = f'G{len(self.goals)} 추가 {fmt_pose(self.goals[-1])}'
+            if self.mode == 'nav':
+                self.msg = (f'웨이포인트 {len(self.goals)}개 추가 {fmt_pose(self.goals[-1])}'
+                            ' — g 주행 · i 초기위치 · x 취소')
+            else:
+                self.msg = f'G{len(self.goals)} 추가 {fmt_pose(self.goals[-1])}'
         else:
             self._send_pose(x, y)
 
     def _send_pose(self, x: float, y: float) -> None:
+        """위치 지정(initialpose) — on_pose 콜백이 있으면 그것, 없으면 /initialpose."""
         pose = {'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(self.yaw, 1)}
         if not self.ui.confirm('여기를 로봇 위치로 지정할까요?', default=True, body=[fmt_pose(pose)]):
             self.msg = '취소'
             return
         try:
-            with self.ui.capture() as (out, err):
-                self.on_pose(pose['x'], pose['y'], pose['yaw_deg'])
+            self.ui.busy('초기 위치 지정')
+            self.ui.progress('amcl 반영 기다리는 중…')
+            try:
+                with self.ui.capture() as (out, err):
+                    if self.on_pose is not None:
+                        self.on_pose(pose['x'], pose['y'], pose['yaw_deg'])
+                    else:
+                        self.bus.set_initial_pose(pose['x'], pose['y'], pose['yaw_deg'])
+            finally:
+                self.ui._busy = None
             self.msg = f'위치 지정 {fmt_pose(pose)}'
-        except RuntimeError as exc:
+        except Exception as exc:
+            self.ui._busy = None
+            self.msg = f'FAIL: {exc}'
+
+    def set_initial_pose_here(self) -> None:
+        """십자선 위치·방향을 로봇 초기 위치로 — /initialpose. 위치를 잃었을 때 여기서 바로."""
+        x, y = self.view.center
+        pose = {'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(self.yaw, 1)}
+        if not self.ui.confirm('여기를 로봇 초기 위치로 지정할까요?',
+                               body=[fmt_pose(pose), '위치추정(LOCALIZATION)에서 위치를 잃었을 때 쓰세요']):
+            self.msg = '취소'
+            return
+        try:
+            self.ui.busy('초기 위치 지정')
+            self.ui.progress('로봇 위치 이동 + amcl 반영 중…')
+            try:
+                with self.ui.capture() as (out, err):
+                    rc = self.bus.set_initial_pose(pose['x'], pose['y'], pose['yaw_deg'])
+            finally:
+                self.ui._busy = None
+            text = (out.getvalue() + err.getvalue()).strip().splitlines()
+            self.msg = text[-1] if text else f'초기 위치 {fmt_pose(pose)}'
+            if rc != 0 and not text:
+                self.msg = '초기 위치 실패 — amcl/Nav가 떠 있는지 확인'
+        except Exception as exc:
+            self.ui._busy = None
             self.msg = f'FAIL: {exc}'
 
     def undo_goal(self) -> None:
-        self.msg = '마지막 goal 취소' if self.goals and self.goals.pop() else '취소할 goal 없음'
+        if self.goals:
+            self.goals.pop()
+            self.msg = '마지막 웨이포인트 취소' if self.mode == 'nav' else '마지막 goal 취소'
+        else:
+            self.msg = '취소할 웨이포인트 없음' if self.mode == 'nav' else '취소할 goal 없음'
+
+    def clear_goals(self) -> None:
+        if self.goals:
+            self.goals.clear()
+            self.msg = '웨이포인트 전체 지움'
+        else:
+            self.msg = '지울 웨이포인트 없음'
+
+    def send_waypoints(self) -> None:
+        """찍어 둔 웨이포인트를 Nav2에 보낸다 — 1개는 NavigateToPose, 여러 개는 한 번에."""
+        if not self.goals:
+            self.msg = '웨이포인트 없음 — Enter로 먼저 찍으세요'
+            return
+        body = [f'{i}) {fmt_pose(g)}' for i, g in enumerate(self.goals, 1)]
+        how = '한 점씩' if len(self.goals) == 1 else 'NavigateThroughPoses 한 번에'
+        if not self.ui.confirm(f'웨이포인트 {len(self.goals)}개를 {how} 보낼까요?', body=body):
+            self.msg = '전송 취소'
+            return
+        try:
+            self.ui.busy('목표 전송')
+            self.ui.progress('Nav2 목표 보내는 중…')
+            try:
+                with self.ui.capture() as (out, err):
+                    rc = self.bus.send_waypoints(self.goals)
+            finally:
+                self.ui._busy = None
+            text = (out.getvalue() + err.getvalue()).strip().splitlines()
+            last = text[-1] if text else ''
+            self.msg = (f'목표 {len(self.goals)}개 전송 — {last}' if rc == 0
+                        else f'FAIL: {last or "목표 전송 실패"}')
+        except Exception as exc:
+            self.ui._busy = None
+            self.msg = f'FAIL: {exc}'
+
+    def cancel_nav(self) -> None:
+        """주행 취소 + 지도에 남은 웨이포인트 표시도 지운다 (x)."""
+        try:
+            self.ui.busy('주행 취소')
+            try:
+                with self.ui.capture() as (out, err):
+                    self.bus.cancel_goal()
+            finally:
+                self.ui._busy = None
+            text = (out.getvalue() + err.getvalue()).strip().splitlines()
+            self.goals.clear()
+            self.msg = text[-1] if text else 'Nav2 주행 취소'
+        except Exception as exc:
+            self.ui._busy = None
+            self.msg = f'FAIL: {exc}'
 
     def turn(self, delta: float) -> None:
         self.yaw = (self.yaw + delta + 180) % 360 - 180
@@ -96,31 +194,51 @@ class MapPage(Menu):
         """지도가 모르는 키."""
         if k in ('enter', ' '):
             self.pick()
-        elif k == 'backspace' and self.mode == 'goals':
+        elif k == 'backspace' and self.mode in ('goals', 'nav'):
             self.undo_goal()
+        elif k in ('g', 'G') and self.mode == 'nav':
+            self.send_waypoints()
+        elif k in ('d', 'D') and self.mode == 'nav':
+            self.clear_goals()
+        elif k in ('x', 'X') and self.mode == 'nav':
+            self.cancel_nav()
+        elif k in ('i', 'I') and self.mode == 'nav':
+            self.set_initial_pose_here()
         elif k in ('[', ']', '{', '}') and self.mode != 'view':   # [ ] = 15° · { } = 1° (미세)
-            self.turn({'[': -YAW_STEP, ']': YAW_STEP, '{': -1.0, '}': 1.0}[k])
+            self.turn({'[': YAW_STEP, ']': -YAW_STEP, '{': 1.0, '}': -1.0}[k])
         else:
             return False
         return True
 
     # ---------------------------------------------------------------- 화면
     def items(self):
-        if self.saved:   # 저장했으면 보이는 항목이 없다 → Window.run이 끝남 (기존 규약: 항목이 없으면 화면 종료)
+        if self.saved:   # 저장했으면 보이는 항목이 없다 → Window.run이 끝남
             return []
         v, act = self.view, ActionItem
-        rows = {'goals': [('goal 추가 — 십자선 위치 (Enter)', self.pick), ('마지막 goal 취소 (Backspace)', self.undo_goal)],
-                'pose': [('로봇 위치로 지정 — 십자선 위치 (Enter)', self.pick)], 'view': []}[self.mode]
-        rows += [('확대 (+)', lambda: self.zoom(+1)), ('축소 (-)', lambda: self.zoom(-1)), ('전체 보기 (f)', self.fit),
+        rows = {
+            'goals': [('goal 추가 — 십자선 위치 (Enter)', self.pick),
+                      ('마지막 goal 취소 (Backspace)', self.undo_goal)],
+            'nav': [('웨이포인트 추가 — 십자선 위치 (Enter)', self.pick),
+                    ('마지막 웨이포인트 취소 (Backspace)', self.undo_goal),
+                    ('목표로 주행 — 한 점/여러 점 (g)', self.send_waypoints),
+                    ('웨이포인트 전체 지우기 (d)', self.clear_goals),
+                    ('로봇 초기 위치 지정 — 십자선 (i)', self.set_initial_pose_here),
+                    ('Nav2 주행 취소 (x)', self.cancel_nav)],
+            'pose': [('로봇 위치로 지정 — 십자선 위치 (Enter)', self.pick)],
+            'view': [],
+        }[self.mode]
+        rows += [('확대 (+)', lambda: self.zoom(+1)), ('축소 (-)', lambda: self.zoom(-1)),
+                 ('전체 보기 (f)', self.fit),
                  (lambda: f'로봇 따라가기 (r) — {"켜짐" if v.following else "꺼짐"}', self.toggle_follow)]
         if self.mode != 'view':
-            rows += [(f'방향 +{YAW_STEP:.0f}° (]) · 미세 +1° = }}', lambda: self.turn(YAW_STEP)), (f'방향 -{YAW_STEP:.0f}° ([) · 미세 -1° = {{', lambda: self.turn(-YAW_STEP))]
+            rows += [(f'좌회전 +{YAW_STEP:.0f}° ([) · 미세 +1° = {{', lambda: self.turn(YAW_STEP)),
+                     (f'우회전 -{YAW_STEP:.0f}° (]) · 미세 -1° = }}', lambda: self.turn(-YAW_STEP))]
         if self.mode == 'goals':
             rows += [('저장하고 나가기', self._save)]
         return [act(self.app, str(i), label, fn) for i, (label, fn) in enumerate(rows, 1)]
 
     def _pose(self):
-        """로봇 자세 — 0.3초에 한 번만 (막히지 않는 조회). 저장된 지도 파일을 볼 땐 로봇 점 없음 (좌표계가 다를 수 있음)."""
+        """로봇 자세 — 0.3초에 한 번만 (막히지 않는 조회). 저장된 지도 파일을 볼 땐 로봇 점 없음."""
         if self.source:
             return None
         now = time.monotonic()
@@ -135,29 +253,43 @@ class MapPage(Menu):
         cw, ch = self.ui.window.center_size()
         rows = max(3, ch - 6)
         v.show_yaw = self.mode != 'view'
-        v.robot, v.start, v.goals, v.yaw = (self._pose(), ((self.start['x'], self.start['y']) if self.start else None),
-                                            self.goals, self.yaw)
+        v.robot = self._pose()
+        v.start = (self.start['x'], self.start['y']) if self.start else None
+        v.goals, v.yaw = self.goals, self.yaw
         if not self._fitted:
             v.vp.fit(cw, rows * 2)
             self._fitted = True
         lines = v.render(cw, rows)
         x, y = v.center
         code = v.grid.code(v.vp.k, x, y)
+        if self.mode == 'nav':
+            mode_txt = f'방향 {self.yaw:+.0f}° · 웨이포인트 {len(self.goals)}개'
+        elif self.mode == 'goals':
+            mode_txt = f'방향 {self.yaw:+.0f}° · goal {len(self.goals)}개'
+        elif self.mode == 'pose':
+            mode_txt = f'방향 {self.yaw:+.0f}°'
+        else:
+            mode_txt = '보기 전용'
         status = [f'십자선 ({x:+.2f}, {y:+.2f}) m · {CELL_TXT.get(code, "지도 밖")}',
                   f'한 칸 = {v.vp.scale * 100:.0f} cm · {"따라가기" if v.following else "자유이동"}',
-                  (f'방향 {self.yaw:+.0f}°' if self.mode == 'pose' else
-                   f'방향 {self.yaw:+.0f}° · goal {len(self.goals)}개' if self.mode == 'goals' else '보기 전용')]
+                  mode_txt]
+        if self.state.goal_status:
+            status.append(f'목표: {self.state.goal_status}')
         legend = self.term.paint('● 로봇 + 십자선 S 출발 1 2 goal', DIM)
         return lines + status + [self.msg, legend]
 
     # ---------------------------------------------------------------- 실행
     def _load_grid(self, timeout: float = 10.0):
         if self.source:
-            return MapGrid.from_yaml(self.source)
+            local = self.bus.procs.local_map(self.source)
+            if local is None:
+                raise RuntimeError(f'지도 파일을 못 가져옴: {self.source}')
+            return MapGrid.from_yaml(local)
         from nav_msgs.msg import OccupancyGrid
         from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
         inbox: list = []
-        qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                         durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         sub = self.app.create_subscription(OccupancyGrid, '/map', inbox.append, qos)
         try:
             end = time.monotonic() + timeout
@@ -177,7 +309,7 @@ class MapPage(Menu):
             k += 1
 
     def show(self) -> str:
-        self.ui.busy('지도 여는 중 …')   # 지도 받기·읽기가 몇 초 걸릴 수 있다 — 화면이 뜨기 전까지 busy 창
+        self.ui.busy('지도 여는 중 …')
         try:
             grid = self._load_grid()
             if grid is not None:
@@ -186,7 +318,7 @@ class MapPage(Menu):
             print(f'FAIL: {exc}', file=sys.stderr)
             return STAY
         finally:
-            self.ui._busy = None   # 지도 화면이 그려지면 가려짐 · 뒤에 여는 확인창이 busy를 다시 그리지 않게
+            self.ui._busy = None
         if grid is None:
             print('FAIL: /map을 못 받음 — 지도 서버(map_server)·Nav가 떠 있는지 확인', file=sys.stderr)
             return STAY
@@ -202,5 +334,6 @@ class MapPage(Menu):
                 return BACK
             if self.mode != 'goals' or self.goals == self._initial or self.ui.confirm(
                     '저장하지 않고 나갈까요?', default=False,
-                    body=[f'고친 goal {len(self.goals)}개가 사라집니다.', '저장하려면 아니오 → 왼쪽 메뉴의 저장하고 나가기']):
+                    body=[f'고친 goal {len(self.goals)}개가 사라집니다.',
+                          '저장하려면 아니오 → 왼쪽 메뉴의 저장하고 나가기']):
                 return BACK

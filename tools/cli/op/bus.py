@@ -47,12 +47,68 @@ class Bus:
         self._req = {'control': (node.create_publisher(String, '/cmd_manual_control', 10), String),
                      'estop': (node.create_publisher(Bool, '/cmd_manual_estop', 10), Bool)}
         self._nav_client = None
+        self._through_client = None
         self._goal_handle = None
         from .pages.ab.core import AbTest
         self.ab = AbTest(self)
 
     def _poll(self, seconds: float = 0.2):
         self.node.poll(seconds)
+
+    # ------------------------------------------------------- 충돌 감시 (collision_monitor)
+    def poll_collision_enabled(self) -> bool | None:
+        """collision_monitor enabled 파라미터를 짧게 읽어 캐시 — TUI가 5초마다 부른다."""
+        target = self.param_target('collision_monitor')
+        if target is None:
+            self.state.collision_enabled = None
+            return None
+        cli = self.param_client(*target)
+        if cli is None:
+            return self.state.collision_enabled
+        vals = self.param_get_vals(cli, ['enabled'], timeout=0.4)
+        if not vals:
+            return self.state.collision_enabled
+        try:
+            self.state.collision_enabled = bool(vals[0].bool_value)
+        except Exception:
+            return self.state.collision_enabled
+        return self.state.collision_enabled
+
+    def collision_status_text(self) -> str:
+        on = self.state.collision_enabled
+        base = '-' if on is None else ('켬' if on else '끔')
+        action = self.state.collision_action()
+        return base + (f' · {action}' if action else '')
+
+    def set_collision(self, want: bool) -> tuple[bool, str]:
+        """collision_monitor 켜기/끄기 — /collision_monitor/toggle (nav2_msgs/srv/Toggle)."""
+        svc = next((n for n, _t, _c in self.node_services('collision_monitor')
+                    if n.endswith('/toggle')), '/collision_monitor/toggle')
+        ok, result = self.call_service(svc, 'nav2_msgs/srv/Toggle', {'enable': bool(want)})
+        if not ok:
+            return False, str(result)
+        self.state.collision_enabled = bool(want)
+        end = time.monotonic() + 1.5
+        while time.monotonic() < end:   # 서비스 응답 뒤 파라미터가 실제로 바뀌었는지 짧게 확인
+            self._poll(0.1)
+            if self.poll_collision_enabled() == want:
+                break
+        msg = result.get('message') if isinstance(result, dict) else ''
+        return True, f'{"켬" if want else "끔"}' + (f' — {msg}' if msg else '')
+
+    def cmd_collision(self, args) -> int:
+        """collision_monitor 켜기/끄기/상태 — run-cli collision on|off|status."""
+        if args.state == 'status':
+            self._poll(2.0)   # PC에서는 파라미터 서비스 discovery에 잠깐 걸린다
+            self.poll_collision_enabled()
+            print(f'collision_monitor: {self.collision_status_text()}')
+            return 0
+        ok, text = self.set_collision(args.state == 'on')
+        if not ok:
+            print(f'실패: {text}', file=sys.stderr)
+            return 1
+        print(f'collision_monitor → {text}')
+        return 0
 
     # ------------------------------------------------------------- 상태
     def service_rows(self) -> list[tuple[str, str, bool, str]]:
@@ -81,7 +137,8 @@ class Bus:
                   f' odom  {self.state.odom_txt()}',
                   f' scan  {self.state.scan_txt()}',
                   f' map   {self.state.map_txt()}',
-                  f' amcl  {self.state.amcl_txt()}']
+                  f' amcl  {self.state.amcl_txt()}',
+                  f' 충돌  {self.collision_status_text()}']
         if self.state.goal_status:
             lines.append(f' 목표  {self.state.goal_status}')
         return lines
@@ -120,6 +177,7 @@ class Bus:
 
     def cmd_status(self, args) -> int:
         self._poll(2.5)
+        self.poll_collision_enabled()
         print('\n'.join(self.status_lines()))
         return 0
 
@@ -630,6 +688,7 @@ class Bus:
         self.state.goal_status = f'({x:.2f},{y:.2f}) 이동 중'
         print(f'목표 전송: x={x:.2f} y={y:.2f} θ={yaw_deg:.0f}°')
         if not wait:
+            self._watch_goal(handle, f'({x:.2f},{y:.2f})')
             return 0
         res_fut = handle.get_result_async()
         try:
@@ -645,8 +704,87 @@ class Bus:
         code = res_fut.result().status  # 4=SUCCEEDED 5=CANCELED 6=ABORTED
         txt = {4: '도착', 5: '취소됨', 6: '실패(ABORTED)'}.get(code, f'status {code}')
         self.state.goal_status = f'({x:.2f},{y:.2f}) {txt}'
+        self._goal_handle = None
         print(f'결과: {txt}')
         return 0 if code == 4 else 1
+
+    def _watch_goal(self, handle, label: str) -> None:
+        """wait=False로 보낸 목표의 완료를 콜백으로 기록 — 상단 '목표' 칸·취소 가능 여부."""
+        fut = handle.get_result_async()
+
+        def done(f):
+            if self._goal_handle is not handle:
+                return
+            try:
+                status = f.result().status
+            except Exception:
+                return
+            txt = {4: '도착', 5: '취소됨', 6: '실패(ABORTED)'}.get(status, f'status {status}')
+            self.state.goal_status = f'{label} {txt}'
+            self._goal_handle = None
+
+        fut.add_done_callback(done)
+
+    def send_waypoints(self, poses: list[dict], frame_id: str = 'map', through: bool = True) -> int:
+        """웨이포인트 전송 — 1개는 NavigateToPose, 여러 개는 NavigateThroughPoses 한 번에."""
+        poses = [dict(p) for p in poses]
+        if not poses:
+            print('웨이포인트 없음')
+            return 2
+        if len(poses) == 1:
+            p = poses[0]
+            return self.send_goal(float(p['x']), float(p['y']), float(p.get('yaw_deg', 0.0)), wait=False)
+        from nav2_msgs.action import NavigateThroughPoses
+        from rclpy.action import ActionClient
+        if self._through_client is None:
+            self._through_client = ActionClient(self.node, NavigateThroughPoses, '/navigate_through_poses')
+        cli = self._through_client
+        end = time.monotonic() + 5.0
+        while not cli.server_is_ready() and time.monotonic() < end:
+            self._poll(0.2)
+        if not cli.server_is_ready():
+            print(self.term.paint('/navigate_through_poses 서버 없음 — Nav가 떠 있는지 확인', RED))
+            return 1
+        self.ensure_nav()
+        goal = NavigateThroughPoses.Goal()
+        goal.poses.header.frame_id = frame_id
+        goal.poses.header.stamp = self.node.get_clock().now().to_msg()
+        for p in poses:
+            ps = PoseStamped()
+            ps.header = goal.poses.header
+            ps.pose.position.x = float(p['x'])
+            ps.pose.position.y = float(p['y'])
+            qz, qw = yaw_quat(math.radians(float(p.get('yaw_deg', 0.0))))
+            ps.pose.orientation.z, ps.pose.orientation.w = qz, qw
+            goal.poses.goals.append(ps)
+
+        def on_feedback(fb):
+            d = getattr(fb.feedback, 'distance_remaining', None)
+            left = getattr(fb.feedback, 'number_of_poses_remaining', None)
+            txt = f'웨이포인트 {len(poses)}개'
+            if left is not None:
+                txt += f' 남은 {left}'
+            if d is not None:
+                txt += f' · {d:.2f}m'
+            self.state.goal_status = txt
+
+        self._poll(0.5)
+        fut = cli.send_goal_async(goal, feedback_callback=on_feedback)
+        end = time.monotonic() + 10.0
+        while not fut.done() and time.monotonic() < end:
+            self._poll(0.1)
+        if not fut.done():
+            print(self.term.paint('웨이포인트 응답 없음 (10초) — Nav 로그 확인: ./run-cli nav log', RED))
+            return 1
+        handle = fut.result()
+        if not handle.accepted:
+            print(self.term.paint('웨이포인트 거부됨 — bt_navigator가 거절 (Nav 기동 중? 초기 위치?)', RED))
+            return 1
+        self._goal_handle = handle
+        self.state.goal_status = f'웨이포인트 {len(poses)}개 이동 중'
+        print(f'웨이포인트 {len(poses)}개 전송 (NavigateThroughPoses)')
+        self._watch_goal(handle, f'웨이포인트 {len(poses)}개')
+        return 0
 
     def cancel_goal(self) -> int:
         if self._goal_handle is None:
@@ -765,6 +903,57 @@ class Bus:
             return '', '/'
         return parts[-1], ('/' + '/'.join(parts[:-1])) if len(parts) > 1 else '/'
 
+    def node_services(self, name: str) -> list[tuple[str, str, bool]]:
+        """노드가 제공하는 서비스 (이름, 타입, 호출 가능)."""
+        full = name.strip('/')
+        short = full.rsplit('/', 1)[-1]
+        ns = '/' + full.rsplit('/', 1)[0] if '/' in full else '/'
+        items = []
+        try:
+            items = self.node.get_service_names_and_types_by_node(short, ns)
+        except Exception:
+            pass
+        if not items:
+            try:
+                all_items = self.node.get_service_names_and_types()
+            except Exception:
+                all_items = []
+            prefix = f'/{full}/'
+            items = [(s, t) for s, t in all_items if s == f'/{full}' or s.startswith(prefix)]
+        callable_fn = getattr(self.node, 'service_callable', None)
+        rows = []
+        for s, types in items:
+            callable_ = bool(callable_fn(s)) if callable_fn else True
+            rows.append((s, types[0] if types else '', callable_))
+        return sorted(set(rows))
+
+    def call_service(self, name: str, type_name: str, request: dict):
+        """서비스 호출 — (ok, dict | error str)."""
+        if hasattr(self.node, 'call_service'):
+            return self.node.call_service(name, type_name, request or {})
+        try:
+            from rosidl_runtime_py.convert import message_to_ordereddict
+            from rosidl_runtime_py.set_message import set_message_fields
+            from rosidl_runtime_py.utilities import get_service
+        except ImportError as exc:
+            return False, f'rosidl_runtime_py 없음: {exc}'
+        try:
+            srv = get_service(type_name)
+            cli = self.node.create_client(srv, name)
+            try:
+                if not cli.wait_for_service(timeout_sec=2.0):
+                    return False, f'서버 없음: {name}'
+                req = srv.Request()
+                set_message_fields(req, request or {})
+                res = self.param_wait(cli.call_async(req), timeout=10.0)
+                if res is None:
+                    return False, '응답 없음 (10초)'
+                return True, message_to_ordereddict(res)
+            finally:
+                self.node.destroy_client(cli)
+        except Exception as exc:
+            return False, f'서비스 호출 실패: {exc}'
+
     def node_feature_lines(self, name: str, summary: bool = False) -> list[str]:
         """노드별 추가 상태 — op/pages/nodes/<node>.py의 NodeFeature."""
         from .pages.nodes import feature_for
@@ -871,9 +1060,9 @@ class Bus:
             return None
         return list(res.descriptors)
 
-    def param_get_vals(self, cli, names: list[str]):
+    def param_get_vals(self, cli, names: list[str], timeout: float = 5.0):
         try:
-            res = self.param_wait(cli.get_parameters(names))
+            res = self.param_wait(cli.get_parameters(names), timeout=timeout)
         except Exception:
             return None
         if res is None or getattr(res, 'values', None) is None:

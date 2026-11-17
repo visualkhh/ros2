@@ -328,41 +328,34 @@ class MapPickMenu(Menu):
                     [f' RL 모델: {self.model}'] if self.model else [])
 
 
-class ModelStartItem(MenuItem):
-    """RL ONNX를 지정해서 Nav 시작 — 지도 선택으로 이어짐."""
-    key = '6'
+class NavMapItem(MenuItem):
+    """지도 한 화면에서 목표(Enter·g)·초기위치(i)·취소(x)를 모두 한다."""
+    shows_busy = False
+
+    def __init__(self, app, key: str = '3'):
+        super().__init__(app)
+        self.key = key
 
     def label(self):
-        return 'RL 모델로 시작 (ONNX)'
-
-    def visible(self):
-        return not self.bus.procs.running('nav')
+        return '지도에서 목표·초기위치·취소 (한 화면)'
 
     def run(self):
-        raw = self.ui.modal_input(
-            'RL 모델로 Nav 시작',
-            ['ONNX 경로 (PC 경로면 .onnx.data와 함께 로봇으로 복사)',
-             '비우면 취소 · 취소: Esc'],
-            '경로>', default=os.environ.get('TOOL_RL_MODEL', ''))
-        if raw is None or not raw.strip():
-            return STAY
-        return MapPickMenu(self.app, model=raw.strip()).show()
+        return self.ui.window.navigate('map', mode='nav')
 
 
 class NavMenu(ServiceMenu):
     name = 'nav'
 
     def items(self):
-        return [MapStartItem(self.app), ModelStartItem(self.app),
+        return [MapStartItem(self.app), NavMapItem(self.app),
                 StopItem(self.app, '1', self.name),
-                RestartItem(self.app, '2', self.name), InitPoseItem(self.app),
-                GoalItem(self.app), CancelGoalItem(self.app), RvizItem(self.app, 'nav'),
+                RestartItem(self.app, '2', self.name), RvizItem(self.app, 'nav'),
                 LogItem(self.app, 'l', self.name)]
 
     def hint(self):
         info = self.bus.procs.info('nav')
         return ([f' 지도: {info}'] if info else []) + [
-            self.term.paint(' 순서: 시작(또는 6 RL 모델) → 초기 위치 → 목표', DIM),
+            self.term.paint(' 순서: 시작 → 3) 지도 화면에서 i) 초기위치 → Enter 목표 → g 주행', DIM),
             self.term.paint(' 보기: v) RViz로 보기', DIM)]
 
 
