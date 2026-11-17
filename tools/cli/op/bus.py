@@ -218,22 +218,23 @@ class Bus:
 
         if target in ('all', 'base'):
             if self.procs.running('base'):
-                print('베이스: 이미 실행 중')
+                print('베이스: 이미 실행 중 — 건너뜀')
             elif self.start('base'):
-                return 1
-            if not self._wait_base():
                 return 1
             if target == 'base':
                 return 0
+
+        # 이미 Nav까지 떠 있으면 odom/scan/Discovery를 다시 기다리지 않고 그대로 끝낸다.
+        # (start를 두 번 쳤을 때 '이미 실행 중' 대신 _wait_base 타임아웃 오류가 나던 문제)
+        if self.procs.running('nav'):
+            print('Nav: 이미 실행 중 — 건너뜀 (재시작: ./run-cli nav restart)')
+            return 0
 
         if not self.procs.running('base'):
             print(self.term.paint('베이스가 꺼져 있음 — 먼저 ./run-cli start base', RED))
             return 1
         if not self._wait_base(5.0):
             return 1
-        if self.procs.running('nav'):
-            print('Nav: 이미 실행 중 — 재시작: ./run-cli nav restart')
-            return 0
         path = self.procs.resolve_map(map_arg)
         if path is None:
             print(f'지도 없음: {map_arg or "(최근 지도)"} — {self.procs.map_dir_txt} 확인 · `map list`',
