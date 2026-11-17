@@ -1240,7 +1240,7 @@ class Bus:
     # ------------------------------------------------------------- fallback controller
     def set_fallback(self, name: str) -> tuple[bool, str]:
         """RL 바이패스 controller 변경 — 설정 파일 저장·빌드·Nav 재시작 (PC는 SSH)."""
-        return self.procs.set_fallback(name)
+        return self.procs.set_fallback(name, progress=lambda text: self.ui.progress(text))
 
     def cmd_fallback(self, args) -> int:
         ok, msg = self.set_fallback(args.name)

@@ -253,7 +253,7 @@ class Procs:
         return True, '\n'.join(msgs)
 
     # ------------------------------------------------------------ fallback controller
-    FALLBACKS = ('mppi', 'dwb', 'rpp', 'rotation_shim')
+    FALLBACKS = ('mppi', 'dwb')   # inner 프리셋이 있는 것만
 
     @staticmethod
     def nav_params_source() -> Path:
@@ -270,28 +270,40 @@ class Procs:
         m = re.search(r'(?m)^\s*fallback_controller:\s*["\']?([^"\'\s#]+)', text)
         return m.group(1) if m else '?'
 
-    def set_fallback(self, name: str) -> tuple[bool, str]:
+    def set_fallback(self, name: str, progress=None) -> tuple[bool, str]:
         """RL 바이패스 controller를 설정 파일에 저장 → tb3_bringup 빌드 → Nav 재시작."""
         name = (name or '').strip().lower()
         if name not in self.FALLBACKS:
             return False, f'fallback은 {", ".join(self.FALLBACKS)} 중 하나'
         path = self.nav_params_source()
+        preset = Path(__file__).with_name(f'nav2_inner_{name}.yaml')
         try:
             text = path.read_text()
+            inner = preset.read_text().rstrip('\n') + '\n'
         except OSError as exc:
-            return False, f'설정 파일을 못 읽음: {path} ({exc})'
+            return False, f'설정/프리셋 파일을 못 읽음: {exc}'
         new, n = re.subn(r'''(?m)^(\s*fallback_controller:\s*["'])[^"']+(["'])''',
                          rf'\g<1>{name}\g<2>', text, count=1)
         if not n:
             return False, f'fallback_controller 줄을 못 찾음: {path}'
-        if new != text:
-            path.write_text(new)
+        # inner 블록도 그 controller 프리셋으로 바꾼다 (MPPI critic을 DWB가 읽다 죽는 문제 방지)
+        start = new.index('      inner:\n')
+        m = re.search(r'(?m)^\S', new[start:])
+        if not m:
+            return False, f'inner 블록 끝을 못 찾음: {path}'
+        end = start + m.start()
+        new = new[:start] + inner + '\n' + new[end:]
+        path.write_text(new)
         print(f'fallback_controller → {name}  ({path})')
+        if progress:
+            progress(f'{name} 설정 저장 — tb3_bringup 빌드 중…')
         rc = self.build(['--packages-select', 'tb3_bringup'])
         if rc != 0:
             return False, f'빌드 실패 (exit {rc}) — 설정은 저장됨. 로그를 확인하세요'
         if not self.running('nav'):
             return True, f'fallback {name} 저장 · 빌드 완료 (Nav 꺼짐 — 다음 시작 때 적용)'
+        if progress:
+            progress('Nav 재시작 중… (20~40초)')
         ok, msg = self.restart('nav')
         return ok, f'fallback {name} 저장 · 빌드 완료\n{msg}'
 
@@ -517,7 +529,7 @@ class RemoteProcs(Procs):
         rc, out = self._cli('restart-all')
         return rc == 0, f'[{self.host}] {out}'
 
-    def set_fallback(self, name: str) -> tuple[bool, str]:
+    def set_fallback(self, name: str, progress=None) -> tuple[bool, str]:
         rc, out = self._cli('fallback', name, timeout=240)
         return rc == 0, f'[{self.host}] {out}'
 

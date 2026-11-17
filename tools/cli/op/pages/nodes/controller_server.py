@@ -200,7 +200,7 @@ class ControllerServerFeature(NodeFeature):
             enabled = enabled_now()
             target = (not enabled) if enabled is not None else True
             now = '?' if enabled is None else ('ON' if enabled else 'OFF')
-            body = [f'현재: {now}', f'바꿀 상태: {"ON (정책)" if target else "OFF (MPPI fallback)"}',
+            body = [f'현재: {now}', f'바꿀 상태: {"ON (정책)" if target else "OFF (fallback)"}',
                     '서비스: /controller_server/FollowPath/toggle']
             if not app.ui.confirm('FollowPath.toggle을 보낼까요?', default=False, body=body):
                 return
@@ -226,14 +226,13 @@ class ControllerServerFeature(NodeFeature):
             return '?'
 
         def change_fallback():
-            names = {'1': 'mppi', '2': 'dwb', '3': 'rpp', '4': 'rotation_shim'}
+            names = {'1': 'mppi', '2': 'dwb'}
             cur = fallback_now()
             choice = app.ui.select(
                 'RL 바이패스 controller',
-                [('1', 'mppi (기본 · 부드러운 주행)'), ('2', 'dwb (가볍고 단순)'),
-                 ('3', 'rpp (Regulated Pure Pursuit)'), ('4', 'rotation_shim (회전 보조)')],
+                [('1', 'mppi (기본 · 부드러운 주행)'), ('2', 'dwb (가볍고 단순)')],
                 [f'현재: {cur}', 'Nav를 재시작해야 적용됩니다 (주행 중이면 멈춤)',
-                 '설정 파일에 저장 → tb3_bringup 빌드 → nav restart'])
+                 '설정 파일 + inner 프리셋 저장 → tb3_bringup 빌드 → nav restart'])
             if choice not in names:
                 return
             name_new = names[choice]
@@ -245,14 +244,19 @@ class ControllerServerFeature(NodeFeature):
                                         '저장 후 tb3_bringup을 빌드하고 Nav를 재시작합니다.',
                                         '주행 중이면 로봇이 멈춥니다.']):
                 return
-            ok, msg = bus.set_fallback(name_new)
+            app.ui.busy(f'fallback {cur} → {name_new} · 빌드/재시작')
+            app.ui.progress(f'{name_new} 설정 저장 중…')
+            try:
+                ok, msg = bus.set_fallback(name_new)
+            finally:
+                app.ui._busy = None
             print(('적용: ' if ok else '실패: ') + msg)
 
         return [
             GoMenu(app, 'a', '서비스 목록 · 호출 (테스트)',
                    ServiceMenu(app, name, self.services(bus, name))),
-            ActionItem(app, 'b', '서비스: FollowPath.toggle (RL↔MPPI fallback)', toggle),
-            ActionItem(app, 'c', '바이패스 controller 변경 (MPPI/DWB/RPP) — Nav 재시작', change_fallback),
+            ActionItem(app, 'b', '서비스: FollowPath.toggle (RL↔fallback)', toggle),
+            ActionItem(app, 'c', '바이패스 controller 변경 (MPPI/DWB) — Nav 재시작', change_fallback),
         ]
 
     @staticmethod
