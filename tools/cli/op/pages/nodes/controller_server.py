@@ -175,12 +175,29 @@ class ControllerServerFeature(NodeFeature):
         if name.rstrip('/').split('/')[-1] != self.node:
             return []
 
-        def toggle():
-            enabled = None
+        def enabled_now() -> bool | None:
+            """현재 FollowPath.enable — 주행 중이면 status, 아니면 파라미터에서 읽는다."""
+            st = bus.state.rl_status
+            age = time.monotonic() - bus.state.rl_status_time if st else None
+            if st and age is not None and age <= 2.0 and len(st) > 3:
+                return st[3] >= 0.5
+            target_node = bus.param_target('controller_server')
+            if target_node is not None:
+                cli = bus.param_client(*target_node)
+                if cli is not None:
+                    vals = bus.param_get_vals(cli, ['FollowPath.enable'], timeout=1.0)
+                    if vals:
+                        try:
+                            return bool(vals[0].bool_value)
+                        except Exception:
+                            pass
             for diag_name, values in bus.state.diag_values.items():
                 if 'controller_server' in diag_name:
-                    enabled = dict(values).get('enable') == 'true'
-                    break
+                    return dict(values).get('enable') == 'true'
+            return None
+
+        def toggle():
+            enabled = enabled_now()
             target = (not enabled) if enabled is not None else True
             now = '?' if enabled is None else ('ON' if enabled else 'OFF')
             body = [f'현재: {now}', f'바꿀 상태: {"ON (정책)" if target else "OFF (DWB)"}',
