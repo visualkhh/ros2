@@ -47,7 +47,7 @@ SIM = os.environ.get('TOOL_USE_SIM_TIME', 'false')
 # RemoteProcs가 켜기/끄기·지도 저장/목록·로그를 SSH로 로봇의 run-cli에 넘기고, 켜짐 여부는 ROS 노드 그래프로 본다
 # (그래서 토픽이 보이는 곳 어디서나 같은 CLI). PC 시뮬레이션(로컬에 띄우기)은 TOOL_LOCAL=1.
 ROBOT_HOST = os.environ.get('ROBOT_HOST', 'pak.local')
-ROBOT_TOOL_DIR = os.environ.get('TOOL_ROBOT_DIR', '~/ros2/tool')   # 로봇의 tool 위치
+ROBOT_TOOL_DIR = os.environ.get('TOOL_ROBOT_DIR', '~/ros2/tools')   # 로봇의 tools 위치
 ROBOT_REPO_DIR = os.environ.get('TOOL_ROBOT_REPO', '~/ros2')        # 로봇의 저장소 루트
 ROBOT_SSH = os.environ.get('TOOL_ROBOT_SSH', f'pak@{ROBOT_HOST}')   # SSH 대상 (키 인증 필요)
 IS_ROBOT = socket.gethostname() == ROBOT_HOST.removesuffix('.local') or os.environ.get('TOOL_LOCAL') == '1'

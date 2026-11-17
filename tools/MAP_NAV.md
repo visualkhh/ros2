@@ -47,7 +47,7 @@ ssh pak 'cd ~/ros2 && git pull'          # ros2_ws를 바꿨으면: ~/ros2/setup
 
 # ③ 베이스 bringup — 둘 중 하나
 ./run-cli base start                     # PC에서 (tool이 SSH로 Pi에 띄움)
-ssh -t pak 'cd ~/ros2/tool && ./run-cli base start'   # 또는 Pi에 들어가서 직접
+ssh -t pak 'cd ~/ros2/tools && ./run-cli base start'   # 또는 Pi에 들어가서 직접
 
 # ④ 확인
 ./run-cli status
@@ -232,4 +232,4 @@ for p in "1.0 0.0 0" "1.0 1.0 90" "0 0 180"; do ./run-cli goal $p || break; done
 | `ros2_ws/src/tb3_bringup/config/nav2_params.yaml` | Nav2 설정 (Waffle Pi footprint 다각형 · Twist cmd_vel · amcl `base_footprint`) |
 | `rviz/slam.rviz` · `rviz/nav.rviz` | RViz 화면 |
 | 로봇 `~/ros2/ros2_ws/map/<이름>/` | 저장한 지도 (`map.yaml` · `map.pgm`) |
-| 로봇 `~/ros2/tools/.run/<slam·nav·…>.log` | 실행 로그 (`./run-cli slam log`) |
+| 로봇 `~/ros2/toolss/.run/<slam·nav·…>.log` | 실행 로그 (`./run-cli slam log`) |

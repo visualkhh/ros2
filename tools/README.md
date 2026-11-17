@@ -153,7 +153,7 @@ CLI를 꺼도 띄운 launch는 계속 돕니다 (로봇의 `.run/<이름>.pid`).
 | `TOOL_USE_SIM_TIME` | `false` | Gazebo면 `true` |
 | `ROBOT_HOST` | `pak.local` | 로봇 이름 (DDS 피어 · 원격 실행 대상) |
 | `TOOL_ROBOT_SSH` | `pak@pak.local` | 원격 실행 SSH 대상 (키 인증) |
-| `TOOL_ROBOT_DIR` | `~/ros2/tool` | 로봇의 tool 위치 |
+| `TOOL_ROBOT_DIR` | `~/ros2/tools` | 로봇의 tools 위치 |
 | `TOOL_LOCAL` | — | `1`이면 로봇이 아니어도 **이 컴퓨터에** 띄움 (PC 시뮬레이션) |
 
 프레임 규약 (REP-105, TurtleBot3와 같음): `map → odom → base_footprint(바닥) → base_link(바퀴축 +0.010) → base_scan`.
