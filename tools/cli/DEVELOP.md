@@ -49,7 +49,7 @@ Window (op/window/window.py) — ui.window
   top_bar(TopStateBar) + menu_bar(LeftSideMenuBar) + 중앙(center_fn) + 힌트 줄을 조합해 draw()
   navigate(name, **params)                     이름으로 화면 열기 — 웹 페이지 이동처럼 파라미터를 넘김 (앱의 screen(name, **params)가 받음)
   run(title, items_fn, center_fn, back, main)  화면 하나의 키 루프 (Menu.show가 부름)
-     Tab = 메뉴 막대 ↔ 상태바 포커스 · Enter = 포커스된 부품 activate() · Esc/b/m/q = 이동
+     Tab/Shift+Tab = 메뉴 막대 ↔ 중앙 ↔ 상태바 포커스 · Enter = 포커스된 부품 activate() · Esc/b/m/q = 이동
   run(…, center_comp=지도, focus_center=True)  중앙에 포커스 가능한 부품을 올림 — Tab으로 메뉴 막대와 오감 (예: MapPage의 MapView)
   select(title, [(key, label)], center)        한 번 고르기 (ChoiceItem으로 run(once=True))
   perform(label, fn, busy)                     실행 + 끝나면 이 화면의 메뉴 막대·중앙·포커스 복원
@@ -93,7 +93,7 @@ StateBar — State를 줄(row)로 받아 ' | '로 이어 그림 · add(state, ro
 
 ### 2.4 키 입력 — cbreak + 직접 읽기
 
-`KeyReader`(op/keys.py)가 cbreak(줄 단위 X · echo X)로 키 즉시 1바이트를 읽고, 방향키(`ESC [ A`)·Tab·UTF-8을 `'up'`·`'tab'`·`'가'` 같은 이름으로 돌려줍니다.
+`KeyReader`(op/keys.py)가 cbreak(줄 단위 X · echo X)로 키 즉시 1바이트를 읽고, 방향키(`ESC [ A`)·Tab/Shift+Tab(`ESC [ Z`)·UTF-8을 `'up'`·`'tab'`·`'backtab'`·`'가'` 같은 이름으로 돌려줍니다.
 `tcflush`(입력 버퍼 비우기)는 확인창·입력창·결과창을 열 때만 하고, 메뉴(`Window._wait_key`)는 `flush=False`입니다 (2초마다 다시 그릴 때 키가 사라지지 않게).
 실행 중 `print()`는 `Ui.capture`가 가로채 결과창에 모읍니다 (`Window.perform`). 화면 그리기는 진짜 stdout(`Ui.console`)에 씁니다.
 
@@ -122,6 +122,6 @@ self.ui.window.navigate('map', mode='nav')                                    # 
 self.ui.window.navigate('map', mode='pose', on_pose=fn)                       # 위치 지정 — Enter → fn(x, y, yaw_deg)
 ```
 
-- 중앙 = `MapView`(포커스 가능 Component), 왼쪽 = 같은 동작 메뉴. Tab/Esc로 오간다. 화면 한가운데 십자선(+)이 찍을 자리, 로봇은 빨간 점(●), 찍는 모드는 십자선에서 방향선이 나간다 (`[` `]` 15° · `{` `}` 1°).
+- 중앙 = `MapView`(포커스 가능 Component), 왼쪽 = 같은 동작 메뉴. Tab/Shift+Tab/Esc로 오간다. 화면 한가운데 십자선(+)이 찍을 자리, 로봇은 빨간 점(●)과 진행 방향 화살표, 찍는 모드는 십자선에서 방향선이 나간다 (`[` `]` 15° · `{` `}` 1°). `m`/`o`는 map·odom 원점, `v`는 planner 예상 경로, `p`는 Nav2 경로.
 - 로봇 따라가기(기본): 중심이 로봇을 따라간다. 지도가 한 화면에 다 보이면 지도는 고정되고 로봇 점이 움직인다. 방향키로 지도를 밀면 풀리고 `r`로 다시 켠다.
 - 새 쓰임은 mode를 늘리지 말고, 먼저 파라미터(`on_pose` 같은 콜백)로 되는지 본다.
