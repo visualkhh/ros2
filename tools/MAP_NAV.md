@@ -168,6 +168,8 @@ m / o         map 원점 M / odom 원점 O 표시   [ ] { }  방향 15° / 1°
 + - f r       확대·축소 / 전체 보기 / 로봇 따라가기
 ```
 
+지도 화면은 **0.05초(20Hz)** 마다 다시 그린다. 필요하면 `TOOL_MAP_REDRAW=0.1 ./run-cli`처럼 늦출 수 있다. `/map` 자체는 SLAM(cartographer)이 **0.3초마다** 발행한다 (`publish_period_sec`, 기본값).
+
 SLAM 중 live 지도:
 
 ```text

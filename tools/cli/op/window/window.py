@@ -84,7 +84,8 @@ class Window:
         self.menu_bar, self.center_fn, self.focus, self.back, self.main, self.title, self.center_comp = saved
 
     def run(self, title: str, items_fn, center_fn, back: bool = True, main: bool = True,
-            timeout: float | None = None, once: bool = False, center_comp=None, focus_center: bool = False):
+            timeout: float | None = None, once: bool = False, center_comp=None, focus_center: bool = False,
+            redraw: float | None = None):
         """화면 하나의 키 루프. items_fn() = Component(key·label()·activate()) 목록 (보이는 것만), center_fn() = 중앙 줄.
 
         once=False (Menu): 고른 항목을 activate하고 계속 · MAIN/QUIT/BACK(뒤로 키)만 돌려준다.
@@ -111,7 +112,7 @@ class Window:
                 if once or result in (MAIN, QUIT):
                     return result
                 continue
-            k = self._wait_key(title, center_fn, timeout)
+            k = self._wait_key(title, center_fn, timeout, redraw)
             if once:
                 self._once_idx[title] = bar.idx
             if k is None:            # 갱신 시간 — 항목·중앙 다시 계산
@@ -137,19 +138,28 @@ class Window:
                 return BACK
             # r · 뒤로/메인이 없는 화면의 그 키 → 다시 그리기만
 
-    def _wait_key(self, title: str, center_fn, timeout: float):
+    def _wait_key(self, title: str, center_fn, timeout: float, redraw: float | None = None):
         """그리기 → 키 대기. 포커스 이동 키는 여기서 처리하고 다시 그린다.
+        redraw = 초 단위 중앙 갱신 주기 (None이면 입력/2초 갱신 때만).
         반환: 처리 못 한 키(enter·q·b·m·r…) | None(timeout 동안 아무것도 안 눌림)."""
         with KeyReader(self.term, flush=False) as keys:
             while True:
                 # 키를 하나 처리할 때마다 갱신 시계를 새로 시작 — 리드로우 직후 키가 씹히는 느낌을 막는다.
                 end = time.monotonic() + timeout
-                self.draw(title, center_fn())   # 그릴 때마다 다시 계산 — 지도처럼 키로 바뀌는 중앙도 바로 반영
+                next_draw = 0.0
                 while True:
-                    remain = end - time.monotonic()
+                    now = time.monotonic()
+                    if redraw is None:
+                        if next_draw == 0.0:
+                            self.draw(title, center_fn())
+                            next_draw = 1e18
+                    elif now >= next_draw:
+                        self.draw(title, center_fn())
+                        next_draw = now + redraw
+                    remain = end - now
                     if remain <= 0:
                         return None
-                    k = keys.read(min(0.1, remain))
+                    k = keys.read(min(0.05, remain))
                     if k is None or not keys.pending():   # 키가 밀려 있으면 ROS 폴링은 건너뜀
                         self.emit('tick', 0.02)
                     if k is None:

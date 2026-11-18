@@ -13,6 +13,7 @@ Enter = mode의 동작(웨이포인트 추가 · 위치 지정). Tab/Esc로 왼�
 from __future__ import annotations
 
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -397,7 +398,7 @@ class MapPage(Menu):
         if self.source or self.view is None or self._map_msg is None:
             return
         now = time.monotonic()
-        if now - self._grid_at < 0.5:
+        if now - self._grid_at < 0.2:
             return
         try:
             grid = MapGrid.from_msg(self._map_msg)
@@ -576,7 +577,7 @@ class MapPage(Menu):
         if self.source:
             return None
         now = time.monotonic()
-        interval = 0.1 if self.mode == 'teleop' else 0.3   # 텔레오퍼는 방향 화살표가 빨리 따라오게
+        interval = 0.1   # 지도 위 로봇·방향 화살표가 빨리 따라오게
         if now - self._robot_at >= interval:
             self._robot_at = now
             p = self.bus.robot_pose()
@@ -744,7 +745,8 @@ class MapPage(Menu):
             self.ui.window.connect('tick', self._tick)
         try:
             result = self.ui.window.run(self.title, self.items, self.center, back=True, main=True,
-                                        center_comp=self.view, focus_center=True)
+                                        center_comp=self.view, focus_center=True,
+                                        redraw=max(0.02, float(os.environ.get('TOOL_MAP_REDRAW', '0.05'))))
         finally:
             if tick:
                 self.ui.window.disconnect('tick', self._tick)

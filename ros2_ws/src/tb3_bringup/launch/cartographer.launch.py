@@ -15,7 +15,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('resolution', default_value='0.05'),
-        DeclareLaunchArgument('publish_period_sec', default_value='1.0'),
+        DeclareLaunchArgument('publish_period_sec', default_value='0.3'),
         Node(
             package='cartographer_ros',
             executable='cartographer_node',
