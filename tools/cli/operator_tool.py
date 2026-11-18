@@ -73,6 +73,14 @@ class OperatorTool(Node):
         self.ui.bus = self.bus
         self.drive_cfg = {'linear': 0.15, 'angular': 0.8, 'duration': 1.0}
         self._collision_at = 0.0
+        # 새 CLI/TUI도 마지막 저장된 토글을 바로 표시 (실제 적용은 Nav/노드 시작 때)
+        try:
+            saved_enable = self.procs.saved_enable()
+        except Exception:
+            saved_enable = None
+        if saved_enable is not None:
+            self.state.rl_enabled = saved_enable
+            self.state.rl_enabled_at = time.monotonic()
         # 화면 틀(Window) 신호 — ROS 폴링은 'tick', 이름으로 화면 열기는 'navigate'
         self.ui.window.connect('tick', self._on_tick)
         self.ui.window.connect('navigate', self._on_navigate)

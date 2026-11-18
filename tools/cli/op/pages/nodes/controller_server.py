@@ -228,6 +228,10 @@ class ControllerServerFeature(NodeFeature):
                 return st[3] >= 0.5
             # 오른쪽 상태줄과 같은 캐시(_config)를 먼저 쓴다 — dialog마다 param 서비스가
             # 늦게 응답해 '?'가 뜨던 문제 방지
+            # 저장된 런타임 값 — 파라미터(configure 값)는 토글해도 안 바뀌므로 먼저 본다
+            saved = bus.procs.saved_enable()
+            if saved is not None:
+                return saved
             cfg = self._config(bus)
             val = cfg.get('FollowPath.enable')
             if val is not None:
