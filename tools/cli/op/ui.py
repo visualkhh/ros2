@@ -24,6 +24,7 @@ class Ui:
         # 화면 그리기 전용 — capture()가 sys.stdout을 가로채도 UI는 여기로 쓴다
         self.term.out = self.console = sys.stdout
         self.state = state
+        self.bus = None   # OperatorTool이 Bus 생성 뒤 연결 (상태바 activate에서 사용)
         self._busy = None   # 지금 떠 있는 처리 중 창 (메뉴 항목 실행 동안)
         self.window = Window(self)  # 화면 틀 — 상태바·메뉴 막대·중앙·힌트 조합 · 키 루프 · 신호
         if hasattr(procs, 'on_wait'):

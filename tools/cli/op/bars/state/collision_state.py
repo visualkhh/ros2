@@ -22,7 +22,7 @@ class CollisionState(State):
     def activate(self):
         cur = self.state.collision_enabled
         if cur is None:
-            cur = self.bus.poll_collision_enabled()
+            cur = self.ui.bus.poll_collision_enabled()
         if cur is None:
             self.ui.modal_key('충돌 감시', [
                 '상태를 모름 — /collision_monitor 파라미터 enabled 응답 없음',
@@ -37,7 +37,7 @@ class CollisionState(State):
                                default=want_on, body=body):
             return STAY
         try:
-            ok, text = self.bus.set_collision(want_on)
+            ok, text = self.ui.bus.set_collision(want_on)
         except Exception as exc:   # 서비스 응답 형식이 달라도 TUI가 죽지 않게
             ok, text = False, str(exc)
         self.ui.modal_key('충돌 감시', [('적용: ' if ok else '실패: ') + text])

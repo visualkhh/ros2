@@ -67,6 +67,7 @@ class OperatorTool(Node):
         self.procs = make_procs(self)   # 로봇이 아니면 RemoteProcs (SSH + 노드 그래프)
         self.ui = Ui(self.term, self.state, self.procs)
         self.bus = Bus(self, self.state, self.ui, self.term)
+        self.ui.bus = self.bus
         self.drive_cfg = {'linear': 0.15, 'angular': 0.8, 'duration': 1.0}
         self._collision_at = 0.0
         # 화면 틀(Window) 신호 — ROS 폴링은 'tick', 이름으로 화면 열기는 'navigate'
