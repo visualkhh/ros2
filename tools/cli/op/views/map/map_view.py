@@ -70,6 +70,7 @@ class MapView(View):
         self.grid, self.color = grid, color
         self.vp = Viewport(grid)
         self.following = True
+        self.teleop = False       # True면 방향키를 지도 이동 대신 페이지(텔레오퍼)로 넘긴다
         self.robot: tuple[float, float] | None = None
         self.robot_yaw: float | None = None   # 로봇 진행 방향 [deg] — ●에서 화살표
         self.odom: tuple[float, float] | None = None   # map 기준 odom 프레임 원점
@@ -109,6 +110,8 @@ class MapView(View):
     def on_key(self, k) -> bool:
         cols, rows = self.size
         vp = self.vp
+        if self.teleop and (k in PAN_KEYS or k in ('+', '=', '-', '_')):
+            return bool(self.extra_key and self.extra_key(k))
         if k in PAN_KEYS:
             self.following = False
             vp.pan(*PAN_KEYS[k])

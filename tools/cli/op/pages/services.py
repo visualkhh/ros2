@@ -178,6 +178,28 @@ class RvizItem(MenuItem):
 
 
 # ---------------------------------------------------------------- SLAM
+class MapLiveItem(MenuItem):
+    key = '4'
+    shows_busy = False
+
+    def label(self):
+        return '지도 보기 (live /map — SLAM 그려지는 중)'
+
+    def run(self):
+        return self.ui.window.navigate('map', mode='view')
+
+
+class MapTeleopItem(MenuItem):
+    key = '5'
+    shows_busy = False
+
+    def label(self):
+        return '지도 보면서 수동 이동 (live map + 텔레오퍼)'
+
+    def run(self):
+        return self.ui.window.navigate('map', mode='teleop')
+
+
 class SaveMapItem(MenuItem):
     key = '3'
 
@@ -206,11 +228,12 @@ class SlamMenu(ServiceMenu):
     name = 'slam'
 
     def extra(self):
-        return [SaveMapItem(self.app), RvizItem(self.app, 'slam'),
-                TeleopItem(self.app, 't', '수동으로 이동하기 (텔레오퍼)'), AutoMapItem(self.app)]
+        return [SaveMapItem(self.app), MapLiveItem(self.app), MapTeleopItem(self.app),
+                RvizItem(self.app, 'slam'),
+                TeleopItem(self.app, 't', '텔레오퍼만 (지도 없이)'), AutoMapItem(self.app)]
 
     def hint(self):
-        return [self.term.paint(' 맵핑: 1) 시작 → v) RViz로 보기 → t) 수동으로 돌기 또는 a) 자동 맵핑 → 3) 지도 저장', DIM),
+        return [self.term.paint(' 맵핑: 1) 시작 → 5) 지도 보면서 수동 이동 → 3) 지도 저장 · v RViz', DIM),
                 f' 탐색: {self.state.explore_status or "-"}' if self.state.st_control == 'SLAM_AUTO_MAPPING' else '']
 
 

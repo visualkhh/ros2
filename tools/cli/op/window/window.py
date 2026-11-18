@@ -48,6 +48,12 @@ class Window:
     def emit(self, signal: str, *args) -> list:
         return [fn(*args) for fn in self._signals.get(signal, [])]
 
+    def disconnect(self, signal: str, fn) -> None:
+        """연결한 신호 해제 — 화면을 닫을 때 tick 콜백이 남지 않게."""
+        items = self._signals.get(signal)
+        if items and fn in items:
+            items.remove(fn)
+
     def navigate(self, name: str, **params):
         """이름으로 화면 열기 — 웹 페이지 이동처럼 파라미터를 넘긴다 (예: navigate('map', mode='view', source=경로)).
         받은 쪽(앱)의 첫 결과(page.show() 반환), 받을 쪽이 없으면 STAY."""

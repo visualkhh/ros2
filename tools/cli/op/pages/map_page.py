@@ -4,6 +4,7 @@
     mode    'view'  지도 보기만 (기본)
             'pose'  로봇 위치 지정 — 십자선 위치(+방향)를 on_pose(x, y, yaw_deg)로 보냄
             'nav'   한 화면에서 목표·초기위치·취소 — Enter로 웨이포인트, g 주행, x 취소, i 초기위치
+            'teleop' 지도 보면서 수동 이동 — WASD/방향키, s 정지, +/- 속도 (MANUAL 필요)
     source  None = 지금 /map(live · 로봇 점 표시) · 경로 = 저장된 지도 yaml(map_server 형식)
 
 열면 지도를 받아 중앙에 올린다 (Window.run의 center_comp) — 처음엔 지도가 포커스를 받아 방향키로 지도 이동 · +/- 확대·축소 ·
@@ -19,7 +20,7 @@ from pathlib import Path
 from ..defs import BACK, MAIN, QUIT, STAY
 from ..dialog import fmt_pose
 from ..terminal import DIM, YELLOW
-from ..menus import ActionItem, Menu
+from ..menus import ActionItem, InfoItem, Menu
 from ..views.map import FREE, OCC, UNKNOWN, CostGrid, MapGrid, MapView
 from ..views.map.map_view import LOCAL_PLAN_RGB, PLAN_RGB
 
@@ -29,6 +30,7 @@ TITLES = {
     'view': '지도 보기',
     'pose': '로봇 위치 지정',
     'nav': '지도 주행 — 목표·초기위치·취소',
+    'teleop': '지도 보면서 수동 이동 (SLAM)',
 }
 
 
@@ -60,6 +62,12 @@ class MapPage(Menu):
         self._preview = None         # v — planner 예상 경로
         self._plans: dict[str, tuple[float, list[tuple[float, float]]] | None] = {
             'plan': None, 'local_plan': None}
+        self._map_msg = None
+        self._map_msg_at = 0.0
+        self._grid_at = 0.0
+        self._teleop_move = (0, 0)
+        self._teleop_lin, self._teleop_ang = 0.10, 0.50
+        self._teleop_at = 0.0
         self._cost: dict[str, CostGrid | None] = {'global': None, 'local': None}
         self._cost_at: dict[str, float] = {'global': 0.0, 'local': 0.0}
 
@@ -69,6 +77,9 @@ class MapPage(Menu):
         x, y = self.view.center
         if self.mode == 'view':
             self.msg = '보기 전용 — 목표·초기위치는 Nav(4) 또는 지도/위치(6)에서'
+        elif self.mode == 'teleop':
+            self.msg = 'WASD/방향키 이동 · s 정지 · +/- 속도 · Tab 메뉴'
+            return
         elif self.mode == 'nav':
             note = ''
             if self.snap:
@@ -373,8 +384,72 @@ class MapPage(Menu):
                 out.append((got[1], rgb))
         return out
 
+    def _on_map(self, msg) -> None:
+        self._map_msg = msg
+        self._map_msg_at = time.monotonic()
+
+    def _refresh_grid(self) -> None:
+        """SLAM live /map — 0.5초에 한 번 지도 격자를 새로 만든다 (뷰·로봇 위치는 유지)."""
+        if self.source or self.view is None or self._map_msg is None:
+            return
+        now = time.monotonic()
+        if now - self._grid_at < 0.5:
+            return
+        try:
+            grid = MapGrid.from_msg(self._map_msg)
+        except Exception:
+            return
+        self._map_msg = None
+        self._grid_at = now
+        self.view.grid = grid
+        self.view.vp.grid = grid
+        self.view._key = None
+
+    def _teleop_cmd(self) -> tuple[float, float]:
+        f, t = self._teleop_move
+        return f * self._teleop_lin, t * self._teleop_ang
+
+    def _tick(self, seconds: float) -> None:
+        """지도 화면이 떠 있는 동안 텔레오퍼 명령을 10Hz로 보낸다."""
+        if self.mode != 'teleop':
+            return
+        now = time.monotonic()
+        if now - self._teleop_at < 0.1:
+            return
+        self._teleop_at = now
+        if self.ui.window.focus is not self.view:
+            self._teleop_move = (0, 0)
+        self.bus.send_velocity(*self._teleop_cmd())
+
+    def _move(self, f: int, t: int) -> None:
+        self._teleop_move = (f, t)
+
+    def _stop(self) -> None:
+        self._teleop_move = (0, 0)
+        self.bus.send_velocity(0.0, 0.0)
+
     def _extra_key(self, k) -> bool:
-        """지도가 모르는 키."""
+        """지도가 모르는 키 — teleop은 이동, 그 외는 목표·초기위치·화면 옵션."""
+        if self.mode == 'teleop':
+            moves = {'w': (1, 0), 'up': (1, 0), 'x': (-1, 0), 'down': (-1, 0),
+                     'a': (0, 1), 'left': (0, 1), 'd': (0, -1), 'right': (0, -1),
+                     's': (0, 0), ' ': (0, 0)}
+            if k in moves:
+                self._teleop_move = moves[k]
+                self.msg = (f'텔레오퍼 v={self._teleop_cmd()[0]:+.2f} m/s '
+                            f'ω={self._teleop_cmd()[1]:+.2f} rad/s')
+                return True
+            if k in ('+', '='):
+                self._teleop_lin = min(0.26, self._teleop_lin + 0.02)
+                self._teleop_ang = min(1.82, self._teleop_ang + 0.1)
+                self.msg = f'속도 v {self._teleop_lin:.2f} · ω {self._teleop_ang:.2f}'
+                return True
+            if k in ('-', '_'):
+                self._teleop_lin = max(0.05, self._teleop_lin - 0.02)
+                self._teleop_ang = max(0.2, self._teleop_ang - 0.1)
+                self.msg = f'속도 v {self._teleop_lin:.2f} · ω {self._teleop_ang:.2f}'
+                return True
+            return False
         if k in ('enter', ' '):
             self.pick()
         elif k == 'backspace' and self.mode == 'nav':
@@ -422,6 +497,8 @@ class MapPage(Menu):
                     ('예상 경로 지우기 (V)', self.clear_preview),
                     (lambda: f'웨이포인트 안전 스냅 (s) — {"●" if self.snap else "○"}', self.toggle_snap)],
             'pose': [('로봇 위치로 지정 — 십자선 위치 (Enter)', self.pick)],
+            'teleop': [InfoItem(self.app, '지도에 포커스한 채 WASD/방향키로 이동 · s 정지', '1'),
+                       InfoItem(self.app, '속도는 지도에서 + / - (기본 0.10 m/s · 0.50 rad/s)', '2')],
             'view': [],
         }[self.mode]
         rows += [('확대 (+)', lambda: self.zoom(+1)), ('축소 (-)', lambda: self.zoom(-1)),
@@ -449,10 +526,12 @@ class MapPage(Menu):
         return self._robot
 
     def center(self) -> list[str]:
+        self._refresh_grid()
         v = self.view
         cw, ch = self.ui.window.center_size()
         rows = max(3, ch - 9)   # 아래 상태·메시지·범례까지 화면에 남긴다
-        v.show_yaw = self.mode != 'view'
+        v.show_yaw = self.mode in ('nav', 'pose', 'goals')
+        v.teleop = self.mode == 'teleop'
         v.robot = self._pose()
         v.robot_yaw = self._robot_yaw
         odom = self._odom_origin()
@@ -474,6 +553,9 @@ class MapPage(Menu):
         code = v.grid.code(v.vp.k, x, y)
         if self.mode == 'nav':
             mode_txt = f'방향 {self.yaw:+.0f}° · 웨이포인트 {len(self.goals)}개'
+        elif self.mode == 'teleop':
+            tv, tw = self._teleop_cmd()
+            mode_txt = f'텔레오퍼 v={tv:+.2f} m/s ω={tw:+.2f} rad/s'
         elif self.mode == 'pose':
             mode_txt = f'방향 {self.yaw:+.0f}°'
         else:
@@ -496,6 +578,9 @@ class MapPage(Menu):
         if self.show_odom and self._odom:
             mo.append(f'({self._odom[0]:+.2f},{self._odom[1]:+.2f})')
         status.append(' '.join(mo))
+        if not self.source:
+            age = time.monotonic() - self._map_msg_at if self._map_msg_at else None
+            status.append('live /map ' + ('● 갱신 중' if age is not None and age <= 2.0 else '○ 대기'))
         if self.state.goal_status:
             status.append(f'목표: {self.state.goal_status}')
         legend = self.term.paint('● 로봇 → 방향 · + 십자선 · S 출발 · 1 2 goal · M map · O odom', DIM)
@@ -532,6 +617,8 @@ class MapPage(Menu):
             k += 1
 
     def show(self) -> str:
+        if self.mode == 'teleop' and not self.bus.ensure_manual():
+            return STAY
         self.ui.busy('지도 여는 중 …')
         try:
             grid = self._load_grid()
@@ -546,26 +633,42 @@ class MapPage(Menu):
             print('FAIL: /map을 못 받음 — 지도 서버(map_server)·Nav가 떠 있는지 확인', file=sys.stderr)
             return STAY
         self.view = MapView(grid, self.term.color, extra_key=self._extra_key)
+        self.view.teleop = self.mode == 'teleop'
         self._plans = {'plan': None, 'local_plan': None}
         self._cost = {'global': None, 'local': None}
         self._cost_at = {'global': 0.0, 'local': 0.0}
+        self._map_msg = None
+        self._grid_at = 0.0
         subs = []
         try:
-            from nav_msgs.msg import Path
+            from nav_msgs.msg import Path, OccupancyGrid
             for topic, kind in (('/plan', 'plan'), ('/local_plan', 'local_plan')):
                 subs.append(self.app.create_subscription(
                     Path, topic, lambda m, k=kind: self._on_path(k, m), 10))
-            from nav_msgs.msg import OccupancyGrid
             for topic, kind in (('/global_costmap/costmap', 'global'),
                                 ('/local_costmap/costmap', 'local')):
                 subs.append(self.app.create_subscription(
                     OccupancyGrid, topic, lambda m, k=kind: self._on_cost(k, m), 10))
+            if not self.source:
+                from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
+                qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                                 durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+                subs.append(self.app.create_subscription(OccupancyGrid, '/map', self._on_map, qos))
         except Exception:
             pass
+        tick = self.mode == 'teleop'
+        if tick:
+            self.view.hints = 'WASD/방향키 이동 · s 정지 · +/- 속도 · Tab 메뉴 · Esc 메뉴'
+            self.ui.window.connect('tick', self._tick)
         try:
             result = self.ui.window.run(self.title, self.items, self.center, back=True, main=True,
                                         center_comp=self.view, focus_center=True)
         finally:
+            if tick:
+                self.ui.window.disconnect('tick', self._tick)
+                for _ in range(3):
+                    self.bus.send_velocity(0.0, 0.0)
+                    self.bus._poll(0.05)
             for sub in subs:
                 try:
                     self.app.destroy_subscription(sub)
