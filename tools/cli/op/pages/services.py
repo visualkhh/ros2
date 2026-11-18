@@ -359,22 +359,31 @@ class MapPickMenu(Menu):
 
 
 class ChangeMapItem(MenuItem):
-    """Nav 실행 중 다른 지도로 갈아타기 — 정지 후 선택한 지도로 시작."""
+    """다른 지도로 갈아타기 — Nav가 켜져 있으면 정지 후 선택한 지도로 시작."""
     key = '4'
 
+    def __init__(self, app, key: str = '4', always: bool = False):
+        super().__init__(app)
+        self.key = key
+        self.always = always   # 지도/위치 메뉴에서는 Nav가 꺼져 있어도 보인다
+
     def label(self):
-        return '지도 바꾸기 (다른 지도 선택 → Nav 재시작)'
+        return 'Nav 지도 바꾸기 (다른 지도 선택 → 재시작)'
 
     def visible(self):
-        return self.bus.procs.running('nav')
+        return self.always or self.bus.procs.running('nav')
 
     def run(self):
+        running = self.bus.procs.running('nav')
         cur = self.state.st_map or self.bus.procs.info('nav') or '?'
-        if not self.ui.confirm('Nav 지도를 바꿀까요?',
-                               body=[f'현재 지도: {cur}',
-                                     'Nav를 멈추고 선택한 지도로 다시 시작합니다.',
-                                     '초기 위치(3)를 다시 넣어야 합니다.'],
-                               default=False):
+        body = [f'현재 지도: {cur}']
+        if running:
+            body += ['Nav를 멈추고 선택한 지도로 다시 시작합니다.',
+                     '초기 위치(3)를 다시 넣어야 합니다.']
+        else:
+            body += ['선택한 지도로 Nav를 시작합니다.',
+                     '초기 위치(3)를 넣어야 합니다.']
+        if not self.ui.confirm('Nav 지도를 바꿀까요?', body=body, default=False):
             return STAY
         return MapPickMenu(self.app, switch=True).show()
 

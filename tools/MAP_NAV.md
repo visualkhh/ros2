@@ -146,6 +146,8 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ```text
 4) Nav (지도 주행) → 4) 지도 바꾸기 (다른 지도 선택 → Nav 재시작)
 또는
+6) 지도/위치 → n) Nav 지도 바꾸기 (다른 지도 선택 → Nav 재시작)
+또는
 ./run-cli nav switch office
 ```
 

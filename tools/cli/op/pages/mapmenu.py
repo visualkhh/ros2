@@ -5,7 +5,7 @@ from pathlib import Path
 
 from ..defs import STAY
 from ..menus import InfoItem, Menu, MenuItem
-from .services import NavMapItem, SaveMapItem
+from .services import ChangeMapItem, NavMapItem, SaveMapItem
 
 
 class MapInfoItem(MenuItem):
@@ -55,11 +55,14 @@ class MapMenu(Menu):
         maps = self.bus.procs.maps()
         rows = [MapInfoItem(self.app, str(i), n, p) for i, (n, p) in enumerate(maps, 1)]
         return [MapShowItem(self.app, 'v', 'view'), MapShowItem(self.app, 'p', 'pose'),
-                NavMapItem(self.app, 'g'), save] + (rows or [InfoItem(self.app, '저장된 지도 없음')])
+                NavMapItem(self.app, 'g'),
+                ChangeMapItem(self.app, 'n', always=True), save] + (
+                    rows or [InfoItem(self.app, '저장된 지도 없음')])
 
     def center(self):
         return [f'[지도 폴더] {self.bus.procs.map_dir_txt}', ' <이름>/map.yaml + map.pgm', '',
                 ' v) 지금 /map 보기 · g) 목표·초기위치·취소 (한 화면)',
+                ' n) Nav 지도 바꾸기 (다른 지도 선택 → Nav 재시작)',
                 ' p) 초기 위치 지정 (amcl) · s) 지금 /map 저장',
                 ' 번호) 저장된 지도 보기 (PC는 로봇에서 내려받아 표시)',
                 '', f' 지도 /map: {self.state.map_txt()}']
