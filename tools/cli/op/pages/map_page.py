@@ -66,6 +66,9 @@ class MapPage(Menu):
         self._map_msg_at = 0.0
         self._grid_at = 0.0
         self._map_updates = 0
+        self.show_scan = False       # l — /scan 라이다 점
+        self._scan_points: list[tuple[float, float]] = []
+        self._scan_at = 0.0
         self._teleop_move = (0, 0)
         self._teleop_lin, self._teleop_ang = 0.10, 0.50
         self._teleop_at = 0.0
@@ -430,6 +433,55 @@ class MapPage(Menu):
         self._teleop_move = (0, 0)
         self.bus.send_velocity(0.0, 0.0)
 
+    def _sensor_pose(self, frame: str):
+        """map 기준 라이다 자세 (x, y, yaw[rad]) — TF, 없으면 로봇 자세로 근사."""
+        frame = (frame or '').strip()
+        buf = getattr(self.bus.node, 'tf_buffer', None) if hasattr(self.bus, 'node') else None
+        if buf is not None and frame:
+            try:
+                import rclpy
+                tr = buf.lookup_transform('map', frame, rclpy.time.Time())
+                p, q = tr.transform.translation, tr.transform.rotation
+                yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+                return p.x, p.y, yaw
+            except Exception:
+                pass
+        if self._robot is None:
+            self._pose()
+        if self._robot is None:
+            return None
+        return self._robot[0], self._robot[1], math.radians(self._robot_yaw or 0.0)
+
+    def _on_scan(self, msg) -> None:
+        """LaserScan → map 좌표 점 (l로 켰을 때만)."""
+        if not self.show_scan or self.source:
+            self._scan_points = []
+            return
+        pose = self._sensor_pose(getattr(getattr(msg, 'header', None), 'frame_id', ''))
+        if pose is None:
+            return
+        x0, y0, yaw = pose
+        pts = []
+        for i, r in enumerate(msg.ranges):
+            if not math.isfinite(r) or r < msg.range_min or r > msg.range_max:
+                continue
+            a = msg.angle_min + i * msg.angle_increment + yaw
+            pts.append((x0 + r * math.cos(a), y0 + r * math.sin(a)))
+        self._scan_points = pts
+        self._scan_at = time.monotonic()
+
+    def toggle_scan(self) -> None:
+        if self.source:
+            self.msg = '저장 지도에는 라이다 없음 — 지금 지도(live)에서만'
+            return
+        self.show_scan = not self.show_scan
+        if not self.show_scan:
+            self._scan_points = []
+            self.msg = '라이다 스캔 ○ 꺼짐'
+        else:
+            self.msg = '라이다 스캔 ● 켜짐 — /scan 점을 빨간색으로 (RViz LaserScan)'
+
     def _extra_key(self, k) -> bool:
         """지도가 모르는 키 — teleop은 이동, 그 외는 목표·초기위치·화면 옵션."""
         if self.mode == 'teleop':
@@ -473,6 +525,8 @@ class MapPage(Menu):
             self.toggle_plan()
         elif k in ('c', 'C'):
             self.toggle_cost()
+        elif k in ('l', 'L'):
+            self.toggle_scan()
         elif k in ('s', 'S') and self.mode == 'nav':
             self.toggle_snap()
         elif k in ('m', 'M'):
@@ -510,7 +564,8 @@ class MapPage(Menu):
                  (lambda: f'M map 원점 (m) — {"●" if self.show_map else "○"}', self.toggle_map_origin),
                  (lambda: f'O odom 원점 (o) — {"●" if self.show_odom else "○"}', self.toggle_odom),
                  (lambda: f'Nav2 경로 겹쳐 보기 (p) — {"●" if self.plan_on else "○"}', self.toggle_plan),
-                 (lambda: f'costmap 겹쳐 보기 (c) — {self.COST_LABELS[self.cost_mode]}', self.toggle_cost)]
+                 (lambda: f'costmap 겹쳐 보기 (c) — {self.COST_LABELS[self.cost_mode]}', self.toggle_cost),
+                 (lambda: f'라이다 스캔 겹쳐 보기 (l) — {"●" if self.show_scan else "○"}', self.toggle_scan)]
         if self.mode in ('nav', 'pose'):
             rows += [(f'좌회전 +{YAW_STEP:.0f}° ([) · 미세 +1° = {{', lambda: self.turn(YAW_STEP)),
                      (f'우회전 -{YAW_STEP:.0f}° (]) · 미세 -1° = }}', lambda: self.turn(-YAW_STEP))]
@@ -521,7 +576,8 @@ class MapPage(Menu):
         if self.source:
             return None
         now = time.monotonic()
-        if now - self._robot_at >= 0.3:
+        interval = 0.1 if self.mode == 'teleop' else 0.3   # 텔레오퍼는 방향 화살표가 빨리 따라오게
+        if now - self._robot_at >= interval:
             self._robot_at = now
             p = self.bus.robot_pose()
             self._robot = (p['x'], p['y']) if p else None
@@ -533,7 +589,8 @@ class MapPage(Menu):
         v = self.view
         cw, ch = self.ui.window.center_size()
         rows = max(3, ch - 9)   # 아래 상태·메시지·범례까지 화면에 남긴다
-        v.show_yaw = self.mode in ('nav', 'pose', 'goals')
+        v.show_yaw = self.mode in ('nav', 'pose')
+        v.show_cursor = self.mode in ('nav', 'pose')
         v.teleop = self.mode == 'teleop'
         v.robot = self._pose()
         v.robot_yaw = self._robot_yaw
@@ -546,6 +603,7 @@ class MapPage(Menu):
         v.plans = self._plan_lines()
         v.cost = self._cost_grid()
         v.show_cost = v.cost is not None
+        v.scan, v.show_scan = self._scan_points, self.show_scan
         v.start = None
         v.goals, v.yaw = self.goals, self.yaw
         if not self._fitted:
@@ -563,7 +621,8 @@ class MapPage(Menu):
             mode_txt = f'방향 {self.yaw:+.0f}°'
         else:
             mode_txt = '보기 전용'
-        status = [f'십자선 ({x:+.2f}, {y:+.2f}) m · {CELL_TXT.get(code, "지도 밖")}',
+        point_name = '십자선' if self.mode in ('nav', 'pose') else '화면 중심'
+        status = [f'{point_name} ({x:+.2f}, {y:+.2f}) m · {CELL_TXT.get(code, "지도 밖")}',
                   f'한 칸 = {v.vp.scale * 100:.0f} cm · {"따라가기" if v.following else "자유이동"}',
                   mode_txt]
         if v.robot and v.robot_yaw is not None:
@@ -576,6 +635,10 @@ class MapPage(Menu):
         if self.cost_mode:
             status.append('costmap ' + self.COST_LABELS[self.cost_mode]
                           + ('' if self._cost_grid() is not None else ' — 수신 대기'))
+        if self.show_scan:
+            age = time.monotonic() - self._scan_at if self._scan_at else None
+            status.append(f'라이다 {len(self._scan_points)}점' + (
+                '' if age is not None and age <= 2.0 else ' — /scan 대기'))
         mo = [f'M map {"●" if self.show_map else "○"}']
         if self.show_map:
             mo.append('(0.00,0.00)')
@@ -589,7 +652,11 @@ class MapPage(Menu):
             status.append(f'live /map {live} · {v.grid.w}x{v.grid.h} · {self._map_updates}회')
         if self.state.goal_status:
             status.append(f'목표: {self.state.goal_status}')
-        legend = self.term.paint('● 로봇 → 방향 · + 십자선 · S 출발 · 1 2 goal · M map · O odom', DIM)
+        legend_txt = '● 로봇 → 방향'
+        if self.mode in ('nav', 'pose'):
+            legend_txt += ' · + 십자선'
+        legend_txt += ' · S 출발 · 1 2 goal · M map · O odom'
+        legend = self.term.paint(legend_txt, DIM)
         return lines + status + [self.msg, legend]
 
     # ---------------------------------------------------------------- 실행
@@ -648,6 +715,8 @@ class MapPage(Menu):
         self._map_msg = None
         self._grid_at = 0.0
         self._map_updates = 0
+        self._scan_points = []
+        self._scan_at = 0.0
         subs = []
         try:
             from nav_msgs.msg import Path, OccupancyGrid
@@ -659,10 +728,14 @@ class MapPage(Menu):
                 subs.append(self.app.create_subscription(
                     OccupancyGrid, topic, lambda m, k=kind: self._on_cost(k, m), 10))
             if not self.source:
-                from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
+                from rclpy.qos import (QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy,
+                                       qos_profile_sensor_data)
                 qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
                                  durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
                 subs.append(self.app.create_subscription(OccupancyGrid, '/map', self._on_map, qos))
+                from sensor_msgs.msg import LaserScan
+                subs.append(self.app.create_subscription(
+                    LaserScan, '/scan', self._on_scan, qos_profile_sensor_data))
         except Exception:
             pass
         tick = self.mode == 'teleop'

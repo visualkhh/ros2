@@ -1354,10 +1354,14 @@ class Bus:
 
         Nav 중에는 amcl_pose, SLAM 중에는 TF(map→base_footprint)를 쓴다.
         """
-        try:
-            return self.current_pose()
-        except RuntimeError:
-            pass
+        # AMCL이 살아 있을 때만 amcl_pose — Nav를 끄면 마지막 값이 남아 로봇이 멈춘 것처럼 보인다
+        if self.state.amcl is not None:
+            age = self.state.amcl_rate.age()
+            if age is not None and age <= 2.0:
+                try:
+                    return self.current_pose()
+                except RuntimeError:
+                    pass
         buf = getattr(self.node, 'tf_buffer', None)
         if buf is None:
             return None

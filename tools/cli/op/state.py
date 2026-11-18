@@ -213,7 +213,8 @@ class StateStore:
         return txt
 
     def amcl_txt(self) -> str:
-        if self.amcl is None:
+        age = self.amcl_rate.age()
+        if self.amcl is None or age is None or age > 2.0:
             return 'amcl_pose 없음'
         x, y, th = self.amcl
         return f'x={x:+.2f} y={y:+.2f} θ={math.degrees(th):+.0f}° ({self._age_txt(self.amcl_rate)})'

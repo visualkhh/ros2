@@ -13,6 +13,7 @@ from .viewport import Viewport
 
 RGB = {UNKNOWN: (70, 70, 78), FREE: (205, 205, 210), OCC: (18, 18, 24)}   # 칸 색 — OUT은 색 없음 (터미널 바탕)
 MAP_RGB, ODOM_RGB = (90, 220, 255), (255, 150, 40)   # map 원점 M · odom 원점 O
+SCAN_RGB = (255, 70, 55)   # /scan 라이다 점 — RViz LaserScan처럼
 PATH_RGB, ROBOT_RGB, GOAL_RGB, START_RGB, CURSOR_RGB = (240, 190, 40), (235, 60, 60), (60, 200, 90), (70, 150, 255), (255, 80, 220)
 PREVIEW_RGB, PLAN_RGB, LOCAL_PLAN_RGB = (0, 200, 120), (20, 90, 255), (170, 0, 255)
 COST_INFLATED, COST_LETHAL = (125, 85, 25), (175, 35, 35)   # costmap 팽창 / 내접·치명
@@ -64,7 +65,7 @@ class MapView(View):
 
     focusable = True
     hints = ('↑↓←→ 지도 이동 · +/- 확대·축소 · f 전체 · r 로봇 따라가기 · '
-             'm M · o O · v 예상경로 · p Nav2경로 · c costmap · s 안전 · [ ] 방향 15° · { } 1° · Enter 찍기')
+             'm M · o O · l 라이다 · v 예상경로 · p Nav2경로 · c costmap · s 안전 · [ ] 방향 15° · { } 1° · Enter 찍기')
 
     def __init__(self, grid: MapGrid, color: bool = True, extra_key=None):
         self.grid, self.color = grid, color
@@ -78,6 +79,9 @@ class MapView(View):
         self.show_map = False       # m — map 원점 M
         self.show_odom = False      # o — odom 원점 O
         self.show_robot = True      # 로봇 진행 방향 화살표 (기본 표시)
+        self.scan: list[tuple[float, float]] = []   # map 좌표 라이다 점
+        self.show_scan = False
+        self.show_cursor = True     # nav/pose에서만 십자선 표시
         self.preview: list[tuple[float, float]] = []   # v — planner 예상 경로 (로봇 안 움직임)
         self.plans: list[tuple[list[tuple[float, float]], tuple]] = []  # p — Nav2 /plan · /local_plan
         self.cost: CostGrid | None = None   # c — costmap 겹침
@@ -180,6 +184,14 @@ class MapView(View):
                     if 0 <= c < cols and 0 <= r < sub:
                         dots[(c, r)] = rgb
 
+        scan_cells = set()
+        if self.show_scan and self.scan:
+            for p in self.scan:
+                c, r = scr(p)
+                if 0 <= c < cols and 0 <= r < sub:
+                    dots[(c, r)] = SCAN_RGB
+                    scan_cells.add((c, r // 2))
+
         for pl, rgb in self.plans:   # Nav2 /plan · /local_plan
             draw_path(pl, rgb)
         if self.preview:             # v — planner 예상 경로
@@ -244,7 +256,8 @@ class MapView(View):
                 c, r = dx // 2, dy // 4
                 if 0 <= c < cols and 0 <= r < rows and (c, r) != cur:
                     braille[(c, r)] = braille.get((c, r), 0) | BRAILLE[(dx % 2, dy % 4)]
-        labels[cur] = (('⊕', ROBOT_RGB) if robot_cell == cur else ('+', CURSOR_RGB))   # 십자선·로봇 겹침
+        if self.show_cursor:
+            labels[cur] = (('⊕', ROBOT_RGB) if robot_cell == cur else ('+', CURSOR_RGB))   # 십자선·로봇 겹침
 
         out = []
         for tr in range(rows):
@@ -289,7 +302,8 @@ class MapView(View):
                     code = max(top, bot) if OUT not in (top, bot) else min(top, bot)
                     on_path = ((c, 2 * tr) in dots or (c, 2 * tr + 1) in dots
                                or (c, tr) in braille or (c, tr) in rays)
-                    ch = lab[0] if lab else (':' if on_path else {OCC: '#', FREE: '.', UNKNOWN: ' ', OUT: ' '}[code])
+                    ch = lab[0] if lab else ('*' if (c, tr) in scan_cells else
+                                             (':' if on_path else {OCC: '#', FREE: '.', UNKNOWN: ' ', OUT: ' '}[code]))
                     if cost_codes and not lab and not on_path:
                         ct = max(cost_codes[2 * tr][c], cost_codes[2 * tr + 1][c])
                         if ct and code != OCC:
