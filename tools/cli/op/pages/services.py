@@ -315,34 +315,40 @@ class MapStartItem(MenuItem):
 
 
 class PickItem(MenuItem):
-    def __init__(self, app, key: str, name: str, path, model: str | None = None):
+    def __init__(self, app, key: str, name: str, path, model: str | None = None,
+                 switch: bool = False):
         super().__init__(app)
         self.key = key
         self.name = name
         self.path = path
         self.model = model
+        self.switch = switch
 
     def label(self):
         return self.name
 
     def run(self):
-        self.bus.start('nav', str(self.path), self.model)
+        if self.switch:
+            self.bus.switch_map(str(self.path))
+        else:
+            self.bus.start('nav', str(self.path), self.model)
         return BACK
 
 
 class MapPickMenu(Menu):
     title = 'Nav — 지도 선택'
 
-    def __init__(self, app, model: str | None = None):
+    def __init__(self, app, model: str | None = None, switch: bool = False):
         super().__init__(app)
         self.model = model
+        self.switch = switch
 
     def items(self):
         from ..menus import InfoItem
         maps = self.bus.procs.maps()
         if not maps:
             return [InfoItem(self.app, f'지도 없음 — SLAM으로 만들고 저장 ({self.bus.procs.map_dir_txt})')]
-        return [PickItem(self.app, str(i), name, path, self.model)
+        return [PickItem(self.app, str(i), name, path, self.model, self.switch)
                 for i, (name, path) in enumerate(maps, 1)]
 
     def center(self):
@@ -350,6 +356,27 @@ class MapPickMenu(Menu):
                 ' 고르면 nav2 bringup(map_server+amcl+주행)을 띄웁니다',
                 ' 그다음 초기 위치(3)를 꼭 넣으세요'] + (
                     [f' RL 모델: {self.model}'] if self.model else [])
+
+
+class ChangeMapItem(MenuItem):
+    """Nav 실행 중 다른 지도로 갈아타기 — 정지 후 선택한 지도로 시작."""
+    key = '4'
+
+    def label(self):
+        return '지도 바꾸기 (다른 지도 선택 → Nav 재시작)'
+
+    def visible(self):
+        return self.bus.procs.running('nav')
+
+    def run(self):
+        cur = self.state.st_map or self.bus.procs.info('nav') or '?'
+        if not self.ui.confirm('Nav 지도를 바꿀까요?',
+                               body=[f'현재 지도: {cur}',
+                                     'Nav를 멈추고 선택한 지도로 다시 시작합니다.',
+                                     '초기 위치(3)를 다시 넣어야 합니다.'],
+                               default=False):
+            return STAY
+        return MapPickMenu(self.app, switch=True).show()
 
 
 class NavMapItem(MenuItem):
@@ -371,7 +398,7 @@ class NavMenu(ServiceMenu):
     name = 'nav'
 
     def items(self):
-        return [MapStartItem(self.app), NavMapItem(self.app),
+        return [MapStartItem(self.app), ChangeMapItem(self.app), NavMapItem(self.app),
                 StopItem(self.app, '1', self.name),
                 RestartItem(self.app, '2', self.name),
                 GoMenu(self.app, 'c', '충돌 감시 설정 (collision_monitor)', CollisionMenu(self.app)),
@@ -381,6 +408,7 @@ class NavMenu(ServiceMenu):
         info = self.bus.procs.info('nav')
         return ([f' 지도: {info}'] if info else []) + [
             self.term.paint(' 순서: 시작 → 3) 지도 화면에서 i) 초기위치 → Enter 목표 → g 주행', DIM),
+            self.term.paint(' 지도 변경: 실행 중 4) 지도 바꾸기 (Nav 재시작 · 초기위치 다시)', DIM),
             self.term.paint(' 보기: v) RViz로 보기', DIM)]
 
 

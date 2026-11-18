@@ -141,6 +141,16 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 
 메뉴: `./run-cli` → `4) Nav (지도 주행)` → `1) 시작 (지도 선택)` → 목록에서 지도 고르기 (최신 먼저) → `3) 지도에서 목표·초기위치·취소` (한 화면) → `i` 초기 위치 → 지도에서 `Enter`로 목표 → `g` 주행.
 
+실행 중 지도를 바꾸려면:
+
+```text
+4) Nav (지도 주행) → 4) 지도 바꾸기 (다른 지도 선택 → Nav 재시작)
+또는
+./run-cli nav switch office
+```
+
+Nav를 멈추고 새 지도로 다시 시작하므로 **초기 위치(3)를 다시 넣어야 한다**.
+
 지도 화면 키:
 
 ```text

@@ -201,7 +201,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name, svc in SERVICES.items():
         p = sub.add_parser(name, help=f'{svc.label} — {svc.desc}')
-        p.add_argument('action', type=str.lower, choices=('start', 'stop', 'restart', 'status', 'log'))
+        p.add_argument('action', type=str.lower, choices=('start', 'stop', 'restart', 'switch', 'status', 'log'))
         if name == 'nav':
             p.add_argument('map', nargs='?', help='지도 이름·폴더·yaml (기본: 가장 최근 지도)')
             p.add_argument('--model', metavar='ONNX',

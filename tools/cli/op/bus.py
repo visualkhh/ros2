@@ -290,6 +290,16 @@ class Bus:
             self.apply_saved_enable()
         return ok, msg
 
+    def switch_map(self, map_yaml: str) -> int:
+        """Nav 지도 교체 — 실행 중이면 바퀴 정지·Nav 정지 후 새 지도로 시작."""
+        if self.procs.running('nav'):
+            self.send_velocity(0.0, 0.0)
+            ok, msg = self.procs.stop('nav')
+            print(msg)
+            if not ok:
+                return 1
+        return self.start('nav', map_yaml)
+
     def stop(self, name: str) -> int:
         ok, msg = self.procs.stop(name)
         print(msg)
@@ -306,6 +316,12 @@ class Bus:
                     return 1
                 map_yaml = str(path)
             return self.start(name, map_yaml, getattr(args, 'model', None))
+        if args.action == 'switch':
+            path = self.procs.resolve_map(getattr(args, 'map', None))
+            if path is None:
+                print(f'지도 없음: {getattr(args, "map", None) or "(최근 지도)"}', file=sys.stderr)
+                return 1
+            return self.switch_map(str(path))
         if args.action == 'stop':
             return self.stop(name)
         if args.action == 'restart':
