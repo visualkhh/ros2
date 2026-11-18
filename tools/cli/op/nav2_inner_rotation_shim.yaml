@@ -4,13 +4,16 @@
         #   (primary_controller: "클래스명" 문자열 방식은 Kilted에서 제거됨)
         primary_controller:
           plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-          desired_linear_vel: 0.22      # 이 로봇 상한 0.26 — 여유 있게
-          min_linear_vel: 0.0
-          max_linear_vel: 0.26
-          min_angular_vel: 0.0
+          max_linear_vel: 0.26          # 이 로봇 상한 (예전 desired_linear_vel)
+          min_linear_vel: 0.0           # use_dynamic_window=false라 미사용
           max_angular_vel: 1.82
+          min_angular_vel: 0.0
+          max_linear_accel: 2.5
+          max_linear_decel: -2.5
+          max_angular_accel: 3.2
+          max_angular_decel: -3.2
           lookahead_dist: 0.45
-          min_lookahead_dist: 0.25
+          min_lookahead_dist: 0.30      # v=0.26 · L=0.30 → 최대 회전 ≈ 1.73 rad/s (상한 1.82)
           max_lookahead_dist: 0.75
           lookahead_time: 1.5
           use_velocity_scaled_lookahead_dist: true
@@ -20,35 +23,30 @@
           max_allowed_time_to_collision_up_to_carrot: 1.0
           min_distance_to_obstacle: 0.0
           use_regulated_linear_velocity_scaling: true
-          use_cost_regulated_linear_velocity_scaling: true
-          regulated_linear_scaling_min_radius: 0.9
-          regulated_linear_scaling_min_speed: 0.15
-          cost_scaling_dist: 0.3
+          use_cost_regulated_linear_velocity_scaling: false  # 좁은 트랙에서 과도한 감속 방지
+          cost_scaling_dist: 0.25
           cost_scaling_gain: 1.0
-          inflation_cost_scaling_factor: 10.0   # local_costmap inflation_layer.cost_scaling_factor와 동일
+          regulated_linear_scaling_min_radius: 0.9
+          regulated_linear_scaling_min_speed: 0.15           # > 0.1
           use_rotate_to_heading: true
           rotate_to_heading_min_angle: 0.6
           rotate_to_heading_angular_vel: 1.0
-          max_angular_accel: 3.2
-          max_linear_accel: 2.5
-          max_linear_decel: -2.5
-          max_angular_decel: -3.2
           use_cancel_deceleration: false
           allow_reversing: false
           interpolate_curvature_after_goal: false
           use_dynamic_window: false
-          allow_obstacle_checking_beyond_goal: true
+          allow_obstacle_checking_beyond_goal: false
 
         # RotationShim — heading 오차가 threshold보다 크면 회전만, 작으면 primary에 위임
-        forward_sampling_distance: 0.35
+        forward_sampling_distance: 0.30
         angular_dist_threshold: 0.785      # 45°
-        angular_disengage_threshold: 0.10  # 5.7° 아래로 들어오면 회전 종료
+        angular_disengage_threshold: 0.10  # 5.7° 아래로 들어오면 primary로 핸드오프
         rotate_to_heading_angular_vel: 1.0
         max_angular_accel: 3.2
-        max_cost_threshold: 100            # 이 이상 cost면 회전 경로를 충돌로 간주
+        max_cost_threshold: 254            # Nav2 기본 = LETHAL_OBSTACLE
         simulate_ahead_time: 1.0
         control_duration: 0.05             # controller_frequency 20Hz
         rotate_to_goal_heading: false
         rotate_to_heading_once: false      # 경로가 바뀌면 다시 정렬
-        closed_loop: false
+        closed_loop: true                  # odom 20Hz — 실제 속도로 핸드오프
         use_path_orientations: false
