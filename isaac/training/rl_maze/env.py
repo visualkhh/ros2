@@ -81,6 +81,25 @@ class RlMazeEnv(BaseEnv):
         self.wall_clearance = torch.full((n,), 1e6, device=dev)
         self.dyn_clearance = torch.full((n,), 1e6, device=dev)
         self._rows = torch.arange(n, device=dev)
+
+        # 실기 바퀴 응답 (지연 · gain · deadband · 1차지연 · 엔코더/자이로 오차)
+        self.tau = torch.full((n, 2), max(c.tau_min, c.response_tau_s), device=dev)
+        self.gain = torch.ones(n, 2, device=dev)
+        self.deadband = torch.full((n, 1), float(c.response_deadband), device=dev)
+        self.r_nom = torch.full((n,), float(c.wheel_radius), device=dev)
+        self.sep_nom = torch.full((n,), float(c.wheel_sep), device=dev)
+        self.cmd_delay = torch.zeros(n, dtype=torch.long, device=dev)
+        self.obs_delay = torch.zeros(n, dtype=torch.long, device=dev)
+        self.gyro_bias = torch.zeros(n, device=dev)
+        self.tau_range = (max(c.tau_min, c.response_tau_s - c.tau_width),
+                          max(c.tau_min, c.response_tau_s + c.tau_width))
+        self.delay_range = (max(0, c.response_delay_steps - c.delay_width),
+                            max(0, c.response_delay_steps + c.delay_width))
+        self.cmd_buf = torch.zeros(n, self.delay_range[1] + 1, 2, device=dev)
+        self.sens_buf = torch.zeros(n, c.obs_delay_steps[1] + 1, 3, device=dev)
+        self.seen = torch.zeros(n, 3, device=dev)
+        self.wheel_cmd = torch.zeros(n, 2, device=dev)
+        self.wheel_target = torch.zeros(n, 2, device=dev)
         self._wheel_bodies, _ = self.robot.find_bodies(["wheel_left_link", "wheel_right_link"], preserve_order=True)
         self._base_dyn_friction = (float(c.wheel_friction[1]) + float(GROUND_FRICTION[1])) / 2.0
         self.dynamic = DynamicObstacles(self)
@@ -151,7 +170,19 @@ class RlMazeEnv(BaseEnv):
         self.action_raw = actions
         self.action = actions.clamp(-1.0, 1.0)
         v = (self.action[:, 0] * c.max_lin).clamp(min=c.v_min_ratio * c.max_lin)
-        super()._pre_physics_step(torch.stack([v, self.action[:, 1] * c.max_ang], dim=-1))
+        self.cmd = torch.stack([v, self.action[:, 1] * c.max_ang], dim=-1)
+        # 명령 지연 → 드라이버 식 바퀴 속도(비례 축소) → gain/deadband → (다음 _apply_action에서 τ)
+        self.cmd_buf = torch.roll(self.cmd_buf, 1, dims=1)
+        self.cmd_buf[:, 0] = self.cmd
+        applied = self.cmd_buf[self._rows, self.cmd_delay]
+        wheels = self.wheel_speeds(applied[:, 0], applied[:, 1], self.r_nom, self.sep_nom) * self.gain
+        self.wheel_cmd = torch.where(wheels.abs() < self.deadband, torch.zeros_like(wheels), wheels)
+
+    def _apply_action(self) -> None:
+        alpha = 1.0 - torch.exp(-self.cfg.sim.dt / self.tau)
+        self.wheel_target = self.wheel_target + alpha * (self.wheel_cmd - self.wheel_target)
+        self.robot.set_joint_velocity_target(self.wheel_target, joint_ids=self._wheels)
+        self.hold_joints()
 
     def _get_dones(self):
         c = self.cfg
@@ -177,7 +208,7 @@ class RlMazeEnv(BaseEnv):
 
     def _get_rewards(self) -> torch.Tensor:
         c = self.cfg
-        v_enc, _ = self.encoders()
+        v_enc, _ = self.encoders(self.r_nom, self.sep_nom)
         active = (self.grace_steps <= 0).float()
         span = (self.inflation - c.collide_r).clamp(min=1e-3)
         wall_overlap = (self.inflation - self.wall_clearance).clamp(min=0.0)
@@ -225,9 +256,20 @@ class RlMazeEnv(BaseEnv):
         local = torch.stack([cs * rel[..., 0] + sn * rel[..., 1], -sn * rel[..., 0] + cs * rel[..., 1]], dim=-1)
         raw = (self.lidar(xy_o, yaw_o) + torch.randn(n, c.lidar_rays, device=self.device) * c.lidar_noise).clamp(0.0, c.lidar_max)
         scan = (raw - self.inflation[:, None]).clamp(0.0, c.lidar_max)   # 정책이 보는 안전거리 (실기 scan_rays와 같은 식)
-        v_enc, w_enc = self.encoders()
+        v_enc, w_enc = self.encoders(self.r_nom, self.sep_nom)
+        # 실기 rl_nav_controller는 IMU 노이즈 때문에 odom w를 gyro 관측으로 쓴다 — 학습도 같게.
+        sens = torch.stack([
+            v_enc + torch.randn_like(v_enc) * c.enc_noise,
+            w_enc + torch.randn_like(w_enc) * c.enc_noise,
+            w_enc + self.gyro_bias + torch.randn_like(w_enc) * c.gyro_noise,
+        ], dim=-1)
+        self.sens_buf = torch.roll(self.sens_buf, 1, dims=1)
+        self.sens_buf[:, 0] = sens
+        self.seen = self.sens_buf[self._rows, self.obs_delay]
         obs = torch.cat([local.reshape(n, -1) / c.wp_scale, scan / c.lidar_max,
-                         torch.stack([v_enc / c.max_lin, w_enc / c.max_ang, self.true_twist()[1] / c.max_ang], dim=-1),
+                         torch.stack([self.seen[:, 0] / c.max_lin,
+                                      self.seen[:, 1] / c.max_ang,
+                                      self.seen[:, 2] / c.max_ang], dim=-1),
                          self.action, self.inflation[:, None] / c.inflation_scale], dim=-1)
         return {"policy": obs}
 
@@ -271,6 +313,20 @@ class RlMazeEnv(BaseEnv):
         self.wall_clearance[ids] = 1e6
         self.dyn_clearance[ids] = 1e6
         self.inflation[ids] = sample_uniform(*self.cfg.inflation_range, (m,), dev)
+        c = self.cfg
+        self.tau[ids] = sample_uniform(*self.tau_range, (m, 2), dev)
+        self.gain[ids] = sample_uniform(*c.gain_range, (m, 2), dev) * torch.tensor(c.response_gain_lr, device=dev)
+        self.deadband[ids] = c.response_deadband + sample_uniform(*c.deadband_range, (m, 1), dev)
+        self.r_nom[ids] = c.wheel_radius * (1.0 + sample_uniform(-c.radius_nominal_err, c.radius_nominal_err, (m,), dev))
+        self.sep_nom[ids] = c.wheel_sep * (1.0 + sample_uniform(-c.sep_nominal_err, c.sep_nominal_err, (m,), dev))
+        self.gyro_bias[ids] = sample_uniform(-c.gyro_bias, c.gyro_bias, (m,), dev)
+        self.cmd_delay[ids] = torch.randint(self.delay_range[0], self.delay_range[1] + 1, (m,), device=dev)
+        self.obs_delay[ids] = torch.randint(c.obs_delay_steps[0], c.obs_delay_steps[1] + 1, (m,), device=dev)
+        self.cmd_buf[ids] = 0.0
+        self.sens_buf[ids] = 0.0
+        self.seen[ids] = 0.0
+        self.wheel_cmd[ids] = 0.0
+        self.wheel_target[ids] = 0.0
 
     # ------------------------------------------------------------------ 화면 (cfg.debug_vis일 때 BaseEnv가 부른다)
     def debug_vis_setup(self, visible: bool) -> None:

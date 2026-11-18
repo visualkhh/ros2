@@ -74,6 +74,20 @@ class RlMazeEnvCfg(BaseEnvCfg):
     pose_noise = 0.02              # [m] 위치 관측 잡음 (실기기 = 위치 추정)
     yaw_noise = math.radians(2.0)
 
+    # 실기 바퀴 응답 — episode마다 env별 무작위 (robot_cfg.RESPONSE_* = 실측 중심)
+    #   sim은 명령을 그대로 joint target에 넣지만, 실기는 지연·gain·1차지연·데드밴드가 있다.
+    tau_width = 0.06               # [s] τ = 실측 ± 이만큼 (최소 tau_min)
+    tau_min = 0.01
+    gain_range = (0.90, 1.10)      # 바퀴별 gain — 실측 좌/우 gain에 곱함
+    delay_width = 2                # 명령 지연 = 실측 ± 이만큼 [20 Hz 스텝] (최소 0)
+    deadband_range = (0.0, 0.2)    # [rad/s] 실측 데드밴드 + 이 범위
+    obs_delay_steps = (0, 2)       # 센서(odom/gyro) 지연 [스텝]
+    sep_nominal_err = 0.05         # 드라이버 기준 바퀴 간격 오차
+    radius_nominal_err = 0.02      # 드라이버 기준 바퀴 반지름 오차
+    enc_noise = 0.004              # [m/s · rad/s] 엔코더 잡음
+    gyro_noise = 0.01              # [rad/s] 정책 gyro 관측 잡음
+    gyro_bias = 0.01               # [rad/s] ± gyro bias
+
     # 보상 — 안전 최우선 + 가장 빨리 도착:
     #   진행 + 도착 보너스 − 시간 − 충돌(끝) − 인플레이션 안쪽 겹침 − 떨림 − 후진
     #   인플레이션 점군은 soft cost: 실제 라이다/충돌(0.17 m)은 hard, 겹치면 감점만.
@@ -84,5 +98,5 @@ class RlMazeEnvCfg(BaseEnvCfg):
     w_collide = 200.0              # 벽/사람/공 실제 충돌 (끝)
     w_wall = 0.2                   # 매 스텝 × 인플레이션 안쪽 겹침 [0,1] (soft)
     w_dynamic = 0.3                # 매 스텝 × 사람/공 인플레이션 겹침 [0,1] (soft)
-    w_smooth = 0.02                # × |행동 변화|²
+    w_smooth = 0.10                # × |행동 변화|² — 실기 좌우 떨림 억제 (기존 0.02)
     w_back = 0.5                   # × 뒤로 간 속도 [m/s]
