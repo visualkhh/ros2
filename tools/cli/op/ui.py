@@ -183,7 +183,8 @@ class Ui:
 
     def _remote_wait(self, elapsed: float) -> None:
         """SSH로 로봇에서 실행되는 동안 (로봇 run-cli는 ~8초 걸림)."""
-        self.progress(f'로봇({self.procs.host})에서 실행 중 … {elapsed:.0f}초 (보통 8~15초)')
+        hint = getattr(self.procs, 'wait_hint', '') or ' (보통 8~15초)'
+        self.progress(f'로봇({self.procs.host})에서 실행 중 … {elapsed:.0f}초{hint}')
 
     def poll_key(self) -> str | None:
         """오래 걸리는 작업 중 눌린 키 하나 — 기다리지 않음 (없으면 None). TTY가 아니면(명령줄·파이프) 늘 None.

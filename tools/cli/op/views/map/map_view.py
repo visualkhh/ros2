@@ -87,6 +87,7 @@ class MapView(View):
         self.cost: CostGrid | None = None   # c — costmap 겹침
         self.show_cost = False
         self.start: tuple[float, float] | None = None
+        self.path_start: tuple[float, float] | None = None   # 로봇 → 첫 웨이포인트 선 시작점
         self.goals: list[dict] = []
         self.yaw = 0.0
         self.show_yaw = False       # True면 십자선에서 방향(yaw)선을 뻗어 그림 — 찍는 모드(goal · 위치 지정)
@@ -172,7 +173,8 @@ class MapView(View):
             c, r = vp.to_screen(p[0], p[1], cols, sub)
             return int(math.floor(c)), int(math.floor(r))
 
-        pts = ([self.start] if self.start else []) + [(g['x'], g['y']) for g in self.goals]
+        path_start = self.path_start or self.start
+        pts = ([path_start] if path_start else []) + [(g['x'], g['y']) for g in self.goals]
         for a, b in zip(pts, pts[1:]):
             for c, r in _line(scr(a), scr(b)):
                 if 0 <= c < cols and 0 <= r < sub:

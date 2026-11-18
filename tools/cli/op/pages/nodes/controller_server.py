@@ -260,6 +260,7 @@ class ControllerServerFeature(NodeFeature):
                     '결과는 런타임 값으로 저장 — 다음 Nav/노드 재시작에 적용 (첫 시작은 YAML 기본값)']
             if not app.ui.confirm('FollowPath.toggle을 보낼까요?', default=False, body=body):
                 return
+            app.ui.progress(f'FollowPath.toggle(data={str(target).lower()}) 서비스 호출 중…')
             ok, result = bus.call_service(
                 '/controller_server/FollowPath/toggle', 'std_srvs/srv/SetBool', {'data': target})
             if ok:
@@ -269,6 +270,7 @@ class ControllerServerFeature(NodeFeature):
                 print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
                 save = getattr(bus.procs, 'set_enable', None)
                 if save is not None:
+                    app.ui.progress('런타임 값 저장 중… (다음 Nav/노드 재시작에 적용)')
                     ok2, msg2 = save(target)
                     print(('설정 저장: ' if ok2 else '설정 저장 실패: ') + msg2)
             else:
@@ -327,10 +329,12 @@ class ControllerServerFeature(NodeFeature):
             ok, msg = bus.procs.clear_enable()
             print(msg)
 
+        toggle_item = ActionItem(app, 'b', '서비스: FollowPath.toggle (RL↔fallback)', toggle)
+        toggle_item.shows_busy = True   # 서비스·저장이 느릴 때 진행 창
         return [
             GoMenu(app, 'a', '서비스 목록 · 호출 (테스트)',
                    ServiceMenu(app, name, self.services(bus, name))),
-            ActionItem(app, 'b', '서비스: FollowPath.toggle (RL↔fallback)', toggle),
+            toggle_item,
             ActionItem(app, 'c', '바이패스 controller 변경 (MPPI/DWB) — Nav 재시작', change_fallback),
             ActionItem(app, 'd', '저장된 FollowPath.enable 지우기 (다음 시작 기본값)', clear_saved),
         ]

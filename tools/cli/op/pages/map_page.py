@@ -606,6 +606,7 @@ class MapPage(Menu):
         v.show_cost = v.cost is not None
         v.scan, v.show_scan = self._scan_points, self.show_scan
         v.start = None
+        v.path_start = v.robot if self.goals else None   # 로봇 → 첫 웨이포인트 노란 선
         v.goals, v.yaw = self.goals, self.yaw
         if not self._fitted:
             v.vp.fit(cw, rows * 2)

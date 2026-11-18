@@ -472,6 +472,7 @@ class RemoteProcs(Procs):
         self._maps: tuple[float, list] = (0.0, [])
         self._discovered = False
         self.on_wait = None   # (경과 초) → 화면 갱신 — Ui가 연결
+        self.wait_hint = ''   # 오래 걸리는 명령의 예상 시간 안내 (Ui._remote_wait)
 
     def _ssh(self, remote_cmd: str, timeout: float = 120) -> tuple[int, str]:
         cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ROBOT_SSH, remote_cmd]
@@ -482,6 +483,10 @@ class RemoteProcs(Procs):
                 text = r.communicate(timeout=0.25)[0]   # 반복 호출해도 출력은 안에서 계속 모임 (파이프 막힘 없음)
                 break
             except subprocess.TimeoutExpired:
+                try:
+                    self.node.poll(0.05)   # SSH 기다리는 동안에도 토픽·상태 수신 유지
+                except Exception:
+                    pass
                 if time.monotonic() - t0 > timeout:
                     r.kill()
                     r.communicate()
@@ -545,6 +550,8 @@ class RemoteProcs(Procs):
 
     def start(self, name: str, map_yaml: str | None = None,
               model_path: str | None = None) -> tuple[bool, str]:
+        old_hint = self.wait_hint
+        self.wait_hint = ' · Nav/explore 시작은 20~40초' if name in ('nav', 'explore') else ''
         extra: list[str] = []
         if name == 'nav' and model_path:
             try:
@@ -552,7 +559,10 @@ class RemoteProcs(Procs):
             except Exception as exc:
                 return False, f'[{self.host}] RL 모델 전송 실패: {exc}'
             extra = ['--model', model_path]
-        rc, out = self._cli(name, 'start', *([map_yaml] if map_yaml else []), *extra)
+        try:
+            rc, out = self._cli(name, 'start', *([map_yaml] if map_yaml else []), *extra)
+        finally:
+            self.wait_hint = old_hint
         return rc == 0, f'[{self.host}] {out}'
 
     def stop(self, name: str, timeout: float = 10.0) -> tuple[bool, str]:
@@ -584,7 +594,10 @@ class RemoteProcs(Procs):
         return rc == 0, f'[{self.host}] {out}'
 
     def set_enable(self, enabled: bool) -> tuple[bool, str]:
-        rc, out = self._cli('fallback-enable', 'on' if enabled else 'off', timeout=120)
+        # ROS CLI를 새로 띄우지 않고 저장 파일만 직접 쓴다 (~10초 → 1초)
+        script = f'{ROBOT_TOOL_DIR}/cli/op/runtime_state.py'
+        rc, out = self._ssh(
+            f'python3 {script} set controller_server FollowPath.enable {str(bool(enabled)).lower()}', 15)
         return rc == 0, f'[{self.host}] {out}'
 
     def saved_enable(self) -> bool | None:
@@ -598,7 +611,9 @@ class RemoteProcs(Procs):
             return None
 
     def clear_enable(self) -> tuple[bool, str]:
-        rc, out = self._cli('fallback-enable', 'clear', timeout=60)
+        script = f'{ROBOT_TOOL_DIR}/cli/op/runtime_state.py'
+        rc, out = self._ssh(
+            f'python3 {script} clear controller_server FollowPath.enable', 15)
         return rc == 0, f'[{self.host}] {out}'
 
     def build(self, extra: list[str] | None = None, full: bool = False) -> int:
