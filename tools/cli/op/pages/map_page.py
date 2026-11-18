@@ -46,6 +46,7 @@ class MapPage(Menu):
         self.on_pose = on_pose
         self.title = title or (TITLES[mode] + (f' · {Path(str(self.source)).parent.name}' if self.source else ''))
         self.goals = [dict(g) for g in (goals or [])]
+        self._path_start: tuple[float, float] | None = None   # 첫 웨이포인트 찍을 때의 로봇 위치 (고정)
         self.view: MapView | None = None
         self.yaw = 0.0
         self.msg = ''
@@ -94,6 +95,8 @@ class MapPage(Menu):
             if self.view.grid.code(self.view.vp.k, x, y) == OCC:
                 self.msg = '벽 위에는 못 찍음 — 십자선을 옮기세요'
                 return
+            if not self.goals:   # 첫 점을 찍은 순간의 로봇 위치를 경로 시작점으로 고정
+                self._path_start = self._pose()
             self.goals.append({'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(self.yaw, 1)})
             self.msg = (f'웨이포인트 {len(self.goals)}개 추가 {fmt_pose(self.goals[-1])}{note}'
                         ' — g 주행 · i 초기위치 · x 취소')
@@ -151,6 +154,8 @@ class MapPage(Menu):
     def undo_goal(self) -> None:
         if self.goals:
             self.goals.pop()
+            if not self.goals:
+                self._path_start = None
             self.msg = '마지막 웨이포인트 취소'
         else:
             self.msg = '취소할 웨이포인트 없음'
@@ -158,6 +163,7 @@ class MapPage(Menu):
     def clear_goals(self) -> None:
         if self.goals:
             self.goals.clear()
+            self._path_start = None
             self.msg = '웨이포인트 전체 지움'
         else:
             self.msg = '지울 웨이포인트 없음'
@@ -206,6 +212,7 @@ class MapPage(Menu):
                 self.ui._busy = None
             text = (out.getvalue() + err.getvalue()).strip().splitlines()
             self.goals.clear()
+            self._path_start = None
             self._preview = None                 # v 예상 경로도 같이 지움
             self._plans = {'plan': None, 'local_plan': None}
             self.plan_on = False                 # p 경로 겹침도 끔
@@ -606,7 +613,7 @@ class MapPage(Menu):
         v.show_cost = v.cost is not None
         v.scan, v.show_scan = self._scan_points, self.show_scan
         v.start = None
-        v.path_start = v.robot if self.goals else None   # 로봇 → 첫 웨이포인트 노란 선
+        v.path_start = self._path_start if self.goals else None   # 첫 점 찍을 때 로봇 위치 (고정)
         v.goals, v.yaw = self.goals, self.yaw
         if not self._fitted:
             v.vp.fit(cw, rows * 2)
@@ -719,6 +726,7 @@ class MapPage(Menu):
         self._map_updates = 0
         self._scan_points = []
         self._scan_at = 0.0
+        self._path_start = None
         subs = []
         try:
             from nav_msgs.msg import Path, OccupancyGrid
