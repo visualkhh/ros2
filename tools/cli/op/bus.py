@@ -308,14 +308,15 @@ class Bus:
         return ok, msg
 
     def switch_map(self, map_yaml: str) -> int:
-        """Nav 지도 교체 — 실행 중이면 바퀴 정지·Nav 정지 후 새 지도로 시작."""
+        """Nav 지도 교체 — 실행 중이면 바퀴 정지·Nav 정지 후 새 지도로 시작 (RL 모델 유지)."""
+        model = self.procs.model_info('nav') or None   # --model로 띄운 모델은 지도 바꿔도 유지
         if self.procs.running('nav'):
             self.send_velocity(0.0, 0.0)
             ok, msg = self.procs.stop('nav')
             print(msg)
             if not ok:
                 return 1
-        return self.start('nav', map_yaml)
+        return self.start('nav', map_yaml, model)
 
     def stop(self, name: str) -> int:
         ok, msg = self.procs.stop(name)

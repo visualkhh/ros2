@@ -614,6 +614,12 @@ class RemoteProcs(Procs):
             f'python3 {script} set controller_server FollowPath.enable {str(bool(enabled)).lower()}', 15)
         return rc == 0, f'[{self.host}] {out}'
 
+    def model_info(self, name: str) -> str:
+        """원격 pid 파일 세 번째 줄 = 시작 때 쓴 RL 모델 경로."""
+        rc, out = self._ssh(f'head -3 {ROBOT_TOOL_DIR}/.run/{name}.pid 2>/dev/null', 5)
+        lines = out.splitlines()
+        return lines[2].strip() if len(lines) > 2 else ''
+
     def saved_enable(self) -> bool | None:
         rc, out = self._ssh(f'cat {ROBOT_TOOL_DIR}/.run/{self.RUNTIME_PARAMS} 2>/dev/null', 15)
         if rc != 0 or not out.strip():
