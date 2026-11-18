@@ -16,7 +16,7 @@
 #
 # ─── 자주 쓰는 공식 옵션 ───────────────────────────────────────
 #   --num_envs N          동시에 학습하는 로봇 수 (기본: env cfg 512 · 창 볼 땐 16~32)
-#   --max_iterations N    학습 반복 (기본: agent.py 500). 1회 = envs × 64스텝 수집 + PPO 업데이트
+#   agent.max_iterations=N  학습 반복 (기본: agent.py 500). 1회 = envs × 64스텝 수집 + PPO 업데이트
 #   --viz [kit|...]       창으로 보기 (기본은 창 없음 · --viz만 쓰면 kit)
 #   --video               영상 녹화 (logs/…/videos)
 #   --checkpoint <model_N.pt>            이어서 학습 (Isaac Lab 6.1은 --resume 없이 --checkpoint만 — 그 모델을 읽고 새 run 폴더에서 계속)
@@ -29,8 +29,8 @@
 #   agent.algorithm.entropy_coef=0.0 · agent.experiment_name=이름
 #
 # ─── 예 ───────────────────────────────────────────────
-#   ./run-training.sh rl_correction_waypoint --num_envs 16 --max_iterations 5 --viz env.debug_vis=true   # 짧게 확인
-#   ./run-training.sh rl_correction_waypoint --max_iterations 500                                       # 본 학습
+#   ./run-training.sh rl_correction_waypoint --num_envs 16 agent.max_iterations=5 --viz env.debug_vis=true   # 짧게 확인
+#   ./run-training.sh rl_correction_waypoint agent.max_iterations=500                                       # 본 학습
 #   ./run-training.sh rl_correction_waypoint --play --checkpoint artifacts/rl_correction_waypoint/training/<시각>/model_499.pt --num_envs 1
 #   tensorboard --logdir artifacts/rl_correction_waypoint/training
 #   policy.onnx 출력은 신경망 그대로 [-1, 1] — 로봇 corrector가 clamp × action_scale(0.10 m/s · 0.60 rad/s)을 곱한다.
