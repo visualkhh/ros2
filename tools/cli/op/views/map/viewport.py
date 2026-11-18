@@ -8,8 +8,7 @@ class Viewport:
     def __init__(self, grid):
         self.grid = grid
         self.k = 0
-        self.cx = grid.ox + grid.w * grid.res / 2
-        self.cy = grid.oy + grid.h * grid.res / 2
+        self.cx, self.cy = grid.center()
 
     @property
     def scale(self) -> float:
@@ -18,7 +17,8 @@ class Viewport:
     def fits(self, cols: int, subrows: int) -> bool:
         """지금 확대에서 지도 전체가 화면에 다 들어오나."""
         g, s = self.grid, self.scale
-        return g.w * g.res / s <= cols and g.h * g.res / s <= subrows
+        w, h = g.size_m()
+        return w / s <= cols and h / s <= subrows
 
     def fit(self, cols: int, subrows: int) -> None:
         """지도 전체가 화면에 들어오는 가장 큰 확대 · 중심 = 지도 가운데."""
@@ -30,8 +30,7 @@ class Viewport:
         self.center_on_map()
 
     def center_on_map(self) -> None:
-        g = self.grid
-        self.cx, self.cy = g.ox + g.w * g.res / 2, g.oy + g.h * g.res / 2
+        self.cx, self.cy = self.grid.center()
 
     def to_screen(self, wx: float, wy: float, cols: int, subrows: int) -> tuple[float, float]:
         s = self.scale

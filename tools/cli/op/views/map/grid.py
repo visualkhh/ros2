@@ -9,8 +9,10 @@ UNKNOWN, FREE, OCC, OUT = 0, 1, 2, 3   # 칸 종류 — 큰 값이 이긴다 (�
 class MapGrid:
     """width × height 칸, 해상도 res [m], 왼쪽 아래 모서리 (ox, oy). level(k) = 2^k × 2^k 칸을 하나로 합친 지도."""
 
-    def __init__(self, width: int, height: int, res: float, ox: float, oy: float, data):
+    def __init__(self, width: int, height: int, res: float, ox: float, oy: float, data,
+                 yaw: float = 0.0):
         self.w, self.h, self.res, self.ox, self.oy = width, height, res, ox, oy
+        self.yaw = float(yaw)   # map 기준 격자 회전 [rad] — map.yaml origin 3번째 값
         raw = bytearray(width * height)
         for i, v in enumerate(data):
             raw[i] = UNKNOWN if v < 0 else (OCC if v >= 65 else FREE)
@@ -19,8 +21,11 @@ class MapGrid:
     @classmethod
     def from_msg(cls, m) -> 'MapGrid':
         i = m.info
+        q = i.origin.orientation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         return cls(int(i.width), int(i.height), float(i.resolution), float(i.origin.position.x),
-                   float(i.origin.position.y), m.data)
+                   float(i.origin.position.y), m.data, yaw)
 
     @classmethod
     def from_yaml(cls, path) -> 'MapGrid':
@@ -52,14 +57,16 @@ class MapGrid:
             pix = raw[pos + 1:pos + 1 + w * h]
             occ_t, free_t = float(cfg.get('occupied_thresh', 0.65)), float(cfg.get('free_thresh', 0.25))
             neg = cfg.get('negate', '0') in ('1', 'true')
-            ox, oy = [float(t) for t in cfg['origin'].strip('[]').split(',')[:2]]
+            origin = [float(t) for t in cfg['origin'].strip('[]').split(',')]
+            ox, oy = origin[:2]
+            yaw = origin[2] if len(origin) > 2 else 0.0   # map.yaml은 radian
             data = []
             for y in range(h - 1, -1, -1):   # pgm은 위→아래, 지도는 아래→위
                 for x in range(w):
                     v = pix[y * w + x] / 255.0
                     p = v if neg else 1.0 - v
                     data.append(100 if p > occ_t else (0 if p < free_t else -1))
-            return cls(w, h, float(cfg['resolution']), ox, oy, data)
+            return cls(w, h, float(cfg['resolution']), ox, oy, data, yaw)
         except (OSError, KeyError, ValueError, IndexError) as exc:
             raise RuntimeError(f'지도 파일을 못 읽음: {path} ({exc})') from None
 
@@ -76,18 +83,29 @@ class MapGrid:
             self._levels.append((w2, h2, bytes(out)))
         return self._levels[k]
 
+    def center(self) -> tuple[float, float]:
+        """격자 중심의 map 좌표 — origin 회전까지 적용."""
+        dx, dy = self.w * self.res / 2.0, self.h * self.res / 2.0
+        c, s = math.cos(self.yaw), math.sin(self.yaw)
+        return self.ox + c * dx - s * dy, self.oy + s * dx + c * dy
+
+    def size_m(self) -> tuple[float, float]:
+        """map 축 기준 회전된 격자의 외곽 크기 (AABB) [m]."""
+        w, h = self.w * self.res, self.h * self.res
+        c, s = abs(math.cos(self.yaw)), abs(math.sin(self.yaw))
+        return w * c + h * s, w * s + h * c
+
     def code(self, k: int, wx: float, wy: float) -> int:
         """세계 좌표 (wx, wy)가 level(k) 지도에서 어떤 칸인지 (k<0이면 level 0)."""
         lv = max(k, 0)
         w, h, raw = self.level(lv)
         size = self.res * (1 << lv)
-        cx, cy = math.floor((wx - self.ox) / size), math.floor((wy - self.oy) / size)
+        dx, dy = wx - self.ox, wy - self.oy
+        if self.yaw:   # world → 격자 로컬 (역회전)
+            c, s = math.cos(self.yaw), math.sin(self.yaw)
+            dx, dy = c * dx + s * dy, -s * dx + c * dy
+        cx, cy = math.floor(dx / size), math.floor(dy / size)
         return raw[cy * w + cx] if 0 <= cx < w and 0 <= cy < h else OUT
-
-    @property
-    def size_m(self) -> tuple[float, float]:
-        return self.w * self.res, self.h * self.res
-
 
 class CostGrid:
     """nav_msgs/OccupancyGrid 비용 지도 — 0 자유/모름, 1 팽창, 2 내접/치명.
