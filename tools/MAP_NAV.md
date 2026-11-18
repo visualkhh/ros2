@@ -165,6 +165,24 @@ SLAM 중 live 지도:
 
 로봇은 빨간 `●`와 진행 방향 화살표, `M`은 map 원점, `O`은 odom 원점이다. `v`는 로봇을 움직이지 않고 planner에 경로만 물어본다. `c`는 코스트맵(전역/지역)을 겹쳐 본다. `s`가 켜져 있으면 벽이나 costmap 팽창/치명 칸을 찍어도 가장 가까운 안전한 빈 칸으로 옮겨서 웨이포인트를 놓는다. SLAM 중에는 `3) SLAM 맵핑 → 4) 지도 보기`로 지도가 그려지는 것을 보거나, `5) 지도 보면서 수동 이동`에서 WASD/방향키로 움직이며 live 지도를 볼 수 있다.
 
+### RL ↔ fallback 토글 유지
+
+`8) 노드 → controller_server → b) FollowPath.toggle`로 RL을 끄면 **런타임 값**이 `tools/.run/runtime_params.json`에 저장된다.
+
+- Nav/`controller_server`를 **재시작하면 저장한 값(false = MPPI 바이패스)을 다시 적용**한다.
+- 저장 파일이 없는 **첫 시작**은 `nav2_params.yaml`의 `FollowPath.enable` 기본값을 쓴다.
+- fallback controller(MPPI/DWB)는 `nav2_params.yaml`에 저장되므로 재시작해도 유지된다.
+- 저장값을 지워 기본값으로 돌리려면:
+
+```bash
+./run-cli fallback-enable status   # 저장된 값 확인 (없음 = YAML 기본값)
+./run-cli fallback-enable off      # 다음 재시작에도 RL OFF 유지
+./run-cli fallback-enable apply    # 지금 실행 중인 Nav에 즉시 적용
+./run-cli fallback-enable clear    # 저장값 삭제 — 다음 시작은 YAML 기본값
+```
+
+메뉴에서는 `8) 노드 → controller_server → d) 저장된 FollowPath.enable 지우기`로 지울 수 있다.
+
 ### ③ 초기 위치 — **반드시 먼저**
 
 Nav2는 로봇이 지도 어디에 있는지 알아야 켜집니다. 초기 위치를 주기 전에는 목표를 찍어도 **조용히 무시**됩니다.
