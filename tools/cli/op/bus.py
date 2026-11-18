@@ -77,7 +77,11 @@ class Bus:
 
     def collision_status_text(self) -> str:
         on = self.state.collision_enabled
-        base = '-' if on is None else ('켬' if on else '끔')
+        if on is None:
+            if not (self.procs.running('nav') or self.procs.running('explore')):
+                return 'Nav/explore 꺼짐 — collision_monitor 미실행'
+            return '-'
+        base = '켬' if on else '끔'
         action = self.state.collision_action()
         return base + (f' · {action}' if action else '')
 

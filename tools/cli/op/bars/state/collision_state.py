@@ -13,7 +13,8 @@ class CollisionState(State):
         on = self.state.collision_enabled
         action = self.state.collision_action()
         if on is None and not action:
-            return '충돌감시 ' + self.term.paint('-', DIM)
+            nav_on = (self.ui.procs.running('nav') or self.ui.procs.running('explore'))
+            return '충돌감시 ' + self.term.paint('Nav off' if not nav_on else '-', DIM)
         short = '●' if on is not False else '○'
         color = GREEN if on is not False else YELLOW
         return '충돌감시 ' + self.term.paint(short, color) + (
@@ -24,9 +25,14 @@ class CollisionState(State):
         if cur is None:
             cur = self.ui.bus.poll_collision_enabled()
         if cur is None:
-            self.ui.modal_key('충돌 감시', [
-                '상태를 모름 — /collision_monitor 파라미터 enabled 응답 없음',
-                'Nav2(collision_monitor)가 떠 있는지 확인하세요.'])
+            if not (self.ui.procs.running('nav') or self.ui.procs.running('explore')):
+                self.ui.modal_key('충돌 감시', [
+                    'Nav가 꺼져 있어 collision_monitor가 없습니다.',
+                    '4) Nav (지도 주행)를 시작하면 충돌 감시가 함께 뜹니다.'])
+            else:
+                self.ui.modal_key('충돌 감시', [
+                    '상태를 모름 — /collision_monitor 파라미터 enabled 응답 없음',
+                    'Nav2(collision_monitor)가 아직 기동 중인지 확인하세요.'])
             return STAY
         want_on = not cur
         apply = '켬' if want_on else '끔 (근접 정지 없이 통과 — 주의)'
