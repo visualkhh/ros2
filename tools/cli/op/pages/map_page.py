@@ -20,7 +20,7 @@ from pathlib import Path
 from ..defs import BACK, MAIN, QUIT, STAY
 from ..dialog import fmt_pose
 from ..terminal import DIM, YELLOW
-from ..menus import ActionItem, InfoItem, Menu
+from ..menus import ActionItem, Menu
 from ..views.map import FREE, OCC, UNKNOWN, CostGrid, MapGrid, MapView
 from ..views.map.map_view import LOCAL_PLAN_RGB, PLAN_RGB
 
@@ -497,18 +497,20 @@ class MapPage(Menu):
                     ('예상 경로 지우기 (V)', self.clear_preview),
                     (lambda: f'웨이포인트 안전 스냅 (s) — {"●" if self.snap else "○"}', self.toggle_snap)],
             'pose': [('로봇 위치로 지정 — 십자선 위치 (Enter)', self.pick)],
-            'teleop': [InfoItem(self.app, '지도에 포커스한 채 WASD/방향키로 이동 · s 정지', '1'),
-                       InfoItem(self.app, '속도는 지도에서 + / - (기본 0.10 m/s · 0.50 rad/s)', '2')],
+            'teleop': [('지도에 포커스한 채 WASD/방향키로 이동 · s 정지', lambda: None),
+                       ('속도는 지도에서 + / - (기본 0.10 m/s · 0.50 rad/s)', lambda: None)],
             'view': [],
         }[self.mode]
-        rows += [('확대 (+)', lambda: self.zoom(+1)), ('축소 (-)', lambda: self.zoom(-1)),
+        zoom_hint = '' if self.mode == 'teleop' else ' (+)'
+        rows += [(f'확대{zoom_hint}', lambda: self.zoom(+1)),
+                 (f'축소{zoom_hint}', lambda: self.zoom(-1)),
                  ('전체 보기 (f)', self.fit),
                  (lambda: f'로봇 따라가기 (r) — {"켜짐" if v.following else "꺼짐"}', self.toggle_follow),
                  (lambda: f'M map 원점 (m) — {"●" if self.show_map else "○"}', self.toggle_map_origin),
                  (lambda: f'O odom 원점 (o) — {"●" if self.show_odom else "○"}', self.toggle_odom),
                  (lambda: f'Nav2 경로 겹쳐 보기 (p) — {"●" if self.plan_on else "○"}', self.toggle_plan),
                  (lambda: f'costmap 겹쳐 보기 (c) — {self.COST_LABELS[self.cost_mode]}', self.toggle_cost)]
-        if self.mode != 'view':
+        if self.mode in ('nav', 'pose'):
             rows += [(f'좌회전 +{YAW_STEP:.0f}° ([) · 미세 +1° = {{', lambda: self.turn(YAW_STEP)),
                      (f'우회전 -{YAW_STEP:.0f}° (]) · 미세 -1° = }}', lambda: self.turn(-YAW_STEP))]
         return [act(self.app, str(i), label, fn) for i, (label, fn) in enumerate(rows, 1)]
