@@ -6,8 +6,8 @@
   ros2 launch tb3_bringup explore-nav.launch.py                 # 기본: share/tb3_bringup/config/nav2_params.yaml
   ros2 launch tb3_bringup explore-nav.launch.py params_file:=/path/nav2_params.yaml   # 덮어쓰기
 
-Lyrical의 nav2_bringup navigation_launch.py가 lifecycle_manager까지 같이 띄운다
-→ 여기서 manager를 또 붙이지 않는다.
+Lyrical의 navigation_launch.py는 노드만 띄우고 lifecycle manager는 bringup_launch.py가 띄운다.
+→ 여기서는 navigation_launch와 같은 노드 목록으로 manager를 직접 띄운다.
 """
 import os
 
@@ -16,6 +16,12 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+NAV_NODES = [
+    'controller_server', 'smoother_server', 'planner_server', 'route_server',
+    'behavior_server', 'velocity_smoother', 'collision_monitor', 'bt_navigator',
+    'waypoint_follower', 'docking_server', 'following_server',
+]
 
 
 def generate_launch_description():
@@ -31,6 +37,10 @@ def generate_launch_description():
             'params_file': LaunchConfiguration('params_file'),
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'autostart': 'true'}.items()),
+        Node(package='nav2_lifecycle_manager', executable='lifecycle_manager',
+             name='lifecycle_manager_navigation', output='screen',
+             parameters=[{'autostart': True,
+                          'node_names': NAV_NODES}]),
         Node(package='explore_lite', executable='explore', name='explore_node', output='screen',
              parameters=[os.path.join(get_package_share_directory('tb3_bringup'), 'config', 'explore.yaml'),
                          {'use_sim_time': LaunchConfiguration('use_sim_time')}]),

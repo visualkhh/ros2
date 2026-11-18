@@ -1,9 +1,8 @@
 """Resample LaserScan to a fixed number of beams.
 
 LDS-03 (coin_d4_driver) emits a slightly different beam count every revolution (395..404).
-The SLAM front-end (slam_toolbox when this was written) registers the sensor with the first scan's count and drops every later scan whose count
-differs ("LaserRangeScan contains 403 range readings, expected 404") -> no map. This node bins each
-scan into `beams` fixed angles over 360 deg (nearest beam per bin, closest range wins).
+SLAM·costmap 쪽은 스캔 점 개수가 매번 바뀌면 처리하기 불안정하다. 이 노드는 각 스캔을 360도
+`beams` 고정 각도로 다시 나눈다 (빈마다 가장 가까운 점).
 
 Empty bin = 0.0 (below range_min = invalid), NOT inf: on this robot the rear ~135 deg is blocked by the
 robot body (lidar on the 1st floor front) and returns nothing. inf would mean "nothing up to max range",
