@@ -1257,8 +1257,25 @@ class Bus:
         return {'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(math.degrees(th), 1)}
 
     def robot_pose(self) -> dict | None:
-        """지도 화면용 — 기다리지 않는 자세 조회 (없으면 None)."""
+        """지도 화면용 — 기다리지 않는 자세 조회 (없으면 None).
+
+        Nav 중에는 amcl_pose, SLAM 중에는 TF(map→base_footprint)를 쓴다.
+        """
         try:
             return self.current_pose()
         except RuntimeError:
+            pass
+        buf = getattr(self.node, 'tf_buffer', None)
+        if buf is None:
             return None
+        for child in ('base_footprint', 'base_link'):
+            try:
+                tr = buf.lookup_transform('map', child, rclpy.time.Time())
+            except Exception:
+                continue
+            p, q = tr.transform.translation, tr.transform.rotation
+            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                             1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            return {'x': round(p.x, 3), 'y': round(p.y, 3),
+                    'yaw_deg': round(math.degrees(yaw), 1)}
+        return None

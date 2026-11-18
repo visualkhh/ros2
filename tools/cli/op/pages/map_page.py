@@ -65,6 +65,7 @@ class MapPage(Menu):
         self._map_msg = None
         self._map_msg_at = 0.0
         self._grid_at = 0.0
+        self._map_updates = 0
         self._teleop_move = (0, 0)
         self._teleop_lin, self._teleop_ang = 0.10, 0.50
         self._teleop_at = 0.0
@@ -404,6 +405,7 @@ class MapPage(Menu):
         self.view.grid = grid
         self.view.vp.grid = grid
         self.view._key = None
+        self._map_updates += 1
 
     def _teleop_cmd(self) -> tuple[float, float]:
         f, t = self._teleop_move
@@ -565,6 +567,8 @@ class MapPage(Menu):
         status = [f'십자선 ({x:+.2f}, {y:+.2f}) m · {CELL_TXT.get(code, "지도 밖")}',
                   f'한 칸 = {v.vp.scale * 100:.0f} cm · {"따라가기" if v.following else "자유이동"}',
                   mode_txt]
+        if v.robot and v.robot_yaw is not None:
+            status.append(f'로봇 ({v.robot[0]:+.2f}, {v.robot[1]:+.2f}) m · {v.robot_yaw:+.0f}°')
         if self._preview:
             status.append(f'예상 경로 {len(self._preview)}점 (초록)')
         if self.plan_on:
@@ -582,7 +586,8 @@ class MapPage(Menu):
         status.append(' '.join(mo))
         if not self.source:
             age = time.monotonic() - self._map_msg_at if self._map_msg_at else None
-            status.append('live /map ' + ('● 갱신 중' if age is not None and age <= 2.0 else '○ 대기'))
+            live = '● 갱신 중' if age is not None and age <= 2.0 else '○ 대기'
+            status.append(f'live /map {live} · {v.grid.w}x{v.grid.h} · {self._map_updates}회')
         if self.state.goal_status:
             status.append(f'목표: {self.state.goal_status}')
         legend = self.term.paint('● 로봇 → 방향 · + 십자선 · S 출발 · 1 2 goal · M map · O odom', DIM)
@@ -641,6 +646,7 @@ class MapPage(Menu):
         self._cost_at = {'global': 0.0, 'local': 0.0}
         self._map_msg = None
         self._grid_at = 0.0
+        self._map_updates = 0
         subs = []
         try:
             from nav_msgs.msg import Path, OccupancyGrid

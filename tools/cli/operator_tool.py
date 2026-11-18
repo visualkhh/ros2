@@ -43,6 +43,7 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
+from tf2_ros import Buffer, TransformListener
 from sensor_msgs.msg import LaserScan
 from diagnostic_msgs.msg import DiagnosticArray
 
@@ -64,6 +65,8 @@ class OperatorTool(Node):
         super().__init__('operator_tool')
         self.term = Terminal()
         self.state = StateStore()
+        self.tf_buffer = Buffer()                    # SLAM 중 map→base 자세 (amcl 없을 때)
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         self.procs = make_procs(self)   # 로봇이 아니면 RemoteProcs (SSH + 노드 그래프)
         self.ui = Ui(self.term, self.state, self.procs)
         self.bus = Bus(self, self.state, self.ui, self.term)
