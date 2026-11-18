@@ -595,9 +595,11 @@ class MapPage(Menu):
     # ---------------------------------------------------------------- 실행
     def _load_grid(self, timeout: float = 10.0):
         if self.source:
-            local = self.bus.procs.local_map(self.source)
+            # PC에서 이미 내려받은 캐시 경로면 그대로, 로봇 경로면 local_map이 내려받는다.
+            p = Path(self.source).expanduser()
+            local = p if p.is_file() else self.bus.procs.local_map(self.source)
             if local is None:
-                raise RuntimeError(f'지도 파일을 못 가져옴: {self.source}')
+                raise RuntimeError(f'지도 파일을 못 가져옴: {self.source} — 로봇 경로/SSH 확인')
             return MapGrid.from_yaml(local)
         from nav_msgs.msg import OccupancyGrid
         from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy

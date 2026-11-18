@@ -123,6 +123,7 @@ robot_state_publisher · coin_d4_driver(라이다) · scan_filter · scan_resamp
 ```
 
 - 저장 위치 (항상 로봇): `~/ros2/ros2_ws/map/office/map.yaml` + `map.pgm`
+- PC에서 저장 지도를 열면 로봇의 `ros2_ws/map/<이름>`에서 두 파일을 `~/.cache/beebot/maps/<이름>`으로 내려받아 표시한다. **원본은 로봇의 `ros2_ws/map`**이고 `.cache`는 PC 화면용 임시 사본이다 (로봇에서 실행하면 캐시 없이 바로 읽는다).
 - 메뉴: `./run-cli` → `3) SLAM 맵핑` → `3) 지도 저장` → 이름 입력 (빈칸 Enter = 날짜_시각) → 끝나면 같은 메뉴 `1) 정지`.
   목록·내용은 `6) 지도 파일` (`s`로 저장도 됨).
 - `/map 수신 없음`으로 거부되면 SLAM이 지도를 안 내는 중 → `./run-cli slam log`, 라이다 `scan` 확인.
