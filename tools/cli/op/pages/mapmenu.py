@@ -21,19 +21,8 @@ class MapInfoItem(MenuItem):
     shows_busy = False   # 지도 화면을 연다
 
     def run(self):
-        # PC에서 보는 경우 로봇의 지도(map.yaml+pgm)를 캐시로 내려받아 터미널 지도 화면으로 연다.
-        self.ui.busy('지도 내려받는 중 …')
-        try:
-            local = self.bus.procs.local_map(self.path)
-        finally:
-            self.ui._busy = None
-        if local is not None:
-            self.ui.window.navigate('map', mode='view', source=local)
-            return STAY
-        print(f'{self.path}\n')
-        print(self.bus.procs.read_map(self.path))
-        print(f'\nNav로 쓰기: ./run-cli nav start {self.name}')
-        return STAY
+        # 원본은 로봇의 ros2_ws/map/<이름>. PC면 MapPage가 필요할 때만 캐시로 내려받는다.
+        return self.ui.window.navigate('map', mode='view', source=self.path)
 
 
 class MapShowItem(MenuItem):
