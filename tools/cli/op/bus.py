@@ -149,11 +149,19 @@ class Bus:
             mark = self.term.paint('●', GREEN) if on else self.term.paint('○', DIM)
             lines.append(f' {mark} {label + ' ' * max(0, 16 - self.term.disp_len(label))} {extra}')
         lines += ['', '[로봇]', f' {self.state.robot_txt()}', f' {self.state.domain_txt()}']
+        amcl_txt = self.state.amcl_txt()
+        age = self.state.amcl_rate.age()
+        if self.state.amcl is None or age is None or age > 2.0:
+            # amcl_pose는 갱신될 때만 발행(transient local) — 정지 중이면 TF map→base가 더 최신
+            p = self.robot_pose()
+            if p:
+                amcl_txt = (f"x={p['x']:+.2f} y={p['y']:+.2f} θ={p['yaw_deg']:+.0f}° "
+                            f"(TF map→base)")
         lines += ['', '[토픽]',
                   f' odom  {self.state.odom_txt()}',
                   f' scan  {self.state.scan_txt()}',
                   f' map   {self.state.map_txt()}',
-                  f' amcl  {self.state.amcl_txt()}',
+                  f' amcl  {amcl_txt}',
                   f' 충돌  {self.collision_status_text()}']
         if self.state.goal_status:
             lines.append(f' 목표  {self.state.goal_status}')
@@ -192,7 +200,7 @@ class Bus:
         return f'{cur_txt} · {temp_txt} · 배터리 {"-" if bat is None else f"{bat:.1f} V"}'
 
     def cmd_status(self, args) -> int:
-        self._poll(2.5)
+        self._poll(4.0)   # amcl_pose·TF transient/local discovery — 2.5s는 원격에서 빠듯
         self.poll_collision_enabled()
         print('\n'.join(self.status_lines()))
         return 0
