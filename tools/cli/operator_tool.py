@@ -256,6 +256,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('state', type=str.lower, choices=('on', 'off', 'status'), nargs='?', default='status')
     p = sub.add_parser('fallback', help='RL 바이패스 controller 변경 (mppi|dwb|rpp|rotation_shim) — 설정 저장·빌드·Nav 재시작')
     p.add_argument('name', type=str.lower, choices=('mppi', 'dwb'))
+    p = sub.add_parser('fallback-enable', help='FollowPath.enable 런타임 값 저장 (on|off|status|clear) — 다음 재시작에 적용')
+    p.add_argument('value', type=str.lower, choices=('on', 'off', 'status', 'clear', 'apply'))
     sub.add_parser('reboot-motors', help='모터 에러 해제 — 두 바퀴 재부팅 (/opencr/reboot)')
     p = sub.add_parser('beep', help='OpenCR 부저 — 삑 또는 beep <Hz 100~8000> <ms 10~2000>')
     p.add_argument('value', nargs='*', help='예: 4000 300')

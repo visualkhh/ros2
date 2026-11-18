@@ -8,6 +8,7 @@ CLI를 껐다 켜도 pid 파일로 다시 찾으므로 SLAM·Nav는 계속 돈�
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -270,6 +271,55 @@ class Procs:
         m = re.search(r'(?m)^\s*fallback_controller:\s*["\']?([^"\'\s#]+)', text)
         return m.group(1) if m else '?'
 
+    RUNTIME_PARAMS = 'runtime_params.json'   # 노드 재시작에 다시 적용할 런타임 값 (첫 시작 기본값과 분리)
+
+    def runtime_params(self) -> dict:
+        """런타임에 바꾼 값 저장소 — .run/runtime_params.json (첫 시작엔 없음 = YAML 기본값)."""
+        try:
+            data = json.loads((RUN_DIR / self.RUNTIME_PARAMS).read_text())
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _save_runtime_params(self, data: dict) -> None:
+        RUN_DIR.mkdir(parents=True, exist_ok=True)
+        path = RUN_DIR / self.RUNTIME_PARAMS
+        tmp = path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+        os.replace(tmp, path)
+
+    def saved_enable(self) -> bool | None:
+        """저장된 FollowPath.enable — 없으면 None (YAML 기본값 사용)."""
+        val = self.runtime_params().get('controller_server', {}).get('FollowPath.enable')
+        return val if isinstance(val, bool) else None
+
+    def set_enable(self, enabled: bool) -> tuple[bool, str]:
+        """FollowPath.enable 런타임 값을 저장 — 다음 Nav/노드 재시작에만 다시 적용.
+
+        YAML은 건드리지 않는다. 저장 파일이 없는 첫 시작은 YAML 기본값을 쓴다.
+        """
+        data = self.runtime_params()
+        data.setdefault('controller_server', {})['FollowPath.enable'] = bool(enabled)
+        try:
+            self._save_runtime_params(data)
+        except OSError as exc:
+            return False, f'런타임 값 저장 실패: {exc}'
+        return True, (f'런타임 값 저장: FollowPath.enable={str(bool(enabled)).lower()} — '
+                      f'다음 Nav/노드 재시작에 적용 ({RUN_DIR / self.RUNTIME_PARAMS})')
+
+    def clear_enable(self) -> tuple[bool, str]:
+        """저장된 FollowPath.enable을 지운다 — 다음 시작은 YAML 기본값."""
+        data = self.runtime_params()
+        node = data.get('controller_server', {})
+        node.pop('FollowPath.enable', None)
+        if not node:
+            data.pop('controller_server', None)
+        try:
+            self._save_runtime_params(data)
+        except OSError as exc:
+            return False, f'런타임 값 삭제 실패: {exc}'
+        return True, '저장된 FollowPath.enable 삭제 — 다음 시작은 YAML 기본값'
+
     def set_fallback(self, name: str, progress=None) -> tuple[bool, str]:
         """RL 바이패스 controller를 설정 파일에 저장 → tb3_bringup 빌드 → Nav 재시작."""
         name = (name or '').strip().lower()
@@ -531,6 +581,24 @@ class RemoteProcs(Procs):
 
     def set_fallback(self, name: str, progress=None) -> tuple[bool, str]:
         rc, out = self._cli('fallback', name, timeout=240)
+        return rc == 0, f'[{self.host}] {out}'
+
+    def set_enable(self, enabled: bool) -> tuple[bool, str]:
+        rc, out = self._cli('fallback-enable', 'on' if enabled else 'off', timeout=120)
+        return rc == 0, f'[{self.host}] {out}'
+
+    def saved_enable(self) -> bool | None:
+        rc, out = self._ssh(f'cat {ROBOT_TOOL_DIR}/.run/{self.RUNTIME_PARAMS} 2>/dev/null', 15)
+        if rc != 0 or not out.strip():
+            return None
+        try:
+            val = json.loads(out).get('controller_server', {}).get('FollowPath.enable')
+            return val if isinstance(val, bool) else None
+        except (ValueError, AttributeError):
+            return None
+
+    def clear_enable(self) -> tuple[bool, str]:
+        rc, out = self._cli('fallback-enable', 'clear', timeout=60)
         return rc == 0, f'[{self.host}] {out}'
 
     def build(self, extra: list[str] | None = None, full: bool = False) -> int:

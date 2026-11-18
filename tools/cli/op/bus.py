@@ -275,11 +275,20 @@ class Bus:
                 print(self.term.paint('주의: ' + warn, YELLOW))
         ok, msg = self.procs.start(name, map_yaml, model_path)
         print(msg)
+        if ok and name in ('nav', 'explore') and not model_path and IS_ROBOT:
+            self.apply_saved_enable()   # 저장된 토글 값이 있을 때만 (첫 시작은 YAML 기본값)
         if ok and name == 'nav' and IS_ROBOT:   # 원격은 로봇 CLI가 이미 안내를 출력한다
             if model_path:
                 print(self.term.paint(f'RL 모델: {model_path} (enable=true)', DIM))
             self._nav_init_hint()
         return 0 if ok else 1
+
+    def restart(self, name: str) -> tuple[bool, str]:
+        """서비스 재시작 — Nav/explore면 저장된 FollowPath.enable을 다시 적용."""
+        ok, msg = self.procs.restart(name)
+        if ok and name in ('nav', 'explore') and IS_ROBOT:
+            self.apply_saved_enable()
+        return ok, msg
 
     def stop(self, name: str) -> int:
         ok, msg = self.procs.stop(name)
@@ -300,7 +309,7 @@ class Bus:
         if args.action == 'stop':
             return self.stop(name)
         if args.action == 'restart':
-            ok, msg = self.procs.restart(name)
+            ok, msg = self.restart(name)
             print(msg)
             return 0 if ok else 1
         if args.action == 'log':
@@ -370,14 +379,23 @@ class Bus:
             print(err)
             return 2
         self.send_velocity(0.0, 0.0)
-        ok, msg = self.procs.node_restart(base(args.name), force=args.force)
+        ok, msg = self.node_restart(base(args.name), force=args.force)
         print(msg)
         return 0 if ok else 1
+
+    def node_restart(self, name: str, force: bool = False) -> tuple[bool, str]:
+        """노드 재시작 — controller_server면 저장된 FollowPath.enable을 다시 적용."""
+        ok, msg = self.procs.node_restart(name, force=force)
+        if ok and name.rstrip('/').split('/')[-1] == 'controller_server' and IS_ROBOT:
+            self.apply_saved_enable()
+        return ok, msg
 
     def cmd_restart_all(self, args) -> int:
         self.send_velocity(0.0, 0.0)
         ok, msg = self.procs.restart_all()
         print(msg)
+        if ok and IS_ROBOT:
+            self.apply_saved_enable()
         return 0 if ok else 1
 
     # ------------------------------------------------------------- 지도
@@ -1241,12 +1259,71 @@ class Bus:
     # ------------------------------------------------------------- fallback controller
     def set_fallback(self, name: str) -> tuple[bool, str]:
         """RL 바이패스 controller 변경 — 설정 파일 저장·빌드·Nav 재시작 (PC는 SSH)."""
-        return self.procs.set_fallback(name, progress=lambda text: self.ui.progress(text))
+        ok, msg = self.procs.set_fallback(name, progress=lambda text: self.ui.progress(text))
+        if ok and self.procs.running('nav') and IS_ROBOT:
+            self.apply_saved_enable()
+        return ok, msg
 
     def cmd_fallback(self, args) -> int:
         ok, msg = self.set_fallback(args.name)
         print(msg)
         return 0 if ok else 1
+
+    def cmd_fallback_enable(self, args) -> int:
+        if args.value == 'status':
+            saved = self.procs.saved_enable()
+            print('저장된 FollowPath.enable: ' + ('없음 (YAML 기본값)' if saved is None
+                                                   else ('true' if saved else 'false')))
+            return 0
+        if args.value == 'clear':
+            ok, msg = self.procs.clear_enable()
+            print(msg)
+            return 0 if ok else 1
+        if args.value == 'apply':
+            return 0 if self.apply_saved_enable() else 1
+        ok, msg = self.procs.set_enable(args.value == 'on')
+        print(msg)
+        return 0 if ok else 1
+
+    def apply_saved_enable(self, timeout: float = 50.0) -> bool:
+        """저장된 FollowPath.enable을 새 controller_server에 다시 적용 — Nav/노드 재시작용.
+
+        저장값이 없으면(첫 시작) YAML 기본값을 그대로 둔다.
+        """
+        saved = self.procs.saved_enable()
+        if saved is None:
+            return True
+        try:
+            from std_srvs.srv import SetBool
+            cli = self.node.create_client(SetBool, '/controller_server/FollowPath/toggle')
+        except Exception as exc:
+            print(self.term.paint(f'저장값 적용 실패: {exc}', YELLOW))
+            return False
+        try:
+            end = time.monotonic() + timeout
+            while time.monotonic() < end:
+                self.ui.progress(f'저장된 FollowPath.enable={"true" if saved else "false"} '
+                                 f'적용 대기… {max(0, end - time.monotonic()):.0f}s')
+                if cli.wait_for_service(timeout_sec=0.5):
+                    break
+            else:
+                print(self.term.paint('저장된 FollowPath.enable 적용 보류 — toggle 서비스 없음', YELLOW))
+                return False
+            req = SetBool.Request()
+            req.data = bool(saved)
+            res = self.param_wait(cli.call_async(req), timeout=5.0)
+            if res is None or not getattr(res, 'success', False):
+                print(self.term.paint('저장된 FollowPath.enable 적용 실패 — toggle 응답 없음', YELLOW))
+                return False
+            self.state.rl_enabled = bool(saved)
+            self.state.rl_enabled_at = time.monotonic()
+            print(f'런타임 값 적용: FollowPath.enable={str(bool(saved)).lower()}')
+            return True
+        finally:
+            try:
+                self.node.destroy_client(cli)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------- 자세
     def current_pose(self) -> dict:

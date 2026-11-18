@@ -252,7 +252,8 @@ class ControllerServerFeature(NodeFeature):
             target = (not enabled) if enabled is not None else True
             now = '?' if enabled is None else ('ON' if enabled else 'OFF')
             body = [f'현재: {now}', f'바꿀 상태: {"ON (정책)" if target else "OFF (fallback)"}',
-                    '서비스: /controller_server/FollowPath/toggle']
+                    '서비스: /controller_server/FollowPath/toggle',
+                    '결과는 런타임 값으로 저장 — 다음 Nav/노드 재시작에 적용 (첫 시작은 YAML 기본값)']
             if not app.ui.confirm('FollowPath.toggle을 보낼까요?', default=False, body=body):
                 return
             ok, result = bus.call_service(
@@ -262,6 +263,10 @@ class ControllerServerFeature(NodeFeature):
                 bus.state.rl_enabled_at = time.monotonic()
                 print(f'FollowPath.toggle(data={str(target).lower()})')
                 print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+                save = getattr(bus.procs, 'set_enable', None)
+                if save is not None:
+                    ok2, msg2 = save(target)
+                    print(('설정 저장: ' if ok2 else '설정 저장 실패: ') + msg2)
             else:
                 print(f'실패: {result}')
 
@@ -305,11 +310,25 @@ class ControllerServerFeature(NodeFeature):
                 app.ui._busy = None
             print(('적용: ' if ok else '실패: ') + msg)
 
+        def clear_saved():
+            saved = bus.procs.saved_enable()
+            if saved is None:
+                print('저장된 FollowPath.enable 없음 — YAML 기본값 사용 중')
+                return
+            if not app.ui.confirm('저장된 FollowPath.enable을 지울까요?',
+                                  body=[f'현재 저장값: {str(saved).lower()}',
+                                        '지우면 다음 Nav/노드 시작은 YAML 기본값을 씁니다.',
+                                        '지금 실행 중인 값은 바뀌지 않습니다.'], default=True):
+                return
+            ok, msg = bus.procs.clear_enable()
+            print(msg)
+
         return [
             GoMenu(app, 'a', '서비스 목록 · 호출 (테스트)',
                    ServiceMenu(app, name, self.services(bus, name))),
             ActionItem(app, 'b', '서비스: FollowPath.toggle (RL↔fallback)', toggle),
             ActionItem(app, 'c', '바이패스 controller 변경 (MPPI/DWB) — Nav 재시작', change_fallback),
+            ActionItem(app, 'd', '저장된 FollowPath.enable 지우기 (다음 시작 기본값)', clear_saved),
         ]
 
     @staticmethod

@@ -53,7 +53,7 @@ class RestartNodeItem(MenuItem):
         if not self.ui.confirm(f'{self._name} 노드를 재시작할까요?', body=body, default=True):
             return STAY
         self.bus.send_velocity(0.0, 0.0)
-        ok, msg = self.bus.procs.node_restart(self._name, force=True)
+        ok, msg = self.bus.node_restart(self._name, force=True)
         print(msg)
         return STAY
 

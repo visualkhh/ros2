@@ -93,7 +93,7 @@ class RestartItem(MenuItem):
             body = [self.term.paint('재시작하면 지금까지 만든 지도가 사라집니다 (먼저 저장)', YELLOW)]
         if not self.ui.confirm(f'{svc.label}를 재시작할까요?', body=body):
             return STAY
-        print(self.bus.procs.restart(self.name)[1])
+        print(self.bus.restart(self.name)[1])
         return STAY
 
 
