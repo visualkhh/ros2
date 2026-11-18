@@ -110,7 +110,7 @@ class MapView(View):
     def on_key(self, k) -> bool:
         cols, rows = self.size
         vp = self.vp
-        if self.teleop and (k in PAN_KEYS or k in ('+', '=', '-', '_')):
+        if self.teleop and k in PAN_KEYS:
             return bool(self.extra_key and self.extra_key(k))
         if k in PAN_KEYS:
             self.following = False

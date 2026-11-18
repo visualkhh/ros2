@@ -79,7 +79,7 @@ class MapPage(Menu):
         if self.mode == 'view':
             self.msg = '보기 전용 — 목표·초기위치는 Nav(4) 또는 지도/위치(6)에서'
         elif self.mode == 'teleop':
-            self.msg = 'WASD/방향키 이동 · s 정지 · +/- 속도 · Tab 메뉴'
+            self.msg = 'WASD/방향키 이동 · s 정지 · [ ] 속도 · +/- 지도 · Tab 메뉴'
             return
         elif self.mode == 'nav':
             note = ''
@@ -441,17 +441,17 @@ class MapPage(Menu):
                 self.msg = (f'텔레오퍼 v={self._teleop_cmd()[0]:+.2f} m/s '
                             f'ω={self._teleop_cmd()[1]:+.2f} rad/s')
                 return True
-            if k in ('+', '='):
+            if k in (']', '}', '.', '>'):   # + / - 는 지도 확대·축소 — 속도는 [ ]
                 self._teleop_lin = min(0.26, self._teleop_lin + 0.02)
                 self._teleop_ang = min(1.82, self._teleop_ang + 0.1)
                 self.msg = f'속도 v {self._teleop_lin:.2f} · ω {self._teleop_ang:.2f}'
                 return True
-            if k in ('-', '_'):
+            if k in ('[', '{', ',', '<'):
                 self._teleop_lin = max(0.05, self._teleop_lin - 0.02)
                 self._teleop_ang = max(0.2, self._teleop_ang - 0.1)
                 self.msg = f'속도 v {self._teleop_lin:.2f} · ω {self._teleop_ang:.2f}'
                 return True
-            return False
+            # m·o·p·c는 아래 공통 지도 옵션으로 넘긴다 (텔레오퍼 키와 겹치지 않음)
         if k in ('enter', ' '):
             self.pick()
         elif k == 'backspace' and self.mode == 'nav':
@@ -500,12 +500,11 @@ class MapPage(Menu):
                     (lambda: f'웨이포인트 안전 스냅 (s) — {"●" if self.snap else "○"}', self.toggle_snap)],
             'pose': [('로봇 위치로 지정 — 십자선 위치 (Enter)', self.pick)],
             'teleop': [('지도에 포커스한 채 WASD/방향키로 이동 · s 정지', lambda: None),
-                       ('속도는 지도에서 + / - (기본 0.10 m/s · 0.50 rad/s)', lambda: None)],
+                       ('속도는 지도에서 [ / ] (기본 0.10 m/s · 0.50 rad/s)', lambda: None)],
             'view': [],
         }[self.mode]
-        zoom_hint = '' if self.mode == 'teleop' else ' (+)'
-        rows += [(f'확대{zoom_hint}', lambda: self.zoom(+1)),
-                 (f'축소{zoom_hint}', lambda: self.zoom(-1)),
+        rows += [('확대 (+)', lambda: self.zoom(+1)),
+                 ('축소 (-)', lambda: self.zoom(-1)),
                  ('전체 보기 (f)', self.fit),
                  (lambda: f'로봇 따라가기 (r) — {"켜짐" if v.following else "꺼짐"}', self.toggle_follow),
                  (lambda: f'M map 원점 (m) — {"●" if self.show_map else "○"}', self.toggle_map_origin),
@@ -666,7 +665,7 @@ class MapPage(Menu):
             pass
         tick = self.mode == 'teleop'
         if tick:
-            self.view.hints = 'WASD/방향키 이동 · s 정지 · +/- 속도 · Tab 메뉴 · Esc 메뉴'
+            self.view.hints = 'WASD/방향키 이동 · s 정지 · [ ] 속도 · +/- 지도 · Tab 메뉴 · Esc 메뉴'
             self.ui.window.connect('tick', self._tick)
         try:
             result = self.ui.window.run(self.title, self.items, self.center, back=True, main=True,
