@@ -158,9 +158,7 @@ class RlMazeEnv(BaseEnv):
         xy, _ = self.pose()
         d = torch.linalg.norm(self.goal_point() - xy, dim=-1)
         self.reached = d < c.wp_tol
-        nxt = (self.wp_idx + 1).clamp(max=self.wps.shape[1] - 1)   # 다음 점이 더 가까우면 건너뛰기 (모서리 질러가기)
-        skip = torch.linalg.norm(self.wps[self._rows, nxt] - xy, dim=-1) < d
-        adv = (self.reached | skip) & (self.wp_idx < self.wp_n - 1)
+        adv = self.reached & (self.wp_idx < self.wp_n - 1)   # 건너뛰기 없음 — 순서대로 전부 밟아야 함
         self.goal_done = self.reached & (self.wp_idx >= self.wp_n - 1)
         self.wp_idx = self.wp_idx + adv.long()
         self.progress = self.prev_dist - d                          # 진행 (줄인 거리) — 건너뛴 스텝은 새 목표 기준으로 다시

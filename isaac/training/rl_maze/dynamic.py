@@ -302,7 +302,7 @@ class DynamicObstacles:
 
     # --------------------------------------------------------------- 화면
     def setup_visuals(self) -> None:
-        if self.markers is not None:
+        if self.markers is not None or not (self.n_people or self.n_balls):   # 0개면 마커 원형이 원점에 남아 유령 캡슐이 보인다
             return
         import isaaclab.sim as sim_utils
         from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg

@@ -12,6 +12,7 @@
 #   --speed --turn  기준 전진 [m/s] · 회전 [rad/s] (keyboard: 키 하나 · 네모: 기준 속도)
 #   --onnx PATH     기본 모드(웨이포인트)에서 학습한 정책으로 보정 (exported/policy.onnx + 옆에 .onnx.data) · P = 켬/끔
 #   --viz           창 켜기 (기본 끔 = headless · --viz만 쓰면 kit · --viz X로 다른 visualizer). keyboard는 창이 있어야 함
+#   --dyn           동적 장애물 켜기 (rl_maze 사람·공 — 기본 끔)
 #
 # 키: W/A/S/D(화살표) 주행(keyboard) · Shift 느리게 · X 정지 · `[`/`]` 속도 -/+ · R 처음부터
 #     F 카메라를 로봇 쪽으로 · L 라이다 점군 (rl_maze) · 창 닫으면 끝

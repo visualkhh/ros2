@@ -35,6 +35,7 @@ def main(argv=None) -> int:
     p.add_argument("--onnx", default=None, help="학습한 정책 ONNX (exported/policy.onnx, 옆에 .onnx.data) — task 기본 모드에서만 (웨이포인트 보정). P = 켬/끔")
     p.add_argument("--speed", type=float, default=0.15, help="전진 [m/s] (keyboard: 키 하나 · square: 기준 속도)")
     p.add_argument("--turn", type=float, default=1.0, help="회전 [rad/s]")
+    p.add_argument("--dyn", action="store_true", help="동적 장애물 켜기 (기본 끔 = 사람·공 없음)")
     AppLauncher.add_app_launcher_args(p)
     args = p.parse_args(argv)
 
@@ -78,6 +79,10 @@ def main(argv=None) -> int:
                     raise
 
         cfg = load(cfg_spec)()
+        if not args.dyn:   # play 기본 = 동적 장애물 없음 (학습 cfg 값은 그대로 둠 · --dyn으로 켜기)
+            for k in ("n_people", "n_balls"):
+                if hasattr(cfg, k) and getattr(cfg, k):
+                    setattr(cfg, k, 0)
         cfg.robot = tdir   # 로봇 = task 폴더
         cfg.scene.num_envs = 1
         cfg.sim.device = args.device
