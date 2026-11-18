@@ -54,7 +54,8 @@ class StateStore:
         self.st_time: float | None = None                         # /state_* 마지막 수신 (latched라도 base 죽으면 끊김)
         self.st_wall = 0.0                                         # 마지막 /state_* 수신 벽시계 (연결 칸 표시)
         self.collision: tuple[tuple[int, str], float] | None = None  # /collision_monitor_state (action_type, polygon), 시각
-        self.collision_enabled: bool | None = None                 # /collision_monitor enabled 파라미터 (5초 캐시)
+        self.collision_enabled: bool | None = None                 # collision_monitor 런타임 on/off
+        self.collision_override: bool | None = None                # 토글 결과 — enabled 파라미터는 configure 값이라 안 바뀜
         self.explore_status = ''                                   # explore_bridge /explore_status
         self.cmd_vel_nav = Rate(5)                                 # /cmd_vel_nav (Nav2 controller 출력)
         self.nodes_seen: dict[str, float] = {}                     # 노드 그래프에서 마지막으로 본 시각

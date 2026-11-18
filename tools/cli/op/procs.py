@@ -320,6 +320,20 @@ class Procs:
             return False, f'런타임 값 삭제 실패: {exc}'
         return True, '저장된 FollowPath.enable 삭제 — 다음 시작은 YAML 기본값'
 
+    def saved_collision_enabled(self) -> bool | None:
+        val = self.runtime_params().get('collision_monitor', {}).get('enabled')
+        return val if isinstance(val, bool) else None
+
+    def set_collision_enabled(self, enabled: bool) -> tuple[bool, str]:
+        data = self.runtime_params()
+        data.setdefault('collision_monitor', {})['enabled'] = bool(enabled)
+        try:
+            self._save_runtime_params(data)
+        except OSError as exc:
+            return False, f'충돌감시 값 저장 실패: {exc}'
+        return True, (f'충돌감시 런타임 값 저장: enabled={str(bool(enabled)).lower()} — '
+                      f'다음 Nav/노드 재시작에 적용')
+
     def set_fallback(self, name: str, progress=None) -> tuple[bool, str]:
         """RL 바이패스 controller를 설정 파일에 저장 → tb3_bringup 빌드 → Nav 재시작."""
         name = (name or '').strip().lower()
@@ -614,6 +628,22 @@ class RemoteProcs(Procs):
         script = f'{ROBOT_TOOL_DIR}/cli/op/runtime_state.py'
         rc, out = self._ssh(
             f'python3 {script} clear controller_server FollowPath.enable', 15)
+        return rc == 0, f'[{self.host}] {out}'
+
+    def saved_collision_enabled(self) -> bool | None:
+        rc, out = self._ssh(f'cat {ROBOT_TOOL_DIR}/.run/{self.RUNTIME_PARAMS} 2>/dev/null', 15)
+        if rc != 0 or not out.strip():
+            return None
+        try:
+            val = json.loads(out).get('collision_monitor', {}).get('enabled')
+            return val if isinstance(val, bool) else None
+        except (ValueError, AttributeError):
+            return None
+
+    def set_collision_enabled(self, enabled: bool) -> tuple[bool, str]:
+        script = f'{ROBOT_TOOL_DIR}/cli/op/runtime_state.py'
+        rc, out = self._ssh(
+            f'python3 {script} set collision_monitor enabled {str(bool(enabled)).lower()}', 15)
         return rc == 0, f'[{self.host}] {out}'
 
     def build(self, extra: list[str] | None = None, full: bool = False) -> int:

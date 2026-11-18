@@ -81,6 +81,13 @@ class OperatorTool(Node):
         if saved_enable is not None:
             self.state.rl_enabled = saved_enable
             self.state.rl_enabled_at = time.monotonic()
+        try:
+            saved_collision = self.procs.saved_collision_enabled()
+        except Exception:
+            saved_collision = None
+        if saved_collision is not None:
+            self.state.collision_enabled = saved_collision
+            self.state.collision_override = saved_collision
         # 화면 틀(Window) 신호 — ROS 폴링은 'tick', 이름으로 화면 열기는 'navigate'
         self.ui.window.connect('tick', self._on_tick)
         self.ui.window.connect('navigate', self._on_navigate)

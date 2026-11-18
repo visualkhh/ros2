@@ -58,7 +58,10 @@ class Bus:
 
     # ------------------------------------------------------- 충돌 감시 (collision_monitor)
     def poll_collision_enabled(self) -> bool | None:
-        """collision_monitor enabled 파라미터를 짧게 읽어 캐시 — TUI가 5초마다 부른다."""
+        """collision_monitor on/off — 토글 결과가 있으면 그걸 유지, 없으면 enabled 파라미터."""
+        if self.state.collision_override is not None:
+            self.state.collision_enabled = self.state.collision_override
+            return self.state.collision_enabled
         target = self.param_target('collision_monitor')
         if target is None:
             self.state.collision_enabled = None
@@ -76,30 +79,38 @@ class Bus:
         return self.state.collision_enabled
 
     def collision_status_text(self) -> str:
+        if not (self.procs.running('nav') or self.procs.running('explore')):
+            return 'Nav/explore 꺼짐 — collision_monitor 미실행'
         on = self.state.collision_enabled
         if on is None:
-            if not (self.procs.running('nav') or self.procs.running('explore')):
-                return 'Nav/explore 꺼짐 — collision_monitor 미실행'
             return '-'
         base = '켬' if on else '끔'
         action = self.state.collision_action()
         return base + (f' · {action}' if action else '')
 
     def set_collision(self, want: bool) -> tuple[bool, str]:
-        """collision_monitor 켜기/끄기 — /collision_monitor/toggle (nav2_msgs/srv/Toggle)."""
+        """collision_monitor 켜기/끄기 — /collision_monitor/toggle (nav2_msgs/srv/Toggle).
+
+        enabled 파라미터는 configure 값이라 토글해도 안 바뀐다 — 서비스 응답을 믿고
+        런타임 override로 저장한다 (다음 Nav 시작에도 유지).
+        """
         svc = next((n for n, _t, _c in self.node_services('collision_monitor')
                     if n.endswith('/toggle')), '/collision_monitor/toggle')
         ok, result = self.call_service(svc, 'nav2_msgs/srv/Toggle', {'enable': bool(want)})
         if not ok:
             return False, str(result)
+        if isinstance(result, dict) and result.get('success') is False:
+            return False, str(result.get('message') or result)
         self.state.collision_enabled = bool(want)
-        end = time.monotonic() + 1.5
-        while time.monotonic() < end:   # 서비스 응답 뒤 파라미터가 실제로 바뀌었는지 짧게 확인
-            self._poll(0.1)
-            if self.poll_collision_enabled() == want:
-                break
+        self.state.collision_override = bool(want)
         msg = result.get('message') if isinstance(result, dict) else ''
-        return True, f'{"켬" if want else "끔"}' + (f' — {msg}' if msg else '')
+        save = getattr(self.procs, 'set_collision_enabled', None)
+        saved = ''
+        if save is not None:
+            ok2, msg2 = save(want)
+            print(('저장: ' if ok2 else '저장 실패: ') + msg2)
+            saved = ' · 다음 Nav 시작에도 유지' if ok2 else ''
+        return True, f'{"켬" if want else "끔"}' + (f' — {msg}' if msg else '') + saved
 
     def cmd_collision(self, args) -> int:
         """collision_monitor 켜기/끄기/상태 — run-cli collision on|off|status."""
@@ -281,6 +292,7 @@ class Bus:
         print(msg)
         if ok and name in ('nav', 'explore') and not model_path and IS_ROBOT:
             self.apply_saved_enable()   # 저장된 토글 값이 있을 때만 (첫 시작은 YAML 기본값)
+            self.apply_saved_collision()
         if ok and name == 'nav' and IS_ROBOT:   # 원격은 로봇 CLI가 이미 안내를 출력한다
             if model_path:
                 print(self.term.paint(f'RL 모델: {model_path} (enable=true)', DIM))
@@ -292,6 +304,7 @@ class Bus:
         ok, msg = self.procs.restart(name)
         if ok and name in ('nav', 'explore') and IS_ROBOT:
             self.apply_saved_enable()
+            self.apply_saved_collision()
         return ok, msg
 
     def switch_map(self, map_yaml: str) -> int:
@@ -416,6 +429,7 @@ class Bus:
         print(msg)
         if ok and IS_ROBOT:
             self.apply_saved_enable()
+            self.apply_saved_collision()
         return 0 if ok else 1
 
     # ------------------------------------------------------------- 지도
@@ -1282,6 +1296,7 @@ class Bus:
         ok, msg = self.procs.set_fallback(name, progress=lambda text: self.ui.progress(text))
         if ok and self.procs.running('nav') and IS_ROBOT:
             self.apply_saved_enable()
+            self.apply_saved_collision()
         return ok, msg
 
     def cmd_fallback(self, args) -> int:
@@ -1338,6 +1353,43 @@ class Bus:
             self.state.rl_enabled = bool(saved)
             self.state.rl_enabled_at = time.monotonic()
             print(f'런타임 값 적용: FollowPath.enable={str(bool(saved)).lower()}')
+            return True
+        finally:
+            try:
+                self.node.destroy_client(cli)
+            except Exception:
+                pass
+
+    def apply_saved_collision(self, timeout: float = 30.0) -> bool:
+        """저장된 collision_monitor.enabled를 새 Nav에 적용 — Nav/노드 재시작용."""
+        saved = self.procs.saved_collision_enabled()
+        if saved is None:
+            return True
+        try:
+            from nav2_msgs.srv import Toggle
+            cli = self.node.create_client(Toggle, '/collision_monitor/toggle')
+        except Exception as exc:
+            print(self.term.paint(f'충돌감시 저장값 적용 실패: {exc}', YELLOW))
+            return False
+        try:
+            end = time.monotonic() + timeout
+            while time.monotonic() < end:
+                self.ui.progress(f'저장된 충돌감시 enabled={str(saved).lower()} 적용 대기… '
+                                 f'{max(0, end - time.monotonic()):.0f}s')
+                if cli.wait_for_service(timeout_sec=0.5):
+                    break
+            else:
+                print(self.term.paint('저장된 충돌감시 값 적용 보류 — toggle 서비스 없음', YELLOW))
+                return False
+            req = Toggle.Request()
+            req.enable = bool(saved)
+            res = self.param_wait(cli.call_async(req), timeout=5.0)
+            if res is None or not getattr(res, 'success', False):
+                print(self.term.paint('저장된 충돌감시 값 적용 실패 — toggle 응답 없음', YELLOW))
+                return False
+            self.state.collision_enabled = bool(saved)
+            self.state.collision_override = bool(saved)
+            print(f'런타임 값 적용: collision_monitor enabled={str(bool(saved)).lower()}')
             return True
         finally:
             try:
