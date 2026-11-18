@@ -64,7 +64,7 @@ class MapView(View):
 
     focusable = True
     hints = ('↑↓←→ 지도 이동 · +/- 확대·축소 · f 전체 · r 로봇 따라가기 · '
-             'm M · o O · v 예상경로 · p Nav2경로 · c costmap · [ ] 방향 15° · { } 1° · Enter 찍기')
+             'm M · o O · v 예상경로 · p Nav2경로 · c costmap · s 안전 · [ ] 방향 15° · { } 1° · Enter 찍기')
 
     def __init__(self, grid: MapGrid, color: bool = True, extra_key=None):
         self.grid, self.color = grid, color

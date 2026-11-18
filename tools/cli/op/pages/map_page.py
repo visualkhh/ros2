@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ..defs import BACK, MAIN, QUIT, STAY
 from ..dialog import fmt_pose
-from ..terminal import DIM
+from ..terminal import DIM, YELLOW
 from ..menus import ActionItem, Menu
 from ..views.map import FREE, OCC, UNKNOWN, CostGrid, MapGrid, MapView
 from ..views.map.map_view import LOCAL_PLAN_RGB, PLAN_RGB
@@ -54,6 +54,7 @@ class MapPage(Menu):
         self._fitted = False
         self.show_map = False        # m — map 원점 M
         self.show_odom = False       # o — odom 원점 O
+        self.snap = True             # s — 벽/costmap 피해서 가까운 빈 칸으로
         self.plan_on = False         # p — Nav2 /plan · /local_plan 겹침
         self.cost_mode = 0           # c — 0 OFF · 1 global · 2 local
         self._preview = None         # v — planner 예상 경로
@@ -68,12 +69,20 @@ class MapPage(Menu):
         x, y = self.view.center
         if self.mode == 'view':
             self.msg = '보기 전용 — 목표·초기위치는 Nav(4) 또는 지도/위치(6)에서'
+        elif self.mode == 'nav':
+            note = ''
+            if self.snap:
+                sx, sy, moved = self._safe_point(x, y)
+                if moved:
+                    x, y, note = sx, sy, ' (costmap/벽 피해서 이동)'
+            if self.view.grid.code(self.view.vp.k, x, y) == OCC:
+                self.msg = '벽 위에는 못 찍음 — 십자선을 옮기세요'
+                return
+            self.goals.append({'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(self.yaw, 1)})
+            self.msg = (f'웨이포인트 {len(self.goals)}개 추가 {fmt_pose(self.goals[-1])}{note}'
+                        ' — g 주행 · i 초기위치 · x 취소')
         elif self.view.grid.code(self.view.vp.k, x, y) == OCC:
             self.msg = '벽 위에는 못 찍음 — 십자선을 옮기세요'
-        elif self.mode == 'nav':
-            self.goals.append({'x': round(x, 3), 'y': round(y, 3), 'yaw_deg': round(self.yaw, 1)})
-            self.msg = (f'웨이포인트 {len(self.goals)}개 추가 {fmt_pose(self.goals[-1])}'
-                        ' — g 주행 · i 초기위치 · x 취소')
         else:
             self._send_pose(x, y)
 
@@ -143,8 +152,15 @@ class MapPage(Menu):
             self.msg = '웨이포인트 없음 — Enter로 먼저 찍으세요'
             return
         body = [f'{i}) {fmt_pose(g)}' for i, g in enumerate(self.goals, 1)]
+        bad = [f'{i}) {fmt_pose(g)}' for i, g in enumerate(self.goals, 1)
+               if self._cost_code(g['x'], g['y']) >= 1 or
+               self.view.grid.code(self.view.vp.k, g['x'], g['y']) == OCC]
+        if bad:
+            body.append(self.term.paint('WARN: costmap/벽 위 웨이포인트 — planner가 거부할 수 있음', YELLOW))
+            body += bad
         how = '한 점씩' if len(self.goals) == 1 else 'NavigateThroughPoses 한 번에'
-        if not self.ui.confirm(f'웨이포인트 {len(self.goals)}개를 {how} 보낼까요?', default=True, body=body):
+        if not self.ui.confirm(f'웨이포인트 {len(self.goals)}개를 {how} 보낼까요?',
+                               default=not bad, body=body):
             self.msg = '전송 취소'
             return
         try:
@@ -271,6 +287,43 @@ class MapPage(Menu):
             grid.set_parent(odom[0][0], odom[0][1], math.radians(odom[1]))
         return grid
 
+    def _cost_code(self, x: float, y: float) -> int:
+        """그 점의 costmap 위험도 (0 자유, 1 팽창, 2 치명/내접) — global/local 중 큰 값."""
+        worst = 0
+        for kind in ('global', 'local'):
+            grid = self._cost.get(kind)
+            if grid is None:
+                continue
+            if grid.frame_id not in ('', 'map'):
+                odom = self._odom_origin()
+                if odom is None:
+                    continue
+                grid.set_parent(odom[0][0], odom[0][1], math.radians(odom[1]))
+            worst = max(worst, grid.code(x, y))
+        return worst
+
+    def _safe_point(self, x: float, y: float) -> tuple[float, float, bool]:
+        """s — 찍은 점이 벽/costmap 팽창·치명이면 가장 가까운 안전한 빈 칸으로."""
+        def safe(px, py):
+            return (self.view.grid.code(self.view.vp.k, px, py) == FREE
+                    and self._cost_code(px, py) == 0)
+        if safe(x, y):
+            return x, y, False
+        step = max(0.05, self.view.grid.res)
+        for r in range(1, 31):
+            radius = r * step
+            for i in range(16):
+                a = 2.0 * math.pi * i / 16.0
+                px, py = x + radius * math.cos(a), y + radius * math.sin(a)
+                if safe(px, py):
+                    return px, py, True
+        return x, y, False
+
+    def toggle_snap(self) -> None:
+        self.snap = not self.snap
+        self.msg = ('웨이포인트 안전 스냅 ● 켜짐 — 벽/costmap 팽창을 피해 가장 가까운 빈 칸으로'
+                    if self.snap else '웨이포인트 안전 스냅 ○ 꺼짐 — 찍은 자리 그대로')
+
     def preview_path(self) -> None:
         """v — 찍어 둔 웨이포인트로 planner에 경로만 계산 (로봇은 움직이지 않음)."""
         if not self.goals:
@@ -343,6 +396,8 @@ class MapPage(Menu):
             self.toggle_plan()
         elif k in ('c', 'C'):
             self.toggle_cost()
+        elif k in ('s', 'S') and self.mode == 'nav':
+            self.toggle_snap()
         elif k in ('m', 'M'):
             self.toggle_map_origin()
         elif k in ('o', 'O'):
@@ -364,7 +419,8 @@ class MapPage(Menu):
                     ('로봇 초기 위치 지정 — 십자선 (i)', self.set_initial_pose_here),
                     ('Nav2 주행 취소 (x)', self.cancel_nav),
                     ('예상 경로 미리보기 — 계산만 (v)', self.preview_path),
-                    ('예상 경로 지우기 (V)', self.clear_preview)],
+                    ('예상 경로 지우기 (V)', self.clear_preview),
+                    (lambda: f'웨이포인트 안전 스냅 (s) — {"●" if self.snap else "○"}', self.toggle_snap)],
             'pose': [('로봇 위치로 지정 — 십자선 위치 (Enter)', self.pick)],
             'view': [],
         }[self.mode]
@@ -491,6 +547,8 @@ class MapPage(Menu):
             return STAY
         self.view = MapView(grid, self.term.color, extra_key=self._extra_key)
         self._plans = {'plan': None, 'local_plan': None}
+        self._cost = {'global': None, 'local': None}
+        self._cost_at = {'global': 0.0, 'local': 0.0}
         subs = []
         try:
             from nav_msgs.msg import Path
