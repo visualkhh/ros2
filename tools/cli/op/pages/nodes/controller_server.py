@@ -218,7 +218,7 @@ class ControllerServerFeature(NodeFeature):
             return []
 
         def enabled_now() -> bool | None:
-            """현재 FollowPath.enable — 최근 toggle 결과 → status → 파라미터 순서."""
+            """현재 FollowPath.enable — 최근 toggle 결과 → status → 캐시된 설정 파라미터 순서."""
             if (bus.state.rl_enabled is not None
                     and time.monotonic() - bus.state.rl_enabled_at <= 10.0):
                 return bus.state.rl_enabled
@@ -226,6 +226,12 @@ class ControllerServerFeature(NodeFeature):
             age = time.monotonic() - bus.state.rl_status_time if st else None
             if st and age is not None and age <= 2.0 and len(st) > 3:
                 return st[3] >= 0.5
+            # 오른쪽 상태줄과 같은 캐시(_config)를 먼저 쓴다 — dialog마다 param 서비스가
+            # 늦게 응답해 '?'가 뜨던 문제 방지
+            cfg = self._config(bus)
+            val = cfg.get('FollowPath.enable')
+            if val is not None:
+                return bool(val)
             target_node = bus.param_target('controller_server')
             if target_node is not None:
                 cli = bus.param_client(*target_node)
