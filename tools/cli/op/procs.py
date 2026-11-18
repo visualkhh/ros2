@@ -254,7 +254,7 @@ class Procs:
         return True, '\n'.join(msgs)
 
     # ------------------------------------------------------------ fallback controller
-    FALLBACKS = ('mppi', 'dwb')   # inner 프리셋이 있는 것만
+    FALLBACKS = ('mppi', 'dwb', 'rotation_shim')   # inner 프리셋이 있는 것만
 
     @staticmethod
     def nav_params_source() -> Path:

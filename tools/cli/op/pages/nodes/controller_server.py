@@ -28,6 +28,7 @@ REASONS = {
     4: '추론 실패',
 }
 INNER = {1: 'DWB', 2: 'MPPI', 3: 'RPP', 4: 'RotationShim'}
+FALLBACK_KIND = {'dwb': 1, 'mppi': 2, 'rpp': 3, 'rotation_shim': 4}
 
 SERVICE_HINTS = {
     '/controller_server/FollowPath/toggle': {
@@ -290,11 +291,12 @@ class ControllerServerFeature(NodeFeature):
             return '?'
 
         def change_fallback():
-            names = {'1': 'mppi', '2': 'dwb'}
+            names = {'1': 'mppi', '2': 'dwb', '3': 'rotation_shim'}
             cur = fallback_now()
             choice = app.ui.select(
                 'RL 바이패스 controller',
-                [('1', 'mppi (기본 · 부드러운 주행)'), ('2', 'dwb (가볍고 단순)')],
+                [('1', 'mppi (기본 · 부드러운 주행)'), ('2', 'dwb (가볍고 단순)'),
+                 ('3', 'rotation_shim + RPP (경로 방향 제자리 회전)')],
                 [f'현재: {cur}', 'Nav를 재시작해야 적용됩니다 (주행 중이면 멈춤)',
                  '설정 파일 + inner 프리셋 저장 → tb3_bringup 빌드 → nav restart'])
             if choice not in names:
@@ -335,7 +337,7 @@ class ControllerServerFeature(NodeFeature):
             GoMenu(app, 'a', '서비스 목록 · 호출 (테스트)',
                    ServiceMenu(app, name, self.services(bus, name))),
             toggle_item,
-            ActionItem(app, 'c', '바이패스 controller 변경 (MPPI/DWB) — Nav 재시작', change_fallback),
+            ActionItem(app, 'c', '바이패스 controller 변경 (MPPI/DWB/RotationShim) — Nav 재시작', change_fallback),
             ActionItem(app, 'd', '저장된 FollowPath.enable 지우기 (다음 시작 기본값)', clear_saved),
         ]
 
@@ -354,7 +356,7 @@ class ControllerServerFeature(NodeFeature):
         stat = bus.state.rl_status
         age = time.monotonic() - bus.state.rl_status_time if stat else None
         fresh = bool(stat) and age is not None and age <= 1.0
-        inner = INNER.get(2 if fallback == 'mppi' else 1, fallback)
+        inner = INNER.get(FALLBACK_KIND.get(fallback, 0), fallback)
         if summary:
             now = 'RL' if fresh and stat[0] >= 0.5 else inner
             return [f' {now} · fallback={fallback} · toggle={onoff}']
