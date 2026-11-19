@@ -43,7 +43,7 @@
         angular_disengage_threshold: 0.10  # 5.7° 아래로 들어오면 primary로 핸드오프
         rotate_to_heading_angular_vel: 1.0
         max_angular_accel: 3.2
-        max_cost_threshold: 254            # Nav2 기본 = LETHAL_OBSTACLE
+        max_cost_threshold: 254.0          # Nav2 기본 = LETHAL_OBSTACLE (double — 정수 254면 configure 실패: "is of type {double}, setting it to {integer}")
         simulate_ahead_time: 1.0
         control_duration: 0.05             # controller_frequency 20Hz
         rotate_to_goal_heading: false
