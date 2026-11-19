@@ -2,7 +2,7 @@
 """SLAM 조밀도 설정 시험 — ROS 없이: python3 tools/cli/tests/test_slam_density.py
 
 확인: ① 맵 해상도(launch resolution)와 Cartographer 서브맵 격자 해상도가 같은 값 (다르면 /map이 서브맵을 다시 그려 뭉개짐)
-② 이동·회전 필터와 점 필터가 Cartographer 기본값(0.2 m · 1° · 0.025 m)보다 촘촘 ③ 맵 해상도가 기본 0.05보다 작음
+② 이동·회전 필터와 점 필터가 Cartographer 기본값(0.2 m · 1° · 0.025 m)보다 촘촘 ③ 맵 해상도가 기본 0.05보다 작음 ④ /map 노드에 해상도·주기가 -플래그로 전달됨(파라미터로는 무시됨)
 """
 import re
 from pathlib import Path
@@ -27,4 +27,8 @@ assert res_launch < 0.05                                                        
 assert lua_num('TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters') < 0.2         # ②
 assert lua_num('TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians') < 1.0
 assert lua_num('TRAJECTORY_BUILDER_2D.voxel_filter_size') < 0.025
+# ④ /map을 그리는 occupancy_grid_node는 resolution · publish_period_sec를 gflags(명령줄)로만 받는다 — parameters로 주면 무시됨
+node = launch[launch.index("executable='cartographer_occupancy_grid_node'"):]
+assert "'-resolution', LaunchConfiguration('resolution')" in node and "'-publish_period_sec'" in node
+assert "{'resolution'" not in node and "{'publish_period_sec'" not in node
 print('PASS test_slam_density')
