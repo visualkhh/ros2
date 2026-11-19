@@ -109,5 +109,18 @@ cv.robot, cv.robot_yaw = (-0.6, -0.4), 180.0
 assert len(braille_cells(cv)) > len(base), '로봇 진행 방향 화살표'
 cv.show_frames = False
 assert not braille_cells(cv), 'show_frames 가 꺼지면 방향 화살표도 없음'
+
+# 전역 경로(/plan) 사이사이 점 'o' — 1 m마다 · 지역 경로(/local_plan)엔 없음 · 로봇/goal 칸은 덮지 않음
+from op.views.map.map_view import LOCAL_PLAN_RGB, PLAN_RGB  # noqa: E402
+big = MapGrid(40, 40, 0.1, -2.0, -2.0, [0] * 1600)
+pv = MapView(big, color=False)
+pv.vp.fit(60, 20)
+pts = [(-1.5 + 0.1 * i, 0.0) for i in range(31)]   # 3 m
+pv.plans = [(pts, PLAN_RGB)]
+assert ''.join(pv.render(60, 10)).count('o') >= 2, '전역 경로에 o 표시'
+pv.plans = [(pts, LOCAL_PLAN_RGB)]
+assert 'o' not in ''.join(pv.render(60, 10)), '지역 경로엔 o 없음'
+pv.plans = []
+assert 'o' not in ''.join(pv.render(60, 10))
 print('PASS test_map_view')
 

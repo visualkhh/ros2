@@ -16,6 +16,7 @@ MAP_RGB, ODOM_RGB = (90, 220, 255), (255, 150, 40)   # map 원점 M · odom 원�
 SCAN_RGB = (255, 70, 55)   # /scan 라이다 점 — RViz LaserScan처럼
 PATH_RGB, ROBOT_RGB, GOAL_RGB, START_RGB, CURSOR_RGB = (240, 190, 40), (235, 60, 60), (60, 200, 90), (70, 150, 255), (255, 80, 220)
 PREVIEW_RGB, PLAN_RGB, LOCAL_PLAN_RGB = (0, 200, 120), (20, 90, 255), (170, 0, 255)
+WAYPOINT_RGB = (255, 110, 0)   # 전역 경로 사이사이 점 'o'
 COST_INFLATED, COST_LETHAL = (125, 85, 25), (175, 35, 35)   # costmap 팽창 / 내접·치명
 BRAILLE = {(0, 0): 0x01, (0, 1): 0x02, (0, 2): 0x04, (1, 0): 0x08, (1, 1): 0x10, (1, 2): 0x20, (0, 3): 0x40, (1, 3): 0x80}
 YAW_LEN, YAW_GAP, HEAD_LEN = 16, 3, 5   # 방향선 길이 · 십자선에서 비우는 거리 · 화살표 머리 길이 (점 단위 — 점자 한 글자 = 2×4점)
@@ -230,6 +231,20 @@ class MapView(View):
             mark((0.0, 0.0), 'M', MAP_RGB)
         if self.show_odom and self.odom:
             mark(self.odom, 'O', ODOM_RGB)
+
+        # 전역 경로(/plan) 사이사이 점 'o' — 1 m마다 (줄여 보면 점이 겹치지 않게 간격을 넓힘). 다른 글자(S·번호·M·O·●)가 있는 칸은 건너뜀
+        for pl, rgb in self.plans:
+            if rgb == PLAN_RGB and len(pl) > 2:
+                step = max(1.0, 6 * vp.scale)
+                run, nxt = 0.0, step
+                for a, b in zip(pl, pl[1:-1]):
+                    run += math.hypot(b[0] - a[0], b[1] - a[1])
+                    if run >= nxt:
+                        c, r = scr(b)
+                        cell = (c, r // 2)
+                        if 0 <= c < cols and 0 <= r < sub and cell != cur and cell not in labels:
+                            labels[cell] = ('o', WAYPOINT_RGB)
+                        nxt += step
 
         # M·O·로봇 방향 화살표 — 점자 점으로 가늘게. 글자(M·O·●)가 있는 칸은 글자가 우선.
         rays: dict[tuple[int, int], tuple[int, tuple]] = {}
