@@ -157,10 +157,10 @@ controller_server:
       # LiDAR 인플레이션 [m] — 사용자 입력. costmap과 단위는 m, 값은 별개 (로컬 LiDAR 안전 여유).
       #   scan_rays: r - lidar_inflation → 정책 obs 52번째 = lidar_inflation / inflation_scale
       #   lidar_inflation = 사용자가 바꾸는 값 · inflation_scale = 관측 정규화 상수(사용자 값 아님)
-      #   학습 범위(0.20~0.24) 안이면 어느 값이든 정책이 대응. 런타임 변경:
-      #   ros2 param set /controller_server FollowPath.lidar_inflation 0.24
-      #   학습 범위(0.20~0.24)의 최소 — 가장 좁게.
-      lidar_inflation: 0.20
+      #   학습 범위(0.01~0.05 — 2026-11-19 nodyn1k 정책부터) 안이면 어느 값이든 정책이 대응. 런타임 변경:
+      #   ros2 param set /controller_server FollowPath.lidar_inflation 0.05
+      #   (옛 정책 beta1000은 0.20~0.24로 학습했음 — 그 정책으로 되돌리면 0.20으로. 백업: pak ~/policies_backup/beta1000_20261119)
+      lidar_inflation: 0.03
       inflation_scale: 0.50        # 정규화 상수 (사용자 값 아님) — 학습/추론 동일해야 함
       # OpenCR IMU gyro z가 정지 중에도 ±1.4 rad/s로 튐 (2026-11-18 bag 확인) → 정책 관측 w_gyro를
       # 오염시켜 좌우로 흔든다. 발견 즉시 odom angular velocity로 대체 (구독 안 함).
