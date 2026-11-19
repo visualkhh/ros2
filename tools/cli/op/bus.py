@@ -56,6 +56,32 @@ class Bus:
     def _poll(self, seconds: float = 0.2):
         self.node.poll(seconds)
 
+    def wait_until(self, cond, timeout: float, what: str = '', every: float = 0.2) -> bool:
+        """cond()이 참이 될 때까지 ROS를 poll하며 기다린다 (시간이 다 되면 False). 기다리는 대상(what)은 처리 중 창에
+        'what … N/M초'로 보이고 (명령줄에서는 5초 넘게 걸릴 때만 5초마다 한 줄). what이 비면 아무것도 안 보임 (안쪽 대기용).
+        ROS를 기다리는 곳은 직접 루프를 쓰지 말고 이걸 쓴다 — 문구·갱신 주기·명령줄 동작이 한 곳에서 정해진다."""
+        start, next_note = time.monotonic(), 5.0
+        while True:
+            if cond():
+                return True
+            elapsed = time.monotonic() - start
+            if elapsed >= timeout:
+                return False
+            if what:
+                note = f'{what} … {elapsed:.0f}/{timeout:.0f}초'
+                self.ui.progress(note)
+                if elapsed >= next_note and getattr(self.ui, '_busy', None) is None:
+                    print('  ' + note, flush=True)
+                    next_note += 5.0
+            self._poll(every)
+
+    def wait_future(self, fut, timeout: float, what: str = '') -> bool:
+        return self.wait_until(fut.done, timeout, what, every=0.1)
+
+    def wait_server(self, client, name: str, timeout: float = 5.0) -> bool:
+        """액션 서버가 보일 때까지."""
+        return self.wait_until(client.server_is_ready, timeout, f'{name} 서버 연결 대기')
+
     # ------------------------------------------------------- 충돌 감시 (collision_monitor)
     def poll_collision_enabled(self) -> bool | None:
         """collision_monitor on/off — 토글 결과가 있으면 그걸 유지, 없으면 enabled 파라미터."""
@@ -221,22 +247,11 @@ class Bus:
 
     def _wait_base(self, timeout: float = 40.0) -> bool:
         """base가 살아 있고 odom/scan이 실제로 흐를 때까지 — Nav bringup 실패 방지."""
-        start = time.monotonic()
-        end = start + timeout
-        next_note = 0.0
-        while time.monotonic() < end:
-            self._poll(0.2)
-            odom = self.state.odom.age()
-            scan = self.state.scan.age()
-            if odom is not None and scan is not None and odom < 3.0 and scan < 3.0:
-                return True
-            elapsed = time.monotonic() - start
-            if elapsed >= next_note:
-                note = f'베이스 odom/scan 대기 … {elapsed:.0f}/{timeout:.0f}초 (처음엔 10~30초 걸릴 수 있음)'
-                self.ui.progress(note)
-                if getattr(self.ui, '_busy', None) is None:
-                    print('  ' + note, flush=True)
-                next_note += 5.0
+        def flowing() -> bool:
+            odom, scan = self.state.odom.age(), self.state.scan.age()
+            return odom is not None and scan is not None and odom < 3.0 and scan < 3.0
+        if self.wait_until(flowing, timeout, '베이스 odom/scan 대기 (처음엔 10~30초)'):
+            return True
         print(self.term.paint(
             f'베이스 odom/scan 수신 대기 시간 초과 ({timeout:.0f}초) — 로그: {self.procs.logfile("base")}', RED))
         return False
@@ -491,10 +506,8 @@ class Bus:
             ok, msg = self.procs.save_map(name)
             print(msg)
             return self.after_map_save(name, ok, switch=not getattr(args, 'no_switch', False))
-        end = time.monotonic() + 5.0   # 막 켠 프로세스(원격 저장)는 latched /map을 받기까지 몇 초
-        while self.state.map.age() is None and time.monotonic() < end:
-            self._poll(0.2)
-        if self.state.map.age() is None:
+        # 막 켠 프로세스(원격 저장)는 latched /map을 받기까지 몇 초
+        if not self.wait_until(lambda: self.state.map.age() is not None, 5.0, '/map 수신 대기'):
             print(self.term.paint('/map 수신 없음 — SLAM이 지도를 내고 있지 않습니다 (라이다 /scan이 있어야 지도가 생김)', RED))
             return 1
         if not self.procs.running('slam'):
@@ -510,15 +523,11 @@ class Bus:
         if not self.wait_subscriber(pub, 'cmd_manager 없음 — 베이스(tb-only)가 떠 있는지 확인', 5.0):
             return False
         pub.publish(typ(data=value))
-        end = time.monotonic() + 3.0
-        while getattr(self.state, f'st_{key}') != value and time.monotonic() < end:
-            self._poll(0.1)
-        return getattr(self.state, f'st_{key}') == value
+        return self.wait_until(lambda: getattr(self.state, f'st_{key}') == value, 3.0, f'/state_{key} 반영 대기', 0.1)
 
     def _wait_state(self) -> None:
-        end = time.monotonic() + 2.0  # 새로 켠 CLI는 latched /state_control를 받기 전 — 잠깐 기다림
-        while self.state.st_control is None and time.monotonic() < end:
-            self._poll(0.1)
+        # 새로 켠 CLI는 latched /state_control를 받기 전 — 잠깐 기다림
+        self.wait_until(lambda: self.state.st_control is not None, 2.0, '/state_control 수신 대기', 0.1)
 
     def ensure_manual(self) -> bool:
         """수동 주행 전: MANUAL이 아니면 바꿀지 묻는다 (수동 명령은 MANUAL에서만 바퀴로 감). False = 취소."""
@@ -626,10 +635,7 @@ class Bus:
     # ------------------------------------------------------------- 주행
     def wait_subscriber(self, pub, missing: str, timeout: float = 10.0) -> bool:
         """방금 만든 발행자는 상대와 연결(discovery)되기 전 — 구독자가 생길 때까지 기다림. 없으면 missing 출력."""
-        end = time.monotonic() + timeout
-        while pub.get_subscription_count() == 0 and time.monotonic() < end:
-            self._poll(0.2)
-        if pub.get_subscription_count() == 0:
+        if not self.wait_until(lambda: pub.get_subscription_count() > 0, timeout, '구독자 연결 대기'):
             print(self.term.paint(missing, RED))
             return False
         return True
@@ -697,10 +703,7 @@ class Bus:
         for _ in range(3):
             self._init_pub.publish(msg)
             self._poll(0.3)
-        end = time.monotonic() + 3.0
-        while time.monotonic() < end and self.state.amcl_rate.age() in (None, before):
-            self._poll(0.1)
-        got = self.state.amcl_rate.age() not in (None, before)
+        got = self.wait_until(lambda: self.state.amcl_rate.age() not in (None, before), 3.0, 'amcl 반영 대기', 0.1)
         print(f'초기 위치 발행: x={x:.2f} y={y:.2f} θ={yaw_deg:.0f}° (/initialpose) → '
               + ('amcl 반영: ' + self.state.amcl_txt() if got else
                  self.term.paint('amcl 응답 없음 — 아직 기동 중이면 잠시 후 다시', YELLOW)))
@@ -713,19 +716,14 @@ class Bus:
         """Nav2 lifecycle_manager가 노드를 다 활성화했나 — action 서버가 '있기만' 하면 목표를 REJECTED함."""
         from std_srvs.srv import Trigger
         cli = self.node.create_client(Trigger, '/lifecycle_manager_navigation/is_active')
-        start = time.monotonic()
+        def active() -> bool:
+            if not cli.service_is_ready():
+                return False
+            fut = cli.call_async(Trigger.Request())
+            self.wait_future(fut, 2.0)
+            return fut.done() and fut.result() is not None and fut.result().success
         try:
-            while time.monotonic() - start < timeout:
-                self.ui.progress(f'Nav2 켜지는 중 … {time.monotonic() - start:.0f}/{timeout:.0f}초 (Pi에서 보통 20~40초)')
-                if cli.service_is_ready():
-                    fut = cli.call_async(Trigger.Request())
-                    end = time.monotonic() + 2.0
-                    while not fut.done() and time.monotonic() < end:
-                        self._poll(0.1)
-                    if fut.done() and fut.result() is not None and fut.result().success:
-                        return True
-                self._poll(0.5)
-            return False
+            return self.wait_until(active, timeout, 'Nav2 켜지는 중 (Pi에서 보통 20~40초)', every=0.5)
         finally:
             self.node.destroy_client(cli)
 
@@ -755,10 +753,7 @@ class Bus:
         """Nav2 목표 한 점. stop_keys=True면 기다리는 동안 s(이 구간 중지)=STOP_LEG · q(전체 중단)=STOP_ALL을 돌려준다 (목표는 취소)."""
         from nav2_msgs.action import NavigateToPose
         client = self._client()
-        end = time.monotonic() + 5.0
-        while not client.server_is_ready() and time.monotonic() < end:
-            self._poll(0.2)
-        if not client.server_is_ready():
+        if not self.wait_server(client, 'navigate_to_pose'):
             print(self.term.paint('navigate_to_pose 서버 없음 — Nav 또는 SLAM 중 Nav를 먼저 켜세요', RED))
             return 1
         self.ensure_nav()
@@ -777,10 +772,7 @@ class Bus:
 
         self._poll(0.5)  # 서버가 보여도 goal 서비스 연결이 덜 됐을 수 있다 — 첫 요청이 사라지지 않게
         fut = client.send_goal_async(goal, feedback_callback=on_feedback)
-        end = time.monotonic() + 10.0
-        while not fut.done() and time.monotonic() < end:
-            self._poll(0.1)
-        if not fut.done():
+        if not self.wait_future(fut, 10.0, 'Nav2 목표 응답 대기'):
             print(self.term.paint('목표 응답 없음 (10초) — Nav 로그 확인: ./run-cli nav log', RED))
             return 1
         handle = fut.result()
@@ -846,10 +838,7 @@ class Bus:
                 self._path_through_client = ActionClient(
                     self.node, ComputePathThroughPoses, '/compute_path_through_poses')
             cli = self._path_through_client
-            end = time.monotonic() + 5.0
-            while not cli.server_is_ready() and time.monotonic() < end:
-                self._poll(0.2)
-            if not cli.server_is_ready():
+            if not self.wait_server(cli, '/compute_path_through_poses'):
                 raise RuntimeError('/compute_path_through_poses 서버 없음 — planner_server 확인')
             goal = ComputePathThroughPoses.Goal()
             goal.goals.header.frame_id = frame_id
@@ -860,10 +849,7 @@ class Bus:
             if self._path_client is None:
                 self._path_client = ActionClient(self.node, ComputePathToPose, '/compute_path_to_pose')
             cli = self._path_client
-            end = time.monotonic() + 5.0
-            while not cli.server_is_ready() and time.monotonic() < end:
-                self._poll(0.2)
-            if not cli.server_is_ready():
+            if not self.wait_server(cli, '/compute_path_to_pose'):
                 raise RuntimeError('/compute_path_to_pose 서버 없음 — planner_server 확인')
             goal = ComputePathToPose.Goal()
             goal.goal = ps(poses[0])
@@ -914,10 +900,7 @@ class Bus:
         if self._through_client is None:
             self._through_client = ActionClient(self.node, NavigateThroughPoses, '/navigate_through_poses')
         cli = self._through_client
-        end = time.monotonic() + 5.0
-        while not cli.server_is_ready() and time.monotonic() < end:
-            self._poll(0.2)
-        if not cli.server_is_ready():
+        if not self.wait_server(cli, '/navigate_through_poses'):
             print(self.term.paint('/navigate_through_poses 서버 없음 — Nav가 떠 있는지 확인', RED))
             return 1
         self.ensure_nav()
@@ -945,10 +928,7 @@ class Bus:
 
         self._poll(0.5)
         fut = cli.send_goal_async(goal, feedback_callback=on_feedback)
-        end = time.monotonic() + 10.0
-        while not fut.done() and time.monotonic() < end:
-            self._poll(0.1)
-        if not fut.done():
+        if not self.wait_future(fut, 10.0, 'Nav2 웨이포인트 응답 대기'):
             print(self.term.paint('웨이포인트 응답 없음 (10초) — Nav 로그 확인: ./run-cli nav log', RED))
             return 1
         handle = fut.result()
@@ -966,9 +946,7 @@ class Bus:
             print('취소할 목표 없음 (이 CLI에서 보낸 목표만 취소 가능 — RViz 목표는 RViz에서)')
             return 0
         fut = self._goal_handle.cancel_goal_async()
-        end = time.monotonic() + 3.0
-        while not fut.done() and time.monotonic() < end:
-            self._poll(0.1)
+        self.wait_future(fut, 3.0, '목표 취소 대기')
         self._goal_handle = None
         self.state.goal_status = '취소됨'
         self.send_velocity(0.0, 0.0)
@@ -1116,7 +1094,7 @@ class Bus:
             srv = get_service(type_name)
             cli = self.node.create_client(srv, name)
             try:
-                if not cli.wait_for_service(timeout_sec=2.0):
+                if not self.wait_until(cli.service_is_ready, 2.0, f'{name} 서버 대기'):
                     return False, f'서버 없음: {name}'
                 req = srv.Request()
                 set_message_fields(req, request or {})
@@ -1384,13 +1362,8 @@ class Bus:
             print(self.term.paint(f'저장값 적용 실패: {exc}', YELLOW))
             return False
         try:
-            end = time.monotonic() + timeout
-            while time.monotonic() < end:
-                self.ui.progress(f'저장된 FollowPath.enable={"true" if saved else "false"} '
-                                 f'적용 대기… {max(0, end - time.monotonic()):.0f}s')
-                if cli.wait_for_service(timeout_sec=0.5):
-                    break
-            else:
+            if not self.wait_until(cli.service_is_ready, timeout,
+                                   f'저장된 FollowPath.enable={"true" if saved else "false"} 적용 — toggle 서비스 대기'):
                 print(self.term.paint('저장된 FollowPath.enable 적용 보류 — toggle 서비스 없음', YELLOW))
                 return False
             req = SetBool.Request()
@@ -1421,13 +1394,8 @@ class Bus:
             print(self.term.paint(f'충돌감시 저장값 적용 실패: {exc}', YELLOW))
             return False
         try:
-            end = time.monotonic() + timeout
-            while time.monotonic() < end:
-                self.ui.progress(f'저장된 충돌감시 enabled={str(saved).lower()} 적용 대기… '
-                                 f'{max(0, end - time.monotonic()):.0f}s')
-                if cli.wait_for_service(timeout_sec=0.5):
-                    break
-            else:
+            if not self.wait_until(cli.service_is_ready, timeout,
+                                   f'저장된 충돌감시 enabled={str(saved).lower()} 적용 — toggle 서비스 대기'):
                 print(self.term.paint('저장된 충돌감시 값 적용 보류 — toggle 서비스 없음', YELLOW))
                 return False
             req = Toggle.Request()

@@ -684,10 +684,7 @@ class MapPage(Menu):
                          durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         sub = self.app.create_subscription(OccupancyGrid, '/map', inbox.append, qos)
         try:
-            end = time.monotonic() + timeout
-            while not inbox and time.monotonic() < end:
-                self.ui.progress(f'/map 기다리는 중 … {max(0, end - time.monotonic()):.0f}초')
-                self.app.poll(0.2)
+            self.bus.wait_until(lambda: bool(inbox), timeout, '/map 기다리는 중')
             return MapGrid.from_msg(inbox[-1]) if inbox else None
         finally:
             self.app.destroy_subscription(sub)
