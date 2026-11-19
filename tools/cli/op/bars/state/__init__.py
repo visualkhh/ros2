@@ -3,7 +3,7 @@
   State            state.py          칸 하나의 최상위 부모 (Component) — text() (빈 문자열 = 안 보임) · focusable · activate()
   StateBar         state_bar.py      State를 줄(row)로 받아 그림 · add()로 칸·줄 추가 · ←→ 포커스 칸 이동
   TopStateBar      top_state_bar.py  화면 맨 위 기본 구성 (아래 State들)
-  ProcState · OperationState · MapState · PoseState · EstopState · ConnectionState ·
+  ProcState · OperationState · LocalizationState · MapState · PoseState · EstopState · ConnectionState ·
   RateState(odom·스캔·지도) · GoalState · ControllerState(주행) · CollisionState(충돌감시) · DiagState ·
   RobotState(모터) · PowerState(전원)
 

@@ -14,6 +14,7 @@ from ..terminal import DIM, GREEN, YELLOW
 from ..menus import GoMenu, Menu, MenuItem
 from .collision import CollisionMenu
 from .drive import TeleopItem
+from .page import Page
 
 
 def _xyyaw(raw: str) -> str | None:
@@ -386,6 +387,31 @@ class ChangeMapItem(MenuItem):
         if not self.ui.confirm('Nav 지도를 바꿀까요?', body=body, default=False):
             return STAY
         return MapPickMenu(self.app, switch=True).show()
+
+
+class MapChangePage(Page):
+    """상단 '지도' 칸에서 Enter — 지도 바꾸기 (확인 → 지도 고르기 → Nav 재시작). 메뉴의 4) 지도 바꾸기와 같은 동작."""
+    title = '지도 바꾸기'
+
+    def show(self) -> str:
+        return ChangeMapItem(self.app, always=True).run()
+
+
+class LocalizationMenu(Menu):
+    """상단 '위치추정' 칸에서 Enter — 위치추정 방식 고르기: SLAM(지도를 만들며) · Nav(저장된 지도에서 AMCL)."""
+    title = '위치추정'
+
+    def items(self):
+        return [GoMenu(self.app, '1', 'SLAM 맵핑 — 지도를 만들며 위치추정', SlamMenu(self.app)),
+                GoMenu(self.app, '2', 'Nav — 저장된 지도에서 위치추정(AMCL)·주행', NavMenu(self.app))]
+
+    def center(self):
+        op = self.state.st_operation
+        now = {'SLAM': 'SLAM (MAPPING)', 'LOCALIZATION': 'Nav (LOCALIZATION)'}.get(op, '꺼짐/모름' if op is None else str(op))
+        return [f'[지금] {now}', ' 지도 이름: ' + (self.state.st_map or '-'), '',
+                ' 1) SLAM — 지도가 없거나 새로 만들 때 (로봇이 움직이며 지도 작성)',
+                ' 2) Nav — 저장된 지도 위에서 내 위치를 추정하며 목표로 주행 (초기 위치를 넣어야 함)', '',
+                ' 바꾸려면: 고른 화면에서 시작/중지 (SLAM과 Nav는 동시에 못 켬 — 켜면 다른 쪽이 꺼짐)']
 
 
 class NavMapItem(MenuItem):

@@ -8,7 +8,7 @@ from .controller_state import ControllerState
 from .diag_state import DiagState
 from .estop_state import EstopState
 from .goal_state import GoalState
-from .map_state import MapState
+from .map_state import LocalizationState, MapState
 from .operation_state import OperationState
 from .pose_state import PoseState
 from .power_state import PowerState
@@ -24,7 +24,7 @@ class TopStateBar(StateBar):
     def __init__(self, ui):
         super().__init__(ui, [
             [ProcState(ui, name, svc.label) for name, svc in SERVICES.items()],
-            [OperationState(ui), MapState(ui), PoseState(ui), EstopState(ui),
+            [OperationState(ui), LocalizationState(ui), MapState(ui), PoseState(ui), EstopState(ui),
              CollisionState(ui), ConnectionState(ui)],
             [RateState(ui, 'odom', 'odom'), RateState(ui, 'scan', '스캔'),
              GoalState(ui), ControllerState(ui), DiagState(ui)],
