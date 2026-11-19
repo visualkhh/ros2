@@ -1,9 +1,11 @@
 # OpenCR 2륜 펌웨어 (tb3_wheels)
 
 TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, **ID 2 = 왼쪽 · ID 1 = 오른쪽**) 속도제어 + 상태 송신.
-팔·그리퍼 없음 (OpenCR 내장 IMU는 `I` 줄). Beebot용(`beebot_opencr`)이 아니라 기본 주행용.
+바퀴 + (선택) 매니퓰레이터 팔 5축·그리퍼 + 내장 IMU(`I` 줄). 팔이 없어도(뽑음·12V 꺼짐) 바퀴는 그대로 동작하고, 5초마다 팔을 다시 찾는다.
+팔 쪽은 Lv2 `beebot_opencr`를 참고해 **기존 줄은 그대로 두고 줄을 추가**했다 (Pi 드라이버는 모르는 줄을 무시 — 드라이버 수정 없이 올릴 수 있음).
+기준 문서: <https://docs.robotis.com/docs/systems/turtlebot3/manipulation/>
 
-- 소스: `tb3_wheels/tb3_wheels.ino` (Arduino 스케치, 폴더명=파일명 유지 필수)
+- 소스: `tb3_wheels/tb3_wheels.ino` (Arduino 스케치, 폴더명=파일명 유지 필수) · 팔 설정(ID·부호·그리퍼 표) `tb3_wheels/arm_config.h`
 - 의존: OpenCR 보드 패키지 + DynamixelSDK (보드 설치는 [OpenCR 문서](../../documents/opencr/opencr-setup-ubuntu26.04.md))
 - **현재(2026-10-30)**: `pak`에 업로드 완료. `/imu` 20 Hz 확인 (정지 `gz≈0`, `az≈9.98`). `S` 직후 `I` 줄이 오는 구조 그대로.
 
@@ -18,6 +20,20 @@ TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, 
 | OpenCR → SBC | `S,<좌pos rad>,<좌vel>,<우pos>,<우vel>,<uptime ms>,<좌전류 A>,<우전류 A>,<좌온도 ℃>,<우온도 ℃>,<배터리 V>` | 20Hz |
 | OpenCR → SBC | `I,<gx>,<gy>,<gz rad/s>,<ax>,<ay>,<az m/s²>,<qw>,<qx>,<qy>,<qz>` (OpenCR 내장 IMU, 보드 좌표 = `imu_link`). 부팅 때 자이로 바이어스 보정 → **켜고 ~2초 가만히** | `S` 바로 뒤 (20Hz) |
 | OpenCR → SBC | `E,<좌err>,<우err>` (Hardware Error Status 비트마스크, 0=정상, -1=무응답) | 변화 시 + 에러 중 1Hz |
+
+### 팔 줄 (추가)
+
+모터: joint1~5 = ID 11~15, 그리퍼 = ID 16 (DYNAMIXEL Wizard로 미리 설정, 1 Mbps, Protocol 2.0). 0 rad = 서보 중앙(2048). 그리퍼는 손가락 하나 m (0 = 닫힘).
+
+| 방향 | 형식 | 비고 |
+|---|---|---|
+| SBC → OpenCR | `A,<j1>,<j2>,<j3>,<j4>,<j5 rad>,<그리퍼 m>[,<그리퍼 전류 A>]` | 빈칸 = 유지. 한 패킷으로 동시 반영. 그리퍼 전류 = 쥐는 힘 한계 |
+| SBC → OpenCR | `AT,0` · `AT,1` · `AT,<6칸 0/1>` | 팔 토크. 켤 때 지금 자세가 목표 |
+| SBC → OpenCR | `AR,1` · `AR,<6칸 0/1>` | 팔 모터 재부팅 (Hardware Error 해제) |
+| OpenCR → SBC | `M,<6 × (pos, vel, 전류 A)>,<6 온도 ℃>` | 20Hz, `I` 뒤. 못 읽은 값 `nan` · 온도 −1 |
+| OpenCR → SBC | `F,<6 에러>` | `E`와 같음 (변화 시 + 에러 중 1Hz) |
+
+안전: 500ms 동안 `A`가 없으면 현재 자세 유지. 12V를 껐다 켜 토크가 풀린 모터는 0.5초 안에 다시 켜고 느린 속도로 복귀. 관절 부호(`ARM_DIR`)와 그리퍼 쥐는 전류는 아직 **실측 전** (Lv2 값 그대로).
 
 에러(`E`) 비트: `1`=입력전압 `4`=과열 `8`=엔코더 `16`=전기충격 `32`=과부하 (여러 개면 합, 예 `36`=과열+과부하). 에러가 나면 다이나믹셀이 스스로 토크를 끔 → `R`로 재부팅해야 해제. 정상 복귀 시 `E,0,0` 한 번 송신.
 

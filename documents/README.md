@@ -7,6 +7,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyri
 | [raspberry/](raspberry/) | **로봇 Pi(`pak`)** — 설치·설정 내역 요약, 처음부터 세팅 순서, SD카드·SSH·udev | [raspberry/README.md](raspberry/README.md) |
 | [ros/lyrical/](ros/lyrical/) | ROS 2 Lyrical 설치 (Pi 기준, PC 추가분) · 프로젝트 패키지 · `ros2_ws` 빌드 | [lyrical-setup-ubuntu26.04.md](ros/lyrical/lyrical-setup-ubuntu26.04.md) |
 | [opencr/](opencr/) | OpenCR 펌웨어 툴체인·컴파일·업로드 (arm64 Pi에서) | [opencr-setup-ubuntu26.04.md](opencr/opencr-setup-ubuntu26.04.md) |
+| [manipulator/](manipulator/) | 팔 — 기준 문서 [ROBOTIS TurtleBot3 Manipulation](https://docs.robotis.com/docs/systems/turtlebot3/manipulation/) · 연결 · 할 일 | [manipulator/README.md](manipulator/README.md) |
 | [ai/](ai/) | AI(Claude Code)가 Pi를 비밀번호 없이 다루게 하기 (SSH 키 · sudo) | [ai-passwordless-robot-access.md](ai/ai-passwordless-robot-access.md) |
 | [docker/](docker/) | PC 시험대 (Lyrical 컨테이너 · 테스트 스크립트) | [docker/README.md](docker/README.md) |
 | [isaac/](isaac/) | Isaac Sim/Lab RL 정책 만들기 (lab PC 학습 → Nav2 `rl_nav_controller` 추론) · **개념 정리**(gain · 지연 · τ) | [isaac/README.md](isaac/README.md) · [isaac/concepts.md](isaac/concepts.md) |
