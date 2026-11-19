@@ -14,7 +14,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
-        DeclareLaunchArgument('resolution', default_value='0.05'),
+        DeclareLaunchArgument('resolution', default_value='0.03'),   # 맵 해상도 [m] — cartographer_2d.lua의 grid_options_2d.resolution과 같게
         DeclareLaunchArgument('publish_period_sec', default_value='0.3'),
         Node(
             package='cartographer_ros',

@@ -34,6 +34,12 @@ options = {
 MAP_BUILDER.use_trajectory_builder_2d = true
 
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 35
+-- 조밀하게 (2026-11-19) — 맵 격자 · 스캔 반영 빈도 · 점 솎기. 값을 줄일수록 Pi 4 CPU를 더 쓴다 (너무 느려지면 되돌릴 것).
+--   cartographer.launch.py의 resolution(맵 /map 해상도)과 같은 값으로 둔다 — 서브맵 격자가 다르면 /map이 서브맵을 다시 그려 뭉개진다
+TRAJECTORY_BUILDER_2D.submaps.grid_options_2d.resolution = 0.03            -- 기본 0.05 [m]
+TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.1               -- 기본 0.2: 이만큼 움직일 때마다 스캔을 반영
+TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.5)       -- 기본 1°: 이만큼 돌 때마다 반영
+TRAJECTORY_BUILDER_2D.voxel_filter_size = 0.015                             -- 기본 0.025: 점을 덜 솎는다
 TRAJECTORY_BUILDER_2D.min_range = 0.12
 TRAJECTORY_BUILDER_2D.max_range = 8.
 TRAJECTORY_BUILDER_2D.missing_data_ray_length = 8.
