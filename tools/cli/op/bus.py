@@ -298,9 +298,8 @@ class Bus:
                 print(self.term.paint('주의: ' + warn, YELLOW))
         ok, msg = self.procs.start(name, map_yaml, model_path)
         print(msg)
-        if ok and name in ('nav', 'explore') and not model_path and IS_ROBOT:
-            self.apply_saved_enable()   # 저장된 토글 값이 있을 때만 (첫 시작은 YAML 기본값)
-            self.apply_saved_collision()
+        if ok and name in ('nav', 'explore'):
+            self.forget_saved_runtime()   # 그냥 켬 = 소스(YAML) 기본값 — 이전 토글 값은 '재시작'에만 이어 간다
         if ok and name == 'nav' and IS_ROBOT:   # 원격은 로봇 CLI가 이미 안내를 출력한다
             if model_path:
                 print(self.term.paint(f'RL 모델: {model_path} (enable=true)', DIM))
@@ -473,6 +472,8 @@ class Bus:
         ok, msg = self.procs.start('nav', str(path))   # SLAM/explore는 conflicts로 자동 종료
         print(msg)
         if ok:
+            self.forget_saved_runtime()
+        if ok:
             print(f'LOCALIZATION 시작 — 초기 위치: ./run-cli initpose <x> <y> <yaw> (지도: {name})')
         return 0 if ok else 1
 
@@ -571,6 +572,8 @@ class Bus:
                 print(msg)
                 if not ok:
                     return 1
+                if name == 'explore':
+                    self.forget_saved_runtime()
         self.ui.step('3/4 Nav2 활성화 대기')
         if not self.nav2_active(60.0):
             print(self.term.paint('Nav2 주행부가 활성화 안 됨 (60초) — ./run-cli explore log', RED))
@@ -1354,6 +1357,17 @@ class Bus:
         ok, msg = self.procs.set_enable(args.value == 'on')
         print(msg)
         return 0 if ok else 1
+
+    def forget_saved_runtime(self) -> None:
+        """저장된 런타임 값(FollowPath.enable · collision_monitor.enabled)을 지운다 — 새로 켤 때 호출.
+        저장값은 '재시작'(restart · node_restart · restart_all · set_fallback)에서만 다시 적용한다."""
+        for clear in (self.procs.clear_enable, self.procs.clear_collision_enabled):
+            try:
+                clear()
+            except Exception:   # SSH가 안 돼도 시작은 막지 않는다
+                pass
+        self.state.collision_enabled = self.state.collision_override = None
+        self.state.rl_enabled = None
 
     def apply_saved_enable(self, timeout: float = 50.0) -> bool:
         """저장된 FollowPath.enable을 새 controller_server에 다시 적용 — Nav/노드 재시작용.

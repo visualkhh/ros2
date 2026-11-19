@@ -320,6 +320,19 @@ class Procs:
             return False, f'런타임 값 삭제 실패: {exc}'
         return True, '저장된 FollowPath.enable 삭제 — 다음 시작은 YAML 기본값'
 
+    def clear_collision_enabled(self) -> tuple[bool, str]:
+        """저장된 collision_monitor.enabled를 지운다 — 다음 시작은 YAML 기본값."""
+        data = self.runtime_params()
+        node = data.get('collision_monitor', {})
+        node.pop('enabled', None)
+        if not node:
+            data.pop('collision_monitor', None)
+        try:
+            self._save_runtime_params(data)
+        except OSError as exc:
+            return False, f'충돌감시 값 삭제 실패: {exc}'
+        return True, '저장된 collision_monitor.enabled 삭제 — 다음 시작은 YAML 기본값'
+
     def saved_collision_enabled(self) -> bool | None:
         val = self.runtime_params().get('collision_monitor', {}).get('enabled')
         return val if isinstance(val, bool) else None
@@ -645,6 +658,11 @@ class RemoteProcs(Procs):
             return val if isinstance(val, bool) else None
         except (ValueError, AttributeError):
             return None
+
+    def clear_collision_enabled(self) -> tuple[bool, str]:
+        script = f'{ROBOT_TOOL_DIR}/cli/op/runtime_state.py'
+        rc, out = self._ssh(f'python3 {script} clear collision_monitor enabled', 15)
+        return rc == 0, f'[{self.host}] {out}'
 
     def set_collision_enabled(self, enabled: bool) -> tuple[bool, str]:
         script = f'{ROBOT_TOOL_DIR}/cli/op/runtime_state.py'
