@@ -375,7 +375,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 10.0   # 최소 인플레이션: 장애물 바로 옆만 진하고 금방 0 (3.0은 0.3 m 띠 전체가 진함)
-        inflation_radius: 0.2       # 줄임(0.28→0.2): 로봇 내접 반지름 0.155보다는 크게. MPPI(circumscribed 0.265)는 충돌검사 경고·느려짐 — mppi로 돌아가면 0.28로
+        inflation_radius: 0.24      # 0.28→0.2로 줄였다가 조금 되돌림(0.24): 로봇 내접 반지름 0.155보다 크게. MPPI(circumscribed 0.265)는 충돌검사 경고·느려짐 — mppi로 돌아가면 0.28로
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: true
@@ -457,7 +457,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 10.0   # 최소 인플레이션: 장애물 바로 옆만 진하고 금방 0 (3.0은 0.3 m 띠 전체가 진함)
-        inflation_radius: 0.2       # 줄임(0.28→0.2): 로봇 내접 반지름 0.155보다는 크게. MPPI(circumscribed 0.265)는 충돌검사 경고·느려짐 — mppi로 돌아가면 0.28로
+        inflation_radius: 0.24      # 0.28→0.2로 줄였다가 조금 되돌림(0.24): 로봇 내접 반지름 0.155보다 크게. MPPI(circumscribed 0.265)는 충돌검사 경고·느려짐 — mppi로 돌아가면 0.28로
       always_send_full_costmap: true
       introspection_mode: "disabled"
 
@@ -626,7 +626,7 @@ collision_monitor:
     cmd_vel_in_topic: "cmd_vel_smoothed"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"
-    transform_tolerance: 0.2
+    transform_tolerance: 0.5   # 0.2→0.5: odom TF 나이가 최대 0.32 s까지 튀어 스캔이 TF보다 앞서면 "invalid source" 정지 (2026-11-19 pak 측정)
     source_timeout: 1.0
     base_shift_correction: true
     stop_pub_timeout: 2.0
