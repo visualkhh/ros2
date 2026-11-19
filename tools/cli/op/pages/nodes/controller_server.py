@@ -298,7 +298,7 @@ class ControllerServerFeature(NodeFeature):
                 [('1', 'mppi (기본 · 부드러운 주행)'), ('2', 'dwb (가볍고 단순)'),
                  ('3', 'rotation_shim + RPP (경로 방향 제자리 회전)')],
                 [f'현재: {cur}', 'Nav를 재시작해야 적용됩니다 (주행 중이면 멈춤)',
-                 '설정 파일 + inner 프리셋 저장 → tb3_bringup 빌드 → nav restart'])
+                 '설정 파일의 fallback_controller 한 줄만 바꾸고 → nav restart (파라미터는 inner_<이름> 블록)'])
             if choice not in names:
                 return
             name_new = names[choice]

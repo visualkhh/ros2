@@ -254,7 +254,7 @@ class Procs:
         return True, '\n'.join(msgs)
 
     # ------------------------------------------------------------ fallback controller
-    FALLBACKS = ('mppi', 'dwb', 'rotation_shim')   # inner 프리셋이 있는 것만
+    FALLBACKS = ('mppi', 'dwb', 'rotation_shim')   # nav2_params.yaml에 inner_<이름> 블록이 있는 것만
 
     @staticmethod
     def nav_params_source() -> Path:
@@ -348,41 +348,31 @@ class Procs:
                       f'다음 Nav/노드 재시작에 적용')
 
     def set_fallback(self, name: str, progress=None) -> tuple[bool, str]:
-        """RL 바이패스 controller를 설정 파일에 저장 → tb3_bringup 빌드 → Nav 재시작."""
+        """RL 바이패스 controller 변경 — 설정 파일의 fallback_controller 한 줄만 바꾸고 Nav 재시작.
+        컨트롤러별 파라미터는 nav2_params.yaml의 FollowPath.inner_<이름> 블록에 이미 있고 플러그인이 고른 것만 읽는다
+        (--symlink-install이라 설정은 다시 빌드하지 않아도 읽힌다)."""
         name = (name or '').strip().lower()
         if name not in self.FALLBACKS:
             return False, f'fallback은 {", ".join(self.FALLBACKS)} 중 하나'
         path = self.nav_params_source()
-        preset = Path(__file__).with_name(f'nav2_inner_{name}.yaml')
         try:
             text = path.read_text()
-            inner = preset.read_text().rstrip('\n') + '\n'
         except OSError as exc:
-            return False, f'설정/프리셋 파일을 못 읽음: {exc}'
+            return False, f'설정 파일을 못 읽음: {exc}'
+        if f'      inner_{name}:\n' not in text:
+            return False, f'{path}에 FollowPath.inner_{name} 블록이 없음 — 먼저 추가하세요'
         new, n = re.subn(r'''(?m)^(\s*fallback_controller:\s*["'])[^"']+(["'])''',
                          rf'\g<1>{name}\g<2>', text, count=1)
         if not n:
             return False, f'fallback_controller 줄을 못 찾음: {path}'
-        # inner 블록도 그 controller 프리셋으로 바꾼다 (MPPI critic을 DWB가 읽다 죽는 문제 방지)
-        start = new.index('      inner:\n')
-        m = re.search(r'(?m)^\S', new[start:])
-        if not m:
-            return False, f'inner 블록 끝을 못 찾음: {path}'
-        end = start + m.start()
-        new = new[:start] + inner + '\n' + new[end:]
         path.write_text(new)
         print(f'fallback_controller → {name}  ({path})')
-        if progress:
-            progress(f'{name} 설정 저장 — tb3_bringup 빌드 중…')
-        rc = self.build(['--packages-select', 'tb3_bringup'])
-        if rc != 0:
-            return False, f'빌드 실패 (exit {rc}) — 설정은 저장됨. 로그를 확인하세요'
         if not self.running('nav'):
-            return True, f'fallback {name} 저장 · 빌드 완료 (Nav 꺼짐 — 다음 시작 때 적용)'
+            return True, f'fallback {name} 저장 (Nav 꺼짐 — 다음 시작 때 적용)'
         if progress:
             progress('Nav 재시작 중… (20~40초)')
         ok, msg = self.restart('nav')
-        return ok, f'fallback {name} 저장 · 빌드 완료\n{msg}'
+        return ok, f'fallback {name} 저장\n{msg}'
 
     # ------------------------------------------------------------ 빌드 (run-cli build)
     def build(self, extra: list[str] | None = None, full: bool = False) -> int:

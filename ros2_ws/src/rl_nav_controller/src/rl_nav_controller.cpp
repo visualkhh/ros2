@@ -43,7 +43,7 @@ void RlNavController::configure(
   //   dwb_core::DWBLocalPlanner · nav2_mppi_controller::MPPIController ·
   //   nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController ·
   //   nav2_rotation_shim_controller::RotationShimController
-  //   선택한 플러그인의 파라미터는 <name>.inner.* 에 둔다.
+  //   선택한 플러그인의 파라미터는 <name>.inner_<이름>.* 에 둔다 (inner_mppi · inner_dwb · inner_rpp · inner_rotation_shim).
   const auto fallback = param<std::string>(node, name + ".fallback_controller", "");
   std::string inner;
   if (!fallback.empty()) {
@@ -95,9 +95,13 @@ void RlNavController::configure(
   lidar_inflation_ = std::max(0.0, param<double>(node, name + ".lidar_inflation", lidar_inflation_));
   inflation_scale_ = std::max(1e-6, param<double>(node, name + ".inflation_scale", inflation_scale_));
 
-  // 바이패스용 기본 controller — 파라미터는 <name>.inner.* (예: FollowPath.inner.time_steps)
+  // 바이패스용 기본 controller — 파라미터는 고른 컨트롤러의 블록 <name>.inner_<이름>.* (예: FollowPath.inner_mppi.time_steps)
+  //   고르지 않은 블록은 읽지 않는다. 전체 클래스명을 직접 준 경우(알 수 없는 종류)는 <name>.inner.*
+  static const char * const kInnerNs[] = {".inner", ".inner_dwb", ".inner_mppi", ".inner_rpp", ".inner_rotation_shim"};
+  const std::string inner_ns = name + kInnerNs[inner_kind_];
+  RCLCPP_INFO(logger_, "[%s] inner 파라미터 블록: %s.*", name.c_str(), inner_ns.c_str());
   inner_ = loader_.createSharedInstance(inner);
-  inner_->configure(parent, name + ".inner", tf, costmap_ros);
+  inner_->configure(parent, inner_ns, tf, costmap_ros);
   load_model(model);
   if (enable_ && !policy_.loaded()) {
     RCLCPP_WARN(logger_, "[%s] enable인데 정책 없음 — 바이패스로 (%s)", name.c_str(), inner.c_str());

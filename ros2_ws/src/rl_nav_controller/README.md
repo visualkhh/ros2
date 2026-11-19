@@ -26,7 +26,7 @@ inner_kind: 1=DWB · 2=MPPI · 3=RPP · 4=RotationShim · 0=기타
 | `plugin` | `rl_nav_controller::RlNavController` | |
 | `enable` | `false` | 시작 때 정책 적용 |
 | `model_path` | `""` | `policy.onnx` — 비우면 늘 fallback(MPPI) (켜려 해도 거부) |
-| `fallback_controller` | `mppi` (코드 기본 · 이 설정도 `mppi`) | 바이패스 controller: `mppi`·`dwb`·`rpp`·`rotation_shim` 또는 전체 pluginlib 클래스명 · 설정은 `FollowPath.inner.*` |
+| `fallback_controller` | `mppi` (코드 기본 · 이 설정도 `mppi`) | 바이패스 controller: `mppi`·`dwb`·`rpp`·`rotation_shim` 또는 전체 pluginlib 클래스명 · 설정은 `FollowPath.inner_<이름>.*` (고른 것의 블록만 읽음) |
 | `inner_plugin` | (예전 이름) | `fallback_controller`가 비었을 때만 사용하는 호환 파라미터 |
 | `max_lin` · `max_ang` · `v_min_ratio` | 0.26 · 1.82 · -0.2 | 정책 [v, w] 스케일 = 학습 env |
 | `lookahead` · `wp_step` · `wp_scale` | 5 · 0.30 · 2.0 | 웨이포인트 관측 = 학습 env |
