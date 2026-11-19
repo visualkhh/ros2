@@ -594,6 +594,32 @@ class Bus:
         print(f'비상정지: {"ON" if self.state.st_estop else "OFF"}' if ok else self.term.paint('비상정지 변경 실패', RED))
         return 0 if ok else 1
 
+    def toggle_estop(self) -> None:
+        """비상정지를 지금의 반대로 — '현재 → 적용' 다이얼로그, y면 /cmd_manual_estop (상태바 칸 · 상태 메뉴 공용).
+        켜기는 Enter만 눌러도 예, 해제는 기본 아니오 (해제하면 다시 명령대로 움직임)."""
+        on = self.state.st_estop
+        if on is None:
+            self.ui.modal_key('비상정지', ['상태를 모름 (/state_estop 없음)', 'cmd_manager(베이스 tb-only)가 떠 있는지 확인하세요.'])
+            return
+        body = [f'현재: {"ON (정지 중)" if on else "OFF"}', f'적용: {"OFF — 해제" if on else "ON — 바퀴 정지"}']
+        if on:
+            body += ['', '해제하면 다시 명령대로 움직입니다. 주변을 확인하세요.']
+        if self.ui.confirm('비상정지를 해제할까요?' if on else '비상정지를 켤까요?', default=not on, body=body):
+            self.cmd_estop(argparse.Namespace(value='off' if on else 'on'))
+
+    def diag_detail_lines(self, name: str) -> list[str]:
+        """진단 항목 하나 — 레벨 · 메시지 · key-value 전부"""
+        level, message = self.state.diagnostics.get(name, (None, ''))
+        tag = {0: 'OK', 1: 'WARN', 2: 'ERROR', 3: 'STALE'}.get(level, '없음 (사라짐)')
+        color = GREEN if level == 0 else YELLOW if level == 1 else RED if level in (2, 3) else DIM
+        lines = [f'[{self.diag_short(name)}]', f' 레벨: {self.term.paint(tag, color)}', f' 메시지: {message or "-"}']
+        values = self.state.diag_values.get(name, [])
+        if values:
+            width = min(28, max(self.term.disp_len(k) for k, _ in values))
+            lines.append('')
+            lines += [f' {k}{" " * (width - self.term.disp_len(k))}  {v}' for k, v in values]
+        return lines
+
     # ------------------------------------------------------------- 주행
     def wait_subscriber(self, pub, missing: str, timeout: float = 10.0) -> bool:
         """방금 만든 발행자는 상대와 연결(discovery)되기 전 — 구독자가 생길 때까지 기다림. 없으면 missing 출력."""

@@ -146,7 +146,7 @@ class OperatorTool(Node):
         return {
             '1': pages.StatusMenu, '2': pages.BaseMenu, '3': pages.SlamMenu, '4': pages.NavMenu,
             '5': pages.DriveMenu, '6': pages.MapMenu, '7': pages.ExploreMenu, '8': pages.NodesMenu,
-            't': pages.TopicBagMenu, 'collision': pages.CollisionMenu, '9': pages.StopAllPage, '0': pages.BeepMenu,
+            't': pages.TopicBagMenu, 'collision': pages.CollisionMenu, 'diagnostics': pages.DiagnosticsMenu, '9': pages.StopAllPage, '0': pages.BeepMenu,
         }[name](self)
 
     # ------------------------------------------------------------- CLI 진입

@@ -6,6 +6,13 @@ from .state import State
 
 
 class DiagState(State):
+    """Tab으로 포커스 → Enter = 진단 화면 (Window 'navigate' 신호)."""
+
+    focusable = True
+
+    def activate(self):
+        return self.ui.window.navigate('diagnostics')
+
     def text(self) -> str:
         diags = self.state.diagnostics
         if not diags:

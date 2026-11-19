@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 
-from ..defs import BACK, STAY
-from ..menus import Menu, MenuItem
+from ..defs import BACK, MAIN, QUIT, STAY
+from ..menus import InfoItem, Menu, MenuItem
+from ..terminal import DIM, GREEN, RED, YELLOW
+from .page import Page
 
 
 class PrintStatusItem(MenuItem):
@@ -104,11 +106,8 @@ class ToggleItem(MenuItem):
         st = self.state
         if self.what == 'mode':
             return ModeMenu(self.app).show()
-        elif st.st_estop:
-            if self.ui.confirm('비상정지를 해제할까요?', body=['해제하면 다시 명령대로 움직입니다.']):
-                self.bus.cmd_estop(argparse.Namespace(value='off'))
         else:
-            self.bus.cmd_estop(argparse.Namespace(value='on'))  # ON은 확인 없이 바로
+            self.bus.toggle_estop()
         return STAY
 
 
@@ -157,3 +156,52 @@ class StatusMenu(Menu):
             ' odom 없음 → 베이스(2) 확인 · scan 없음 → 라이다 드라이버 확인',
             ' map 없음 → SLAM(3) 또는 Nav(4) 켜기',
             ' PC에서 안 보이면 → 같은 ROS_DOMAIN_ID · 같은 WiFi 확인']
+
+
+class DiagItem(MenuItem):
+    """진단 항목 하나 — Enter가 상세 화면."""
+    shows_busy = False  # 하위 화면을 연다
+
+    def __init__(self, app, key: str, name: str, level: int, message: str):
+        super().__init__(app)
+        self.key, self._name, self._level, self._message = key, name, level, message
+
+    def label(self):
+        lv = self._level
+        mark = self.term.paint('●', GREEN if lv == 0 else YELLOW if lv == 1 else RED if lv >= 2 else DIM)
+        return f'{mark} {self.bus.diag_short(self._name)} — {self._message}'
+
+    def run(self):
+        return DiagDetailPage(self.app, self._name).show()
+
+
+class DiagnosticsMenu(Menu):
+    """진단 목록 (문제 있는 것 먼저) → 번호를 고르면 그 항목의 key-value 상세. 상단 '진단' 칸에서 Tab → Enter."""
+    title = '진단'
+
+    def items(self):
+        entries = self.bus.diag_entries()
+        if not entries:
+            return [InfoItem(self.app, '진단 없음 (/diagnostics 대기 중 — 베이스 확인)')]
+        return [DiagItem(self.app, str(i), name, lv, msg) for i, (name, lv, msg) in enumerate(entries, 1)]
+
+    def center(self):
+        entries = self.bus.diag_entries()
+        bad = sum(1 for _, lv, _ in entries if lv >= 1)
+        return [f'[진단 {len(entries)}개 · 주의 {bad}]', ' Enter = 그 항목 상세 (값 전부, 2초마다 갱신)',
+                ' 레벨: ● OK · ● WARN · ● ERROR · ● STALE(보고 끊김)']
+
+
+class DiagDetailPage(Page):
+    """진단 항목 하나 — 2초마다 다시 그려 값이 바뀌는 게 보임."""
+
+    def __init__(self, app, name: str):
+        super().__init__(app)
+        self._name = name
+        self.title = f'진단 · {app.bus.diag_short(name)}'
+
+    def show(self) -> str:
+        while True:
+            choice = self.ui.select(self.title, [('r', '새로고침 (자동 갱신)')], self.bus.diag_detail_lines(self._name))
+            if choice in (BACK, MAIN, QUIT):
+                return choice
