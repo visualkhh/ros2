@@ -1,2 +1,5 @@
-# 예제가 만드는 산출물 (저장한 지도 yaml + pgm 등)
-/examples/turtlebot3/artifacts/
+# 예제가 만드는 산출물 (저장한 지도 등). 지도 폴더 구조를 알리는 README만 올린다
+/examples/turtlebot3/artifacts/*
+!/examples/turtlebot3/artifacts/maps/
+/examples/turtlebot3/artifacts/maps/*
+!/examples/turtlebot3/artifacts/maps/README.md
