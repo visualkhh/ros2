@@ -2,7 +2,8 @@
 
 - 현실 쪽(kros와 무관한 순수 시뮬레이션): MazeWorld 안에 TurtleBot3를 놓고, SimulationRunner가 화면과 따로 월드를 고정 간격으로 돌리고,
   SnapshotRecorder가 스텝마다 스냅샷을 만들어 Viewer(3D 창)가 그린다. 사람의 입력은 Keyboard(Interaction)가 받아 로봇이 receive()한다 (창의 키 -> Keyboard -> 로봇이 해석).
-- Viz(kros): rviz 같은 두 번째 창. kros 인스턴스 하나만 받아 tf/robot_description/scan/imu/odom 토픽을 구독해 그린다 (Viewer는 시뮬레이션의 진실, Viz는 로봇이 내보낸 값).
+- Viz(kros): rviz 같은 두 번째 창. kros 인스턴스 하나만 받아 tf/robot_description/scan/imu/odom/odometry/filtered 토픽을 구독해 그린다 (Viewer는 시뮬레이션의 진실, Viz는 로봇이 내보낸 값).
+  바퀴 odom(분홍 화살표)과 EKF 결과(하늘색 화살표, 모델 위치)를 겹쳐 본다.
 - kros 쪽(Node): RobotBridge, cmd_vel -> robot.command (다른 프로그램이 로봇을 움직일 때), 라이다 측정 -> scan.
   kros의 시간(타이머, node.now())은 시뮬레이션 시간이다: 러너가 매 스텝 SimulatedTimeSource를 밀어 준다
 """
@@ -11,7 +12,7 @@ from kros.context import Context
 from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.nodes import Node
-from kros.nodes import DiffDriveOdometry, RobotStatePublisher
+from kros.nodes import DiffDriveOdometry, Ekf, RobotStatePublisher
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
 from kros.viewer.snapshot_recorder import SnapshotRecorder
@@ -22,6 +23,10 @@ from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARAT
 from kros.worlds.simulation_runner import SimulationRunner
 
 from .robot_bridge import RobotBridge
+
+# robot_localization의 *_config 15칸 (x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az) 중 켤 칸
+ODOM_CONFIG = tuple(i in (6, 11) for i in range(15))  # 바퀴: vx, vyaw (위치는 바퀴가 적분한 것이라 다시 넣지 않는다)
+IMU_CONFIG = tuple(i == 11 for i in range(15))  # 자이로: vyaw (방향은 편향이 쌓여 쓰지 않는다)
 
 
 def main() -> None:
@@ -39,8 +44,11 @@ def main() -> None:
     def create_nodes(ctx: Context) -> list[Node]:
         # kros가 제공하는 노드를 쓸지는 여기서(launch 파일처럼) 정한다: URDF로 TF를 만드는 RobotStatePublisher
         description = RobotStatePublisher(ctx, parameters={"robot_description": robot.urdf_path.read_text()})
-        odometry = DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION})  # 바퀴 -> odom -> base_footprint TF
-        return [RobotBridge(ctx, robot), description, odometry]
+        # 바퀴 -> odom 토픽. TF(odom -> base_footprint)는 EKF가 내므로 끈다
+        odometry = DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False})
+        # robot_localization ekf_node처럼: 바퀴의 앞 속도/회전 속도 + 자이로 회전 속도 -> odometry/filtered, odom -> base_footprint TF
+        ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
+        return [RobotBridge(ctx, robot), description, odometry, ekf]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()

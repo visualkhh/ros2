@@ -33,7 +33,7 @@ kros/
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
 │       └── turtlebot3/  TurtleBot3(Robot): OpenCR 보드(구동부 + IMU)와 LDS-01 라이다를 단다. 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
 ├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 스텝마다 그 순간을 불변 데이터 Snapshot(snapshot.py)으로 만드는 SnapshotRecorder(snapshot_recorder.py: 월드와 로봇을 아는 곳)가 러너의 리스너로 달리고, Viewer는 그 최신 스냅샷만 그린다. snapshot/recorder는 panda3d 없이 돈다. kros와 무관
-├── viz/               [kros 쪽] rviz 같은 화면: `Viz(kros, package_root, base=None)`가 Kros 인스턴스 하나만 받아 안에서 `VizNode`를 만들고 tf/tf_static, robot_description(latch), scan, imu, odom을 구독해 그린다 (왼쪽 구독 토픽 패널에 체크박스로 표시 켜기/끄기, 격자, TF 축과 부모 선, URDF 모델을 TF로 배치, 라이다 점, IMU/odom 글자; 기준 프레임 `fixed_frame`=odom). `base`로 Viewer(ShowBase)를 주면 그 위에 두 번째 창을 열고, 없으면 자기 창. 월드/하드웨어는 모른다
+├── viz/               [kros 쪽] rviz 같은 화면: `Viz(kros, package_root, base=None)`가 Kros 인스턴스 하나만 받아 안에서 `VizNode`를 만들고 tf/tf_static, robot_description(latch), scan, imu, odom, odometry/filtered를 구독해 그린다 (왼쪽 구독 토픽 패널에 체크박스로 표시 켜기/끄기, 격자, TF 축과 부모 선, URDF 모델을 TF로 배치, 라이다 점, IMU/odom/ekf 글자, odom(분홍)과 odometry/filtered(하늘색) 위치 화살표; 기준 프레임 `fixed_frame`=odom). `base`로 Viewer(ShowBase)를 주면 그 위에 두 번째 창을 열고, 없으면 자기 창. 월드/하드웨어는 모른다
 ├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan, imu)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성
@@ -92,7 +92,7 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
 - **하드웨어와의 연결(예제)**: `Robot.joint_positions()`(URDF 관절 이름 -> 위치, 바퀴 모터 엔코더 값)가 하드웨어가 남긴 사실이고, `RobotBridge`가 이걸 `joint_states` 토픽으로 낸다(`joint_states_period` 파라미터, 기본 0.05초). 그러면 `RobotStatePublisher`가 바퀴 TF를 만든다. URDF의 라이다 위치(`base_footprint` -> `base_scan` = (-0.064, 0, 0.132))가 `TurtleBot3`가 코드에 적은 `LIDAR_MOUNT_X/HEIGHT`와 같다는 걸 테스트가 확인한다.
 **오도메트리**: `DiffDriveOdometry`는 `joint_states`의 바퀴 각을 적분해 `odom` 토픽(`nav_msgs.Odometry`)과 TF(`odom -> base_footprint`)를 낸다. 파라미터: `wheel_radius`, `wheel_separation`, `left_joint`/`right_joint`, `odom_frame`/`base_frame`, `publish_tf`, `pose_covariance_diagonal`/`twist_covariance_diagonal`(ROS diff_drive_controller처럼 odom 공분산의 대각 6개), `jump_threshold`(바퀴 각이 한 번에 이만큼(rad) 넘게 뛰면 보드 재부팅으로 보고 그 변화는 버린다). 한 조각은 시작 방향이 아니라 중간 방향으로 간 것으로 적분한다. 바퀴만 보므로 **바퀴가 헛돌면 오차가 쌓인다**(시뮬레이션에서 벽에 막혀도 바퀴 모터는 도는 것으로 세어져 벽을 뚫고 간 것으로 추정한다: 테스트가 이 한계를 확인한다). 정답 위치(월드의 로봇 pose)와 따로 계산하므로 둘의 차이가 곧 오도메트리 오차다.
 
-**EKF**: `Ekf`는 robot_localization의 `ekf_node`처럼 센서 토픽을 확장 칼만 필터로 합쳐 `odometry/filtered`와 TF(`odom -> base_footprint`, `publish_tf`)를 낸다. 2D만(상태 `[x, y, yaw, v, w]`, 일정 속도 모델). 파라미터 이름은 robot_localization과 같다: `frequency`, `odom0`/`imu0`(토픽), `odom0_config`/`imu0_config`(15개 bool, x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az 중 x/y/yaw/vx/vyaw만 본다), `*_pose_rejection_threshold`/`*_twist_rejection_threshold`(마할라노비스 거리), `imu0_relative`, `process_noise_covariance`/`initial_estimate_covariance`(15개 대각만). 센서 값은 쌓아 뒀다가 `frequency`마다 시각 순서로 처리하고, 이미 처리한 시각보다 오래된 값은 버린다. 행렬 연산은 표준 라이브러리로 직접 한다. 노이즈 낀 TurtleBot3에서 바퀴 v,w + 자이로를 합치면 바퀴만 쓸 때보다 위치 오차가 절반쯤이다(테스트). 쓸 때는 `DiffDriveOdometry`의 `publish_tf`를 끈다.
+**EKF**: `Ekf`는 robot_localization의 `ekf_node`처럼 센서 토픽을 확장 칼만 필터로 합쳐 `odometry/filtered`와 TF(`odom -> base_footprint`, `publish_tf`)를 낸다. 2D만(상태 `[x, y, yaw, v, w]`, 일정 속도 모델). 파라미터 이름은 robot_localization과 같다: `frequency`, `odom0`/`imu0`(토픽), `odom0_config`/`imu0_config`(15개 bool, x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az 중 x/y/yaw/vx/vyaw만 본다), `*_pose_rejection_threshold`/`*_twist_rejection_threshold`(마할라노비스 거리), `imu0_relative`, `process_noise_covariance`/`initial_estimate_covariance`(15개 대각만). 센서 값은 쌓아 뒀다가 `frequency`마다 시각 순서로 처리하고, 이미 처리한 시각보다 오래된 값은 버린다. 행렬 연산은 표준 라이브러리로 직접 한다. 노이즈 낀 TurtleBot3에서 바퀴 v,w + 자이로를 합치면 바퀴만 쓸 때보다 위치 오차가 절반쯤이다(테스트). 쓸 때는 `DiffDriveOdometry`의 `publish_tf`를 끈다. 예제 `main.py`는 바퀴 vx/vyaw + 자이로 vyaw를 합치고, Viz에서 바퀴 odom(분홍 화살표)과 EKF(하늘색 화살표, 모델 위치)를 겹쳐 본다.
 
 ### TF 사용법 (노드에서)
 
@@ -282,7 +282,7 @@ kros/test.sh -v -p test_kros.py       # 파일 하나
 - 실패하면 조용히 내려간다: GPU 계산이 예외를 내면 경고 로그를 한 번 남기고 이후 CPU로 계산한다. cupy가 import는 돼도 GPU가 없으면 쓰지 않는다.
 - 환경변수 `KROS_COMPUTE=auto|gpu|cpu|python`으로 고정할 수 있다 (기본 `auto`). 시작할 때 `compute: ...`가 찍힌다.
 - 이 PC(RTX 5060)에서 측정(레이 수, 도형 31개): 360개 numpy 0.22ms / GPU 0.60ms(CPU 승), 3600개 1.10 / 0.61ms, 36000개 24.5 / 1.2ms, 360000개 317 / 14.5ms. 지금 라이다(360개)는 CPU가 더 빨라서 GPU를 쓰지 않는다. 순수 파이썬은 360개에 약 6.8ms.
-- 세 백엔드가 같은 결과를 내는지 `tests/test_compute.py`, `tests/test_maze_world.py`(`TestBatchRays`)가 확인한다.
+- 세 백엔드가 같은 결과를 내는지 `tests/test_ekf.py`(EKF: 행렬, 이상값 거부, 시각 순서, 노이즈 TurtleBot3에서 바퀴만보다 정확한지), `tests/test_compute.py`, `tests/test_maze_world.py`(`TestBatchRays`)가 확인한다.
 - 렌더링(Panda3D)의 GPU는 이와 별개다.
 
 ## 예제: TurtleBot3 + MazeWorld
@@ -314,7 +314,7 @@ kros/examples/turtlebot3/run.sh
 
 **화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `viewer/urdf_model.py`가 읽어 만들고(STL은 `viewer/stl.py`), 바닥/벽은 `viewer/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
 
-**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_tf_math.py`/`test_tf_buffer.py`/`test_tf_nodes.py`/`test_urdf.py`(TF 수학, 버퍼, 브로드캐스터/리스너, RobotStatePublisher, URDF), `tests/test_tf_usage.py`(README의 TF 사용 예제를 실제로 실행), `tests/test_log.py`(rosout, log_level, 스레드, 콘솔), `tests/test_diagnostics.py`(진단 메시지, 업데이트, 집계, 하드웨어 사실 -> 수준), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_viz.py`(오프스크린으로 Viz가 토픽만으로 모델/TF/HUD를 만드는지), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
+**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_tf_math.py`/`test_tf_buffer.py`/`test_tf_nodes.py`/`test_urdf.py`(TF 수학, 버퍼, 브로드캐스터/리스너, RobotStatePublisher, URDF), `tests/test_tf_usage.py`(README의 TF 사용 예제를 실제로 실행), `tests/test_log.py`(rosout, log_level, 스레드, 콘솔), `tests/test_diagnostics.py`(진단 메시지, 업데이트, 집계, 하드웨어 사실 -> 수준), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_viz.py`(오프스크린으로 Viz가 토픽만으로 모델/TF/HUD를 만드는지), `tests/test_ekf.py`(EKF: 행렬, 이상값 거부, 시각 순서, 노이즈 TurtleBot3에서 바퀴만보다 정확한지), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
 
 ## TODO
 

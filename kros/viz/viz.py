@@ -28,7 +28,8 @@ from kros.viewer.urdf_model import UrdfModel
 NAME = "Viz"
 HELP = "left drag: orbit    right drag: pan    wheel: zoom    checkbox: show/hide    esc: close"
 PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.84, 0.13  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
-TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "scan", "imu", "odom")  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
+ODOMETRY_ARROWS = {"odom": (1.0, 0.35, 0.85, 1.0), "odometry/filtered": (0.3, 0.9, 1.0, 1.0)}  # 바퀴 오도메트리(분홍, TF 부모 선이 노랑이라)와 EKF 결과(하늘색)를 화살표로 겹쳐 본다
+TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "scan", "imu", *ODOMETRY_ARROWS)  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
 
 
 class VizNode(Node):
@@ -48,6 +49,7 @@ class VizNode(Node):
             ("scan", LaserScan, QOS_SENSOR_DATA),
             ("imu", Imu, QOS_SENSOR_DATA),
             ("odom", Odometry, QOS_SENSOR_DATA),
+            ("odometry/filtered", Odometry, QOS_SENSOR_DATA),
         ):
             self._stats[topic] = (msg_type.__name__, 0, 0.0, 0.0)  # 구독만 하고 아직 못 받은 토픽도 패널에 보인다
             self.subscribe(topic, msg_type, lambda message, key=topic: self._store(key, message), qos)  # type: ignore[misc]
@@ -87,7 +89,8 @@ class Viz:
 
     base를 주면 그 ShowBase에 두 번째 창을 열고, 안 주면 자기 ShowBase를 만든다 (창은 프로세스에 ShowBase 하나만 가능).
     package_root: URDF의 package://<pkg>/ 뒤 경로가 놓인 폴더 (메시 파일 위치). fixed_frame: 화면의 기준 프레임.
-    그리는 것: 바닥 격자, TF 축과 부모 선, robot_description 모델(TF로 배치), 라이다 점(scan_frame에서), IMU/odom 글자.
+    그리는 것: 바닥 격자, TF 축과 부모 선, robot_description 모델(TF로 배치), 라이다 점(scan_frame에서), IMU/odom 글자,
+    odom과 odometry/filtered의 위치 화살표 (둘 다 fixed_frame 기준일 때만: TF는 둘 중 하나만 내므로 나머지는 화살표로 비교한다).
     """
 
     def __init__(self, kros: Kros, package_root: Path, base: ShowBase | None = None, fixed_frame: str = "odom", scan_frame: str = "base_scan", imu_frame: str = "imu_link") -> None:
@@ -168,6 +171,19 @@ class Viz:
             grid.drawTo(5, i * 0.5, 0)
         self.grid_np = self.scene.attachNewNode(grid.create())
         self.grid_np.setLightOff()
+        self.arrows: dict[str, NodePath] = {}
+        for topic, color in ODOMETRY_ARROWS.items():
+            arrow = LineSegs()
+            arrow.setColor(*color)
+            arrow.setThickness(3)
+            for start, end in (((0, 0), (0.3, 0)), ((0.3, 0), (0.22, 0.05)), ((0.3, 0), (0.22, -0.05))):
+                arrow.moveTo(start[0], start[1], 0.02)
+                arrow.drawTo(end[0], end[1], 0.02)
+            self.arrows[topic] = self.scene.attachNewNode(arrow.create())
+            self.arrows[topic].setLightOff()
+            self.arrows[topic].setBin("fixed", 0)  # 모델에 가려지지 않게
+            self.arrows[topic].setDepthTest(False)
+            self.arrows[topic].hide()
 
     def _make_2d(self) -> None:
         """글자와 체크박스를 올리는 2D 장면 (세로 +-1, 가로는 창 비율). PGTop이 DirectGUI 위젯의 마우스 영역을 이 창의 마우스 감시기에 연결한다."""
@@ -231,6 +247,7 @@ class Viz:
         self._update_model()
         self._update_tf()
         self._update_scan()
+        self._update_odometry()
         self.hud.setText(self._hud_text())
         self._resize()
         texts = {"grid": "grid", **self.node.topic_rows()}
@@ -343,12 +360,25 @@ class Viz:
                 _mat_of(stamped, self._scan_np)
                 self._scan_np.show()
 
+    def _update_odometry(self) -> None:
+        for topic, arrow in self.arrows.items():
+            odom = self.node.latest(topic)
+            if isinstance(odom, Odometry) and self.enabled[topic] and odom.header.frame_id == self.fixed_frame:
+                p, q = odom.pose.pose.position, odom.pose.pose.orientation
+                arrow.setPos(p.x, p.y, p.z)
+                arrow.setQuat(LQuaternionf(q.w, q.x, q.y, q.z))
+                arrow.show()
+            else:
+                arrow.hide()
+
     def _hud_text(self) -> str:
-        odom, imu = self.node.latest("odom"), self.node.latest("imu")
+        imu = self.node.latest("imu")
         rows = [f"fixed frame: {self.fixed_frame}   frames: {len(self.node.buffer.all_frames())}"]
-        if isinstance(odom, Odometry) and self.enabled["odom"]:
-            p = odom.pose.pose.position
-            rows.append(f"odom x={p.x:.2f} y={p.y:.2f}   v={odom.twist.twist.linear.x:.2f} w={odom.twist.twist.angular.z:.2f}")
+        for topic, label in (("odom", "odom"), ("odometry/filtered", "ekf ")):
+            odom = self.node.latest(topic)
+            if isinstance(odom, Odometry) and self.enabled[topic]:
+                p = odom.pose.pose.position
+                rows.append(f"{label} x={p.x:.2f} y={p.y:.2f}   v={odom.twist.twist.linear.x:.2f} w={odom.twist.twist.angular.z:.2f}")
         if isinstance(imu, Imu) and self.enabled["imu"]:
             a, w = imu.linear_acceleration, imu.angular_velocity
             rows.append(f"imu a=({a.x:.1f},{a.y:.1f},{a.z:.1f}) gyro_z={w.z:.2f}")

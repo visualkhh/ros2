@@ -14,7 +14,8 @@ if HAS_PANDA:
     from kros import Kros
     from kros.examples.turtlebot3.robot_bridge import RobotBridge
     from kros.msgs.geometry_msgs import Twist, Vector3
-    from kros.nodes import DiffDriveOdometry, RobotStatePublisher
+    from kros.examples.turtlebot3.main import IMU_CONFIG, ODOM_CONFIG
+    from kros.nodes import DiffDriveOdometry, Ekf, RobotStatePublisher
     from kros.timer import SimulatedTimeSource
     from kros.viz import Viz
     from kros.worlds.maze.maze_world import MazeWorld
@@ -32,7 +33,8 @@ class TestVizSmoke(unittest.TestCase):
             lambda ctx: [
                 RobotBridge(ctx, robot),
                 RobotStatePublisher(ctx, parameters={"robot_description": robot.urdf_path.read_text()}),
-                DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION}),
+                DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False}),
+                Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG}),  # main.py처럼 TF는 EKF가 낸다
             ],
             time_source=source,
         )
@@ -53,8 +55,12 @@ class TestVizSmoke(unittest.TestCase):
         assert viz.model is not None
         self.assertFalse(viz.model.links["base_link"].isHidden())  # TF가 있는 링크는 보인다
         self.assertIn("odom x=", viz.hud.getText())
+        self.assertIn("ekf  x=", viz.hud.getText())
+        self.assertFalse(viz.arrows["odom"].isHidden())  # 바퀴 오도메트리 화살표
+        self.assertGreater(viz.arrows["odom"].getX(), 0.1)  # 앞으로 간 만큼
+        self.assertFalse(viz.arrows["odometry/filtered"].isHidden())
         text = " ".join(row.getText() for row in viz.rows.values()) + " ".join(viz.rows)
-        for topic in ("tf", "tf_static", "robot_description", "scan", "imu", "odom"):
+        for topic in ("tf", "tf_static", "robot_description", "scan", "imu", "odom", "odometry/filtered"):
             self.assertIn(topic, text)  # 구독 중인 토픽이 패널에 나온다
         self.assertIn("* LaserScan", text)
         viz.enabled["scan"] = viz.enabled["odom"] = viz.enabled["robot_description"] = False  # 체크 해제
@@ -62,6 +68,7 @@ class TestVizSmoke(unittest.TestCase):
         self.assertTrue(viz.model.links["base_link"].isHidden())
         self.assertTrue(viz._scan_np is None or viz._scan_np.isHidden())
         self.assertNotIn("odom x=", viz.hud.getText())
+        self.assertTrue(viz.arrows["odom"].isHidden())
         self.assertFalse(viz.enabled["scan"])
         self.assertIn("LaserScan", viz.rows["scan"].getText())
         self.assertTrue(viz.enabled["imu"])
