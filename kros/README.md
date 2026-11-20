@@ -16,7 +16,8 @@ kros/
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
 ├── topic/             TopicManager(토픽별 구독자 목록, 메시지 전달), Subscription (한 프로세스 안)
 ├── interactions/      [현실] 사람(조종자)이 넣는 입력 장치. interaction.py: Interaction 베이스, keyboard.py: Keyboard(KeyState). 월드 바깥의 것이고 로봇이 receive()로 받는다. kros와 무관
-├── worlds/            [현실] 외부 환경 + 그 안의 객체들. kros와 무관. world.py: World(환경, 시계), world_object.py: WorldObject, clock.py: Clock
+├── worlds/            [현실] 외부 환경 + 그 안의 객체들. kros와 무관. world.py: World(환경, 시계), world_object.py: WorldObject, clock.py: Clock,
+│   │                  simulation_runner.py: SimulationRunner(월드를 화면과 따로 고정 간격으로 돌린다. 월드만 알고 로봇은 모른다)
 │   ├── collision.py   충돌/레이 도형 Circle, Box와 계산 (ray_hit, circle_vs)
 │   ├── maze/          MazeWorld(World): isaac rl_maze 트랙(track.py의 벽 데이터) -> Wall 20개 + 시작할 때 퍽 10개를 흩뿌림
 │   ├── objects/       로봇이 아닌 WorldObject들. wall.py: Wall(static 상자), puck.py: Puck(모양 PuckShape, 색)
