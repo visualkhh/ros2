@@ -9,19 +9,16 @@ from kros.topic import QOS_LATCHED
 
 from .map_io import MapIoError, load_map
 
-MAPS_DIRECTORY = Path(__file__).resolve().parents[2] / "maps"  # kros/maps: 저장한 지도를 두는 곳 (git에는 안 올린다)
-
-
 def resolve(url: str, directory: str) -> Path:
-    """상대 경로면 지도 폴더 기준, 절대 경로면 그대로."""
+    """상대 경로면 지도 폴더 기준, 절대 경로면 그대로. 지도 폴더도 상대 경로면 ROS처럼 지금 작업 폴더(cwd) 기준이다."""
     path = Path(url).expanduser()
-    return path if path.is_absolute() else Path(directory) / path
+    return path if path.is_absolute() else Path(directory).expanduser() / path
 
 
 class MapServer(Node):
     """nav2 map_server 흉내: 지도 파일(yaml + pgm)을 읽어 map 토픽(latch)으로 낸다.
 
-    파라미터: yaml_filename (시작할 때 띄울 지도, ""이면 없음), topic_name ("map"), frame_id ("map"), maps_directory (상대 경로의 기준, kros/maps).
+    파라미터: yaml_filename (시작할 때 띄울 지도, ""이면 없음), topic_name ("map"), frame_id ("map"), maps_directory (상대 경로의 기준, 기본 "": 작업 폴더. 예제는 examples/turtlebot3/artifacts/maps).
     서비스 map_server/load_map (nav2_msgs/LoadMap): 실행 중에 다른 지도를 띄운다. 실패하면 지금 지도는 그대로다.
     """
 
@@ -30,7 +27,7 @@ class MapServer(Node):
         self.yaml_filename = self.declare_parameter("yaml_filename", "")
         self.topic_name = self.declare_parameter("topic_name", "map")
         self.frame_id = self.declare_parameter("frame_id", "map")
-        self.maps_directory = self.declare_parameter("maps_directory", str(MAPS_DIRECTORY))
+        self.maps_directory = self.declare_parameter("maps_directory", "")
         self.create_service(f"{self.name}/load_map", LoadMap, self._on_load_map)
         if self.yaml_filename.value:
             response = self.load(self.yaml_filename.value)

@@ -21,7 +21,6 @@ from kros.msgs.geometry_msgs import Point, Pose, PoseWithCovariance, PoseWithCov
 from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse, SaveMap, SaveMapRequest, SaveMapResponse
 from kros.msgs.std_msgs import Header
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
-from kros.nodes.map_server import MAPS_DIRECTORY
 from kros.parameter import ParameterNotDeclaredError, ParameterRejectedError
 from kros.service.service_type import Req, Res, ServiceType
 from kros.tf import TransformException
@@ -43,9 +42,9 @@ def _button(parent: object, text: str, left: float, right: float, y: float, comm
 
 
 class SlamPanel:
-    def __init__(self, viz: "Viz", cartographer: str = "cartographer", map_server: str = "map_server", map_saver: str = "map_saver", maps_directory: Path = MAPS_DIRECTORY) -> None:
+    def __init__(self, viz: "Viz", cartographer: str = "cartographer", map_server: str = "map_server", map_saver: str = "map_saver") -> None:
         self.viz, self.node = viz, viz.node
-        self.cartographer, self.map_server, self.map_saver, self.maps_directory = cartographer, map_server, map_saver, maps_directory
+        self.cartographer, self.map_server, self.map_saver = cartographer, map_server, map_saver
         self.pose_tool = False  # 2D Pose Estimate: 켜지면 3D 화면의 왼쪽 드래그가 카메라 대신 위치/방향을 찍는다
         self._drag_start: tuple[float, float] | None = None
         self._pending: list[tuple[Future[Any], Callable[[object], None]]] = []  # 응답을 기다리는 서비스 호출 (UI는 매 프레임 확인한다)
@@ -83,6 +82,14 @@ class SlamPanel:
     def toggle_slam(self) -> None:
         """start SLAM = mapping (새 지도), stop SLAM = idle (만든 지도는 map 토픽에 남아 save map으로 저장할 수 있다)."""
         self.set_mode("idle" if self._get_mode() == "mapping" else "mapping")
+
+    @property
+    def maps_directory(self) -> Path:
+        """지도 폴더는 map_saver 노드의 maps_directory 파라미터를 따른다 (경로를 한 곳에서만 정한다). map_saver가 없으면 작업 폴더."""
+        try:
+            return Path(str(self.node.context.parameter_manager.get(self.map_saver, "maps_directory"))).expanduser()
+        except ParameterNotDeclaredError:
+            return Path()
 
     def map_names(self) -> list[str]:
         return sorted(path.stem for path in self.maps_directory.glob("*.yaml"))

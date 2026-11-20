@@ -9,13 +9,13 @@ from kros.parameter import ParameterValue
 from kros.topic import QOS_LATCHED
 
 from .map_io import FREE_THRESH, OCCUPIED_THRESH, MapIoError, save_map
-from .map_server import MAPS_DIRECTORY, resolve
+from .map_server import resolve
 
 
 class MapSaver(Node):
     """nav2 map_saver_server 흉내: 서비스를 받으면 map 토픽의 지도 하나를 받아 yaml + pgm으로 저장한다.
 
-    파라미터: save_map_timeout (지도를 기다릴 초), free_thresh_default, occupied_thresh_default (요청에 0을 주면 쓰는 값), maps_directory (kros/maps).
+    파라미터: save_map_timeout (지도를 기다릴 초), free_thresh_default, occupied_thresh_default (요청에 0을 주면 쓰는 값), maps_directory (상대 경로의 기준, 기본 "": 작업 폴더).
     서비스 map_saver/save_map (nav2_msgs/SaveMap): map_url이 비면 "map", 상대 경로면 maps_directory 아래에 저장한다.
     """
 
@@ -26,7 +26,7 @@ class MapSaver(Node):
         self.save_map_timeout = self.declare_parameter("save_map_timeout", 2.0, validator=positive)
         self.free_thresh_default = self.declare_parameter("free_thresh_default", FREE_THRESH, validator=ratio)
         self.occupied_thresh_default = self.declare_parameter("occupied_thresh_default", OCCUPIED_THRESH, validator=ratio)
-        self.maps_directory = self.declare_parameter("maps_directory", str(MAPS_DIRECTORY))
+        self.maps_directory = self.declare_parameter("maps_directory", "")
         self.create_service(f"{self.name}/save_map", SaveMap, self._on_save_map)
 
     def _on_save_map(self, request: SaveMapRequest) -> SaveMapResponse:

@@ -171,7 +171,6 @@ class TestVizSlamPanel(unittest.TestCase):
         self.cartographer, self.watcher = slam, made["watcher"]
         self.viz = Viz(self.kros, TurtleBot3.description_dir)
         self.addCleanup(self.viz.close)
-        self.viz.slam.maps_directory = self.maps
         self.panel = self.viz.slam
 
     def wait_status(self, prefix: str) -> None:

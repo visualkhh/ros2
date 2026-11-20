@@ -8,6 +8,8 @@
 - kros 쪽(Node): RobotBridge, cmd_vel -> robot.command (다른 프로그램이 로봇을 움직일 때), 라이다 측정 -> scan.
   kros의 시간(타이머, node.now())은 시뮬레이션 시간이다: 러너가 매 스텝 SimulatedTimeSource를 밀어 준다
 """
+from pathlib import Path
+
 from kros import Kros
 from kros.context import Context
 from kros.interactions import Keyboard
@@ -24,6 +26,8 @@ from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARAT
 from kros.worlds.simulation_runner import SimulationRunner
 
 from .robot_bridge import RobotBridge
+
+MAPS_DIRECTORY = Path(__file__).resolve().parent / "artifacts" / "maps"  # 저장한 지도 (git에는 안 올린다: kros/.gitignore)
 
 # robot_localization의 *_config 15칸 (x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az) 중 켤 칸
 ODOM_CONFIG = tuple(i in (6, 11) for i in range(15))  # 바퀴: vx, vyaw (위치는 바퀴가 적분한 것이라 다시 넣지 않는다)
@@ -49,9 +53,10 @@ def main() -> None:
         odometry = DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False})
         # robot_localization ekf_node처럼: 바퀴의 앞 속도/회전 속도 + 자이로 회전 속도 -> odometry/filtered, odom -> base_footprint TF
         ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
-        # SLAM/위치 추정 (map -> odom)과 지도 파일 (kros/maps). viz 패널에서 모드를 바꾸고, 지도를 저장/불러오고, 2D Pose Estimate를 찍는다
+        # SLAM/위치 추정 (map -> odom)과 지도 파일 (이 예제 폴더의 artifacts/maps). viz 패널에서 모드를 바꾸고, 지도를 저장/불러오고, 2D Pose Estimate를 찍는다
         slam = Cartographer(ctx, parameters={"mode": "idle"})
-        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx), MapSaver(ctx)]
+        maps = {"maps_directory": str(MAPS_DIRECTORY)}
+        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps)]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()
