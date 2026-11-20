@@ -10,6 +10,7 @@ from kros.context import Context
 from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.node import Node
+from kros.tf import RobotStatePublisher
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
 from kros.viewer.snapshot_recorder import SnapshotRecorder
@@ -33,7 +34,9 @@ def main() -> None:
     runner.add_listener(lambda w: time_source.set(w.time))
 
     def create_nodes(ctx: Context) -> list[Node]:
-        return [RobotBridge(ctx, robot)]
+        # kros가 제공하는 노드를 쓸지는 여기서(launch 파일처럼) 정한다: URDF로 TF를 만드는 RobotStatePublisher
+        description = RobotStatePublisher(ctx, parameters={"robot_description": robot.urdf_path.read_text()})
+        return [RobotBridge(ctx, robot), description]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()

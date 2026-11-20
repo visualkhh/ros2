@@ -9,8 +9,10 @@ kros/
 ├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
 ├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, timer_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
 ├── node/node.py       Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
-├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan / std_msgs: Header / diagnostic_msgs: DiagnosticStatus, DiagnosticArray / rcl_interfaces: Log, LogLevel ... (ROS의 msg 흉내)
+├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan / std_msgs: Header, String / geometry_msgs: Quaternion, Transform, TransformStamped / tf2_msgs: TFMessage / sensor_msgs: JointState / diagnostic_msgs / rcl_interfaces: Log ... (ROS의 msg 흉내)
 ├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
+├── tf/                TF: TransformBuffer(좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, RobotStatePublisher(URDF -> TF), transform_math(순수 3D 계산)
+├── urdf/              URDF 파서 (표준 라이브러리만, 링크/관절 트리 검증)
 ├── log/               NodeLogger(node.get_logger(): 파이썬 logging + rosout 토픽), enable_console
 ├── diagnostics/       DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticAggregator(모아서 STALE 판단), DiagnosticStatusWrapper
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
@@ -69,6 +71,21 @@ node.subscribe("scan", LaserScan, callback, QOS_SENSOR_DATA)  # 느리면 오래
 - **`depth`**: 구독에서는 처리를 기다리는 메시지의 최대 개수다. 넘치면 가장 오래된(아직 실행 전인) 것을 버리고 `Subscription.dropped`로 센다 (사실만 노출한다). 버려도 `join()`은 안 막힌다. 기본 `None`은 무제한(아무것도 안 버림). 느린 구독자 때문에 큐가 무한히 쌓이는 것을 막는다.
 - **함정 하나**: `QOS_LATCHED`(`depth=1`)를 **구독에** 쓰면 처리 대기 큐도 1개라서, 메시지가 연달아 오면 오래된 것은 버려지고 최신만 남는다 (ROS의 `keep_last(1)`과 같다). 하나도 놓치면 안 되면 구독에는 더 깊은 `depth`를 준다 (`QoS(depth=10, durability=TRANSIENT_LOCAL)`).
 - 지금 없는 것: `reliability`(재전송 정책), `deadline`, `lifespan`, `liveliness`. 한 프로세스 안에서는 전달이 항상 신뢰할 수 있어서 필요해지는 때는 네트워크를 붙일 때다.
+
+## TF (좌표계 변환)
+
+ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하나)이고, `TransformStamped`의 `header.frame_id`가 부모, `child_frame_id`가 자식이다. `Transform`은 "자식 좌표계의 점을 부모 좌표계로 옮기는" 3D 변환(이동 + 쿼터니언 회전)이다.
+
+- **`TransformBuffer`**(순수 계산, kros의 다른 부분을 모른다): 변환 트리와 이력을 들고 있고, `lookup_transform(target, source, time)`이 "source 좌표계의 점을 target 좌표계로 옮기는" 변환을 돌려준다. 공통 조상까지 올라갔다 내려오며 이어 붙이고, 움직이는 변환은 시각별 이력(`cache_time` 기본 10초)에서 **앞뒤 두 값 사이를 보간**한다(이동은 선형, 회전은 구면 보간). 안 변하는(static) 변환은 시각과 상관없다. `time=None`이면 가장 최근 공통 시각이다.
+  - 예외: `LookupException`(모르는 좌표계), `ConnectivityException`(트리에서 이어져 있지 않음 / 순환), `ExtrapolationException`(요청 시각이 이력 범위 밖: 미래이거나 너무 오래됨). 모두 `TransformException`의 자식이고 `can_transform`이 불리언으로 감싼다.
+  - 자식의 부모가 바뀌면 이전 이력을 버리고(경고) 순환이 생기는 변은 거절한다.
+- **`TransformBroadcaster(node)` / `StaticTransformBroadcaster(node)`**: `send_transform(...)`으로 `tf` / `tf_static` 토픽에 `TFMessage`를 낸다. 정적은 **latch**(`TRANSIENT_LOCAL`, 깊이 100)로 내서 나중에 뜬 리스너도 받는다.
+- **`TransformListener(node)`**: 두 토픽을 구독해 `listener.buffer`를 채운다.
+- **`RobotStatePublisher`(노드)**: 파라미터 `robot_description`(URDF 본문 문자열, 실행 중 바꾸면 다시 읽는다)으로 TF를 만든다. 고정 관절은 `tf_static`으로, 움직이는 관절(continuous/revolute/prismatic)은 `joint_states`(`JointState`)를 받을 때마다 `tf`로 낸다(그 관절의 값이 아직 안 왔으면 안 낸다). URDF 본문은 `robot_description` 토픽(latch)으로도 낸다. 잘못된 URDF(뿌리가 둘, 순환, 없는 링크 ...)는 파라미터가 거절하고 이전 로봇이 그대로 남는다. **kros가 제공하는 노드이고 쓸지는 사용자가 `node_create`에서 정한다**(안 만들면 아무 일도 안 한다).
+- **URDF 파서(`kros/urdf`)**: 표준 라이브러리만 쓴다. 링크/관절 트리를 검증하고(이름 중복, 없는 링크, 부모가 둘, 뿌리가 둘 이상, 순환), xacro는 **인자 치환(`${namespace}` 기본 빈 값)만** 지원한다. 그 밖의 `${...}`가 이름에 남으면 조용히 틀린 이름을 쓰지 않고 `UrdfError`다.
+- **하드웨어와의 연결(예제)**: `Robot.joint_positions()`(URDF 관절 이름 -> 위치, 바퀴 모터 엔코더 값)가 하드웨어가 남긴 사실이고, `RobotBridge`가 이걸 `joint_states` 토픽으로 낸다(`joint_states_period` 파라미터, 기본 0.05초). 그러면 `RobotStatePublisher`가 바퀴 TF를 만든다. URDF의 라이다 위치(`base_footprint` -> `base_scan` = (-0.064, 0, 0.132))가 `TurtleBot3`가 코드에 적은 `LIDAR_MOUNT_X/HEIGHT`와 같다는 걸 테스트가 확인한다.
+- 수학(`transform_math`)은 독립적으로 계산한 회전 행렬과 대조해서 검증한다 (rpy, 합성, 역변환, 구면 보간).
+- **주의 (시뮬레이션 시간)**: 타이머 콜백이 아직 실행 중일 때 시간이 여러 주기 건너뛰면 그 주기는 버려진다(`missed`). 테스트에서 시뮬레이션 시간을 sleep 없이 몰아서 밀면 `joint_states` 샘플이 빠질 수 있으니 스텝마다 `timer_manager.join()`으로 기다린다. 실시간 60Hz로 도는 `SimulationRunner`에서는 따라간다.
 
 ## 로깅 (rosout)
 
@@ -240,7 +257,7 @@ kros/examples/turtlebot3/run.sh
 
 **화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `viewer/urdf_model.py`가 읽어 만들고(STL은 `viewer/stl.py`), 바닥/벽은 `viewer/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
 
-**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_log.py`(rosout, log_level, 스레드, 콘솔), `tests/test_diagnostics.py`(진단 메시지, 업데이트, 집계, 하드웨어 사실 -> 수준), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
+**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_tf_math.py`/`test_tf_buffer.py`/`test_tf_nodes.py`/`test_urdf.py`(TF 수학, 버퍼, 브로드캐스터/리스너, RobotStatePublisher, URDF), `tests/test_log.py`(rosout, log_level, 스레드, 콘솔), `tests/test_diagnostics.py`(진단 메시지, 업데이트, 집계, 하드웨어 사실 -> 수준), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
 
 ## TODO
 

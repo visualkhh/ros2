@@ -18,6 +18,10 @@ class Robot(Hardware, WorldObject, ABC):
 
     command: Twist  # 로봇이 받은 속도 명령 (바깥에서 넣는다)
 
+    def joint_positions(self) -> dict[str, float]:
+        """움직이는 관절의 현재 위치 (URDF 관절 이름 -> rad 또는 m). 바퀴 모터 엔코더처럼 하드웨어가 남긴 사실이다. 기본은 없음."""
+        return {}
+
     def receive(self, interaction: Interaction[Any]) -> None:
         """사람의 입력 장치(키보드, 게임패드 ...)를 받는다. 입력이 들어올 때마다 on_interaction 훅이 불린다."""
         interaction.subscribe(lambda state: self.on_interaction(interaction, state))

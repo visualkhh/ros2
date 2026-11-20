@@ -240,6 +240,7 @@ class TestHardwareDiagnostics(unittest.TestCase):
         for _ in range(round(seconds / 0.05)):
             self.world.step(0.05)
             self.source.set(self.world.time)  # 시뮬레이션이 kros 시간을 밀어 준다
+            self.kros.context.timer_manager.join()  # 시간을 sleep 없이 몰아서 밀면 타이머 워커가 못 따라가 주기를 건너뛴다 (missed). 한 스텝마다 기다린다
         settle(self.kros)
 
     def latest(self) -> dict[str, DiagnosticStatus]:

@@ -43,6 +43,10 @@ class TurtleBot3(Robot):
         self.add(self.drive, "drive")  # 부품을 단다: 월드의 시계 신호가 Robot.tick -> DiffDrive.tick(-> 바퀴 모터들), Lidar.tick 순으로 내려간다
         self.add(self.lidar, "lidar")
 
+    def joint_positions(self) -> dict[str, float]:
+        """URDF의 관절 이름으로 바퀴 모터의 누적 회전각 (엔코더)."""
+        return {"wheel_left_joint": self.drive.left.position, "wheel_right_joint": self.drive.right.position}
+
     def on_interaction(self, interaction: Interaction[Any], state: Any) -> None:
         """키보드 입력이 오면 키를 속도 명령으로 해석해 구동부에 내린다. w/s(up/down) 전후진, a/d(left/right) 좌/우회전,
         반대 키는 서로 상쇄, q/z는 속도 배율 올리기/내리기(누를 때마다 한 번)."""
