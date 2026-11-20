@@ -1,7 +1,7 @@
 from kros.context import Context
 from kros.diagnostics import DiagnosticUpdater
 from kros.msgs.geometry_msgs import Twist
-from kros.msgs.sensor_msgs import JointState, LaserScan
+from kros.msgs.sensor_msgs import Imu, JointState, LaserScan
 from kros.msgs.std_msgs import Header
 from kros.nodes import Node
 from kros.tf import JOINT_STATES_TOPIC_NAME
@@ -9,11 +9,11 @@ from kros.timer import Timer
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 
 from .hardware_status import hardware_path, leaves, make_task
-from .topics import CMD_VEL_TOPIC_NAME, SCAN_TOPIC_NAME
+from .topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
 
 
 class RobotBridge(Node):
-    """kros와 로봇 하드웨어를 잇는 접착제(실제 로봇의 하드웨어 드라이버 자리): cmd_vel -> robot.command, 라이다 측정 -> scan 토픽,
+    """kros와 로봇 하드웨어를 잇는 접착제(실제 로봇의 하드웨어 드라이버 자리): cmd_vel -> robot.command, 라이다 측정 -> scan 토픽, IMU 측정 -> imu 토픽,
     하드웨어가 남긴 사실 -> diagnostics 토픽 (진단 수준 판단은 여기서 한다).
 
     로봇의 움직이는 관절(바퀴) 위치를 joint_states 토픽으로 내보낸다 (RobotStatePublisher가 이걸 받아 바퀴 TF를 만든다).
@@ -39,6 +39,7 @@ class RobotBridge(Node):
         self.get_logger().info("로봇 %s 연결: 진단 %d개, 주기 %.1f초", robot.name, len(leaves(robot)), self.diagnostics_period.value)
         self.subscribe(CMD_VEL_TOPIC_NAME, Twist, self._on_cmd_vel)
         robot.lidar.subscribe(self.publish_scan)  # 라이다가 새로 측정할 때마다 scan 토픽으로
+        robot.imu.subscribe(self.publish_imu)  # IMU도 측정할 때마다 imu 토픽으로
 
     def _on_cmd_vel(self, twist: Twist) -> None:
         self.get_logger().debug("cmd_vel 받음: v=%.2f w=%.2f", twist.linear.x, twist.angular.z)
@@ -46,6 +47,9 @@ class RobotBridge(Node):
 
     def publish_scan(self, scan: LaserScan) -> None:
         self.publish(SCAN_TOPIC_NAME, scan)
+
+    def publish_imu(self, imu: Imu) -> None:
+        self.publish(IMU_TOPIC_NAME, imu)
 
     def publish_joint_states(self) -> None:
         positions = self._robot.joint_positions()

@@ -179,8 +179,9 @@ class TestHardware(unittest.TestCase):
         self.assertIsInstance(robot.drive, Hardware)
         self.assertIsInstance(robot.drive.left, Hardware)
         self.assertIsInstance(robot.lidar, Hardware)
+        self.assertIsInstance(robot.imu, Hardware)
         self.assertIsInstance(robot, WorldObject)  # 로봇은 월드에 놓이는 객체이기도 하다
-        self.assertEqual(robot.parts, [robot.drive, robot.lidar])
+        self.assertEqual(robot.parts, [robot.drive, robot.lidar, robot.imu])
         self.assertEqual(robot.drive.parts, [robot.drive.left, robot.drive.right])  # 구동부의 부품은 바퀴 모터 둘
         self.assertIs(robot.drive.owner, robot)
         self.assertIs(robot.drive.left.owner, robot.drive)

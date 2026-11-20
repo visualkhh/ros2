@@ -2,7 +2,8 @@ from pathlib import Path
 from typing import Any
 
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
-from kros.hardwares import Lidar, Motor
+from kros.hardwares import Imu, Lidar, Motor
+from kros.hardwares.imus.mpu9250 import SimulatedMpu9250
 from kros.hardwares.lidars.lds_01 import SimulatedLds01
 from kros.hardwares.motors.xl430_w250 import SimulatedXl430W250
 from kros.interactions import Interaction, KeyState
@@ -22,7 +23,7 @@ SCALE_MIN, SCALE_MAX = 0.25, 4.0  # 기본 속도 대비. 4배면 실제 로봇 
 
 
 class TurtleBot3(Robot):
-    """ROBOTIS TurtleBot3 waffle pi: 구동부(바퀴 모터 둘)와 라이다를 단 로봇. 키보드를 receive()하면 키로 조종한다."""
+    """ROBOTIS TurtleBot3 waffle pi: 구동부(바퀴 모터 둘), 라이다, IMU를 단 로봇. 키보드를 receive()하면 키로 조종한다."""
 
     name = "turtlebot3_waffle_pi"
     description_dir = DESCRIPTION_DIR
@@ -31,17 +32,19 @@ class TurtleBot3(Robot):
     height = 0.141  # m, waffle pi 높이 (라이다 높이 0.132보다 높아서 다른 로봇의 라이다에 보인다)
     radius = 0.2  # waffle pi를 바퀴축 중심 원으로 근사 (뒤쪽 끝 0.197). 회전 중 뒤 모서리(0.25)는 벽을 살짝 파고들 수 있음
 
-    def __init__(self, pose: Pose2D = Pose2D(0.0, 0.0, 0.0), left_motor: Motor | None = None, right_motor: Motor | None = None, lidar: Lidar | None = None) -> None:
-        """부품을 안 주면 시뮬레이션 구현(XL430-W250 바퀴 모터 둘, LDS-01)을 단다. 더미나 진짜 하드웨어 구현을 끼울 수 있다.
+    def __init__(self, pose: Pose2D = Pose2D(0.0, 0.0, 0.0), left_motor: Motor | None = None, right_motor: Motor | None = None, lidar: Lidar | None = None, imu: Imu | None = None) -> None:
+        """부품을 안 주면 시뮬레이션 구현(XL430-W250 바퀴 모터 둘, LDS-01, MPU-9250)을 단다. 더미나 진짜 하드웨어 구현을 끼울 수 있다.
         라이다는 이 로봇의 URDF 위치에 달고, 구동부(DiffDrive)는 이 로봇의 바퀴 치수로 모터 둘을 묶는다."""
         super().__init__()
         self.pose = pose
         self.drive = DiffDrive(left_motor or SimulatedXl430W250(), right_motor or SimulatedXl430W250(), WHEEL_RADIUS, WHEEL_SEPARATION, self.radius)
         self.lidar: Lidar = lidar or SimulatedLds01(LIDAR_MOUNT_X, LIDAR_MOUNT_HEIGHT)
+        self.imu: Imu = imu or SimulatedMpu9250()  # URDF의 imu_link 좌표계 (몸체 방향/각속도/가속도라서 위치는 값에 영향이 없다)
         self.speed_scale = 1.0  # q/z로 바꾸는 키보드 조종 속도 배율
         self._keys: frozenset[str] = frozenset()  # 직전에 눌려 있던 키
         self.add(self.drive, "drive")  # 부품을 단다: 월드의 시계 신호가 Robot.tick -> DiffDrive.tick(-> 바퀴 모터들), Lidar.tick 순으로 내려간다
         self.add(self.lidar, "lidar")
+        self.add(self.imu, "imu")
 
     def joint_positions(self) -> dict[str, float]:
         """URDF의 관절 이름으로 바퀴 모터의 누적 회전각 (엔코더)."""

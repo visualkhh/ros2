@@ -256,6 +256,7 @@ class TestHardwareDiagnostics(unittest.TestCase):
                 "turtlebot3_waffle_pi/drive/left_wheel",
                 "turtlebot3_waffle_pi/drive/right_wheel",
                 "turtlebot3_waffle_pi/lidar",
+                "turtlebot3_waffle_pi/imu",
             },
         )
 
