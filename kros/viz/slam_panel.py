@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from direct.gui.DirectButton import DirectButton
 from direct.gui.DirectOptionMenu import DirectOptionMenu
@@ -40,7 +40,7 @@ class SlamPanel:
         self.cartographer, self.map_server, self.map_saver, self.maps_directory = cartographer, map_server, map_saver, maps_directory
         self.pose_tool = False  # 2D Pose Estimate: 켜지면 3D 화면의 왼쪽 드래그가 카메라 대신 위치/방향을 찍는다
         self._drag_start: tuple[float, float] | None = None
-        self._pending: list[tuple[Future[object], Callable[[object], None]]] = []  # 응답을 기다리는 서비스 호출 (UI는 매 프레임 확인한다)
+        self._pending: list[tuple[Future[Any], Callable[[object], None]]] = []  # 응답을 기다리는 서비스 호출 (UI는 매 프레임 확인한다)
         left = viz.left
         OnscreenText(text="SLAM", parent=left, pos=(0.04, TOP), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
         mode = self._get_mode()
@@ -106,7 +106,7 @@ class SlamPanel:
 
     def _call(self, service: str, srv_type: ServiceType[Req, Res], request: Req, done: Callable[[object], None]) -> None:
         try:
-            future: Future[object] = self.node.call_service_async(service, srv_type, request)  # type: ignore[assignment]
+            future: Future[Any] = self.node.call_service_async(service, srv_type, request)
         except LookupError:  # 그 노드를 안 띄웠다
             self.status.setText(f"{service} 서비스가 없다")
             return
