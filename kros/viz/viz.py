@@ -144,10 +144,10 @@ class Viz:
 
     def _build_scene(self) -> None:
         self.camera = self.scene.attachNewNode(Camera("viz-cam"))
-        lens = PerspectiveLens()
-        lens.setFov(65)
-        lens.setNear(0.02)
-        self.camera.node().setLens(lens)
+        self._lens3d = PerspectiveLens()
+        self._lens3d.setFov(65)
+        self._lens3d.setNear(0.02)
+        self.camera.node().setLens(self._lens3d)
         region = self.win.makeDisplayRegion()
         region.setCamera(self.camera)
         region.setClearColor(LVecBase4f(0.05, 0.05, 0.08, 1))
@@ -205,6 +205,7 @@ class Viz:
     def _resize(self) -> None:
         ratio = self.win.getXSize() / max(1, self.win.getYSize())
         self._lens2d.setFilmSize(2 * ratio, 2)
+        self._lens3d.setAspectRatio(ratio)  # 3D 렌즈도 창 비율을 따라야 늘어나 보이지 않는다
         self.left.setX(-ratio)
         self.hud_anchor.setX(-ratio + PANEL_WIDTH)
 

@@ -79,6 +79,10 @@ class TestVizSmoke(unittest.TestCase):
             self.assertEqual(viz.enabled[name], not before, name)
         self.assertNotIn("tf_static", viz.checks)  # tf_static은 체크박스가 없다
         self.assertTrue(viz.base.isAccepting("window-event"))  # ShowBase 자신의 창 이벤트 처리를 덮어쓰지 않았다
+        viz._lens3d.setAspectRatio(3.0)  # 창 비율과 다른 렌즈 (오프스크린 버퍼는 크기를 못 바꿔서 이렇게 시험한다)
+        viz.base.taskMgr.step()
+        ratio = viz.win.getXSize() / viz.win.getYSize()
+        self.assertAlmostEqual(viz._lens3d.getAspectRatio(), ratio, places=3)  # 창 크기가 바뀌어도 3D가 늘어나지 않는다
         viz.close()
         viz.close()  # 두 번 닫아도 된다
 
