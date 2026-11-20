@@ -1,9 +1,11 @@
 """ROBOTIS LDS-01 2D 라이다 (TurtleBot3 Burger/Waffle Pi): 360도, 1도 간격 360샘플, 0.12~3.5m, 5Hz."""
+import dataclasses
 import math
 import random
 
 from kros.msgs.geometry_msgs import Pose2D
 from kros.msgs.sensor_msgs import LaserScan
+from kros.msgs.std_msgs import Header
 from kros.worlds.clock import Clock
 from kros.hardwares.lidars.lidar import Lidar
 from kros.hardwares.noise import Noise
@@ -16,12 +18,12 @@ RANGE_MIN, RANGE_MAX = 0.12, 3.5  # m
 SCAN_PERIOD = 0.2  # 초 (5Hz)
 
 
-def make_scan(sensor: Pose2D, height: float, world: World) -> LaserScan:
+def make_scan(sensor: Pose2D, height: float, world: World, header: Header = Header(0.0, "base_scan")) -> LaserScan:
     """sensor 위치에서 바닥 위 height 높이로 한 바퀴를 쏴서 LDS-01의 스캔을 만든다 (범위 밖은 inf)."""
     inc = 2 * math.pi / SAMPLES
     hits = world.ray_distances(sensor.x, sensor.y, [sensor.theta + i * inc for i in range(SAMPLES)], height)
     ranges = tuple(r if RANGE_MIN <= r <= RANGE_MAX else math.inf for r in hits)
-    return LaserScan(0.0, 2 * math.pi - inc, inc, RANGE_MIN, RANGE_MAX, ranges)
+    return LaserScan(header, 0.0, 2 * math.pi - inc, inc, RANGE_MIN, RANGE_MAX, ranges)
 
 
 class Lds01(Lidar):
@@ -46,10 +48,10 @@ class SimulatedLds01(Lds01):
     def sample(self, clock: Clock) -> LaserScan:
         body, world = simulated_body(self)
         self.scan_pose = self.sensor_pose(body.pose)
-        scan = make_scan(self.scan_pose, self.mount_height, world)
+        scan = make_scan(self.scan_pose, self.mount_height, world, Header(clock.time, self.frame_id))
         rng = self._rng
         ranges = tuple(r if math.isinf(r) else math.inf if rng.random() < self.dropout else self.range_noise.apply(r, rng) for r in scan.ranges)
-        return LaserScan(scan.angle_min, scan.angle_max, scan.angle_increment, scan.range_min, scan.range_max, ranges)
+        return dataclasses.replace(scan, ranges=ranges)
 
 
 class DummyLds01(Lds01):
@@ -64,4 +66,4 @@ class DummyLds01(Lds01):
         body = self.owner
         if isinstance(body, WorldObject):
             self.scan_pose = self.sensor_pose(body.pose)
-        return LaserScan(0.0, 2 * math.pi - inc, inc, RANGE_MIN, RANGE_MAX, (self.distance,) * SAMPLES)
+        return LaserScan(Header(clock.time, self.frame_id), 0.0, 2 * math.pi - inc, inc, RANGE_MIN, RANGE_MAX, (self.distance,) * SAMPLES)

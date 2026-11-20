@@ -89,13 +89,13 @@ class Viz:
 
     base를 주면 그 ShowBase에 두 번째 창을 열고, 안 주면 자기 ShowBase를 만든다 (창은 프로세스에 ShowBase 하나만 가능).
     package_root: URDF의 package://<pkg>/ 뒤 경로가 놓인 폴더 (메시 파일 위치). fixed_frame: 화면의 기준 프레임.
-    그리는 것: 바닥 격자, TF 축과 부모 선, robot_description 모델(TF로 배치), 라이다 점(scan_frame에서), IMU/odom 글자,
+    그리는 것: 바닥 격자, TF 축과 부모 선, robot_description 모델(TF로 배치), 라이다 점(scan의 header.frame_id에서), IMU/odom 글자,
     odom과 odometry/filtered의 위치 화살표 (둘 다 fixed_frame 기준일 때만: TF는 둘 중 하나만 내므로 나머지는 화살표로 비교한다).
     """
 
-    def __init__(self, kros: Kros, package_root: Path, base: ShowBase | None = None, fixed_frame: str = "odom", scan_frame: str = "base_scan", imu_frame: str = "imu_link") -> None:
+    def __init__(self, kros: Kros, package_root: Path, base: ShowBase | None = None, fixed_frame: str = "odom", imu_frame: str = "imu_link") -> None:
         self.kros, self.package_root = kros, package_root
-        self.fixed_frame, self.scan_frame = fixed_frame, scan_frame
+        self.fixed_frame = fixed_frame
         self.node = VizNode(kros.context)
         self.own_base = base is None
         self.base = base or ShowBase()
@@ -374,7 +374,8 @@ class Viz:
             self._scan_np.setRenderModeThickness(4)
             self._scan_np.hide()
         if self._scan_np is not None:
-            stamped = self._lookup(self.scan_frame) if self.enabled["scan"] else None
+            frame = self._scan_drawn.header.frame_id if isinstance(self._scan_drawn, LaserScan) else ""
+            stamped = self._lookup(frame) if self.enabled["scan"] else None
             if stamped is None:
                 self._scan_np.hide()
             else:

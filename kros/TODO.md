@@ -51,5 +51,5 @@
 - [ ] 프로세스 분리 (소켓) -> 분산 디스커버리
 - [ ] QoS: `reliability`, `deadline`, `lifespan`, `liveliness` (depth와 durability는 있음). 네트워크를 붙일 때 필요
 
-- [ ] viz 확장: IMU 화살표, odom 궤적, 오른쪽 클릭 목표, scan_frame을 토픽 header에서 읽기 (지금은 LaserScan에 header가 없어 파라미터), 패널 스크롤, viz 창에 포커스가 있어도 조종 키가 먹게, `TransformListener`에 수신 카운트 훅 (지금 viz가 tf를 두 번 구독)
+- [ ] viz 확장: IMU 화살표, odom 궤적, 오른쪽 클릭 목표, 패널 스크롤, viz 창에 포커스가 있어도 조종 키가 먹게, `TransformListener`에 수신 카운트 훅 (지금 viz가 tf를 두 번 구독)
 - [ ] 하드웨어 오차: 모터(엔코더) 값의 지연, 송신 주기 흔들림, 오차 수치를 진짜 하드웨어 값에 맞춰 보정

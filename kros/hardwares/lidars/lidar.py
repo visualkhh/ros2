@@ -12,8 +12,9 @@ class Lidar(Sensor[LaserScan]):
     어디에 달렸는가(mount_x: 로봇 중심에서 앞쪽으로 m, mount_height: 바닥에서 센서까지 m)는 부품이 아니라 로봇이 정해 넘긴다.
     """
 
-    def __init__(self, mount_x: float = 0.0, mount_height: float = 0.0, period: float | None = None) -> None:
+    def __init__(self, mount_x: float = 0.0, mount_height: float = 0.0, period: float | None = None, frame_id: str = "base_scan") -> None:
         super().__init__(period)
+        self.frame_id = frame_id  # header에 적는 센서 좌표계 이름 (URDF 링크 이름과 맞춘다)
         self.mount_x = mount_x
         self.mount_height = mount_height
         self.scan_pose: Pose2D | None = None  # 최신 스캔을 측정한 순간의 센서 위치 (화면 표시용)

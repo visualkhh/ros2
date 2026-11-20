@@ -554,6 +554,8 @@ class TestLidar(unittest.TestCase):
         for _ in range(20):  # 0.05초 간격으로 1.0초
             world.step(0.05)
         self.assertEqual(len(scans), 6)  # 첫 신호(0.05초)에 바로 한 번, 이후 0.2, 0.4, 0.6, 0.8, 1.0
+        self.assertEqual([round(scan.header.stamp, 6) for scan in scans], [0.05, 0.2, 0.4, 0.6, 0.8, 1.0])  # 측정 시각
+        self.assertEqual(scans[0].header.frame_id, "base_scan")  # URDF의 라이다 링크
         self.assertIsNotNone(robot.lidar.read())
 
     def test_big_dt_scans_once(self) -> None:
