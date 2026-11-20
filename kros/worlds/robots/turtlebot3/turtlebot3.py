@@ -40,8 +40,8 @@ class TurtleBot3(Robot):
         self.lidar: Lidar = lidar or SimulatedLds01(LIDAR_MOUNT_X, LIDAR_MOUNT_HEIGHT)
         self.speed_scale = 1.0  # q/z로 바꾸는 키보드 조종 속도 배율
         self._keys: frozenset[str] = frozenset()  # 직전에 눌려 있던 키
-        self.add(self.drive)  # 부품을 단다: 월드의 시계 신호가 Robot.tick -> DiffDrive.tick(-> 바퀴 모터들), Lidar.tick 순으로 내려간다
-        self.add(self.lidar)
+        self.add(self.drive, "drive")  # 부품을 단다: 월드의 시계 신호가 Robot.tick -> DiffDrive.tick(-> 바퀴 모터들), Lidar.tick 순으로 내려간다
+        self.add(self.lidar, "lidar")
 
     def on_interaction(self, interaction: Interaction[Any], state: Any) -> None:
         """키보드 입력이 오면 키를 속도 명령으로 해석해 구동부에 내린다. w/s(up/down) 전후진, a/d(left/right) 좌/우회전,

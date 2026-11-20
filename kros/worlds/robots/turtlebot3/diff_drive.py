@@ -20,8 +20,8 @@ class DiffDrive(Actuator[Twist]):
         self.wheel_radius = wheel_radius  # m
         self.wheel_separation = wheel_separation  # m, 두 바퀴 사이
         self.body_radius = body_radius  # m, 몸체를 원으로 본 충돌 반지름
-        self.add(left)
-        self.add(right)
+        self.add(left, "left_wheel")
+        self.add(right, "right_wheel")
 
     def apply(self, command: Twist, clock: Clock, world: World) -> None:
         """역기구학: 몸체 속도 명령 -> 바퀴 속도 목표."""

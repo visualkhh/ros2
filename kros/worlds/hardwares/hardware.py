@@ -29,6 +29,8 @@ class Hardware(ABC):
     """
 
     period: float | None = None  # 하위 클래스의 기본 주기 (생성자 인자로 덮어쓸 수 있다)
+    name: str = ""  # 부품 이름 (달 때 정한다: "left_wheel", "lidar" ...). 진단 이름 등에 쓴다
+    model: str = ""  # 모델 번호 ("LDS-01", "XL430-W250" ...). 진짜 장치의 식별자(hardware_id)가 된다
 
     def __init__(self, period: float | None = None) -> None:
         if period is not None:
@@ -41,8 +43,10 @@ class Hardware(ABC):
         self._next_due = 0.0  # 다음 주기 시각. 간격을 빼서 비교하면 부동소수점 오차로 한 번씩 밀린다
         self._last_run: float | None = None
 
-    def add(self, part: Hardware) -> Hardware:
-        """부품을 단다. 단 부품을 그대로 돌려준다."""
+    def add(self, part: Hardware, name: str | None = None) -> Hardware:
+        """부품을 단다 (name을 주면 부품의 이름으로 정한다). 단 부품을 그대로 돌려준다."""
+        if name is not None:
+            part.name = name
         part.owner = self
         self.parts.append(part)
         return part

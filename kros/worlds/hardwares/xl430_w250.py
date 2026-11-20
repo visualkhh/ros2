@@ -8,6 +8,8 @@ class SimulatedXl430W250(Motor):
     """속도 모드 시뮬레이션: 목표 속도(max_velocity가 있으면 그 안으로 제한)로 돌고 position을 누적한다. 꺼지면 멈춘다.
     관성/가속은 아직 없다 (목표 속도로 바로 돈다)."""
 
+    model = "XL430-W250"
+
     def __init__(self, max_velocity: float | None = None, period: float | None = None) -> None:
         super().__init__(period)
         self.max_velocity = max_velocity  # rad/s, None이면 제한 없음

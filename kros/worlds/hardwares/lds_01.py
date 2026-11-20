@@ -24,6 +24,8 @@ def make_scan(sensor: Pose2D, height: float, world: World) -> LaserScan:
 class Lds01(Lidar):
     """LDS-01 라이다의 공통부: 5Hz. 스캔을 만드는 sample()은 구현(시뮬레이션/더미/진짜)이 한다."""
 
+    model = "LDS-01"
+
     def __init__(self, mount_x: float = 0.0, mount_height: float = 0.0, period: float | None = SCAN_PERIOD) -> None:
         super().__init__(mount_x, mount_height, period)
 
