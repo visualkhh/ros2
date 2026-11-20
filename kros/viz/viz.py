@@ -26,7 +26,7 @@ from kros.tf import QOS_TF, QOS_TF_STATIC, ROBOT_DESCRIPTION_TOPIC_NAME, TF_STAT
 from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
 from kros.viewer.urdf_model import UrdfModel
 
-from .slam_panel import SlamPanel
+from .slam_panel import BUTTON_COLOR, SlamPanel
 
 NAME = "Viz"
 HELP = "left drag: orbit (pose tool: set pose)    right drag: pan    wheel: zoom    checkbox: show/hide    esc: close"
@@ -155,7 +155,7 @@ class Viz:
         frames = list(FIXED_FRAMES) if fixed_frame in FIXED_FRAMES else [fixed_frame, *FIXED_FRAMES]
         self.fixed_menu = DirectOptionMenu(
             parent=self.left, items=frames, initialitem=frames.index(fixed_frame), scale=0.045, pos=(0.38, 0, -0.82), command=self._set_fixed_frame,
-            text_fg=(1, 1, 1, 1), frameColor=(0.2, 0.24, 0.34, 1), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
+            text_fg=(1, 1, 1, 1), frameColor=BUTTON_COLOR, relief=DGG.RAISED, borderWidth=(0.12, 0.12), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
         )
         self.slam = SlamPanel(self)
         self.base.taskMgr.add(self._update, "viz-update")

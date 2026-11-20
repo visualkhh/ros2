@@ -11,6 +11,7 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from direct.gui import DirectGuiGlobals as DGG
 from direct.gui.DirectButton import DirectButton
 from direct.gui.DirectOptionMenu import DirectOptionMenu
 from direct.gui.OnscreenText import OnscreenText
@@ -30,7 +31,15 @@ if TYPE_CHECKING:
 
 TOP = -0.33  # 패널에서 SLAM 칸이 시작하는 높이
 INITIAL_POSE_COVARIANCE = tuple(0.25 if i in (0, 7) else 0.0685 if i == 35 else 0.0 for i in range(36))  # rviz 2D Pose Estimate의 기본 공분산
-GUI = {"scale": 0.04, "text_fg": (1, 1, 1, 1), "frameColor": (0.2, 0.24, 0.34, 1), "relief": 1}
+BUTTON_COLOR = (0.26, 0.31, 0.44, 1)
+# 입체 테두리(RAISED: 누르는 동안 SUNKEN으로 들어간다), 글자 둘레 여백
+GUI = {"scale": 0.04, "text_fg": (1, 1, 1, 1), "frameColor": BUTTON_COLOR, "relief": DGG.RAISED, "borderWidth": (0.12, 0.12), "pad": (0.3, 0.25)}
+
+
+def _button(parent: object, text: str, left: float, right: float, y: float, command: Callable[[], None]) -> DirectButton:
+    """패널 좌표 left~right 폭을 꽉 채운 버튼 (글자는 가운데). 같은 줄/열의 버튼 끝이 맞는다."""
+    half = (right - left) / 2 / GUI["scale"]  # type: ignore[operator]
+    return DirectButton(parent=parent, text=text, pos=((left + right) / 2, 0, y), frameSize=(-half, half, -0.5, 1.0), command=command, **{**GUI, "pad": (0, 0)})
 
 
 class SlamPanel:
@@ -43,15 +52,17 @@ class SlamPanel:
         left = viz.left
         OnscreenText(text="SLAM", parent=left, pos=(0.04, TOP), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
         self.mode_text = OnscreenText(parent=left, pos=(0.2, TOP), align=TextNode.ALeft, fg=(1, 0.75, 0.3, 1), scale=0.04, mayChange=True)
-        self.slam_button = DirectButton(parent=left, text="start SLAM", pos=(0.07, 0, TOP - 0.08), command=self.toggle_slam, text_align=TextNode.ALeft, **GUI)
-        self.save_button = DirectButton(parent=left, text="save map", pos=(0.4, 0, TOP - 0.08), command=self.save_map, text_align=TextNode.ALeft, **GUI)
+        self.slam_button = _button(left, "start SLAM", 0.06, 0.32, TOP - 0.1, self.toggle_slam)
+        self.save_button = _button(left, "save map", 0.36, 0.62, TOP - 0.1, self.save_map)
         maps = self.map_names()
         self.map_menu = DirectOptionMenu(
-            parent=left, items=maps or ["(no maps)"], pos=(0.07, 0, TOP - 0.17), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1), **GUI,
+            parent=left, items=maps or ["(no maps)"], pos=(0.075, 0, TOP - 0.21), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
+            **{**GUI, "frameColor": (0.12, 0.14, 0.2, 1), "relief": DGG.SUNKEN},  # 고르는 칸은 들어간 모양 (버튼과 구별)
         )
-        self.load_button = DirectButton(parent=left, text="load", pos=(0.52, 0, TOP - 0.17), command=self.load_map, text_align=TextNode.ALeft, **GUI)
-        self.pose_button = DirectButton(parent=left, text="2D Pose Estimate", pos=(0.07, 0, TOP - 0.26), command=self.toggle_pose_tool, text_align=TextNode.ALeft, **GUI)
-        self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.34), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
+        self.map_menu["frameSize"] = (-0.4, (0.62 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # type: ignore[operator]  # 한 줄을 다 쓴다 (지도 이름이 길다)
+        self.load_button = _button(left, "load", 0.06, 0.22, TOP - 0.32, self.load_map)
+        self.pose_button = _button(left, "2D Pose Estimate", 0.26, 0.62, TOP - 0.32, self.toggle_pose_tool)
+        self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.41), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
 
     # ---- 버튼 -----------------------------------------------------------------------------------
 
@@ -115,7 +126,7 @@ class SlamPanel:
     def toggle_pose_tool(self) -> None:
         self.pose_tool = not self.pose_tool
         self._drag_start = None
-        self.pose_button["frameColor"] = (0.6, 0.35, 0.1, 1) if self.pose_tool else GUI["frameColor"]
+        self.pose_button["frameColor"] = (0.6, 0.35, 0.1, 1) if self.pose_tool else BUTTON_COLOR
         self.status.setText("drag on the floor: position -> heading" if self.pose_tool else "")
 
     # ---- 매 프레임 --------------------------------------------------------------------------------
