@@ -8,7 +8,7 @@ ROS를 파이썬으로 직접 만들며 학습하는 프로젝트. 타입 힌트
 kros/
 ├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
 ├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, timer_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
-├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan(header: 측정 시각, base_scan) / std_msgs: Header, String / geometry_msgs: Quaternion, Transform, TransformStamped, PoseWithCovariance, TwistWithCovariance / nav_msgs: Odometry(공분산 포함) / sensor_msgs: Imu(공분산 포함) / tf2_msgs: TFMessage / sensor_msgs: JointState / diagnostic_msgs / rcl_interfaces: Log ... (ROS의 msg 흉내)
+├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan(header: 측정 시각, base_scan) / std_msgs: Header, String / geometry_msgs: Quaternion, Transform, TransformStamped, PoseWithCovariance, TwistWithCovariance / nav_msgs: Odometry(공분산 포함), OccupancyGrid/MapMetaData(격자 지도) / sensor_msgs: Imu(공분산 포함) / tf2_msgs: TFMessage / sensor_msgs: JointState / diagnostic_msgs / rcl_interfaces: Log ... (ROS의 msg 흉내)
 ├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
 ├── tf/                TF 도구: Buffer(tf2_ros.Buffer, 좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, transform_math(순수 3D 계산)
 ├── urdf/              URDF 파서 (표준 라이브러리만, 링크/관절 트리 검증)
@@ -33,7 +33,7 @@ kros/
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
 │       └── turtlebot3/  TurtleBot3(Robot): OpenCR 보드(구동부 + IMU)와 LDS-01 라이다를 단다. 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
 ├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 스텝마다 그 순간을 불변 데이터 Snapshot(snapshot.py)으로 만드는 SnapshotRecorder(snapshot_recorder.py: 월드와 로봇을 아는 곳)가 러너의 리스너로 달리고, Viewer는 그 최신 스냅샷만 그린다. snapshot/recorder는 panda3d 없이 돈다. kros와 무관
-├── viz/               [kros 쪽] rviz 같은 화면: `Viz(kros, package_root, base=None)`가 Kros 인스턴스 하나만 받아 안에서 `VizNode`를 만들고 tf/tf_static, robot_description(latch), scan, imu, odom, odometry/filtered를 구독해 그린다 (왼쪽 구독 토픽 패널에 체크박스로 표시 켜기/끄기, 격자, TF 축과 부모 선, URDF 모델을 TF로 배치, 라이다 점, IMU/odom/ekf 글자, odom(분홍)과 odometry/filtered(하늘색) 위치 화살표; 기준 프레임 `fixed_frame`=odom). `base`로 Viewer(ShowBase)를 주면 그 위에 두 번째 창을 열고, 없으면 자기 창. 월드/하드웨어는 모른다
+├── viz/               [kros 쪽] rviz 같은 화면: `Viz(kros, package_root, base=None)`가 Kros 인스턴스 하나만 받아 안에서 `VizNode`를 만들고 tf/tf_static, robot_description(latch), map(latch, OccupancyGrid), scan, imu, odom, odometry/filtered를 구독해 그린다 (왼쪽 구독 토픽 패널에 체크박스로 표시 켜기/끄기, 격자, TF 축과 부모 선, URDF 모델을 TF로 배치, 라이다 점, IMU/odom/ekf 글자, odom(분홍)과 odometry/filtered(하늘색) 위치 화살표, 격자 지도를 바닥 텍스처로; 기준 프레임은 패널 아래 Fixed Frame 메뉴로 odom/map 중에서 고른다(rviz처럼, map은 map -> odom TF가 있을 때만)). `base`로 Viewer(ShowBase)를 주면 그 위에 두 번째 창을 열고, 없으면 자기 창. 월드/하드웨어는 모른다
 ├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan, imu)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성

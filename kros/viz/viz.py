@@ -5,18 +5,19 @@ from pathlib import Path
 
 from direct.gui import DirectGuiGlobals as DGG
 from direct.gui.DirectCheckButton import DirectCheckButton
+from direct.gui.DirectOptionMenu import DirectOptionMenu
 from direct.gui.OnscreenText import OnscreenText
 from direct.showbase.DirectObject import DirectObject
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, ButtonThrower, Camera, CardMaker, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
     LineSegs, MouseAndKeyboard, OrthographicLens, PGTop, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
-    LVecBase4f, GraphicsWindow,
+    LVecBase4f, GraphicsWindow, SamplerState, Texture,
 )
 
 from kros import Kros
 from kros.msgs.geometry_msgs import TransformStamped
-from kros.msgs.nav_msgs import Odometry
+from kros.msgs.nav_msgs import UNKNOWN, OccupancyGrid, Odometry
 from kros.msgs.sensor_msgs import Imu, LaserScan
 from kros.msgs.std_msgs import String
 from kros.nodes import Node
@@ -29,7 +30,10 @@ NAME = "Viz"
 HELP = "left drag: orbit    right drag: pan    wheel: zoom    checkbox: show/hide    esc: close"
 PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.84, 0.13  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
 ODOMETRY_ARROWS = {"odom": (1.0, 0.35, 0.85, 1.0), "odometry/filtered": (0.3, 0.9, 1.0, 1.0)}  # 바퀴 오도메트리(분홍, TF 부모 선이 노랑이라)와 EKF 결과(하늘색)를 화살표로 겹쳐 본다
-TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "scan", "imu", *ODOMETRY_ARROWS)  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
+TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "map", "scan", "imu", *ODOMETRY_ARROWS)
+FIXED_FRAMES = ("odom", "map")  # rviz의 Fixed Frame: 무엇을 기준으로 그릴지 (map은 SLAM/위치추정이 map -> odom TF를 낼 때만 있다)
+# 지도 칸 색 (rviz map 색과 비슷하게): 모름은 어두운 청회색, 점유 확률 0(빈 곳)~100(벽)은 밝은 회색~검정
+MAP_COLORS = {UNKNOWN: bytes((60, 66, 78, 255)), **{v: bytes((round(225 - 2.15 * v),) * 3 + (255,)) for v in range(101)}}  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
 
 
 class VizNode(Node):
@@ -46,6 +50,7 @@ class VizNode(Node):
             (TF_TOPIC_NAME, TFMessage, QOS_TF),  # 이 둘은 TransformListener도 따로 구독한다: 여기서는 패널의 통계용
             (TF_STATIC_TOPIC_NAME, TFMessage, QOS_TF_STATIC),
             (ROBOT_DESCRIPTION_TOPIC_NAME, String, QOS_LATCHED),
+            ("map", OccupancyGrid, QOS_LATCHED),  # 지도는 한 번 내고 바뀔 때만 다시 낸다 (늦게 켜도 받는다)
             ("scan", LaserScan, QOS_SENSOR_DATA),
             ("imu", Imu, QOS_SENSOR_DATA),
             ("odom", Odometry, QOS_SENSOR_DATA),
@@ -114,6 +119,9 @@ class Viz:
         self._scan_drawn: object = None
         self._scan_np: NodePath | None = None
         self._tf_np: NodePath | None = None
+        self._map_drawn: object = None
+        self._map_np = self.scene.attachNewNode("map")  # 지도 header의 frame_id에 TF로 놓는다
+        self._map_np.hide()
         self._labels: dict[str, NodePath] = {}  # TF 프레임 이름 글자 (rviz의 Show Names)
         self._last_mouse: tuple[float, float] | None = None
         self._closed = False
@@ -139,6 +147,12 @@ class Viz:
             self.rows[name] = OnscreenText(parent=self.left, pos=(0.11, y - 0.05), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
         self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
         OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
+        OnscreenText(text="Fixed Frame", parent=self.left, pos=(0.04, -0.82), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
+        frames = list(FIXED_FRAMES) if fixed_frame in FIXED_FRAMES else [fixed_frame, *FIXED_FRAMES]
+        self.fixed_menu = DirectOptionMenu(
+            parent=self.left, items=frames, initialitem=frames.index(fixed_frame), scale=0.045, pos=(0.38, 0, -0.82), command=self._set_fixed_frame,
+            text_fg=(1, 1, 1, 1), frameColor=(0.2, 0.24, 0.34, 1), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
+        )
         self.base.taskMgr.add(self._update, "viz-update")
 
     # ---- 만들기 ------------------------------------------------------------------------------
@@ -210,6 +224,9 @@ class Viz:
         self.left.setX(-ratio)
         self.hud_anchor.setX(-ratio + PANEL_WIDTH)
 
+    def _set_fixed_frame(self, frame: str) -> None:
+        self.fixed_frame = frame
+
     def _set_enabled(self, checked: int, name: str) -> None:
         self.enabled[name] = bool(checked)
 
@@ -248,6 +265,7 @@ class Viz:
         self._camera()
         self._update_model()
         self._update_tf()
+        self._update_map()
         self._update_scan()
         self._update_odometry()
         self.hud.setText(self._hud_text())
@@ -349,6 +367,37 @@ class Viz:
             self._labels[frame] = label
         return self._labels[frame]
 
+    def _update_map(self) -> None:
+        """OccupancyGrid를 칸마다 색을 칠한 텍스처 한 장으로 바닥에 깐다 (새 지도일 때만 만든다)."""
+        grid = self.node.latest("map")
+        if isinstance(grid, OccupancyGrid) and grid is not self._map_drawn:
+            self._map_drawn = grid
+            self._map_np.getChildren().detach()
+            info = grid.info
+            if info.width and info.height and len(grid.data) == info.width * info.height:
+                texture = Texture("map")
+                texture.setup2dTexture(info.width, info.height, Texture.T_unsigned_byte, Texture.F_rgba)
+                texture.setRamImageAs(b"".join(MAP_COLORS.get(v, MAP_COLORS[UNKNOWN]) for v in grid.data), "RGBA")  # 텍스처 첫 줄이 아래(y가 작은 쪽): 지도의 행 순서와 같다
+                texture.setMagfilter(SamplerState.FT_nearest)  # 칸이 번지지 않게
+                texture.setMinfilter(SamplerState.FT_nearest)
+                card = CardMaker("map-card")
+                card.setFrame(0, info.width * info.resolution, 0, info.height * info.resolution)
+                o, q = info.origin.position, info.origin.orientation
+                origin = self._map_np.attachNewNode("map-origin")
+                origin.setPos(o.x, o.y, o.z - 0.002)  # 격자선보다 살짝 아래
+                origin.setQuat(LQuaternionf(q.w, q.x, q.y, q.z))
+                plane = origin.attachNewNode(card.generate())
+                plane.setP(-90)  # CardMaker는 xz 평면에 만든다: 바닥(xy)으로 눕힌다
+                plane.setTexture(texture)
+                plane.setLightOff()
+                plane.setTwoSided(True)
+        stamped = self._lookup(grid.header.frame_id) if isinstance(grid, OccupancyGrid) and self.enabled["map"] else None
+        if stamped is None:
+            self._map_np.hide()
+        else:
+            _mat_of(stamped, self._map_np)
+            self._map_np.show()
+
     def _update_scan(self) -> None:
         """scan의 점을 센서 프레임 기준으로 한 번 만들고, 센서의 TF에 맞춰 놓는다 (새 스캔일 때만 만든다)."""
         scan = self.node.latest("scan")
@@ -395,7 +444,9 @@ class Viz:
 
     def _hud_text(self) -> str:
         imu = self.node.latest("imu")
-        rows = [f"fixed frame: {self.fixed_frame}   frames: {len(self.node.buffer.all_frames())}"]
+        frames = self.node.buffer.all_frames()
+        missing = "" if self.fixed_frame in frames else "  (no tf yet)"
+        rows = [f"fixed frame: {self.fixed_frame}{missing}   frames: {len(frames)}"]
         for topic, label in (("odom", "odom"), ("odometry/filtered", "ekf ")):
             odom = self.node.latest(topic)
             if isinstance(odom, Odometry) and self.enabled[topic]:
@@ -422,6 +473,7 @@ class Viz:
         self._events.ignoreAll()
         for check in self.checks.values():
             check.destroy()
+        self.fixed_menu.destroy()
         if self.own_base:
             self.base.destroy()
         else:

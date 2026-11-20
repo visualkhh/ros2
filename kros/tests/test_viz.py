@@ -17,7 +17,15 @@ if HAS_PANDA:
     from kros.examples.turtlebot3.main import IMU_CONFIG, ODOM_CONFIG
     from kros.nodes import DiffDriveOdometry, Ekf, RobotStatePublisher
     from kros.timer import SimulatedTimeSource
+    from kros.context import Context
+    from kros.msgs.geometry_msgs import Point, Pose, Transform, TransformStamped
+    from kros.tf import TransformBroadcaster
+    from kros.msgs.nav_msgs import FREE, OCCUPIED, UNKNOWN, MapMetaData, OccupancyGrid
+    from kros.msgs.std_msgs import Header
+    from kros.nodes import Node
+    from kros.topic import QOS_LATCHED
     from kros.viz import Viz
+    from kros.viz.viz import MAP_COLORS
     from kros.worlds.maze.maze_world import MazeWorld
     from kros.worlds.robots.turtlebot3 import TurtleBot3
     from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARATION
@@ -91,6 +99,48 @@ class TestVizSmoke(unittest.TestCase):
         self.assertAlmostEqual(viz._lens3d.getAspectRatio(), ratio, places=3)  # 창 크기가 바뀌어도 3D가 늘어나지 않는다
         viz.close()
         viz.close()  # 두 번 닫아도 된다
+
+
+@unittest.skipUnless(HAS_PANDA, "panda3d 없음")
+class TestVizMap(unittest.TestCase):
+    def test_map_is_drawn_where_its_frame_is_and_fixed_frame_can_be_chosen(self) -> None:
+        made: dict[str, Node] = {}
+
+        def create(ctx: Context) -> list[Node]:
+            made["mapper"] = Node(ctx, "Mapper")
+            return [made["mapper"]]
+
+        kros = Kros(create, time_source=SimulatedTimeSource())
+        self.addCleanup(kros.shutdown)
+        # 4x3칸, 0.5m 칸, 칸 (0, 0)의 모서리가 odom의 (1, 2): 맨 아래 줄 첫 칸이 벽, 둘째 칸은 모름
+        cells = (OCCUPIED, UNKNOWN, FREE, FREE) + (FREE,) * 8
+        grid = OccupancyGrid(Header(0.0, "odom"), MapMetaData(0.0, 0.5, 4, 3, Pose(Point(1.0, 2.0, 0.0))), cells)
+        made["mapper"].publish("map", grid, QOS_LATCHED)
+        kros.context.topic_manager.join()
+        viz = Viz(kros, TurtleBot3.description_dir)  # 지도를 낸 뒤에 켜도 latch라 받는다
+        self.addCleanup(viz.close)
+        TransformBroadcaster(made["mapper"]).send_transform(TransformStamped(Header(0.0, "odom"), "base_footprint", Transform()))  # odom 프레임이 있게 (tf는 latch가 아니라 viz가 켜진 뒤에)
+        kros.context.topic_manager.join()
+        viz.base.taskMgr.step()
+        self.assertFalse(viz._map_np.isHidden())
+        low, high = viz._map_np.getTightBounds()
+        for got, want in zip((low.x, low.y, high.x, high.y), (1.0, 2.0, 3.0, 3.5)):  # 원점에서 4*0.5 x 3*0.5 m
+            self.assertAlmostEqual(got, want, places=3)
+        texture = viz._map_np.findAllTextures()[0]
+        self.assertEqual((texture.getXSize(), texture.getYSize()), (4, 3))
+        image = texture.getRamImageAs("RGBA").getData()
+        self.assertEqual(tuple(image[0:4]), tuple(MAP_COLORS[OCCUPIED]))  # 칸 (0, 0) = 벽 = 어두움
+        self.assertEqual(tuple(image[4:8]), tuple(MAP_COLORS[UNKNOWN]))
+        self.assertGreater(image[8], image[0])  # 빈 곳은 벽보다 밝다
+        viz.fixed_menu.set(viz.fixed_menu["items"].index("map"))  # 패널에서 Fixed Frame을 map으로 고른다
+        viz.base.taskMgr.step()
+        self.assertEqual(viz.fixed_frame, "map")
+        self.assertTrue(viz._map_np.isHidden())  # map -> odom TF가 없으니 odom에 있는 지도를 놓을 수 없다
+        self.assertIn("no tf yet", viz.hud.getText())
+        viz.enabled["map"] = False
+        viz._set_fixed_frame("odom")
+        viz.base.taskMgr.step()
+        self.assertTrue(viz._map_np.isHidden())  # 체크를 끄면 숨는다
 
 
 if __name__ == "__main__":
