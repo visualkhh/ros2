@@ -35,8 +35,8 @@ class TestAction(unittest.TestCase):
     def setUp(self) -> None:
         self.ctx = Context()
         self.addCleanup(self.ctx.shutdown)
-        self.server_node = Node("server", self.ctx)
-        self.client_node = Node("client", self.ctx)
+        self.server_node = Node(self.ctx, "server")
+        self.client_node = Node(self.ctx, "client")
 
     def counting(self, h: H) -> CountResult:
         for i in range(1, h.goal.n + 1):
@@ -148,7 +148,7 @@ class TestAction(unittest.TestCase):
     def test_two_clients_only_get_their_own_result(self) -> None:
         self.server_node.create_action_server("count", Count, self.counting)
         a = self.client_node.create_action_client("count", Count)
-        b = Node("client2", self.ctx).create_action_client("count", Count)
+        b = Node(self.ctx, "client2").create_action_client("count", Count)
         fa: list[CountFeedback] = []
         fb: list[CountFeedback] = []
         ha, hb = a.send_goal(CountGoal(2), fa.append), b.send_goal(CountGoal(3), fb.append)

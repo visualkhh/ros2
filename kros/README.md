@@ -6,10 +6,11 @@ ROS를 파이썬으로 직접 만들며 학습하는 프로젝트. 타입 힌트
 
 ```
 kros/
-├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관
-├── context.py         Context: 노드들이 공유하는 통신 수단 묶음 (topic_manager, service_manager)
-├── node/node.py       Node(name, context): publish/subscribe, 서비스, 액션 (모두 타입 지정)
+├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
+├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, parameter_manager) + 노드 이름 중복 검사
+├── node/node.py       Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
 ├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan (ROS의 msg 흉내)
+├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
 ├── topic/             TopicManager(토픽별 구독자 목록, 메시지 전달), Subscription (한 프로세스 안)
@@ -35,13 +36,13 @@ kros/
 from kros import Kros
 from kros.node import Node
 
-kros = Kros(lambda ctx: [Node("pub", ctx), Node("sub", ctx)])
+kros = Kros(lambda ctx: [Node(ctx, "pub"), Node(ctx, "sub")])
 pub, sub = kros.nodes
 sub.subscribe("chat", str, print)   # 받을 타입을 선언
 pub.publish("chat", "hello")   # -> hello
 ```
 
-- Node는 `Context`를 반드시 받는다. 직접 만들지 않고 Kros가 주입한다 (Spring식 조합). `ctx.topic_manager`, `ctx.service_manager`.
+- Node는 `Context`를 반드시 받는다 (`Node(context, name=None, parameters=None)`: 이름은 기본이 클래스 이름이고, 같은 Context에서 겹치면 `ValueError`라서 같은 클래스를 여럿 만들 때는 `name=`을 준다). 직접 만들지 않고 Kros가 주입한다 (Spring식 조합). `ctx.topic_manager`, `ctx.service_manager`.
 - 구독자 없는 토픽에 publish해도 에러 없음.
 - publish는 즉시 반환. 구독마다 전용 스레드+큐에서 콜백이 동시에 실행되고(구독 안에서는 순서 보장), 콜백 예외는 로그만 남기고 다른 구독자에 영향 없음.
 - `subscribe`는 `Subscription`을 돌려주고 `unsubscribe(sub)`로 해제. `join()`은 전달 완료 대기, `Kros.shutdown()`은 정리 후 종료.
@@ -49,6 +50,30 @@ pub.publish("chat", "hello")   # -> hello
 - 서비스: `node.create_service(이름, ServiceType, handler)` / `node.call_service(이름, ServiceType, request, timeout=)` / `call_service_async` (Future). 서비스 이름당 서버 1개(중복 `ValueError`), 서버 없으면 `LookupError`, 타입 다르면 `TypeError`, 핸들러 예외는 호출자에게 전달. 서버마다 스레드 1개라 요청은 순서대로 하나씩 처리. 자기 서비스를 블로킹 호출하면 데드락(timeout 권장).
 - 액션: `node.create_action_server(이름, ActionType, execute, goal_callback=None)` / `node.create_action_client(이름, ActionType)` -> `client.send_goal(goal, feedback_callback, timeout)` -> `ClientGoalHandle`(`result()`, `cancel()`, `status`). execute는 `handle.publish_feedback()`으로 진행을 알리고 `handle.is_cancel_requested`로 취소에 응한다. 정상 반환 SUCCEEDED(취소 요청 중이었으면 CANCELED), 예외/잘못된 결과 타입 ABORTED, goal_callback이 False면 REJECTED. goal은 받은 순서대로 하나씩 실행. feedback과 result는 같은 토픽(순서 보장)으로 간다.
 - Kros 콜백은 `Context` 하나를 받는다. `Kros.shutdown()`은 `ctx.shutdown()`(서비스 먼저, 토픽 나중).
+
+## 파라미터
+
+노드가 파라미터를 선언해서 가진다 (ROS2식). 처리는 `Context.parameter_manager`가 하고, `Kros`는 시작 값을 넘기기만 한다.
+
+```python
+class Driver(Node):
+    def __init__(self, context: Context) -> None:
+        super().__init__(context)   # 노드 이름은 "Driver"
+        self.speed = self.declare_parameter("speed", 0.26, validator=lambda v: v > 0, on_change=self.on_speed)
+
+    def command(self) -> float:
+        return self.speed.value * 2   # 쓸 때마다 .value를 읽는다: 바뀐 값이 바로 반영된다
+
+kros = Kros(lambda ctx: [Driver(ctx)], parameters={"Driver": {"speed": 0.3}})   # 시작 값
+kros.set_parameter("Driver", "speed", 0.1)    # 실행 중에 바꾼다 (노드 객체나 이름). 노드 안에서도 node.set_parameter(...) / node.speed.set(...)
+```
+
+- **우선순위**(아래가 낮고 위가 이긴다): 선언한 기본값 < `Node(parameters=...)`(그 인스턴스의 값) < `Kros(parameters=...)`(실행할 때 바깥에서 주는 값) < 실행 중 `set`.
+- **타입은 기본값으로 고정**된다(`bool`, `int`, `float`, `str`, 그 튜플). 다른 타입으로 set하면 `TypeError`(int는 float이 아니고 bool은 int가 아니다). 시작 값이 타입이나 검증에 안 맞으면 선언이 실패한다.
+- **검증과 반응**: `validator(새 값) -> bool`이 False면 `ParameterRejectedError`(값은 그대로), 바뀐 뒤에는 `on_change(새 값)`이 불린다. 선언하지 않은 이름은 `ParameterNotDeclaredError`, 두 번 선언하면 `ParameterAlreadyDeclaredError`.
+- **동적 반영**: `Parameter.value`는 호출할 때마다 현재 값을 읽는다(락으로 스레드 안전). 다른 스레드에서 바꾼 값을 구독 콜백이 바로 읽는다. 단 `x = param.value`로 변수에 복사해 두면 따라 바뀌지 않는다. 값에서 파생된 상태를 다시 만들어야 하면 `on_change`를 쓴다.
+- **오타 점검**: 누가 값을 줬는데 선언된 파라미터가 없으면(`Kros(parameters={"Driver": {"spede": 1}})`) 경고 로그를 남긴다.
+- 파라미터는 kros 노드의 개념이다. 현실 쪽(`worlds/` 등)의 `Robot`, `World`, 하드웨어는 생성자 인자로 값을 받는다.
 
 ## 실행
 

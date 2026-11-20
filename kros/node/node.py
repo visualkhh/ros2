@@ -1,12 +1,15 @@
+from collections.abc import Mapping
 from concurrent.futures import Future
 from typing import Callable, TypeVar
 
 from kros.action import ActionClient, ActionServer, ActionType, ServerGoalHandle
 from kros.context import Context
+from kros.parameter import OnChange, Parameter, ParameterValue, Validator
 from kros.topic import Subscription
 from kros.service import ServiceServer, ServiceType
 
 T = TypeVar("T")
+P = TypeVar("P", bound=ParameterValue)
 Req = TypeVar("Req")
 Res = TypeVar("Res")
 Goal = TypeVar("Goal")
@@ -15,11 +18,29 @@ Result = TypeVar("Result")
 
 
 class Node:
-    """kros 노드의 기본형: 이름과 Context를 반드시 가진다."""
+    """kros 노드의 기본형: Context를 반드시 가진다. 이름은 기본이 클래스 이름이다 (같은 Context에서 겹치면 ValueError:
+    같은 클래스를 여럿 만들 때는 name=을 따로 준다). 파라미터를 선언해서 가진다.
 
-    def __init__(self, name: str, context: Context) -> None:
-        self.name: str = name
+    parameters: 이 노드 인스턴스의 파라미터 시작 값 {이름: 값}. 선언한 기본값보다 우선이고, Kros(parameters=...)가 준 값보다는 약하다.
+    """
+
+    def __init__(self, context: Context, name: str | None = None, parameters: Mapping[str, ParameterValue] | None = None) -> None:
+        self.name: str = name or type(self).__name__
         self.context: Context = context
+        context.register_node(self.name)
+        if parameters:
+            context.parameter_manager.set_node_overrides(self.name, parameters)
+
+    def declare_parameter(self, name: str, default: P, validator: Validator[P] | None = None, on_change: OnChange[P] | None = None) -> Parameter[P]:
+        """파라미터를 선언한다. 타입은 default의 타입으로 고정된다. 돌려받은 Parameter의 value가 항상 현재 값이다.
+        validator(새 값) -> bool로 값을 거절할 수 있고, on_change(새 값)은 값이 바뀐 뒤에 불린다."""
+        return self.context.parameter_manager.declare(self.name, name, default, validator, on_change)
+
+    def get_parameter(self, name: str) -> ParameterValue:
+        return self.context.parameter_manager.get(self.name, name)
+
+    def set_parameter(self, name: str, value: ParameterValue) -> None:
+        self.context.parameter_manager.set(self.name, name, value)
 
     def publish(self, topic: str, msg: T) -> None:
         self.context.topic_manager.publish(topic, msg)

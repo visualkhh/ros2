@@ -123,7 +123,7 @@ class TestRobotBridge(unittest.TestCase):
         world, robot = MazeWorld(puck_count=0), TurtleBot3()
         world.add(robot)
         RobotBridge(ctx, robot)
-        listener = Node("listener", ctx)
+        listener = Node(ctx, "listener")
         scans: list[LaserScan] = []
         listener.subscribe(SCAN_TOPIC_NAME, LaserScan, scans.append)
         listener.publish(CMD_VEL_TOPIC_NAME, Twist(Vector3(x=0.2), Vector3()))

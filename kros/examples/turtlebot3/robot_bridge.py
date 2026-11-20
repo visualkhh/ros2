@@ -11,7 +11,7 @@ class RobotBridge(Node):
     """kros와 로봇 하드웨어를 잇는 접착제(실제 로봇의 하드웨어 드라이버 자리): cmd_vel -> robot.command, 라이다 측정 -> scan 토픽."""
 
     def __init__(self, context: Context, robot: TurtleBot3) -> None:
-        super().__init__("robot_bridge", context)
+        super().__init__(context)  # 이름은 클래스 이름(RobotBridge)
         self._robot = robot
         self.subscribe(CMD_VEL_TOPIC_NAME, Twist, self._on_cmd_vel)
         robot.lidar.subscribe(self.publish_scan)  # 라이다가 새로 측정할 때마다 scan 토픽으로
