@@ -57,7 +57,7 @@ class VizNode(Node):
             self._stats[key] = (kind, count + 1, first or now, now)
 
     def topic_rows(self) -> dict[str, str]:
-        """구독 중인 토픽 한 줄씩: 상태(● 최근에 받음, ○ 2초 넘게 조용함/아직 없음), 이름, 타입, 개수, 평균 Hz."""
+        """구독 중인 토픽 한 줄씩: 상태(* 최근에 받음, - 2초 넘게 조용함/아직 없음), 이름, 타입, 개수, 평균 Hz."""
         now = time.monotonic()
         with self._lock:
             stats = dict(self._stats)
@@ -65,7 +65,7 @@ class VizNode(Node):
         for topic, (kind, count, first, last) in stats.items():
             live = count > 0 and now - last < 2.0
             hz = (count - 1) / (last - first) if count > 1 and last > first else 0.0
-            rows[topic] = f"{'●' if live else '○'} {topic}\n      {kind}  n={count}  {hz:.1f}Hz"
+            rows[topic] = f"{'*' if live else '-'} {topic}\n      {kind}  n={count}  {hz:.1f}Hz"
         return rows
 
     def latest(self, topic: str) -> object | None:

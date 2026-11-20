@@ -9,6 +9,7 @@ from kros.hardwares.controllers.opencr import OpenCr
 from kros.hardwares.imus.mpu9250 import SimulatedMpu9250
 from kros.hardwares.lidars.lds_01 import SimulatedLds01
 from kros.hardwares.motors.xl430_w250 import SimulatedXl430W250
+from kros.hardwares.noise import Noise
 from kros.interactions import Interaction, KeyState
 from kros.worlds.robots.robot import Robot
 
@@ -23,6 +24,13 @@ WHEEL_SEPARATION = 0.288  # m, 두 바퀴 사이 (URDF: 바퀴 y = ±0.144)
 LINEAR_SPEED = 0.26  # m/s, waffle pi 최대 (키보드 조종 기본 속도)
 ANGULAR_SPEED = 1.5  # rad/s
 SPEED_STEP = 1.25  # q/z를 한 번 누를 때 곱하는 배율
+# 진짜 같은 오차 (noisy=True일 때): 대략적인 값이라 필요하면 고친다
+ENCODER_TICKS = 4096  # XL430 한 바퀴
+WHEEL_SLIP = (Noise(sigma=0.05, scale=-0.01), Noise(sigma=0.05, scale=0.015))  # 왼쪽/오른쪽 바퀴: 반지름 오차 -1%/+1.5%와 바닥에서의 흔들림 (rad/s)
+GYRO, GYRO_BIAS_WALK = Noise(sigma=0.01, bias=0.005), 0.001  # rad/s, rad/s/sqrt(s)
+ACCEL = Noise(sigma=0.05, bias=0.02)  # m/s^2
+IMU_DELAY, LIDAR_DELAY = (0.01, 0.004), (0.05, 0.02)  # (지연, 흔들림) 초: 시리얼/USB로 값이 오기까지
+LIDAR_RANGE, LIDAR_DROPOUT = Noise(sigma=0.01), 0.01  # 거리 m, 측정 실패 확률
 SCALE_MIN, SCALE_MAX = 0.25, 4.0  # 기본 속도 대비. 4배면 실제 로봇 한계를 넘는 시뮬레이션 전용 값
 
 
@@ -36,12 +44,13 @@ class TurtleBot3(Robot):
     height = 0.141  # m, waffle pi 높이 (라이다 높이 0.132보다 높아서 다른 로봇의 라이다에 보인다)
     radius = 0.2  # waffle pi를 바퀴축 중심 원으로 근사 (뒤쪽 끝 0.197). 회전 중 뒤 모서리(0.25)는 벽을 살짝 파고들 수 있음
 
-    def __init__(self, pose: Pose2D = Pose2D(0.0, 0.0, 0.0), serial_port: str | None = None) -> None:
+    def __init__(self, pose: Pose2D = Pose2D(0.0, 0.0, 0.0), serial_port: str | None = None, noisy: bool = False, seed: int | None = None) -> None:
         """부품은 로봇이 정한다. 시뮬레이션이 기본이다: OpenCR 보드(XL430-W250 바퀴 모터 둘, MPU-9250)와 LDS-01 라이다.
         serial_port(예: "/dev/opencr")를 주면 진짜 OpenCR 보드를 시리얼로 쓴다 (진짜 라이다 구현은 아직 없어 라이다 없이 시작한다).
         부품을 바꾸려면(더미 등) make_opencr / make_lidar를 하위 클래스에서 덮어쓴다. 라이다는 라즈베리파이에 꽂히므로 보드가 아니라 로봇에 직접 달린다."""
         super().__init__()
         self.pose = pose
+        self.noisy, self.seed = noisy, seed  # 시뮬레이션 부품에 진짜 같은 오차를 줄지 (seed가 같으면 같은 오차). 진짜 보드는 원래 오차가 있어 무관하다
         self.opencr: DiffDriveBoard = self.make_opencr(serial_port)
         self._lidar: Lidar | None = self.make_lidar(serial_port)
         self.speed_scale = 1.0  # q/z로 바꾸는 키보드 조종 속도 배율
@@ -54,11 +63,23 @@ class TurtleBot3(Robot):
         """OpenCR 보드를 만든다: 시리얼 포트가 있으면 진짜, 없으면 시뮬레이션 (이 로봇의 바퀴/몸체 치수로)."""
         if serial_port is not None:
             return OpenCrSerial(WHEEL_RADIUS, WHEEL_SEPARATION, serial_port)
-        return OpenCr(SimulatedXl430W250(), SimulatedXl430W250(), SimulatedMpu9250(), WHEEL_RADIUS, WHEEL_SEPARATION, self.radius)
+        if not self.noisy:
+            return OpenCr(SimulatedXl430W250(), SimulatedXl430W250(), SimulatedMpu9250(), WHEEL_RADIUS, WHEEL_SEPARATION, self.radius)
+        base = 0 if self.seed is None else self.seed * 10  # 부품마다 다른 시드 (같은 난수열이 겹치지 않게)
+        wheels = [SimulatedXl430W250(ticks_per_rev=ENCODER_TICKS, slip=slip, seed=None if self.seed is None else base + i) for i, slip in enumerate(WHEEL_SLIP)]
+        imu = SimulatedMpu9250(gyro=GYRO, accel=ACCEL, gyro_bias_walk=GYRO_BIAS_WALK, seed=None if self.seed is None else base + 2)
+        imu.latency, imu.jitter, imu.delay_seed = *IMU_DELAY, None if self.seed is None else base + 4
+        return OpenCr(wheels[0], wheels[1], imu, WHEEL_RADIUS, WHEEL_SEPARATION, self.radius)
 
     def make_lidar(self, serial_port: str | None) -> Lidar | None:
         """라이다를 만든다: 시뮬레이션은 LDS-01. 진짜는 아직 없다(None)."""
-        return None if serial_port is not None else SimulatedLds01(LIDAR_MOUNT_X, LIDAR_MOUNT_HEIGHT)
+        if serial_port is not None:
+            return None
+        if not self.noisy:
+            return SimulatedLds01(LIDAR_MOUNT_X, LIDAR_MOUNT_HEIGHT)
+        lidar = SimulatedLds01(LIDAR_MOUNT_X, LIDAR_MOUNT_HEIGHT, range=LIDAR_RANGE, dropout=LIDAR_DROPOUT, seed=None if self.seed is None else self.seed * 10 + 3)
+        lidar.latency, lidar.jitter, lidar.delay_seed = *LIDAR_DELAY, None if self.seed is None else self.seed * 10 + 5
+        return lidar
 
     @property
     def has_lidar(self) -> bool:

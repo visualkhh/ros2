@@ -9,3 +9,7 @@ class Motor(Actuator[float]):
         super().__init__(0.0, period)
         self.position = 0.0  # rad, 누적 회전각 (엔코더)
         self.velocity = 0.0  # rad/s, 현재 속도
+
+    def contact_velocity(self) -> float:
+        """바퀴가 바닥에 실제로 전달하는 속도 rad/s (몸체가 이 값으로 움직인다). 슬립이 없으면 도는 속도(velocity) 그대로다."""
+        return self.velocity

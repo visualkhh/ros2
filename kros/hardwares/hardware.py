@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Generic, TypeVar
@@ -109,6 +110,11 @@ class Sensor(Hardware, Generic[T]):
         self.latest: T | None = None
         self.stamp: float | None = None  # 최신 값이 만들어진 월드 시각. 쓰는 쪽이 (지금 - stamp)로 "오래됐다"를 판단한다
         self.fault: Callable[[Clock], bool] | None = None  # 시뮬레이션/시험용 고장 주입: True를 돌려주면 이번 읽기는 실패한다
+        self.latency = 0.0  # 초: 측정하고 나서 값이 나오기까지 걸리는 시간 (통신/처리 지연). 값에 찍힌 시각(stamp)은 측정한 때라 받는 쪽에는 그만큼 오래된 값이다
+        self.jitter = 0.0  # 초: 지연이 매번 흔들리는 정도 (표준편차). 지연은 0 아래로 내려가지 않고 값의 순서는 바뀌지 않는다
+        self.delay_seed: int | None = None
+        self._delay_rng: random.Random | None = None
+        self._in_flight: list[tuple[float, T, float]] = []  # (나올 시각, 값, 측정 시각)
         self._subscribers: list[Callable[[T], None]] = []
 
     def subscribe(self, callback: Callable[[T], None]) -> None:
@@ -129,10 +135,29 @@ class Sensor(Hardware, Generic[T]):
             return
         if data is None:
             return
+        if self.latency == 0.0 and self.jitter == 0.0 and not self._in_flight:
+            self._deliver(data, clock.time)
+            return
+        if self._delay_rng is None:
+            self._delay_rng = random.Random(self.delay_seed)
+        ready = clock.time + max(0.0, self.latency + self._delay_rng.gauss(0.0, self.jitter))
+        if self._in_flight:
+            ready = max(ready, self._in_flight[-1][0])  # 먼저 측정한 값이 먼저 나온다
+        self._in_flight.append((ready, data, clock.time))
+
+    def _deliver(self, data: T, stamp: float) -> None:
         self.latest = data
-        self.stamp = clock.time
+        self.stamp = stamp
         for callback in self._subscribers:
             callback(data)
+
+    def tick(self, clock: Clock) -> None:
+        super().tick(clock)
+        if not self.is_on:
+            self._in_flight.clear()  # 꺼지면 오는 중이던 값도 사라진다
+        while self._in_flight and self._in_flight[0][0] <= clock.time + 1e-9:
+            _, data, stamp = self._in_flight.pop(0)
+            self._deliver(data, stamp)
 
     @abstractmethod
     def sample(self, clock: Clock) -> T | None:

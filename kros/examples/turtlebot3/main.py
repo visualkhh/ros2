@@ -26,7 +26,7 @@ from .robot_bridge import RobotBridge
 
 def main() -> None:
     enable_console()  # 노드 로그를 콘솔에 보인다 (수준은 노드의 log_level 파라미터)
-    world, robot, keyboard = MazeWorld(), TurtleBot3(), Keyboard()
+    world, robot, keyboard = MazeWorld(), TurtleBot3(noisy=True), Keyboard()  # noisy: 바퀴 슬립/엔코더 해상도, IMU 편향, 라이다 잡음 (진실은 Viewer, 측정값은 Viz에서 비교)
     print(f"compute: {world.compute.name}")  # gpu(cupy) / cpu(numpy) / python
     world.add(robot)
     robot.receive(keyboard)  # 로봇이 키보드 입력을 받는다

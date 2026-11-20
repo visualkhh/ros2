@@ -337,3 +337,14 @@ board.stop()                         # C,0,0을 보내고 끈다
 - **팔(OpenMANIPULATOR)**: 아직 다루지 않는다. 팔이 없으면 펌웨어가 `M` 줄의 값을 전부 `nan`으로 보내므로, 그걸 보고 `arm_connected`(False, 아직 모르면 None)만 안다.
 - 포트를 다른 프로그램(ROS 드라이버, 시리얼 모니터)이 잡고 있으면 줄이 섞인다. 하드웨어 없이는 가상 시리얼(pty)로 시험한다 (`tests/test_opencr_serial.py`).
 - **아직 없음**: 이 로봇을 `tick`해 주는 실시간 루프(월드 없는 러너), 재부팅(`R`)/토크(`T`)/부저(`B`) 명령, 바퀴 방향 부호, 진짜 라이다.
+
+## 하드웨어 오차와 지연 (시뮬레이션)
+
+진짜 센서/바퀴는 오차와 지연이 있다. 시뮬레이션 하드웨어(`Simulated*`)가 안에서 그걸 흉내 낸다 (진짜 하드웨어 구현은 원래 있어서 넣지 않는다). 기본은 오차 0이고, `TurtleBot3(noisy=True, seed=...)`가 현실적인 값을 준다 (`seed`가 같으면 같은 오차).
+
+- `hardwares/noise.py`의 `Noise(sigma, bias, scale)`: 측정 = 값 * (1 + scale) + bias + 가우시안(0, sigma).
+- 바퀴(`SimulatedXl430W250`): `ticks_per_rev`(엔코더 해상도), `slip`(바닥에 전달되는 속도의 오차: 몸체는 엔코더가 말하는 것과 다르게 움직인다 -> 오도메트리가 어긋난다).
+- IMU(`SimulatedMpu9250`): `gyro`/`accel` Noise, `gyro_bias_walk`(편향이 떠돎). 방향은 측정한 각속도를 쌓은 것이라 서서히 틀어진다.
+- 라이다(`SimulatedLds01`): `range` Noise, `dropout`(측정 실패).
+- 지연: 모든 센서의 `latency`(초)와 `jitter`(흔들림). 값에 찍힌 시각은 측정한 때라 받는 쪽에는 그만큼 오래된 값이고, 값의 순서는 유지된다.
+- Viewer는 진실을, Viz는 오차 낀 측정값을 그리므로 둘을 나란히 보면 오도메트리가 어긋나는 것이 보인다.

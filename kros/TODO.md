@@ -58,3 +58,5 @@
 
 - [x] viz: rviz 같은 두 번째 창 (격자, TF, 로봇 모델, 라이다, IMU/odom 글자)
 - [ ] viz 확장: IMU 화살표, odom 궤적, 오른쪽 클릭 목표, 디스플레이 on/off 패널, scan_frame을 토픽 header에서 읽기 (지금은 LaserScan에 header가 없어 파라미터), 눈으로 확인은 아직 못 했다 (스크린샷)
+- [x] 하드웨어 오차/지연 (Noise, 슬립, 엔코더 해상도, IMU 편향, 라이다 잡음/실패, 센서 지연)
+- [ ] 모터(엔코더) 값의 지연, 송신 주기 흔들림, EKF 노드 (robot_localization 같은 것, 메시지에 공분산 필요), 진짜 값에 맞춘 오차 수치 보정

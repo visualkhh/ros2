@@ -47,7 +47,7 @@ class DiffDrive(Actuator[Twist]):
             body.pose = self.move(body.pose, clock.dt, world)
 
     def wheel_velocity(self, motor: Motor) -> float:
-        return motor.velocity if motor.is_on else 0.0
+        return motor.contact_velocity() if motor.is_on else 0.0
 
     def move(self, pose: Pose2D, dt: float, world: World) -> Pose2D:
         """정기구학: 바퀴가 실제로 돈 속도로 dt초 동안 움직인 새 위치."""
