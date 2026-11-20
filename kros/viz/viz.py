@@ -347,8 +347,8 @@ class Viz:
         odom, imu = self.node.latest("odom"), self.node.latest("imu")
         rows = [f"fixed frame: {self.fixed_frame}   frames: {len(self.node.buffer.all_frames())}"]
         if isinstance(odom, Odometry) and self.enabled["odom"]:
-            p = odom.pose.position
-            rows.append(f"odom x={p.x:.2f} y={p.y:.2f}   v={odom.twist.linear.x:.2f} w={odom.twist.angular.z:.2f}")
+            p = odom.pose.pose.position
+            rows.append(f"odom x={p.x:.2f} y={p.y:.2f}   v={odom.twist.twist.linear.x:.2f} w={odom.twist.twist.angular.z:.2f}")
         if isinstance(imu, Imu) and self.enabled["imu"]:
             a, w = imu.linear_acceleration, imu.angular_velocity
             rows.append(f"imu a=({a.x:.1f},{a.y:.1f},{a.z:.1f}) gyro_z={w.z:.2f}")

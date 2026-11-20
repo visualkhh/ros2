@@ -1,7 +1,7 @@
 import math
 
 from kros.context import Context
-from kros.msgs.geometry_msgs import Point, Pose, Quaternion, Transform, TransformStamped, Twist, Vector3
+from kros.msgs.geometry_msgs import Point, Pose, PoseWithCovariance, Quaternion, Transform, TransformStamped, Twist, TwistWithCovariance, Vector3
 from kros.msgs.nav_msgs import Odometry
 from kros.msgs.sensor_msgs import JointState
 from kros.msgs.std_msgs import Header
@@ -62,7 +62,7 @@ class DiffDriveOdometry(Node):
     def _publish(self, stamp: float, v: float, w: float) -> None:
         orientation = Quaternion(0.0, 0.0, math.sin(self.yaw / 2), math.cos(self.yaw / 2))
         odom_frame, base_frame = self.odom_frame.value, self.base_frame.value
-        self.publish(ODOM_TOPIC_NAME, Odometry(Header(stamp, odom_frame), base_frame, Pose(Point(self.x, self.y, 0.0), orientation), Twist(Vector3(x=v), Vector3(z=w))))
+        self.publish(ODOM_TOPIC_NAME, Odometry(Header(stamp, odom_frame), base_frame, PoseWithCovariance(Pose(Point(self.x, self.y, 0.0), orientation)), TwistWithCovariance(Twist(Vector3(x=v), Vector3(z=w)))))
         if self.publish_tf.value:
             transform = Transform(Vector3(self.x, self.y, 0.0), orientation)
             self._broadcaster.send_transform(TransformStamped(Header(stamp, odom_frame), base_frame, transform))

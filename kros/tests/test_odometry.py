@@ -76,13 +76,13 @@ class TestIntegration(Setup):
         self.wheels(1.0, 0.0, 0.0)
         self.move(1.0, 10.0, 10.0)
         self.assertPose((R * 10.0, 0.0, 0.0))
-        self.assertAlmostEqual(self.messages[-1].twist.linear.x, R * 10.0)  # 1초에 10rad 도는 속도
+        self.assertAlmostEqual(self.messages[-1].twist.twist.linear.x, R * 10.0)  # 1초에 10rad 도는 속도
 
     def test_opposite_wheels_turn_in_place(self) -> None:
         self.wheels(1.0, 0.0, 0.0)
         self.move(1.0, -2.0, 2.0)
         self.assertPose((0.0, 0.0, R * 4.0 / SEP))  # 오른쪽이 더 가면 왼쪽(반시계)으로 돈다
-        self.assertAlmostEqual(self.messages[-1].twist.angular.z, R * 4.0 / SEP)  # 1초에 이만큼 돈다
+        self.assertAlmostEqual(self.messages[-1].twist.twist.angular.z, R * 4.0 / SEP)  # 1초에 이만큼 돈다
 
     def test_a_quarter_turn_then_forward_goes_along_the_new_heading(self) -> None:
         quarter = (math.pi / 2) * SEP / (2 * R)  # 제자리에서 90도 도는 데 필요한 바퀴 각
@@ -176,15 +176,15 @@ class TestAgainstTheSimulation(unittest.TestCase):
     def test_odometry_follows_the_true_pose_on_a_curve(self) -> None:
         odom, robot = self.drive(Twist(Vector3(x=0.2), Vector3(z=0.4)), 3.0)
         # 시뮬레이션에서는 바퀴가 미끄러지지 않아서 거의 같다 (joint_states가 20Hz 샘플이라 마지막 한 샘플 이내의 차이)
-        self.assertAlmostEqual(odom.pose.position.x, robot.pose.x, delta=0.03)
-        self.assertAlmostEqual(odom.pose.position.y, robot.pose.y, delta=0.03)
-        self.assertAlmostEqual(to_rpy(odom.pose.orientation)[2], robot.pose.theta, delta=0.05)
-        self.assertGreater(math.hypot(odom.pose.position.x, odom.pose.position.y), 0.3)  # 실제로 움직였다
+        self.assertAlmostEqual(odom.pose.pose.position.x, robot.pose.x, delta=0.03)
+        self.assertAlmostEqual(odom.pose.pose.position.y, robot.pose.y, delta=0.03)
+        self.assertAlmostEqual(to_rpy(odom.pose.pose.orientation)[2], robot.pose.theta, delta=0.05)
+        self.assertGreater(math.hypot(odom.pose.pose.position.x, odom.pose.pose.position.y), 0.3)  # 실제로 움직였다
 
     def test_when_the_robot_is_stopped_by_a_wall_odometry_follows_the_wheels_not_the_wall(self) -> None:
         # 벽에 막히면 몸체는 안 가는데 바퀴 모터는 계속 돈다고 시뮬레이션이 센다: 오도메트리는 바퀴만 보므로 벽을 뚫고 간 것으로 추정한다 (진짜 로봇의 바퀴 슬립과 같은 한계)
         odom, robot = self.drive(Twist(Vector3(x=0.26)), 12.0)  # 시작점 앞 벽까지 1.1m: 12초면 3m를 가려 한다
-        self.assertGreater(odom.pose.position.x, robot.pose.x + 1.0)
+        self.assertGreater(odom.pose.pose.position.x, robot.pose.x + 1.0)
 
 
 if __name__ == "__main__":
