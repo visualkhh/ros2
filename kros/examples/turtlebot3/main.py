@@ -2,14 +2,16 @@
 
 - 현실 쪽(kros와 무관한 순수 시뮬레이션): MazeWorld 안에 TurtleBot3를 놓고, SimulationRunner가 화면과 따로 월드를 고정 간격으로 돌리고,
   Viewer(3D 창)가 스냅샷을 그린다. 사람의 입력은 Keyboard(Interaction)가 받아 로봇이 receive()한다 (창의 키 -> Keyboard -> 로봇이 해석).
-- kros 쪽(Node): RobotBridge만. cmd_vel -> robot.command (다른 프로그램이 로봇을 움직일 때), 라이다 측정 -> scan
+- kros 쪽(Node): RobotBridge만. cmd_vel -> robot.command (다른 프로그램이 로봇을 움직일 때), 라이다 측정 -> scan.
+  kros의 시간(타이머, node.now())은 시뮬레이션 시간이다: 러너가 매 스텝 SimulatedTimeSource를 밀어 준다
 """
 from kros import Kros
 from kros.context import Context
-from kros.node import Node
 from kros.interactions import Keyboard
-from kros.viewer.runner import SimulationRunner
+from kros.node import Node
+from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
+from kros.viewer.runner import SimulationRunner
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 
@@ -22,11 +24,13 @@ def main() -> None:
     world.add(robot)
     robot.receive(keyboard)  # 로봇이 키보드 입력을 받는다
     runner = SimulationRunner(world, robot)  # 월드는 화면과 따로 고정 간격(60Hz)으로 돈다
+    time_source = SimulatedTimeSource()  # kros의 시간은 시뮬레이션 시간 (시뮬레이션이 매 스텝 밀어 준다)
+    runner.add_listener(lambda snapshot: time_source.set(snapshot.time))
 
     def create_nodes(ctx: Context) -> list[Node]:
         return [RobotBridge(ctx, robot)]
 
-    kros = Kros(create_nodes)
+    kros = Kros(create_nodes, time_source=time_source)
     runner.start()
     try:
         Viewer(runner, lambda keys: keyboard.set_keys(keys)).run()  # 창이 받은 키를 키보드 입력으로

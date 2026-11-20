@@ -51,6 +51,28 @@ class TestSnapshot(unittest.TestCase):
         self.assertEqual(pickle.loads(pickle.dumps(snap)), snap)  # 다른 프로세스로 보낼 수 있다
 
 
+class TestRunnerListeners(unittest.TestCase):
+    def test_listener_gets_every_new_snapshot(self) -> None:
+        runner = make()
+        times: list[float] = []
+        runner.add_listener(lambda snapshot: times.append(snapshot.time))
+        for _ in range(3):
+            runner.step_once()
+        self.assertEqual(len(times), 3)
+        self.assertAlmostEqual(times[-1], 3 / 60)
+
+    def test_listener_runs_on_the_simulation_thread_when_started(self) -> None:
+        import threading
+
+        runner = make()
+        names: list[str] = []
+        runner.add_listener(lambda snapshot: names.append(threading.current_thread().name))
+        runner.start()
+        time.sleep(0.1)
+        runner.stop()
+        self.assertTrue(names and set(names) == {"simulation"})
+
+
 class TestRunnerThread(unittest.TestCase):
     def test_runs_in_real_time_on_its_own_thread_and_stops(self) -> None:
         runner = make()

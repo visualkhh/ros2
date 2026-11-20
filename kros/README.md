@@ -7,9 +7,10 @@ ROS를 파이썬으로 직접 만들며 학습하는 프로젝트. 타입 힌트
 ```
 kros/
 ├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
-├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
-├── node/node.py       Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
+├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, timer_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
+├── node/node.py       Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
 ├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan (ROS의 msg 흉내)
+├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionManager(서버 레지스트리, 서버/클라이언트 수명), ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
@@ -49,7 +50,15 @@ pub.publish("chat", "hello")   # -> hello
 - 토픽은 처음 쓰인 타입으로 고정된다. 다른 타입으로 publish/subscribe하면 `TypeError`.
 - 서비스: `node.create_service(이름, ServiceType, handler)` / `node.call_service(이름, ServiceType, request, timeout=)` / `call_service_async` (Future). 서비스 이름당 서버 1개(중복 `ValueError`), 서버 없으면 `LookupError`, 타입 다르면 `TypeError`, 핸들러 예외는 호출자에게 전달. 서버마다 스레드 1개라 요청은 순서대로 하나씩 처리. 자기 서비스를 블로킹 호출하면 데드락(timeout 권장).
 - 액션: `node.create_action_server(이름, ActionType, execute, goal_callback=None)` / `node.create_action_client(이름, ActionType)` (모두 `Context.action_manager`를 거친다. 내릴 때는 `node.destroy_action_server(서버)` / `node.destroy_action_client(클라이언트)`. 액션 이름당 서버는 하나, 중복은 `ValueError`. 서버를 내리면 실행 중인 goal은 취소 요청을 받고 시작도 못 한 goal은 CANCELED로 끝나며, 클라이언트를 내리면 결과를 기다리던 핸들은 ABORTED로 풀린다. 그래서 영원히 기다리는 일이 없다) -> `client.send_goal(goal, feedback_callback, timeout)` -> `ClientGoalHandle`(`result()`, `cancel()`, `status`). execute는 `handle.publish_feedback()`으로 진행을 알리고 `handle.is_cancel_requested`로 취소에 응한다. 정상 반환 SUCCEEDED(취소 요청 중이었으면 CANCELED), 예외/잘못된 결과 타입 ABORTED, goal_callback이 False면 REJECTED. goal은 받은 순서대로 하나씩 실행. feedback과 result는 같은 토픽(순서 보장)으로 간다.
-- Kros 콜백은 `Context` 하나를 받는다. `Kros.shutdown()`은 `ctx.shutdown()`: 액션 먼저, 서비스, 토픽 나중 순서다 (액션은 서비스와 토픽 위에서 돌고, 서비스 핸들러는 publish할 수 있으므로). 이때 결과를 기다리던 액션 클라이언트의 핸들은 ABORTED로 풀린다.
+- Kros 콜백은 `Context` 하나를 받는다. `Kros.shutdown()`은 `ctx.shutdown()`: 타이머, 액션, 서비스, 토픽 순서로 정리한다 (타이머 콜백은 토픽/서비스/액션을 부를 수 있고, 액션은 서비스와 토픽 위에서 돌고, 서비스 핸들러는 publish할 수 있으므로). 이때 결과를 기다리던 액션 클라이언트의 핸들은 ABORTED로 풀린다.
+
+## 시간과 타이머
+
+- **시간 원천(`TimeSource`)**: `Kros(node_create, time_source=...)`로 정한다. 기본은 `SystemTimeSource`(실제 시간)이고, 시뮬레이션이면 `SimulatedTimeSource`를 주고 시뮬레이션이 `set(t)`/`advance(dt)`로 밀어 준다 (ROS의 `use_sim_time`/`/clock`과 같은 역할; 프로세스를 나누게 되면 이 자리가 토픽이 된다). 시간이 되돌아가면 `ValueError`. `node.now()`가 현재 시각(초)이다.
+- **타이머**: `node.create_timer(period, callback)` -> `Timer`, `node.destroy_timer(timer)`/`timer.cancel()`. 첫 호출은 만든 뒤 `period`가 지났을 때다. 콜백은 **그 타이머 전용 워커 스레드 하나**에서 순서대로 돌고(구독과 같은 결), 예외는 로그만 남기고 타이머는 계속 돈다.
+- **사실만 노출한다**: `timer.calls`(실제로 불린 횟수), `timer.missed`(주기가 됐지만 부르지 못한 횟수). 지난 콜백이 아직 실행 중이면 새 호출은 쌓지 않고 버리며 `missed`로 센다. 시간이 한꺼번에 건너뛰면(예: 시뮬레이션 `dt`가 큼) 한 번만 부르고 나머지는 `missed`로 세되, 박자는 유지한다.
+- **동작 방식**: 실제 시간이면 스케줄 스레드 하나가 가장 가까운 주기까지 기다렸다 깨운다(타이머가 없으면 스레드도 없다). 시뮬레이션 시간이면 시간을 `set`하는 쪽이 **그 스레드에서 바로** 타이머를 판정하므로 스레드 없이 결정적으로 동작한다.
+- 이 예제(`examples/turtlebot3`)에서는 `SimulationRunner.add_listener`로 매 스텝 시뮬레이션 시간을 `SimulatedTimeSource`에 밀어 준다.
 
 ## 파라미터
 

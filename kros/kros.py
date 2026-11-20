@@ -5,6 +5,7 @@ from typing import Callable, Iterable
 from kros.context import Context
 from kros.node import Node
 from kros.parameter import ParameterValue
+from kros.timer import TimeSource
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +17,16 @@ class Kros:
 
     parameters: 파라미터 시작 값 {노드이름: {파라미터: 값}}. 노드가 선언한 기본값보다 우선한다 (파라미터 처리는 Context의 parameter_manager가 한다).
     누구도 선언하지 않은 값(오타)은 경고를 남긴다.
+    time_source: kros의 시간 원천. 기본은 실제 시간이고, 시뮬레이션이면 SimulatedTimeSource를 주고 시뮬레이션이 set()으로 밀어 준다.
     """
 
-    def __init__(self, node_create: NodeCreate, parameters: Mapping[str, Mapping[str, ParameterValue]] | None = None) -> None:
-        self.context: Context = Context(parameters)
+    def __init__(
+        self,
+        node_create: NodeCreate,
+        parameters: Mapping[str, Mapping[str, ParameterValue]] | None = None,
+        time_source: TimeSource | None = None,
+    ) -> None:
+        self.context: Context = Context(parameters, time_source)
         self.nodes: list[Node] = list(node_create(self.context))
         for unused in self.context.parameter_manager.unused_overrides():
             logger.warning("값을 줬는데 선언된 파라미터가 없다 (오타?): %s", unused)

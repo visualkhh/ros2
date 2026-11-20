@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from collections.abc import Callable
 
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.world import World
@@ -23,11 +24,18 @@ class SimulationRunner:
         self.latest: Snapshot = self._snapshot()  # 한 줄 대입이라 읽는 쪽이 중간 값을 볼 일이 없다
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._listeners: list[Callable[[Snapshot], None]] = []
+
+    def add_listener(self, callback: Callable[[Snapshot], None]) -> None:
+        """스텝이 끝날 때마다 새 스냅샷으로 callback이 불린다 (시뮬레이션 스레드에서). 시뮬레이션 시간을 바깥에 알리는 데 쓴다."""
+        self._listeners.append(callback)
 
     def step_once(self) -> Snapshot:
         """한 스텝 진행하고 스냅샷을 갱신한다 (스레드 없이 돌리거나 테스트할 때)."""
         self.world.step(self.dt)
         self.latest = self._snapshot()
+        for callback in self._listeners:
+            callback(self.latest)
         return self.latest
 
     def start(self) -> None:

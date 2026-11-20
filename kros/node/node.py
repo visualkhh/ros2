@@ -5,6 +5,7 @@ from typing import Callable, TypeVar
 from kros.action import ActionClient, ActionServer, ActionType, ServerGoalHandle
 from kros.context import Context
 from kros.parameter import OnChange, Parameter, ParameterValue, Validator
+from kros.timer import Timer
 from kros.topic import Subscription
 from kros.service import ServiceServer, ServiceType
 
@@ -41,6 +42,17 @@ class Node:
 
     def set_parameter(self, name: str, value: ParameterValue) -> None:
         self.context.parameter_manager.set(self.name, name, value)
+
+    def now(self) -> float:
+        """kros의 현재 시각(초): 실제 시간 또는 시뮬레이션 시간 (Kros의 time_source가 정한다). 메시지 시각 등에 쓴다."""
+        return self.context.timer_manager.now()
+
+    def create_timer(self, period: float, callback: Callable[[], None]) -> Timer:
+        """period(초)마다 callback()을 부른다. 첫 호출은 period 뒤. 콜백은 이 타이머 전용 스레드에서 순서대로 돈다."""
+        return self.context.timer_manager.create(period, callback)
+
+    def destroy_timer(self, timer: Timer) -> None:
+        self.context.timer_manager.destroy(timer)
 
     def publish(self, topic: str, msg: T) -> None:
         self.context.topic_manager.publish(topic, msg)

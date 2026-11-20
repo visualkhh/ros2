@@ -339,7 +339,7 @@ class TestManagersAreNotTiedTogether(unittest.TestCase):
         import re
 
         root = pathlib.Path(__file__).parent.parent
-        managers = ("topic", "service", "parameter")
+        managers = ("topic", "service", "parameter", "timer")
         for manager in managers:
             others = [m for m in managers if m != manager] + ["action"]  # 액션은 토픽/서비스 위에 올라가는 기능이라, 아래 매니저가 위를 import하면 안 된다
             banned = re.compile(rf"^\s*(from|import)\s+kros\.({'|'.join(others)})\b", re.M)
