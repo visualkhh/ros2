@@ -6,7 +6,7 @@ from kros.action import ActionClient, ActionServer, ActionType, ServerGoalHandle
 from kros.context import Context
 from kros.parameter import OnChange, Parameter, ParameterValue, Validator
 from kros.timer import Timer
-from kros.topic import Subscription
+from kros.topic import QOS_DEFAULT, QoS, Subscription
 from kros.service import ServiceServer, ServiceType
 
 T = TypeVar("T")
@@ -54,11 +54,13 @@ class Node:
     def destroy_timer(self, timer: Timer) -> None:
         self.context.timer_manager.destroy(timer)
 
-    def publish(self, topic: str, msg: T) -> None:
-        self.context.topic_manager.publish(topic, msg)
+    def publish(self, topic: str, msg: T, qos: QoS = QOS_DEFAULT) -> None:
+        """토픽에 발행한다. qos=QOS_LATCHED처럼 TRANSIENT_LOCAL로 내면 마지막 메시지를 기억해 늦게 구독한 쪽에게도 전달한다."""
+        self.context.topic_manager.publish(topic, msg, qos)
 
-    def subscribe(self, topic: str, msg_type: type[T], callback: Callable[[T], None]) -> Subscription:
-        return self.context.topic_manager.subscribe(topic, msg_type, callback)
+    def subscribe(self, topic: str, msg_type: type[T], callback: Callable[[T], None], qos: QoS = QOS_DEFAULT) -> Subscription:
+        """토픽을 구독한다. qos.depth로 대기 큐 길이를 제한하고(넘치면 오래된 것을 버림), TRANSIENT_LOCAL이면 늦게 구독해도 기억된 메시지를 받는다."""
+        return self.context.topic_manager.subscribe(topic, msg_type, callback, qos)
 
     def unsubscribe(self, subscription: Subscription) -> None:
         self.context.topic_manager.unsubscribe(subscription)

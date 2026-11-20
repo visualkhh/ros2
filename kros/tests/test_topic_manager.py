@@ -44,7 +44,7 @@ class TestTopicManager(unittest.TestCase):
         got: list[int] = []
         self.m.subscribe("x", int, lambda v: None if 1 / 0 else None)
         self.m.subscribe("x", int, got.append)
-        with self.assertLogs("kros.topic.topic_manager", "ERROR"):
+        with self.assertLogs("kros.topic.subscription", "ERROR"):
             self.m.publish("x", 1)
             self.m.join()
         self.assertEqual(got, [1])

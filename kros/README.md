@@ -14,7 +14,7 @@ kros/
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionManager(서버 레지스트리, 서버/클라이언트 수명), ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
-├── topic/             TopicManager(토픽별 구독자 목록, 메시지 전달), Subscription (한 프로세스 안)
+├── topic/             TopicManager(토픽별 구독자 목록, 메시지 전달), Subscription(구독 하나: 전용 스레드+큐), QoS(depth, durability) (한 프로세스 안)
 ├── interactions/      [현실] 사람(조종자)이 넣는 입력 장치. interaction.py: Interaction 베이스, keyboard.py: Keyboard(KeyState). 월드 바깥의 것이고 로봇이 receive()로 받는다. kros와 무관
 ├── worlds/            [현실] 외부 환경 + 그 안의 객체들. kros와 무관. world.py: World(환경, 시계), world_object.py: WorldObject, clock.py: Clock,
 │   │                  simulation_runner.py: SimulationRunner(월드를 화면과 따로 고정 간격으로 돌린다. 월드만 알고 로봇은 모른다)
@@ -52,6 +52,21 @@ pub.publish("chat", "hello")   # -> hello
 - 서비스: `node.create_service(이름, ServiceType, handler)` / `node.call_service(이름, ServiceType, request, timeout=)` / `call_service_async` (Future). 서비스 이름당 서버 1개(중복 `ValueError`), 서버 없으면 `LookupError`, 타입 다르면 `TypeError`, 핸들러 예외는 호출자에게 전달. 서버마다 스레드 1개라 요청은 순서대로 하나씩 처리. 자기 서비스를 블로킹 호출하면 데드락(timeout 권장).
 - 액션: `node.create_action_server(이름, ActionType, execute, goal_callback=None)` / `node.create_action_client(이름, ActionType)` (모두 `Context.action_manager`를 거친다. 내릴 때는 `node.destroy_action_server(서버)` / `node.destroy_action_client(클라이언트)`. 액션 이름당 서버는 하나, 중복은 `ValueError`. 서버를 내리면 실행 중인 goal은 취소 요청을 받고 시작도 못 한 goal은 CANCELED로 끝나며, 클라이언트를 내리면 결과를 기다리던 핸들은 ABORTED로 풀린다. 그래서 영원히 기다리는 일이 없다) -> `client.send_goal(goal, feedback_callback, timeout)` -> `ClientGoalHandle`(`result()`, `cancel()`, `status`). execute는 `handle.publish_feedback()`으로 진행을 알리고 `handle.is_cancel_requested`로 취소에 응한다. 정상 반환 SUCCEEDED(취소 요청 중이었으면 CANCELED), 예외/잘못된 결과 타입 ABORTED, goal_callback이 False면 REJECTED. goal은 받은 순서대로 하나씩 실행. feedback과 result는 같은 토픽(순서 보장)으로 간다.
 - Kros 콜백은 `Context` 하나를 받는다. `Kros.shutdown()`은 `ctx.shutdown()`: 타이머, 액션, 서비스, 토픽 순서로 정리한다 (타이머 콜백은 토픽/서비스/액션을 부를 수 있고, 액션은 서비스와 토픽 위에서 돌고, 서비스 핸들러는 publish할 수 있으므로). 이때 결과를 기다리던 액션 클라이언트의 핸들은 ABORTED로 풀린다.
+
+## QoS (서비스 품질)
+
+토픽의 `publish`/`subscribe`는 `qos`를 받는다 (`QoS(depth, durability)`, 기본 `QOS_DEFAULT`: 무제한 큐, 휘발성이라 이전과 똑같이 동작).
+
+```python
+node.publish("tf_static", msg, QOS_LATCHED)              # 마지막 메시지를 기억한다 (latch)
+node.subscribe("tf_static", Msg, callback, QOS_LATCHED)  # 늦게 구독해도 기억된 마지막 메시지를 먼저 받는다
+node.subscribe("scan", LaserScan, callback, QOS_SENSOR_DATA)  # 느리면 오래된 것을 버리고 최신을 본다 (depth=5)
+```
+
+- **`durability`**: `VOLATILE`(기본)은 지금 구독 중인 쪽에만 전달한다. `TRANSIENT_LOCAL`로 **발행하면 마지막 `depth`개를 기억**하고, `TRANSIENT_LOCAL`로 **나중에 구독한 쪽**에게 새 메시지보다 먼저 전달한다. 발행 쪽과 구독 쪽이 **둘 다** `TRANSIENT_LOCAL`이어야 받는다 (ROS와 같은 규칙). 한 번만 발행하는 정보(`tf_static`, `robot_description`, 지도)를 늦게 뜬 노드도 받게 하는 용도다. `TRANSIENT_LOCAL`은 `depth`가 필요하다(무제한으로 쌓이지 않게).
+- **`depth`**: 구독에서는 처리를 기다리는 메시지의 최대 개수다. 넘치면 가장 오래된(아직 실행 전인) 것을 버리고 `Subscription.dropped`로 센다 (사실만 노출한다). 버려도 `join()`은 안 막힌다. 기본 `None`은 무제한(아무것도 안 버림). 느린 구독자 때문에 큐가 무한히 쌓이는 것을 막는다.
+- **함정 하나**: `QOS_LATCHED`(`depth=1`)를 **구독에** 쓰면 처리 대기 큐도 1개라서, 메시지가 연달아 오면 오래된 것은 버려지고 최신만 남는다 (ROS의 `keep_last(1)`과 같다). 하나도 놓치면 안 되면 구독에는 더 깊은 `depth`를 준다 (`QoS(depth=10, durability=TRANSIENT_LOCAL)`).
+- 지금 없는 것: `reliability`(재전송 정책), `deadline`, `lifespan`, `liveliness`. 한 프로세스 안에서는 전달이 항상 신뢰할 수 있어서 필요해지는 때는 네트워크를 붙일 때다.
 
 ## 시간과 타이머
 
