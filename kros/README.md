@@ -96,6 +96,7 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
 
 **SLAM / 위치 추정**: `nodes/cartographer/`의 `Cartographer`(노드 이름 `cartographer`)는 라이다 스캔을 격자 지도에 맞춰(스캔 매칭) 로봇 위치를 바로잡고 `map -> odom` TF를 낸다. odom 아래(`odom -> base_footprint`)는 EKF가 그대로 내고, 이 노드는 그 위에 하나만 얹는다(REP-105).
 - `mode` 파라미터(실행 중에 바꿀 수 있다): `idle`(아무것도 안 함), `mapping`(SLAM: 새 지도를 만들며 위치를 고치고 `map` 토픽에 latch로 낸다), `localization`(map_server가 띄운 저장 지도로 위치만 고친다, cartographer의 pure localization).
+- `/initialpose`(`geometry_msgs/PoseWithCovarianceStamped`, rviz의 2D Pose Estimate): 로봇이 지도의 어디에 있는지 알려 준다. ROS에서는 nav2의 **amcl**이 받는 토픽인데(cartographer_ros는 `start_trajectory` 서비스), 여기서는 localization 모드가 amcl 자리라 `Cartographer`가 받는다. 받은 직후 첫 매칭은 탐색 범위를 3배로 넓혀 대충 찍은 위치를 지도에 맞춰 다듬는다. map 좌표계가 아니면 버린다.
 - 격자(`ProbabilityGrid`): 칸마다 log-odds. 레이가 지나간 칸은 빈 곳 쪽, 끝난 칸은 벽 쪽. 움직였을 때만 스캔을 넣는다(`motion_filter_*`).
 - 스캔 매칭(`match`): 예상 위치(지난 `map -> odom` + 지금 odom) 둘레 +-`linear_search_window`, +-`angular_search_window`를 거친 간격에서 촘촘하게 3단계로 뒤져 스캔 점들이 벽 칸에 가장 잘 얹히는 곳을 찾는다(점수는 이중선형 보간한 벽 확률의 평균, `min_score`보다 낮으면 버리고 odom을 믿는다).
 - 테스트: 노이즈 TurtleBot3를 벽으로 밀어 바퀴가 헛돌면 odom(EKF)은 0.3m 넘게 틀리지만 map 기준 위치는 5cm 안이다(mapping, localization 둘 다).

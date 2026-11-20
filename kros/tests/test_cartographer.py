@@ -5,7 +5,7 @@ from kros import Kros
 from kros.context import Context
 from kros.examples.turtlebot3.main import IMU_CONFIG, ODOM_CONFIG
 from kros.examples.turtlebot3.robot_bridge import RobotBridge
-from kros.msgs.geometry_msgs import Twist, Vector3
+from kros.msgs.geometry_msgs import Point, Pose, Pose2D, PoseWithCovariance, PoseWithCovarianceStamped, Quaternion, Twist, Vector3
 from kros.msgs.nav_msgs import UNKNOWN, OccupancyGrid
 from kros.msgs.std_msgs import Header
 from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, Node, RobotStatePublisher
@@ -73,10 +73,11 @@ class TestScanMatcher(unittest.TestCase):
 class Simulation:
     """노이즈 TurtleBot3 + EKF(odom) + Cartographer(map). 맨 끝에 벽으로 밀어붙이면 바퀴가 헛돌아 odom은 틀리지만 라이다는 안다."""
 
-    def __init__(self, test: unittest.TestCase, mode: str, given_map: OccupancyGrid | None = None) -> None:
+    def __init__(self, test: unittest.TestCase, mode: str, given_map: OccupancyGrid | None = None, offset: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> None:
         self.world, self.robot = MazeWorld(puck_count=0), TurtleBot3(noisy=True, seed=1)
-        self.world.add(self.robot)
-        self.start = (self.robot.pose.x, self.robot.pose.y, self.robot.pose.theta)
+        start = self.world.start_pose
+        self.start = (start.x, start.y, start.theta)  # map 원점 = 지도를 만들 때 로봇이 켜진 곳
+        self.world.add(self.robot, Pose2D(*compose(self.start, offset)))  # offset: 그 원점에서 본 이번 시작 위치
         self.source = SimulatedTimeSource()
         made: dict[str, Node] = {}
 
@@ -140,6 +141,23 @@ class TestCartographer(unittest.TestCase):
         self.assertLess(sim.error("map"), 0.05)
         self.assertGreater(sim.error("odom"), 0.3)
         self.assertEqual(sim.maps, [saved])  # 지도는 map_server(여기서는 Watcher)가 낸 것뿐: 고치지 않는다
+
+    def test_initialpose_puts_the_robot_on_the_map_and_matching_refines_it(self) -> None:
+        mapping = Simulation(self, "mapping")
+        mapping.run(3.0)
+        mapping.run(2 * math.pi / 0.6, w=0.6)
+        mapping.run(1.5)
+        offset = (0.2, 0.0, 0.25)  # 지도 원점에서 20cm 앞, 14도 돈 곳에서 켠다: 그냥 두면 원점에 있다고 믿는다
+        sim = Simulation(self, "localization", given_map=mapping.maps[-1], offset=offset)
+        sim.run(3.0)
+        self.assertGreater(sim.error("map"), 0.15)
+        x, y, yaw = 0.25, 0.03, 0.2  # 사람이 대충 찍은 위치 (5cm, 3도쯤 틀림)
+        sim.watcher.publish("initialpose", PoseWithCovarianceStamped(Header(0.0, "map"), PoseWithCovariance(Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))))))
+        sim.run(1.0)
+        self.assertLess(sim.error("map"), 0.03)  # 지도에 맞춰 진짜 위치로 다듬었다
+        with self.assertLogs("kros.node.cartographer", level="WARNING"):
+            sim.watcher.publish("initialpose", PoseWithCovarianceStamped(Header(0.0, "odom")))  # map 좌표계가 아니면 버린다
+            sim.run(0.1)
 
     def test_idle_does_nothing_and_mode_is_validated(self) -> None:
         sim = Simulation(self, "idle")
