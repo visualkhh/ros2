@@ -114,6 +114,7 @@ class Viz:
         self._scan_drawn: object = None
         self._scan_np: NodePath | None = None
         self._tf_np: NodePath | None = None
+        self._labels: dict[str, NodePath] = {}  # TF 프레임 이름 글자 (rviz의 Show Names)
         self._last_mouse: tuple[float, float] | None = None
         self._closed = False
         self._build_input()
@@ -304,12 +305,15 @@ class Viz:
     def _update_tf(self) -> None:
         """모든 프레임에 축(x 빨강, y 초록, z 파랑)과 부모로 가는 노란 선."""
         lines = LineSegs()
+        shown: set[str] = set()
         for frame in self.node.buffer.all_frames() if self.enabled["tf"] else ():
             stamped = self._lookup(frame)
             if stamped is None:
                 continue
             t, q = stamped.transform.translation, stamped.transform.rotation
             origin = Vec3(t.x, t.y, t.z)
+            shown.add(frame)
+            self._label(frame).setPos(origin + Vec3(0, 0, 0.02))
             rotation = LQuaternionf(q.w, q.x, q.y, q.z)
             for axis, color in ((Vec3(1, 0, 0), (1, 0, 0, 1)), (Vec3(0, 1, 0), (0, 1, 0, 1)), (Vec3(0, 0, 1), (0.2, 0.4, 1, 1))):
                 lines.setColor(*color)
@@ -322,12 +326,28 @@ class Viz:
                 lines.setColor(1, 0.9, 0.2, 1)
                 lines.moveTo(origin)
                 lines.drawTo(Vec3(p.x, p.y, p.z))
+        for frame, label in self._labels.items():
+            label.show() if frame in shown else label.hide()
         if self._tf_np is not None:
             self._tf_np.removeNode()
         self._tf_np = self.scene.attachNewNode(lines.create())
         self._tf_np.setLightOff()
         self._tf_np.setBin("fixed", 0)  # 모델에 가려지지 않게 위에 그린다
         self._tf_np.setDepthTest(False)
+
+    def _label(self, frame: str) -> NodePath:
+        if frame not in self._labels:
+            text = TextNode(f"label-{frame}")
+            text.setText(frame)
+            text.setTextColor(0.9, 0.9, 0.9, 1)
+            label = self.scene.attachNewNode(text)
+            label.setScale(0.025)
+            label.setBillboardPointEye()  # 늘 카메라를 본다
+            label.setLightOff()
+            label.setBin("fixed", 1)
+            label.setDepthTest(False)
+            self._labels[frame] = label
+        return self._labels[frame]
 
     def _update_scan(self) -> None:
         """scan의 점을 센서 프레임 기준으로 한 번 만들고, 센서의 TF에 맞춰 놓는다 (새 스캔일 때만 만든다)."""

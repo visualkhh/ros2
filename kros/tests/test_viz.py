@@ -55,6 +55,8 @@ class TestVizSmoke(unittest.TestCase):
         assert viz.model is not None
         self.assertFalse(viz.model.links["base_link"].isHidden())  # TF가 있는 링크는 보인다
         self.assertIn("odom x=", viz.hud.getText())
+        self.assertFalse(viz._labels["odom"].isHidden())  # TF 프레임 이름이 보인다
+        self.assertEqual(viz._labels["base_footprint"].node().getText(), "base_footprint")
         self.assertIn("ekf  x=", viz.hud.getText())
         self.assertFalse(viz.arrows["odom"].isHidden())  # 바퀴 오도메트리 화살표
         self.assertGreater(viz.arrows["odom"].getX(), 0.1)  # 앞으로 간 만큼
@@ -69,6 +71,10 @@ class TestVizSmoke(unittest.TestCase):
         self.assertTrue(viz._scan_np is None or viz._scan_np.isHidden())
         self.assertNotIn("odom x=", viz.hud.getText())
         self.assertTrue(viz.arrows["odom"].isHidden())
+        viz.enabled["tf"] = False
+        viz.base.taskMgr.step()
+        self.assertTrue(viz._labels["odom"].isHidden())  # tf를 끄면 이름도 숨는다
+        viz.enabled["tf"] = True
         self.assertFalse(viz.enabled["scan"])
         self.assertIn("LaserScan", viz.rows["scan"].getText())
         self.assertTrue(viz.enabled["imu"])
