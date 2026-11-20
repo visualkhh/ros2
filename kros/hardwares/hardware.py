@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from kros.worlds.clock import Clock
-
-if TYPE_CHECKING:
-    from kros.worlds.world import World
 
 T = TypeVar("T")
 O = TypeVar("O")
@@ -18,7 +15,7 @@ class HardwareError(Exception):
 
 
 class Hardware(ABC):
-    """물리 장치의 최상위 (모터, 센서, 로봇 ...). kros와 무관하다.
+    """물리 장치의 최상위 (모터, 센서, 로봇 ...). kros와 무관하고, 월드도 모른다 (시계 신호(Clock)만 받는다: 월드가 내려주든 진짜 하드웨어를 돌리는 실시간 루프가 내려주든 같다).
 
     - 부품(Hardware)을 달 수 있다. 부품은 달린 장치를 owner로 안다.
     - **period**(초): 이 장치가 일하는 주기. None이면 월드의 시계 신호마다. 장치마다 따로 설정한다.
@@ -70,23 +67,23 @@ class Hardware(ABC):
         """실제로 전원이 들어와 있는가: 자기 스위치와 달려 있는 장치의 전원이 모두 켜져 있어야 한다."""
         return self.powered and (self.owner is None or self.owner.is_on)
 
-    def tick(self, clock: Clock, world: World) -> None:
+    def tick(self, clock: Clock) -> None:
         """시계 신호를 받는다: 켜져 있고 주기가 됐으면 on_period 훅을 부르고, 부품들에게도 그대로 내려준다."""
         if self.is_on:
             due = self._due(clock)
             if due is not None:
-                self.on_period(due, world)
+                self.on_period(due)
         else:
             self._last_run = None  # 다시 켜졌을 때 꺼져 있던 시간이 한 번에 흘러온 것처럼 보이지 않게
         for part in self.parts:
-            part.tick(clock, world)
+            part.tick(clock)
 
     def fail(self, error: HardwareError) -> None:
         """실패를 기록한다 (사실만 남긴다)."""
         self.error_count += 1
         self.last_error = error
 
-    def on_period(self, clock: Clock, world: World) -> None:
+    def on_period(self, clock: Clock) -> None:
         """훅: 이 장치의 주기마다 불린다. clock.dt는 지난 호출 이후 지난 시간. 하위 클래스가 덮어쓴다."""
 
     def _due(self, clock: Clock) -> Clock | None:
@@ -122,11 +119,11 @@ class Sensor(Hardware, Generic[T]):
         """가장 최근 값 (아직 없으면 None)."""
         return self.latest
 
-    def on_period(self, clock: Clock, world: World) -> None:
+    def on_period(self, clock: Clock) -> None:
         try:
             if self.fault is not None and self.fault(clock):
                 raise HardwareError("주입된 고장")
-            data = self.sample(clock, world)
+            data = self.sample(clock)
         except HardwareError as error:  # 읽기 실패: 기록만 하고 새 값은 없다 (latest는 그대로 남아 오래된 값이 된다)
             self.fail(error)
             return
@@ -138,7 +135,7 @@ class Sensor(Hardware, Generic[T]):
             callback(data)
 
     @abstractmethod
-    def sample(self, clock: Clock, world: World) -> T | None:
+    def sample(self, clock: Clock) -> T | None:
         """훅: 새 값을 만든다. 없으면 None. 읽기에 실패하면 HardwareError를 일으킨다."""
 
 
@@ -156,12 +153,12 @@ class Actuator(Hardware, Generic[T]):
         """명령을 내린다 (객체째 교체라 다른 스레드에서 불러도 안전하다)."""
         self.command = command
 
-    def on_period(self, clock: Clock, world: World) -> None:
+    def on_period(self, clock: Clock) -> None:
         try:
-            self.apply(self.command, clock, world)
+            self.apply(self.command, clock)
         except HardwareError as error:  # 명령 실행 실패: 기록만 한다
             self.fail(error)
 
     @abstractmethod
-    def apply(self, command: T, clock: Clock, world: World) -> None:
+    def apply(self, command: T, clock: Clock) -> None:
         """훅: 명령을 실행한다. 실패하면 HardwareError를 일으킨다."""

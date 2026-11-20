@@ -16,7 +16,7 @@ class DummyObject(WorldObject):
     def __init__(self) -> None:
         self.clocks: list[Clock] = []
 
-    def tick(self, clock: Clock, world: World) -> None:
+    def tick(self, clock: Clock) -> None:
         self.clocks.append(clock)
 
 
@@ -261,7 +261,7 @@ class TestHardwareLayout(unittest.TestCase):
 
     def test_top_level_holds_only_the_base_and_kind_packages(self) -> None:
         files = {p.name for p in self.root.glob("*.py")}
-        self.assertEqual(files, {"__init__.py", "hardware.py"})  # 인터페이스나 모델 파일이 바깥에 평평하게 섞이면 안 된다
+        self.assertEqual(files, {"__init__.py", "hardware.py", "simulated_body.py"})  # 인터페이스나 모델 파일이 바깥에 평평하게 섞이면 안 된다
         self.assertEqual({p.name for p in self.root.iterdir() if p.is_dir() and p.name != "__pycache__"}, {"controllers", "imus", "lidars", "motors"})
 
     def test_every_kind_package_has_its_interface_and_models_inside(self) -> None:

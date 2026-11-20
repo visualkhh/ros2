@@ -66,7 +66,7 @@ class TestRobotReceivesInteraction(unittest.TestCase):
 
     def test_base_robot_ignores_input_by_default(self) -> None:
         class Bare(Robot):
-            def tick(self, clock: Any, world: Any) -> None:
+            def tick(self, clock: Any) -> None:
                 pass
 
         robot, keyboard = Bare(), Keyboard()

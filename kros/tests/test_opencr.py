@@ -4,6 +4,7 @@ from kros.hardwares import Controller, Hardware
 from kros.hardwares.controllers.opencr import OpenCr
 from kros.hardwares.imus.mpu9250 import DummyMpu9250
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
+from kros.worlds.clock import Clock
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.objects.world_object import WorldObject
@@ -40,6 +41,25 @@ class TestOpenCr(unittest.TestCase):
             world.step(1 / 60)
         self.assertEqual(robot.pose.x, 0.0)
         self.assertIsNone(robot.imu.read())  # 꺼진 센서는 값을 내지 않는다
+
+    def test_hardware_runs_on_a_clock_alone_without_any_world(self) -> None:
+        # 진짜 하드웨어를 돌리는 실시간 루프처럼: 월드 없이 시계 신호만 내려준다
+        board = TurtleBot3.make_opencr(imu=DummyMpu9250())
+        for i in range(1, 11):
+            board.imu.tick(Clock(i * 0.01, 0.01))
+        self.assertIsNotNone(board.imu.read())
+
+    def test_hardware_base_does_not_know_the_world(self) -> None:
+        import pathlib
+
+        text = (pathlib.Path(__file__).parent.parent / "hardwares" / "hardware.py").read_text()
+        self.assertNotIn("kros.worlds.world", text)
+
+    def test_world_tells_each_object_where_it_is(self) -> None:
+        world, robot = MazeWorld(puck_count=0), TurtleBot3()
+        self.assertIsNone(robot.world)
+        world.add(robot)
+        self.assertIs(robot.world, world)
 
     def test_parts_can_be_swapped_when_making_the_board(self) -> None:
         dummy = DummyMpu9250()

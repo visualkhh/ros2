@@ -133,7 +133,7 @@ class TestDummyAndBridge(unittest.TestCase):
 
     def test_simulated_mpu_needs_a_world_object_owner(self) -> None:
         with self.assertRaises(AssertionError):
-            SimulatedMpu9250().sample(Clock(0.0, DT), MazeWorld(puck_count=0))
+            SimulatedMpu9250().sample(Clock(0.0, DT))
 
 
 if __name__ == "__main__":

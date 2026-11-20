@@ -3,8 +3,8 @@ import math
 from kros.msgs.geometry_msgs import Pose2D, Twist
 from kros.worlds.clock import Clock
 from kros.hardwares import Actuator, Motor
+from kros.hardwares.simulated_body import simulated_body
 from kros.worlds.world import World
-from kros.worlds.objects.world_object import WorldObject
 
 MAX_SUBSTEP = 0.05  # m, 한 번에 크게 움직이면 벽을 통째로 건너뛰므로 이 이하로 쪼갠다
 
@@ -23,17 +23,16 @@ class DiffDrive(Actuator[Twist]):
         self.add(left, "left_wheel")
         self.add(right, "right_wheel")
 
-    def apply(self, command: Twist, clock: Clock, world: World) -> None:
+    def apply(self, command: Twist, clock: Clock) -> None:
         """역기구학: 몸체 속도 명령 -> 바퀴 속도 목표."""
         v, w, r, half = command.linear.x, command.angular.z, self.wheel_radius, self.wheel_separation / 2
         self.left.write((v - w * half) / r)
         self.right.write((v + w * half) / r)
 
-    def tick(self, clock: Clock, world: World) -> None:
-        super().tick(clock, world)  # 목표를 바퀴에 주고(apply), 바퀴 모터들이 돈다
-        body = self.find_owner(WorldObject)  # type: ignore[type-abstract]  # 추상 클래스도 찾는 종류로 쓴다
-        assert body is not None, "DiffDrive는 WorldObject(로봇) 아래에 달아야 한다"
+    def tick(self, clock: Clock) -> None:
+        super().tick(clock)  # 목표를 바퀴에 주고(apply), 바퀴 모터들이 돈다
         if self.is_on:
+            body, world = simulated_body(self)  # 시뮬레이션: 몸체를 월드 안에서 움직인다
             body.pose = self.move(body.pose, clock.dt, world)
 
     def wheel_velocity(self, motor: Motor) -> float:

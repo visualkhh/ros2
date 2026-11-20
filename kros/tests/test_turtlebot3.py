@@ -167,9 +167,9 @@ class RecordingHardware(Hardware):
         super().__init__()
         self.name, self.log = name, log
 
-    def tick(self, clock: Clock, world: World) -> None:
+    def tick(self, clock: Clock) -> None:
         self.log.append(self.name)
-        super().tick(clock, world)
+        super().tick(clock)
 
 
 class TestHardware(unittest.TestCase):
@@ -199,7 +199,7 @@ class TestHardware(unittest.TestCase):
         top.add(a)
         a.add(RecordingHardware("a1", log))
         top.add(b)
-        top.tick(Clock(0.1, 0.1), WORLD)
+        top.tick(Clock(0.1, 0.1))
         self.assertEqual(log, ["top", "a", "a1", "b"])
 
     def test_world_step_ticks_robot_parts(self) -> None:
@@ -217,7 +217,7 @@ class CountingSensor(Sensor[int]):
         super().__init__(period)
         self.samples = 0
 
-    def sample(self, clock: Clock, world: World) -> int | None:
+    def sample(self, clock: Clock) -> int | None:
         self.samples += 1
         return self.samples
 
@@ -227,7 +227,7 @@ class RecordingActuator(Actuator[str]):
         super().__init__("idle", period)
         self.applied: list[tuple[str, float]] = []
 
-    def apply(self, command: str, clock: Clock, world: World) -> None:
+    def apply(self, command: str, clock: Clock) -> None:
         self.applied.append((command, round(clock.dt, 6)))
 
 
@@ -257,7 +257,7 @@ class TestHardwareInterface(unittest.TestCase):
 
     def test_sensor_sample_hook_can_skip_a_period(self) -> None:
         class Sometimes(Sensor[int]):
-            def sample(self, clock: Clock, world: World) -> int | None:
+            def sample(self, clock: Clock) -> int | None:
                 return None  # 이번엔 데이터 없음
 
         robot, world = make()
@@ -313,7 +313,7 @@ class FailingSensor(Sensor[int]):
         super().__init__(period)
         self.broken = False
 
-    def sample(self, clock: Clock, world: World) -> int | None:
+    def sample(self, clock: Clock) -> int | None:
         if self.broken:
             raise HardwareError("타임아웃")
         return int(clock.time * 100)
@@ -388,7 +388,7 @@ class TestHardwarePowerAndFailure(unittest.TestCase):
 
     def test_other_exceptions_are_bugs_and_propagate(self) -> None:
         class Buggy(Sensor[int]):
-            def sample(self, clock: Clock, world: World) -> int | None:
+            def sample(self, clock: Clock) -> int | None:
                 raise ZeroDivisionError
 
         robot, world = make()
@@ -411,7 +411,7 @@ class TestHardwarePowerAndFailure(unittest.TestCase):
 
     def test_actuator_failure_is_recorded_and_command_is_not_executed(self) -> None:
         class DeadMotor(Actuator[str]):
-            def apply(self, command: str, clock: Clock, world: World) -> None:
+            def apply(self, command: str, clock: Clock) -> None:
                 raise HardwareError("모터 응답 없음")
 
         robot, world = make()
@@ -427,7 +427,7 @@ class TestHardwarePowerAndFailure(unittest.TestCase):
 class TestMotor(unittest.TestCase):
     def tick(self, motor: SimulatedXl430W250, dt: float, n: int) -> None:
         for i in range(n):
-            motor.tick(Clock((i + 1) * dt, dt), WORLD)
+            motor.tick(Clock((i + 1) * dt, dt))
 
     def test_single_motor_integrates_position_at_commanded_velocity(self) -> None:
         motor = SimulatedXl430W250()

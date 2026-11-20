@@ -1,7 +1,6 @@
 """ROBOTIS Dynamixel XL430-W250 모터 한 개 (TurtleBot3 바퀴, 매니퓰레이터 관절 등)."""
 from kros.worlds.clock import Clock
 from kros.hardwares.motors.motor import Motor
-from kros.worlds.world import World
 
 
 class SimulatedXl430W250(Motor):
@@ -14,12 +13,12 @@ class SimulatedXl430W250(Motor):
         super().__init__(period)
         self.max_velocity = max_velocity  # rad/s, None이면 제한 없음
 
-    def apply(self, command: float, clock: Clock, world: World) -> None:
+    def apply(self, command: float, clock: Clock) -> None:
         limit = self.max_velocity
         self.velocity = command if limit is None else max(-limit, min(limit, command))
         self.position += self.velocity * clock.dt
 
-    def tick(self, clock: Clock, world: World) -> None:
-        super().tick(clock, world)
+    def tick(self, clock: Clock) -> None:
+        super().tick(clock)
         if not self.is_on:
             self.velocity = 0.0  # 전원이 꺼지면 돌지 않는다

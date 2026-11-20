@@ -5,6 +5,7 @@ from kros.msgs.geometry_msgs import Pose2D
 from kros.msgs.sensor_msgs import LaserScan
 from kros.worlds.clock import Clock
 from kros.hardwares.lidars.lidar import Lidar
+from kros.hardwares.simulated_body import simulated_body
 from kros.worlds.world import World
 from kros.worlds.objects.world_object import WorldObject
 
@@ -33,9 +34,8 @@ class Lds01(Lidar):
 class SimulatedLds01(Lds01):
     """월드에 레이를 쏴서 측정한다: owner(로봇)의 위치에서."""
 
-    def sample(self, clock: Clock, world: World) -> LaserScan:
-        body = self.owner
-        assert isinstance(body, WorldObject), "SimulatedLds01은 WorldObject(로봇)에 달아야 한다"
+    def sample(self, clock: Clock) -> LaserScan:
+        body, world = simulated_body(self)
         self.scan_pose = self.sensor_pose(body.pose)
         return make_scan(self.scan_pose, self.mount_height, world)
 
@@ -47,7 +47,7 @@ class DummyLds01(Lds01):
         super().__init__(mount_x, mount_height, period)
         self.distance = distance
 
-    def sample(self, clock: Clock, world: World) -> LaserScan:
+    def sample(self, clock: Clock) -> LaserScan:
         inc = 2 * math.pi / SAMPLES
         body = self.owner
         if isinstance(body, WorldObject):

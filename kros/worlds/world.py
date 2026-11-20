@@ -32,6 +32,7 @@ class World(ABC):
     def add(self, obj: WorldObject, pose: Pose2D | None = None) -> None:
         """객체를 월드에 놓는다 (pose를 안 주면 start_pose)."""
         obj.pose = pose or self.start_pose
+        obj.world = self
         self.objects.append(obj)
         if obj.static and obj.collider is not None:
             self._statics.append(obj)
@@ -49,7 +50,7 @@ class World(ABC):
         self.time += dt
         clock = Clock(self.time, dt)
         for obj in self.objects:
-            obj.tick(clock, self)
+            obj.tick(clock)
         self._slide(dt)
         self._resolve_collisions(dt)
 

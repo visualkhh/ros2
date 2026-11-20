@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from kros.msgs.geometry_msgs import Pose2D
 from kros.worlds.clock import Clock
 from kros.worlds.objects.world_object import WorldObject
-
-if TYPE_CHECKING:  # 월드가 objects 패키지를 import하므로 실행 때는 import하지 않는다 (순환 방지)
-    from kros.worlds.world import World
 
 
 class PuckShape(Enum):
@@ -33,5 +29,5 @@ class Puck(WorldObject):
         self.height = height  # m, 라이다(0.132m)보다 낮아서 라이다에는 보이지 않는다
         self.pose = Pose2D(0.0, 0.0, 0.0)
 
-    def tick(self, clock: Clock, world: World) -> None:
+    def tick(self, clock: Clock) -> None:
         pass

@@ -6,8 +6,7 @@ from kros.msgs.sensor_msgs import Imu as ImuMessage
 from kros.msgs.std_msgs import Header
 from kros.hardwares.imus.imu import Imu
 from kros.worlds.clock import Clock
-from kros.worlds.objects.world_object import WorldObject
-from kros.worlds.world import World
+from kros.hardwares.simulated_body import simulated_body
 
 IMU_PERIOD = 0.01  # 초 (100Hz). 월드가 이보다 드물게 신호를 주면 신호마다 한 번이다
 
@@ -32,9 +31,8 @@ class SimulatedMpu9250(Mpu9250):
         self._last: tuple[float, float, float, float] | None = None  # 지난 값을 만들 때의 (시각, x, y, theta)
         self._previous_velocity: tuple[float, float] | None = None
 
-    def sample(self, clock: Clock, world: World) -> ImuMessage:
-        body = self.find_owner(WorldObject)  # type: ignore[type-abstract]  # 추상 클래스도 찾는 종류로 쓴다
-        assert body is not None, "SimulatedMpu9250은 WorldObject(로봇) 아래에 달아야 한다"
+    def sample(self, clock: Clock) -> ImuMessage:
+        body, world = simulated_body(self)
         pose = body.pose
         yaw, c, s = pose.theta, math.cos(pose.theta), math.sin(pose.theta)
         angular_z, ax, ay = 0.0, 0.0, 0.0
@@ -62,5 +60,5 @@ class DummyMpu9250(Mpu9250):
         super().__init__(frame_id, period)
         self.gravity = gravity
 
-    def sample(self, clock: Clock, world: World) -> ImuMessage:
+    def sample(self, clock: Clock) -> ImuMessage:
         return ImuMessage(Header(clock.time, self.frame_id), Quaternion(), Vector3(), Vector3(0.0, 0.0, self.gravity))
