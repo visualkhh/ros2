@@ -19,7 +19,6 @@ from panda3d.core import TextNode
 from kros.msgs.geometry_msgs import Point, Pose, PoseWithCovariance, PoseWithCovarianceStamped, Quaternion
 from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse, SaveMap, SaveMapRequest, SaveMapResponse
 from kros.msgs.std_msgs import Header
-from kros.nodes.cartographer import MODES
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
 from kros.nodes.map_server import MAPS_DIRECTORY
 from kros.parameter import ParameterNotDeclaredError, ParameterRejectedError
@@ -43,11 +42,8 @@ class SlamPanel:
         self._pending: list[tuple[Future[Any], Callable[[object], None]]] = []  # 응답을 기다리는 서비스 호출 (UI는 매 프레임 확인한다)
         left = viz.left
         OnscreenText(text="SLAM", parent=left, pos=(0.04, TOP), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
-        mode = self._get_mode()
-        self.mode_menu = DirectOptionMenu(
-            parent=left, items=list(MODES), initialitem=MODES.index(mode) if mode in MODES else 0, pos=(0.07, 0, TOP - 0.08), command=self.set_mode,
-            highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1), **GUI,
-        )
+        self.mode_text = OnscreenText(parent=left, pos=(0.2, TOP), align=TextNode.ALeft, fg=(1, 0.75, 0.3, 1), scale=0.04, mayChange=True)
+        self.slam_button = DirectButton(parent=left, text="start SLAM", pos=(0.07, 0, TOP - 0.08), command=self.toggle_slam, text_align=TextNode.ALeft, **GUI)
         self.save_button = DirectButton(parent=left, text="save map", pos=(0.4, 0, TOP - 0.08), command=self.save_map, text_align=TextNode.ALeft, **GUI)
         maps = self.map_names()
         self.map_menu = DirectOptionMenu(
@@ -69,9 +65,13 @@ class SlamPanel:
         """ros2 param set /cartographer mode <mode>."""
         try:
             self.node.context.parameter_manager.set(self.cartographer, "mode", mode)
-            self.status.setText(f"mode: {mode}")
-        except (ParameterNotDeclaredError, ParameterRejectedError) as error:
-            self.status.setText(f"{self.cartographer} 없음: {error}")
+            self.status.setText("")
+        except (ParameterNotDeclaredError, ParameterRejectedError):
+            self.status.setText(f"no node '{self.cartographer}'")
+
+    def toggle_slam(self) -> None:
+        """start SLAM = mapping (새 지도), stop SLAM = idle (만든 지도는 map 토픽에 남아 save map으로 저장할 수 있다)."""
+        self.set_mode("idle" if self._get_mode() == "mapping" else "mapping")
 
     def map_names(self) -> list[str]:
         return sorted(path.stem for path in self.maps_directory.glob("*.yaml"))
@@ -83,7 +83,7 @@ class SlamPanel:
 
     def _saved(self, name: str, response: object) -> None:
         ok = isinstance(response, SaveMapResponse) and response.result
-        self.status.setText(f"saved {name}" if ok else f"save failed ({self.map_saver} 로그를 보라)")
+        self.status.setText(f"saved {name}" if ok else "save failed: no map yet (start SLAM first)")
         maps = self.map_names()
         if maps:
             self.map_menu["items"] = maps
@@ -101,14 +101,14 @@ class SlamPanel:
         if not (isinstance(response, LoadMapResponse) and response.result == LoadMapResponse.RESULT_SUCCESS):
             self.status.setText(f"load failed: {name}")
             return
-        self.mode_menu.set(MODES.index("localization"))  # 저장한 지도로 위치만 잡는다 (메뉴가 set_mode를 부른다)
-        self.status.setText(f"loaded {name}: 2D Pose Estimate로 위치를 찍어 준다")
+        self.set_mode("localization")  # 저장한 지도로 위치만 잡는다
+        self.status.setText(f"loaded {name}: set the robot with 2D Pose Estimate")
 
     def _call(self, service: str, srv_type: ServiceType[Req, Res], request: Req, done: Callable[[object], None]) -> None:
         try:
             future: Future[Any] = self.node.call_service_async(service, srv_type, request)
         except LookupError:  # 그 노드를 안 띄웠다
-            self.status.setText(f"{service} 서비스가 없다")
+            self.status.setText(f"no service {service}")
             return
         self._pending.append((future, done))
 
@@ -121,7 +121,12 @@ class SlamPanel:
     # ---- 매 프레임 --------------------------------------------------------------------------------
 
     def update(self, ground: tuple[float, float] | None, pressed: bool) -> None:
-        """Viz가 매 프레임 부른다: 끝난 서비스 응답을 화면에 반영하고, 2D Pose Estimate 드래그를 처리한다 (ground: 마우스 아래 바닥점, fixed frame)."""
+        """Viz가 매 프레임 부른다: 모드 표시, 끝난 서비스 응답, 2D Pose Estimate 드래그 (ground: 마우스 아래 바닥점, fixed frame)."""
+        mode = self._get_mode()  # 다른 곳(ros2 param set 같은)에서 바꿔도 따라간다
+        self.mode_text.setText(mode or "(no cartographer)")
+        mapping = mode == "mapping"
+        self.slam_button["text"] = "stop SLAM" if mapping else "start SLAM"
+        self.slam_button["frameColor"] = (0.6, 0.2, 0.2, 1) if mapping else (0.15, 0.45, 0.25, 1)
         for future, done in [item for item in self._pending if item[0].done()]:
             self._pending.remove((future, done))
             error = future.exception()
@@ -147,7 +152,7 @@ class SlamPanel:
             try:
                 t = self.node.buffer.lookup_transform("map", fixed).transform
             except TransformException:
-                self.status.setText("map TF가 없다: Fixed Frame을 map으로 하거나 SLAM/localization을 켠다")
+                self.status.setText("no map TF: start SLAM or load a map")
                 return
             pose = compose((t.translation.x, t.translation.y, yaw_of(t.rotation)), pose)
         x, y, yaw = pose
@@ -156,5 +161,5 @@ class SlamPanel:
         self.status.setText(f"initialpose ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
 
     def destroy(self) -> None:
-        for widget in (self.mode_menu, self.save_button, self.map_menu, self.load_button, self.pose_button):
+        for widget in (self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button):
             widget.destroy()

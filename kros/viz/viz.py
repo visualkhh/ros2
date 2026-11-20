@@ -212,6 +212,7 @@ class Viz:
         root.setDepthWrite(False)
         cam = root.attachNewNode(Camera("viz-cam2d"))
         self._lens2d = OrthographicLens()
+        self._lens2d.setFilmSize(2, 2)  # render2d처럼 늘 -1~1: DirectGUI(PGTop)는 클릭 영역을 이 좌표로 마우스와 비교한다
         self._lens2d.setNearFar(-1000, 1000)
         cam.node().setLens(self._lens2d)
         region = self.win.makeDisplayRegion()
@@ -224,7 +225,7 @@ class Viz:
 
     def _resize(self) -> None:
         ratio = self.win.getXSize() / max(1, self.win.getYSize())
-        self._lens2d.setFilmSize(2 * ratio, 2)
+        self.aspect.setScale(1 / ratio, 1, 1)  # ShowBase의 aspect2d처럼: 안쪽 좌표는 가로 +-ratio, 세로 +-1 (글자가 늘어나지 않게)
         self._lens3d.setAspectRatio(ratio)  # 3D 렌즈도 창 비율을 따라야 늘어나 보이지 않는다
         self.left.setX(-ratio)
         self.hud_anchor.setX(-ratio + PANEL_WIDTH)

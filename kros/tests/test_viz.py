@@ -33,7 +33,7 @@ if HAS_PANDA:
     from panda3d.core import Vec3
     from kros.msgs.geometry_msgs import PoseWithCovarianceStamped
     from kros.nodes import Cartographer, MapSaver, MapServer
-    from kros.nodes.cartographer import MODES
+    from panda3d.core import MouseButton, VirtualMouse
     from kros.worlds.maze.maze_world import MazeWorld
     from kros.worlds.robots.turtlebot3 import TurtleBot3
     from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARATION
@@ -183,8 +183,10 @@ class TestVizSlamPanel(unittest.TestCase):
         self.fail(f"status: {self.panel.status.getText()!r}")
 
     def test_mode_save_and_load_go_through_parameter_and_services(self) -> None:
-        self.panel.mode_menu.set(MODES.index("mapping"))  # 메뉴에서 고른다 = ros2 param set
+        self.panel.slam_button["command"]()  # start SLAM = ros2 param set /cartographer mode mapping
         self.assertEqual(self.cartographer.mode.value, "mapping")
+        self.viz.base.taskMgr.step()
+        self.assertEqual(self.panel.slam_button["text"], "stop SLAM")
         grid = OccupancyGrid(Header(0.0, "map"), MapMetaData(0.0, 0.05, 2, 1), (OCCUPIED, FREE))
         self.watcher.publish("map", grid, QOS_LATCHED)  # 저장할 지도 (SLAM 자리)
         self.panel.save_button["command"]()
@@ -225,13 +227,46 @@ class TestVizSlamPanel(unittest.TestCase):
         self.viz.base.taskMgr.step()
         self.assertIsNone(self.viz.ground_point(0.0, 0.9))
 
+    def click(self, widget: object, mouse: "VirtualMouse") -> None:
+        """위젯의 클릭 영역 한가운데를 진짜 마우스처럼 누른다. 그 점이 창 안이어야 사람이 누를 수 있다."""
+        watcher = self.viz.mouse.node()
+        frames = {group.getRegion(i).getName(): group.getRegion(i).getFrame() for g in range(watcher.getNumGroups()) for group in [watcher.getGroup(g)] for i in range(group.getNumRegions())}
+        left, right, bottom, top = frames[widget.guiId]  # type: ignore[attr-defined]
+        x, y = ((left + right) / 2 + 1) / 2 * self.size[0], (1 - (bottom + top) / 2) / 2 * self.size[1]
+        self.assertTrue(0 <= x < self.size[0] and 0 <= y < self.size[1], f"{widget}: 클릭 영역이 창 밖 ({x:.0f}, {y:.0f})")
+        mouse.setMousePos(int(x), int(y))
+        self.viz.base.taskMgr.step()
+        mouse.pressButton(MouseButton.one())
+        self.viz.base.taskMgr.step()
+        mouse.releaseButton(MouseButton.one())
+        self.viz.base.taskMgr.step()
+
+    def test_checkboxes_and_buttons_respond_to_real_mouse_clicks(self) -> None:
+        # DirectGUI는 클릭 영역을 -1~1 화면 좌표로 마우스와 비교한다: 2D 장면 좌표를 창 비율로 늘리면 왼쪽 패널의 영역이 창 밖으로 나가 눌리지 않았다
+        self.size = (self.viz.win.getXSize(), self.viz.win.getYSize())
+        mouse = VirtualMouse("test-mouse")
+        mouse.setWindowSize(*self.size)
+        mouse.setMouseOn(True)
+        self.viz.mouse.reparentTo(self.viz.base.dataRoot.attachNewNode(mouse))
+        self.viz.base.taskMgr.step()
+        for name, check in self.viz.checks.items():
+            before = self.viz.enabled[name]
+            self.click(check, mouse)
+            self.assertEqual(self.viz.enabled[name], not before, name)
+        self.click(self.panel.slam_button, mouse)
+        self.assertEqual(self.cartographer.mode.value, "mapping")
+        self.click(self.panel.slam_button, mouse)
+        self.assertEqual(self.cartographer.mode.value, "idle")
+        self.click(self.panel.pose_button, mouse)
+        self.assertTrue(self.panel.pose_tool)
+
     def test_missing_nodes_are_reported_not_crashed(self) -> None:
         self.panel.map_saver = "nobody"
         self.panel.save_map()
-        self.assertIn("서비스가 없다", self.panel.status.getText())
+        self.assertIn("no service", self.panel.status.getText())
         self.panel.cartographer = "nobody"
         self.panel.set_mode("mapping")
-        self.assertIn("nobody 없음", self.panel.status.getText())
+        self.assertIn("no node 'nobody'", self.panel.status.getText())
 
 
 if __name__ == "__main__":
