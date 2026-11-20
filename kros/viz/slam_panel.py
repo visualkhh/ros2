@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from .viz import Viz
 
 TOP = -0.17  # 패널에서 SLAM 칸이 시작하는 높이
+NO_SELECTION = "(select map)"  # 지도 목록의 처음 상태: 아무것도 고르지 않았다 (사람이 고른다)
+MAP_FILE = "map"  # 지도 폴더 안의 파일 이름: maps/<지도 이름>/map.yaml + map.pgm
 TOOL_COLORS = {"initialpose": (0.3, 1.0, 0.4, 1.0), "goal": (1.0, 0.35, 0.8, 1.0)}  # 드래그 중 미리 보는 화살표 색 (rviz처럼 도구마다)
 TOOL_ACTIVE = (0.6, 0.35, 0.1, 1)  # 켜진 도구 버튼 색
 INITIAL_POSE_COVARIANCE = tuple(0.25 if i in (0, 7) else 0.0685 if i == 35 else 0.0 for i in range(36))  # rviz 2D Pose Estimate의 기본 공분산
@@ -76,9 +78,8 @@ class SlamPanel:
         self.mode_text = OnscreenText(parent=left, pos=(0.2, TOP), align=TextNode.ALeft, fg=(1, 0.75, 0.3, 1), scale=0.04, mayChange=True)
         self.slam_button = _button(left, "start SLAM", 0.06, 0.32, TOP - 0.09, self.toggle_slam)
         self.save_button = _button(left, "save map", 0.36, 0.62, TOP - 0.09, self.save_map)
-        maps = self.map_names()
         self.map_menu = DirectOptionMenu(
-            parent=left, items=maps or ["(no maps)"], pos=(0.075, 0, TOP - 0.19), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
+            parent=left, items=[NO_SELECTION, *self.map_names()], initialitem=0, pos=(0.075, 0, TOP - 0.19), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
             **{**GUI, "frameColor": (0.12, 0.14, 0.2, 1), "relief": DGG.SUNKEN},  # 고르는 칸은 들어간 모양 (버튼과 구별)
         )
         self.map_menu["frameSize"] = (-0.4, (0.44 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # 지도 이름이 길다
@@ -116,28 +117,35 @@ class SlamPanel:
             return Path()
 
     def map_names(self) -> list[str]:
-        return sorted(path.stem for path in self.maps_directory.glob("*.yaml"))
+        """지도 폴더들 (maps/<이름>/map.yaml이 있는 것)."""
+        return sorted(path.parent.name for path in self.maps_directory.glob(f"*/{MAP_FILE}.yaml"))
 
     def save_map(self) -> None:
         name = time.strftime("map_%Y%m%d_%H%M%S")
         self.status.setText(f"saving {name} ...")
-        self._call(f"{self.map_saver}/save_map", SaveMap, SaveMapRequest(map_url=str(self.maps_directory / name)), lambda response: self._saved(name, response))
+        url = str(self.maps_directory / name / MAP_FILE)  # map_saver가 폴더를 만들고 map.yaml + map.pgm을 쓴다
+        self._call(f"{self.map_saver}/save_map", SaveMap, SaveMapRequest(map_url=url), lambda response: self._saved(name, response))
 
     def _saved(self, name: str, response: object) -> None:
         ok = isinstance(response, SaveMapResponse) and response.result
         self.status.setText(f"saved {name}" if ok else "save failed: no map yet (start SLAM first)")
-        maps = self.map_names()
-        if maps:
-            self.map_menu["items"] = maps
-            self.map_menu.set(maps.index(name) if name in maps else 0, fCommand=False)
+        self.refresh_maps()
+
+    def refresh_maps(self) -> None:
+        """지도 목록을 다시 읽는다. 고른 것은 그대로 두고, 없어졌으면 '고르지 않음'으로."""
+        chosen = self.map_menu.get()
+        items = [NO_SELECTION, *self.map_names()]
+        self.map_menu["items"] = items
+        self.map_menu.set(items.index(chosen) if chosen in items else 0, fCommand=False)
 
     def load_map(self) -> None:
         name = self.map_menu.get()
-        if name not in self.map_names():
-            self.status.setText("no map to load")
+        if name == NO_SELECTION or name not in self.map_names():
+            self.status.setText("select a map first")
             return
         self.status.setText(f"loading {name} ...")
-        self._call(f"{self.map_server}/load_map", LoadMap, LoadMapRequest(str(self.maps_directory / f"{name}.yaml")), lambda response: self._loaded(name, response))
+        request = LoadMapRequest(str(self.maps_directory / name / f"{MAP_FILE}.yaml"))
+        self._call(f"{self.map_server}/load_map", LoadMap, request, lambda response: self._loaded(name, response))
 
     def _loaded(self, name: str, response: object) -> None:
         if not (isinstance(response, LoadMapResponse) and response.result == LoadMapResponse.RESULT_SUCCESS):

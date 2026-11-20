@@ -195,8 +195,13 @@ class TestVizSlamPanel(unittest.TestCase):
         self.wait_status("saved")
         names = self.panel.map_names()
         self.assertEqual(len(names), 1)
-        self.assertTrue((self.maps / f"{names[0]}.pgm").exists())
-        self.assertEqual(self.panel.map_menu.get(), names[0])  # 방금 저장한 지도가 골라져 있다
+        self.assertTrue((self.maps / names[0] / "map.pgm").exists())  # maps/<이름>/map.yaml + map.pgm
+        self.assertTrue((self.maps / names[0] / "map.yaml").exists())
+        self.assertEqual(self.panel.map_menu.get(), "(select map)")  # 저절로 고르지 않는다: 사람이 고른다
+        self.assertEqual(self.panel.map_menu["items"], ["(select map)", names[0]])
+        self.panel.load_button["command"]()
+        self.assertEqual(self.panel.status.getText(), "select a map first")
+        self.panel.map_menu.set(1, fCommand=False)  # 고른다
         self.panel.load_button["command"]()
         self.wait_status("loaded")
         self.assertEqual(self.cartographer.mode.value, "localization")  # 저장한 지도로 위치만 잡는다
