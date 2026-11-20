@@ -4,6 +4,8 @@ from typing import Callable, TypeVar
 
 from kros.action import ActionClient, ActionServer, ActionType, ServerGoalHandle
 from kros.context import Context
+from kros.log import LOG_TOPIC_NAME, NodeLogger
+from kros.msgs.rcl_interfaces import LogLevel
 from kros.parameter import OnChange, Parameter, ParameterValue, Validator
 from kros.timer import Timer
 from kros.topic import QOS_DEFAULT, QoS, Subscription
@@ -31,6 +33,9 @@ class Node:
         context.register_node(self.name)
         if parameters:
             context.parameter_manager.set_node_overrides(self.name, parameters)
+        # 모든 노드가 선언하는 파라미터 (ROS의 use_sim_time처럼): 로그 수준. 실행 중에 바꾸면 로거가 바로 따른다
+        self._log_level = self.declare_parameter("log_level", "INFO", validator=lambda level: level.upper() in LogLevel.__members__)
+        self._logger = NodeLogger(self.name, lambda log: self.publish(LOG_TOPIC_NAME, log), self.now, lambda: LogLevel[self._log_level.value.upper()])
 
     def declare_parameter(self, name: str, default: P, validator: Validator[P] | None = None, on_change: OnChange[P] | None = None) -> Parameter[P]:
         """파라미터를 선언한다. 타입은 default의 타입으로 고정된다. 돌려받은 Parameter의 value가 항상 현재 값이다.
@@ -42,6 +47,10 @@ class Node:
 
     def set_parameter(self, name: str, value: ParameterValue) -> None:
         self.context.parameter_manager.set(self.name, name, value)
+
+    def get_logger(self) -> NodeLogger:
+        """이 노드의 로거: 파이썬 logging과 rosout 토픽으로 나간다. 수준은 log_level 파라미터(기본 INFO)가 정한다."""
+        return self._logger
 
     def now(self) -> float:
         """kros의 현재 시각(초): 실제 시간 또는 시뮬레이션 시간 (Kros의 time_source가 정한다). 메시지 시각 등에 쓴다."""

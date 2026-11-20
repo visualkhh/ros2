@@ -8,6 +8,7 @@
 from kros import Kros
 from kros.context import Context
 from kros.interactions import Keyboard
+from kros.log import enable_console
 from kros.node import Node
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
@@ -20,6 +21,7 @@ from .robot_bridge import RobotBridge
 
 
 def main() -> None:
+    enable_console()  # 노드 로그를 콘솔에 보인다 (수준은 노드의 log_level 파라미터)
     world, robot, keyboard = MazeWorld(), TurtleBot3(), Keyboard()
     print(f"compute: {world.compute.name}")  # gpu(cupy) / cpu(numpy) / python
     world.add(robot)

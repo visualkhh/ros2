@@ -26,10 +26,12 @@ class RobotBridge(Node):
         self._diagnostics = DiagnosticUpdater(self, self.diagnostics_period.value, hardware_id=robot.name)
         for hardware in leaves(robot):  # 센서/구동기마다 진단 작업 하나
             self._diagnostics.add(hardware_path(hardware), make_task(hardware, self.now, lambda: self.data_timeout.value))
+        self.get_logger().info("로봇 %s 연결: 진단 %d개, 주기 %.1f초", robot.name, len(leaves(robot)), self.diagnostics_period.value)
         self.subscribe(CMD_VEL_TOPIC_NAME, Twist, self._on_cmd_vel)
         robot.lidar.subscribe(self.publish_scan)  # 라이다가 새로 측정할 때마다 scan 토픽으로
 
     def _on_cmd_vel(self, twist: Twist) -> None:
+        self.get_logger().debug("cmd_vel 받음: v=%.2f w=%.2f", twist.linear.x, twist.angular.z)
         self._robot.command = twist  # 객체째 교체라 구독 스레드에서 넣어도 안전
 
     def publish_scan(self, scan: LaserScan) -> None:

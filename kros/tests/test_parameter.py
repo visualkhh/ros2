@@ -260,7 +260,7 @@ class TestParameterEvents(unittest.TestCase):
         kros, watcher, _ = self.make({"Speedy": {"speed": 0.4}})
         self.settle(kros)
         declared = {e.name: e for e in watcher.events if e.node == "Speedy"}
-        self.assertEqual(set(declared), {"speed", "topic", "count"})
+        self.assertEqual(set(declared), {"speed", "topic", "count", "log_level"})  # log_level은 모든 노드가 자동으로 선언한다
         self.assertEqual((declared["speed"].kind, declared["speed"].old, declared["speed"].new), (ParameterEventKind.DECLARED, None, 0.4))  # 덮어쓴 시작 값
         self.assertEqual(declared["topic"].new, "cmd_vel")  # 덮어쓰지 않은 건 기본값
 
@@ -353,7 +353,7 @@ class TestManagersAreNotTiedTogether(unittest.TestCase):
         Node(ctx, "w").subscribe(PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, seen.append)
         Node(ctx, "n").declare_parameter("x", 1)
         ctx.topic_manager.join()
-        self.assertEqual([(e.node, e.name) for e in seen], [("n", "x")])
+        self.assertEqual([(e.node, e.name) for e in seen], [("n", "log_level"), ("n", "x")])  # log_level은 모든 노드가 자동으로 선언한다
 
 
 class TestKrosIntegration(unittest.TestCase):

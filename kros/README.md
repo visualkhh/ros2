@@ -9,8 +9,9 @@ kros/
 ├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
 ├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, timer_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
 ├── node/node.py       Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
-├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan / std_msgs: Header / diagnostic_msgs: DiagnosticStatus, DiagnosticArray ... (ROS의 msg 흉내)
+├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan / std_msgs: Header / diagnostic_msgs: DiagnosticStatus, DiagnosticArray / rcl_interfaces: Log, LogLevel ... (ROS의 msg 흉내)
 ├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
+├── log/               NodeLogger(node.get_logger(): 파이썬 logging + rosout 토픽), enable_console
 ├── diagnostics/       DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticAggregator(모아서 STALE 판단), DiagnosticStatusWrapper
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionManager(서버 레지스트리, 서버/클라이언트 수명), ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
@@ -68,6 +69,22 @@ node.subscribe("scan", LaserScan, callback, QOS_SENSOR_DATA)  # 느리면 오래
 - **`depth`**: 구독에서는 처리를 기다리는 메시지의 최대 개수다. 넘치면 가장 오래된(아직 실행 전인) 것을 버리고 `Subscription.dropped`로 센다 (사실만 노출한다). 버려도 `join()`은 안 막힌다. 기본 `None`은 무제한(아무것도 안 버림). 느린 구독자 때문에 큐가 무한히 쌓이는 것을 막는다.
 - **함정 하나**: `QOS_LATCHED`(`depth=1`)를 **구독에** 쓰면 처리 대기 큐도 1개라서, 메시지가 연달아 오면 오래된 것은 버려지고 최신만 남는다 (ROS의 `keep_last(1)`과 같다). 하나도 놓치면 안 되면 구독에는 더 깊은 `depth`를 준다 (`QoS(depth=10, durability=TRANSIENT_LOCAL)`).
 - 지금 없는 것: `reliability`(재전송 정책), `deadline`, `lifespan`, `liveliness`. 한 프로세스 안에서는 전달이 항상 신뢰할 수 있어서 필요해지는 때는 네트워크를 붙일 때다.
+
+## 로깅 (rosout)
+
+`node.get_logger()`는 ROS의 `get_logger()`와 같다. 한 번 부르면 두 곳으로 나간다.
+
+```python
+log = self.get_logger()
+log.info("속도 %.2f m/s", v)          # debug / info / warn / error / fatal. logging처럼 % 인자를 받는다
+```
+
+- **파이썬 `logging`**(로거 이름 `kros.node.<노드이름>`)과 **`rosout` 토픽**(`Log(stamp, level, name, msg, file, function, line)`)으로 동시에 나간다. `stamp`는 kros 시간(시뮬레이션이면 시뮬레이션 시간)이고, 부른 곳의 파일/함수/줄이 자동으로 붙는다. `rosout`을 구독하면 어디서든 모든 노드의 로그를 볼 수 있다(기록기/모니터를 붙이는 자리).
+- **수준은 `log_level` 파라미터**가 정한다. ROS의 `use_sim_time`처럼 **모든 노드가 자동으로 선언**하고(기본 `"INFO"`), 실행 중에 `kros.set_parameter(노드, "log_level", "DEBUG")`로 바꾸면 바로 따른다(`Kros(parameters={"노드": {"log_level": "ERROR"}})`로 시작할 때도 줄 수 있다). 수준 미만의 로그는 어디에도 안 나간다. 이 파라미터도 `parameter_events`로 알려진다.
+- **`enable_console()`**로 콘솔에 `[INFO] [kros.node.RobotBridge]: 메시지` 형식으로 볼 수 있다(여러 번 불러도 핸들러는 하나). 라이브러리가 멋대로 켜지 않아서 기본은 꺼져 있고, 예제의 `main.py`가 켠다.
+- 포매팅이 틀려도(`"%d"`에 문자열) 예외를 내지 않는다(로그가 프로그램을 죽이면 안 된다). `is_enabled_for(level)`로 메시지를 만드는 비용이 큰 곳을 건너뛸 수 있다.
+- **주의**: `rosout`을 구독하는 콜백 안에서 로그를 남기면 그 로그가 다시 `rosout`으로 나가 끝없이 이어진다 (ROS도 같다).
+- kros 코어 내부의 오류(구독/타이머/액션 콜백 실패 등)는 파이썬 `logging`(`kros.topic.subscription` 같은 모듈 이름)으로만 나간다. 코어는 `Node`보다 아래 층이라 노드 로거를 모른다.
 
 ## 진단 (diagnostics)
 
@@ -223,7 +240,7 @@ kros/examples/turtlebot3/run.sh
 
 **화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `viewer/urdf_model.py`가 읽어 만들고(STL은 `viewer/stl.py`), 바닥/벽은 `viewer/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
 
-**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_diagnostics.py`(진단 메시지, 업데이트, 집계, 하드웨어 사실 -> 수준), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
+**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_log.py`(rosout, log_level, 스레드, 콘솔), `tests/test_diagnostics.py`(진단 메시지, 업데이트, 집계, 하드웨어 사실 -> 수준), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
 
 ## TODO
 
