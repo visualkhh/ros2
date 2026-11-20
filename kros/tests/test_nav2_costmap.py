@@ -101,6 +101,15 @@ class TestCostmap2DROS(unittest.TestCase):
         self.assertLess(rebuilt.cost(24, 20), INSCRIBED_INFLATED_OBSTACLE)
         self.assertIsNot(rebuilt, costmap)  # 받은 것은 그대로 두고 새로 만든다
 
+    def test_an_empty_map_means_no_map(self) -> None:
+        self.user.publish("map", wall_grid(), QOS_LATCHED)
+        self.kros.context.topic_manager.join()
+        self.assertIsNotNone(self.node.costmap)
+        self.user.publish("map", OccupancyGrid(Header(0.0, "map")), QOS_LATCHED)  # map_server가 지도를 내렸다
+        self.kros.context.topic_manager.join()
+        self.assertIsNone(self.node.costmap)
+        self.assertEqual(self.published[-1].info.width, 0)
+
     def test_robot_pose_comes_from_tf(self) -> None:
         self.assertIsNone(self.node.get_robot_pose())
         yaw = 0.5

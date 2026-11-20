@@ -205,6 +205,16 @@ class TestVizSlamPanel(unittest.TestCase):
         self.panel.load_button["command"]()
         self.wait_status("loaded")
         self.assertEqual(self.cartographer.mode.value, "localization")  # 저장한 지도로 위치만 잡는다
+        maps: list[OccupancyGrid] = []
+        self.watcher.subscribe("map", OccupancyGrid, maps.append, QOS_LATCHED)
+        self.kros.context.topic_manager.join()
+        self.assertGreater(maps[-1].info.width, 0)  # 띄운 지도
+        self.panel.unload_button["command"]()  # 지도 내리기
+        self.wait_status("map unloaded")
+        self.kros.context.topic_manager.join()
+        self.assertEqual((maps[-1].info.width, maps[-1].info.height), (0, 0))  # 빈 지도 = 지도 없음
+        self.assertEqual(self.cartographer.mode.value, "idle")  # 지도 없이 위치 추정은 끈다
+        self.assertEqual(self.panel.map_menu.get(), "(select map)")
 
     def test_pose_tool_publishes_initialpose_in_map_frame(self) -> None:
         got: list[PoseWithCovarianceStamped] = []

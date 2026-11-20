@@ -80,8 +80,14 @@ class Costmap2DROS(Node):
             return self._costmap
 
     def _on_map(self, grid: OccupancyGrid) -> None:
+        empty = grid.info.width == 0 or grid.info.height == 0  # map_server가 지도를 내렸다
         with self._lock:
-            self._map = grid
+            self._map = None if empty else grid
+            if empty and not self.rolling_window.value:
+                self._costmap = None  # 지도 크기의 costmap은 지도가 없으면 없다
+        if empty and not self.rolling_window.value:
+            self.publish(f"{self.name}/costmap", OccupancyGrid(Header(self.now(), self.global_frame.value)), QOS_LATCHED)
+            return
         self._rebuild()
 
     # ---- obstacle_layer --------------------------------------------------------------------------------

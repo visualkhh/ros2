@@ -9,6 +9,7 @@ from kros.msgs.geometry_msgs import Point, Pose, Quaternion
 from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse, SaveMap, SaveMapRequest
 from kros.msgs.nav_msgs import FREE, OCCUPIED, UNKNOWN, MapMetaData, OccupancyGrid
 from kros.msgs.std_msgs import Header
+from kros.msgs.std_srvs import Trigger, TriggerRequest
 from kros.nodes import MapSaver, MapServer, Node
 from kros.nodes.map_server import MapIoError, load_map, save_map
 from kros.timer import SimulatedTimeSource
@@ -98,6 +99,12 @@ class TestMapNodes(unittest.TestCase):
         self.kros.context.topic_manager.join()
         self.assertEqual(len(self.maps), 2)
         self.assertEqual(self.maps[-1].data, response.map.data)
+
+    def test_unload_publishes_an_empty_map(self) -> None:
+        response = self.user.call_service("map_server/unload_map", Trigger, TriggerRequest(), timeout=2.0)
+        self.assertTrue(response.success)
+        self.kros.context.topic_manager.join()
+        self.assertEqual((self.maps[-1].info.width, self.maps[-1].info.height), (0, 0))
 
     def test_load_failures_keep_the_current_map(self) -> None:
         with self.assertLogs("kros.node.map_server", level="ERROR"):

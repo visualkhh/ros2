@@ -20,6 +20,7 @@ from panda3d.core import LineSegs, NodePath, TextNode
 from kros.msgs.geometry_msgs import Point, Pose, PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Quaternion
 from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse, SaveMap, SaveMapRequest, SaveMapResponse
 from kros.msgs.std_msgs import Header
+from kros.msgs.std_srvs import Trigger, TriggerRequest, TriggerResponse
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
 from kros.nodes.nav2.bt_navigator import GOAL_POSE_TOPIC_NAME
 from kros.parameter import ParameterNotDeclaredError, ParameterRejectedError
@@ -82,8 +83,9 @@ class SlamPanel:
             parent=left, items=[NO_SELECTION, *self.map_names()], initialitem=0, pos=(0.075, 0, TOP - 0.19), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
             **{**GUI, "frameColor": (0.12, 0.14, 0.2, 1), "relief": DGG.SUNKEN},  # 고르는 칸은 들어간 모양 (버튼과 구별)
         )
-        self.map_menu["frameSize"] = (-0.4, (0.44 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # 지도 이름이 길다
-        self.load_button = _button(left, "load", 0.47, 0.62, TOP - 0.19, self.load_map)
+        self.map_menu["frameSize"] = (-0.4, (0.37 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # 지도 이름이 길다
+        self.load_button = _button(left, "load", 0.39, 0.5, TOP - 0.19, self.load_map, scale=0.032)
+        self.unload_button = _button(left, "unload", 0.52, 0.64, TOP - 0.19, self.unload_map, scale=0.032)
         self.pose_button = _button(left, "2D Pose Estimate", 0.06, 0.33, TOP - 0.29, lambda: self.toggle_tool("initialpose"), scale=0.032)
         self.goal_button = _button(left, "2D Goal Pose", 0.36, 0.62, TOP - 0.29, lambda: self.toggle_tool("goal"), scale=0.032)
         self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.38), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.033, mayChange=True)
@@ -146,6 +148,20 @@ class SlamPanel:
         self.status.setText(f"loading {name} ...")
         request = LoadMapRequest(str(self.maps_directory / name / f"{MAP_FILE}.yaml"))
         self._call(f"{self.map_server}/load_map", LoadMap, request, lambda response: self._loaded(name, response))
+
+    def unload_map(self) -> None:
+        """띄운 지도를 내린다 (map_server/unload_map) + 위치 추정을 끈다 (Cartographer idle). 목록은 다시 '고르지 않음'으로."""
+        self.status.setText("unloading ...")
+        self._call(f"{self.map_server}/unload_map", Trigger, TriggerRequest(), self._unloaded)
+
+    def _unloaded(self, response: object) -> None:
+        if not (isinstance(response, TriggerResponse) and response.success):
+            self.status.setText("unload failed")
+            return
+        if self._get_mode() == "localization":
+            self.set_mode("idle")  # 지도 없이 위치 추정은 못 한다 (SLAM 중이면 그대로 둔다)
+        self.map_menu.set(0, fCommand=False)
+        self.status.setText("map unloaded")
 
     def _loaded(self, name: str, response: object) -> None:
         if not (isinstance(response, LoadMapResponse) and response.result == LoadMapResponse.RESULT_SUCCESS):
@@ -260,5 +276,5 @@ class SlamPanel:
     def destroy(self) -> None:
         for arrow in self._preview.values():
             arrow.removeNode()
-        for widget in (self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button):
+        for widget in (self.unload_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button):
             widget.destroy()

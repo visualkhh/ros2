@@ -3,6 +3,9 @@ from pathlib import Path
 
 from kros.context import Context
 from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse
+from kros.msgs.nav_msgs import OccupancyGrid
+from kros.msgs.std_msgs import Header
+from kros.msgs.std_srvs import Trigger, TriggerRequest, TriggerResponse
 from kros.nodes.node import Node
 from kros.parameter import ParameterValue
 from kros.topic import QOS_LATCHED
@@ -20,6 +23,7 @@ class MapServer(Node):
 
     파라미터: yaml_filename (시작할 때 띄울 지도, ""이면 없음), topic_name ("map"), frame_id ("map"), maps_directory (상대 경로의 기준, 기본 "": 작업 폴더. 예제는 examples/turtlebot3/artifacts/maps).
     서비스 map_server/load_map (nav2_msgs/LoadMap): 실행 중에 다른 지도를 띄운다. 실패하면 지금 지도는 그대로다.
+    서비스 map_server/unload_map (std_srvs/Trigger, kros에만 있다: nav2에는 없다): 지도를 내린다 = 빈 지도(0x0)를 latch로 내서 받던 쪽이 "지도 없음"이 된다.
     """
 
     def __init__(self, context: Context, name: str | None = None, parameters: Mapping[str, ParameterValue] | None = None) -> None:
@@ -29,6 +33,7 @@ class MapServer(Node):
         self.frame_id = self.declare_parameter("frame_id", "map")
         self.maps_directory = self.declare_parameter("maps_directory", "")
         self.create_service(f"{self.name}/load_map", LoadMap, self._on_load_map)
+        self.create_service(f"{self.name}/unload_map", Trigger, self._on_unload_map)
         if self.yaml_filename.value:
             response = self.load(self.yaml_filename.value)
             if response.result != LoadMapResponse.RESULT_SUCCESS:
@@ -50,3 +55,8 @@ class MapServer(Node):
 
     def _on_load_map(self, request: LoadMapRequest) -> LoadMapResponse:
         return self.load(request.map_url)
+
+    def _on_unload_map(self, request: TriggerRequest) -> TriggerResponse:
+        self.publish(self.topic_name.value, OccupancyGrid(Header(self.now(), self.frame_id.value)), QOS_LATCHED)  # 0x0: 지도 없음
+        self.get_logger().info("지도를 내렸다")
+        return TriggerResponse(True, "unloaded")
