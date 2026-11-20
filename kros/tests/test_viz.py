@@ -1,4 +1,8 @@
+import math
+import tempfile
+import time
 import unittest
+from pathlib import Path
 
 try:
     import panda3d  # noqa: F401
@@ -26,6 +30,10 @@ if HAS_PANDA:
     from kros.topic import QOS_LATCHED
     from kros.viz import Viz
     from kros.viz.viz import MAP_COLORS
+    from panda3d.core import Vec3
+    from kros.msgs.geometry_msgs import PoseWithCovarianceStamped
+    from kros.nodes import Cartographer, MapSaver, MapServer
+    from kros.nodes.cartographer import MODES
     from kros.worlds.maze.maze_world import MazeWorld
     from kros.worlds.robots.turtlebot3 import TurtleBot3
     from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARATION
@@ -141,6 +149,89 @@ class TestVizMap(unittest.TestCase):
         viz._set_fixed_frame("odom")
         viz.base.taskMgr.step()
         self.assertTrue(viz._map_np.isHidden())  # 체크를 끄면 숨는다
+
+
+@unittest.skipUnless(HAS_PANDA, "panda3d 없음")
+class TestVizSlamPanel(unittest.TestCase):
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.maps = Path(directory.name)
+        made: dict[str, Node] = {}
+
+        def create(ctx: Context) -> list[Node]:
+            folder = {"maps_directory": str(self.maps)}
+            made["watcher"], made["slam"] = Node(ctx, "Watcher"), Cartographer(ctx, parameters={"mode": "idle"})
+            return [made["watcher"], made["slam"], MapServer(ctx, parameters=folder), MapSaver(ctx, parameters=folder)]
+
+        self.kros = Kros(create, time_source=SimulatedTimeSource())
+        self.addCleanup(self.kros.shutdown)
+        slam = made["slam"]
+        assert isinstance(slam, Cartographer)
+        self.cartographer, self.watcher = slam, made["watcher"]
+        self.viz = Viz(self.kros, TurtleBot3.description_dir)
+        self.addCleanup(self.viz.close)
+        self.viz.slam.maps_directory = self.maps
+        self.panel = self.viz.slam
+
+    def wait_status(self, prefix: str) -> None:
+        for _ in range(200):
+            self.viz.base.taskMgr.step()
+            if self.panel.status.getText().startswith(prefix):
+                return
+            time.sleep(0.01)
+        self.fail(f"status: {self.panel.status.getText()!r}")
+
+    def test_mode_save_and_load_go_through_parameter_and_services(self) -> None:
+        self.panel.mode_menu.set(MODES.index("mapping"))  # 메뉴에서 고른다 = ros2 param set
+        self.assertEqual(self.cartographer.mode.value, "mapping")
+        grid = OccupancyGrid(Header(0.0, "map"), MapMetaData(0.0, 0.05, 2, 1), (OCCUPIED, FREE))
+        self.watcher.publish("map", grid, QOS_LATCHED)  # 저장할 지도 (SLAM 자리)
+        self.panel.save_button["command"]()
+        self.wait_status("saved")
+        names = self.panel.map_names()
+        self.assertEqual(len(names), 1)
+        self.assertTrue((self.maps / f"{names[0]}.pgm").exists())
+        self.assertEqual(self.panel.map_menu.get(), names[0])  # 방금 저장한 지도가 골라져 있다
+        self.panel.load_button["command"]()
+        self.wait_status("loaded")
+        self.assertEqual(self.cartographer.mode.value, "localization")  # 저장한 지도로 위치만 잡는다
+
+    def test_pose_tool_publishes_initialpose_in_map_frame(self) -> None:
+        got: list[PoseWithCovarianceStamped] = []
+        self.watcher.subscribe("initialpose", PoseWithCovarianceStamped, got.append)
+        self.viz.fixed_frame = "map"
+        self.panel.toggle_pose_tool()
+        self.panel.update((1.0, 2.0), True)  # 바닥을 누르고
+        self.panel.update((1.0, 3.0), False)  # +y 쪽으로 끌어 놓는다
+        self.kros.context.topic_manager.join()
+        self.assertEqual(len(got), 1)
+        pose = got[0].pose.pose
+        self.assertEqual((got[0].header.frame_id, pose.position.x, pose.position.y), ("map", 1.0, 2.0))
+        self.assertAlmostEqual(2 * math.atan2(pose.orientation.z, pose.orientation.w), math.pi / 2)
+        self.assertFalse(self.panel.pose_tool)  # 한 번 찍으면 꺼진다
+        self.viz.fixed_frame = "odom"
+        self.panel.publish_initial_pose((0.0, 0.0, 0.0))  # map TF가 없으면 map 좌표로 못 바꾼다
+        self.assertIn("map TF", self.panel.status.getText())
+
+    def test_ground_point_under_the_screen_center_is_the_camera_target(self) -> None:
+        self.viz.target = Vec3(0.7, -0.4, 0.0)
+        self.viz.base.taskMgr.step()
+        point = self.viz.ground_point(0.0, 0.0)
+        assert point is not None
+        self.assertAlmostEqual(point[0], 0.7, places=3)
+        self.assertAlmostEqual(point[1], -0.4, places=3)
+        self.viz.pitch = 0.05  # 거의 수평으로 보면 화면 위쪽은 하늘
+        self.viz.base.taskMgr.step()
+        self.assertIsNone(self.viz.ground_point(0.0, 0.9))
+
+    def test_missing_nodes_are_reported_not_crashed(self) -> None:
+        self.panel.map_saver = "nobody"
+        self.panel.save_map()
+        self.assertIn("서비스가 없다", self.panel.status.getText())
+        self.panel.cartographer = "nobody"
+        self.panel.set_mode("mapping")
+        self.assertIn("nobody 없음", self.panel.status.getText())
 
 
 if __name__ == "__main__":

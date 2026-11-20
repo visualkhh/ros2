@@ -12,7 +12,7 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, ButtonThrower, Camera, CardMaker, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
     LineSegs, MouseAndKeyboard, OrthographicLens, PGTop, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
-    LVecBase4f, GraphicsWindow, SamplerState, Texture,
+    LVecBase4f, GraphicsWindow, SamplerState, Texture, Point2, Point3,
 )
 
 from kros import Kros
@@ -26,11 +26,14 @@ from kros.tf import QOS_TF, QOS_TF_STATIC, ROBOT_DESCRIPTION_TOPIC_NAME, TF_STAT
 from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
 from kros.viewer.urdf_model import UrdfModel
 
+from .slam_panel import SlamPanel
+
 NAME = "Viz"
-HELP = "left drag: orbit    right drag: pan    wheel: zoom    checkbox: show/hide    esc: close"
+HELP = "left drag: orbit (pose tool: set pose)    right drag: pan    wheel: zoom    checkbox: show/hide    esc: close"
 PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.84, 0.13  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
 ODOMETRY_ARROWS = {"odom": (1.0, 0.35, 0.85, 1.0), "odometry/filtered": (0.3, 0.9, 1.0, 1.0)}  # 바퀴 오도메트리(분홍, TF 부모 선이 노랑이라)와 EKF 결과(하늘색)를 화살표로 겹쳐 본다
 TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "map", "scan", "imu", *ODOMETRY_ARROWS)
+SPECIAL_FRAMES = {"map": (1.0, 0.55, 0.1, 1.0), "odom": (0.3, 0.9, 1.0, 1.0)}  # 위치 추정의 기준 좌표계: 굵고 긴 축과 색 이름표로 눈에 띄게
 FIXED_FRAMES = ("odom", "map")  # rviz의 Fixed Frame: 무엇을 기준으로 그릴지 (map은 SLAM/위치추정이 map -> odom TF를 낼 때만 있다)
 # 지도 칸 색 (rviz map 색과 비슷하게): 모름은 어두운 청회색, 점유 확률 0(빈 곳)~100(벽)은 밝은 회색~검정
 MAP_COLORS = {UNKNOWN: bytes((60, 66, 78, 255)), **{v: bytes((round(225 - 2.15 * v),) * 3 + (255,)) for v in range(101)}}  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
@@ -145,14 +148,16 @@ class Viz:
             else:
                 OnscreenText(text=name, parent=self.left, pos=(0.11, y), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.045)
             self.rows[name] = OnscreenText(parent=self.left, pos=(0.11, y - 0.05), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
-        self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
-        OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
+        shade = (0.05, 0.05, 0.08, 0.75)  # 밝은 지도 위에서도 읽히게
+        self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), bg=shade, scale=0.05, mayChange=True)
+        OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.8, 0.8, 0.8, 1), bg=shade, scale=0.04)
         OnscreenText(text="Fixed Frame", parent=self.left, pos=(0.04, -0.82), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
         frames = list(FIXED_FRAMES) if fixed_frame in FIXED_FRAMES else [fixed_frame, *FIXED_FRAMES]
         self.fixed_menu = DirectOptionMenu(
             parent=self.left, items=frames, initialitem=frames.index(fixed_frame), scale=0.045, pos=(0.38, 0, -0.82), command=self._set_fixed_frame,
             text_fg=(1, 1, 1, 1), frameColor=(0.2, 0.24, 0.34, 1), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
         )
+        self.slam = SlamPanel(self)
         self.base.taskMgr.add(self._update, "viz-update")
 
     # ---- 만들기 ------------------------------------------------------------------------------
@@ -224,6 +229,17 @@ class Viz:
         self.left.setX(-ratio)
         self.hud_anchor.setX(-ratio + PANEL_WIDTH)
 
+    def ground_point(self, x: float, y: float) -> tuple[float, float] | None:
+        """창 좌표(-1~1)의 마우스 아래 바닥(z=0) 점 (fixed frame 좌표). 바닥을 안 보면 None."""
+        near, far = Point3(), Point3()
+        if not self._lens3d.extrude(Point2(x, y), near, far):
+            return None
+        near, far = self.scene.getRelativePoint(self.camera, near), self.scene.getRelativePoint(self.camera, far)
+        if (near.z > 0) == (far.z > 0):
+            return None
+        t = near.z / (near.z - far.z)
+        return near.x + (far.x - near.x) * t, near.y + (far.y - near.y) * t
+
     def _set_fixed_frame(self, frame: str) -> None:
         self.fixed_frame = frame
 
@@ -265,6 +281,9 @@ class Viz:
         self._camera()
         self._update_model()
         self._update_tf()
+        mouse = self.mouse.node()
+        pressed = mouse.hasMouse() and mouse.isButtonDown(MouseButton.one()) and not self._over_gui()
+        self.slam.update(self.ground_point(mouse.getMouseX(), mouse.getMouseY()) if mouse.hasMouse() else None, pressed)
         self._update_map()
         self._update_scan()
         self._update_odometry()
@@ -290,7 +309,7 @@ class Viz:
         pos = (mouse.getMouseX(), mouse.getMouseY()) if mouse.hasMouse() else None
         if pos and self._last_mouse and not self._over_gui():  # 패널 위의 드래그는 카메라를 움직이지 않는다
             dx, dy = pos[0] - self._last_mouse[0], pos[1] - self._last_mouse[1]
-            if mouse.isButtonDown(MouseButton.one()):
+            if mouse.isButtonDown(MouseButton.one()) and not self.slam.pose_tool:  # 2D Pose Estimate 중에는 왼쪽 드래그가 위치를 찍는다
                 self.yaw -= dx * 3.0
                 self.pitch = min(1.5, max(0.05, self.pitch - dy * 2.0))
             if mouse.isButtonDown(MouseButton.three()):
@@ -322,7 +341,8 @@ class Viz:
 
     def _update_tf(self) -> None:
         """모든 프레임에 축(x 빨강, y 초록, z 파랑)과 부모로 가는 노란 선."""
-        lines = LineSegs()
+        lines, bold = LineSegs(), LineSegs()
+        bold.setThickness(4)
         shown: set[str] = set()
         for frame in self.node.buffer.all_frames() if self.enabled["tf"] else ():
             stamped = self._lookup(frame)
@@ -331,12 +351,13 @@ class Viz:
             t, q = stamped.transform.translation, stamped.transform.rotation
             origin = Vec3(t.x, t.y, t.z)
             shown.add(frame)
-            self._label(frame).setPos(origin + Vec3(0, 0, 0.02))
+            self._label(frame).setPos(origin + Vec3(0, 0, 0.15 if frame == "map" else 0.02))  # map과 odom은 처음엔 같은 자리라 이름표를 위아래로 비킨다
             rotation = LQuaternionf(q.w, q.x, q.y, q.z)
+            pen, length = (bold, 0.4) if frame in SPECIAL_FRAMES else (lines, 0.05)
             for axis, color in ((Vec3(1, 0, 0), (1, 0, 0, 1)), (Vec3(0, 1, 0), (0, 1, 0, 1)), (Vec3(0, 0, 1), (0.2, 0.4, 1, 1))):
-                lines.setColor(*color)
-                lines.moveTo(origin)
-                lines.drawTo(origin + rotation.xform(axis) * 0.05)
+                pen.setColor(*color)
+                pen.moveTo(origin)
+                pen.drawTo(origin + rotation.xform(axis) * length)
             parent = self.node.buffer.parent_of(frame)
             parent_pose = self._lookup(parent) if parent else None
             if parent_pose is not None:
@@ -349,6 +370,7 @@ class Viz:
         if self._tf_np is not None:
             self._tf_np.removeNode()
         self._tf_np = self.scene.attachNewNode(lines.create())
+        self._tf_np.attachNewNode(bold.create())
         self._tf_np.setLightOff()
         self._tf_np.setBin("fixed", 0)  # 모델에 가려지지 않게 위에 그린다
         self._tf_np.setDepthTest(False)
@@ -357,9 +379,14 @@ class Viz:
         if frame not in self._labels:
             text = TextNode(f"label-{frame}")
             text.setText(frame)
-            text.setTextColor(0.9, 0.9, 0.9, 1)
+            special = SPECIAL_FRAMES.get(frame)
+            text.setTextColor(*(special or (0.9, 0.9, 0.9, 1)))
+            if special:  # 진한 바탕을 깔아 다른 이름들 사이에서도 보이게
+                text.setCardColor(0.05, 0.05, 0.08, 0.85)
+                text.setCardAsMargin(0.3, 0.3, 0.15, 0.15)
+                text.setCardDecal(True)
             label = self.scene.attachNewNode(text)
-            label.setScale(0.025)
+            label.setScale(0.06 if special else 0.025)
             label.setBillboardPointEye()  # 늘 카메라를 본다
             label.setLightOff()
             label.setBin("fixed", 1)
@@ -474,6 +501,7 @@ class Viz:
         for check in self.checks.values():
             check.destroy()
         self.fixed_menu.destroy()
+        self.slam.destroy()
         if self.own_base:
             self.base.destroy()
         else:

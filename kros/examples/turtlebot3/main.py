@@ -3,7 +3,8 @@
 - 현실 쪽(kros와 무관한 순수 시뮬레이션): MazeWorld 안에 TurtleBot3를 놓고, SimulationRunner가 화면과 따로 월드를 고정 간격으로 돌리고,
   SnapshotRecorder가 스텝마다 스냅샷을 만들어 Viewer(3D 창)가 그린다. 사람의 입력은 Keyboard(Interaction)가 받아 로봇이 receive()한다 (창의 키 -> Keyboard -> 로봇이 해석).
 - Viz(kros): rviz 같은 두 번째 창. kros 인스턴스 하나만 받아 tf/robot_description/scan/imu/odom/odometry/filtered 토픽을 구독해 그린다 (Viewer는 시뮬레이션의 진실, Viz는 로봇이 내보낸 값).
-  바퀴 odom(분홍 화살표)과 EKF 결과(하늘색 화살표, 모델 위치)를 겹쳐 본다.
+  바퀴 odom(분홍 화살표)과 EKF 결과(하늘색 화살표, 모델 위치)를 겹쳐 본다. 왼쪽 패널 SLAM 칸에서 Cartographer를 켜고(mapping),
+  지도를 저장/불러오고(localization), 2D Pose Estimate로 위치를 찍는다. 지도를 볼 때는 Fixed Frame을 map으로.
 - kros 쪽(Node): RobotBridge, cmd_vel -> robot.command (다른 프로그램이 로봇을 움직일 때), 라이다 측정 -> scan.
   kros의 시간(타이머, node.now())은 시뮬레이션 시간이다: 러너가 매 스텝 SimulatedTimeSource를 밀어 준다
 """
@@ -12,7 +13,7 @@ from kros.context import Context
 from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.nodes import Node
-from kros.nodes import DiffDriveOdometry, Ekf, RobotStatePublisher
+from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapSaver, MapServer, RobotStatePublisher
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
 from kros.viewer.snapshot_recorder import SnapshotRecorder
@@ -48,7 +49,9 @@ def main() -> None:
         odometry = DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False})
         # robot_localization ekf_node처럼: 바퀴의 앞 속도/회전 속도 + 자이로 회전 속도 -> odometry/filtered, odom -> base_footprint TF
         ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
-        return [RobotBridge(ctx, robot), description, odometry, ekf]
+        # SLAM/위치 추정 (map -> odom)과 지도 파일 (kros/maps). viz 패널에서 모드를 바꾸고, 지도를 저장/불러오고, 2D Pose Estimate를 찍는다
+        slam = Cartographer(ctx, parameters={"mode": "idle"})
+        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx), MapSaver(ctx)]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()
