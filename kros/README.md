@@ -14,7 +14,7 @@ kros/
 ├── urdf/              URDF 파서 (표준 라이브러리만, 링크/관절 트리 검증)
 ├── log/               NodeLogger(node.get_logger(): 파이썬 logging + rosout 토픽), enable_console
 ├── diagnostics/       진단 도구: DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticStatusWrapper
-├── nodes/             node.py: Node 기반 클래스(Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터, 로거) + **kros가 제공하는 표준 노드들**: RobotStatePublisher(URDF -> TF), DiffDriveOdometry(바퀴 각 적분 -> odom 토픽, odom -> base_footprint TF), Ekf(robot_localization의 ekf_node: 바퀴 + IMU -> odometry/filtered, odom -> base_footprint TF), DiagnosticAggregator(진단 모으기, STALE 판단). 쓸지는 사용자가 node_create에서 정한다
+├── nodes/             node.py: Node 기반 클래스(Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터, 로거) + **kros가 제공하는 표준 노드들**: RobotStatePublisher(URDF -> TF), DiffDriveOdometry(바퀴 각 적분 -> odom 토픽, odom -> base_footprint TF), Ekf(robot_localization의 ekf_node: 바퀴 + IMU -> odometry/filtered, odom -> base_footprint TF), MapServer/MapSaver(nav2_map_server: 지도 파일 <-> map 토픽), DiagnosticAggregator(진단 모으기, STALE 판단). 쓸지는 사용자가 node_create에서 정한다
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionManager(서버 레지스트리, 서버/클라이언트 수명), ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
@@ -93,6 +93,11 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
 **오도메트리**: `DiffDriveOdometry`는 `joint_states`의 바퀴 각을 적분해 `odom` 토픽(`nav_msgs.Odometry`)과 TF(`odom -> base_footprint`)를 낸다. 파라미터: `wheel_radius`, `wheel_separation`, `left_joint`/`right_joint`, `odom_frame`/`base_frame`, `publish_tf`, `pose_covariance_diagonal`/`twist_covariance_diagonal`(ROS diff_drive_controller처럼 odom 공분산의 대각 6개), `jump_threshold`(바퀴 각이 한 번에 이만큼(rad) 넘게 뛰면 보드 재부팅으로 보고 그 변화는 버린다). 한 조각은 시작 방향이 아니라 중간 방향으로 간 것으로 적분한다. 바퀴만 보므로 **바퀴가 헛돌면 오차가 쌓인다**(시뮬레이션에서 벽에 막혀도 바퀴 모터는 도는 것으로 세어져 벽을 뚫고 간 것으로 추정한다: 테스트가 이 한계를 확인한다). 정답 위치(월드의 로봇 pose)와 따로 계산하므로 둘의 차이가 곧 오도메트리 오차다.
 
 **EKF**: `Ekf`는 robot_localization의 `ekf_node`처럼 센서 토픽을 확장 칼만 필터로 합쳐 `odometry/filtered`와 TF(`odom -> base_footprint`, `publish_tf`)를 낸다. 2D만(상태 `[x, y, yaw, v, w]`, 일정 속도 모델). 파라미터 이름은 robot_localization과 같다: `frequency`, `odom0`/`imu0`(토픽), `odom0_config`/`imu0_config`(15개 bool, x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az 중 x/y/yaw/vx/vyaw만 본다), `*_pose_rejection_threshold`/`*_twist_rejection_threshold`(마할라노비스 거리), `imu0_relative`, `process_noise_covariance`/`initial_estimate_covariance`(15개 대각만). 센서 값은 쌓아 뒀다가 `frequency`마다 시각 순서로 처리하고, 이미 처리한 시각보다 오래된 값은 버린다. 행렬 연산은 표준 라이브러리로 직접 한다. 노이즈 낀 TurtleBot3에서 바퀴 v,w + 자이로를 합치면 바퀴만 쓸 때보다 위치 오차가 절반쯤이다(테스트). 쓸 때는 `DiffDriveOdometry`의 `publish_tf`를 끈다. `DiffDriveOdometry`는 바퀴가 멈춰 있으면 속도 공분산을 아주 작게(`STOPPED_VARIANCE`) 낸다: 서 있는 바퀴는 미끄러지지 않으니 정지는 확실하다. 예제 `main.py`는 바퀴 vx/vyaw + 자이로 vyaw를 합치고, Viz에서 바퀴 odom(분홍 화살표)과 EKF(하늘색 화살표, 모델 위치)를 겹쳐 본다.
+
+**지도 파일**: `nodes/map_server/`는 nav2_map_server 흉내다. 파일은 ROS와 같은 **yaml + pgm**(P5 8비트, trinary: 벽 0, 빈 곳 254, 모름 205)이라 ROS의 map_server/map_saver가 만든 지도와 서로 읽힌다. 기본 폴더는 `kros/maps/`(`kros/.gitignore`로 git에서 뺐다), 상대 경로는 이 폴더 기준.
+- `MapServer`(노드 이름 `map_server`): `yaml_filename`이 있으면 시작할 때 띄우고, `map_server/load_map` 서비스(`nav2_msgs/LoadMap`)로 실행 중에 바꾼다. `map` 토픽에 latch로 낸다(`topic_name`, `frame_id`=map). 실패하면 결과 코드(`RESULT_MAP_DOES_NOT_EXIST` 등)를 돌려주고 지금 지도는 그대로.
+- `MapSaver`(노드 이름 `map_saver`): `map_saver/save_map` 서비스(`nav2_msgs/SaveMap`)를 받으면 `map_topic`의 지도를 받아 `map_url`(비면 `map`)에 저장한다. `free_thresh_default`는 ROS1 map_saver처럼 0.196: 모름(205)의 점유 정도가 50/255라 이보다 작아야 다시 읽을 때 모름으로 남는다.
+- yaml은 PyYAML 없이 map_server 형식(한 줄에 `키: 값`, `[a, b, c]`)만 읽는다. mode는 trinary만.
 
 ### TF 사용법 (노드에서)
 
