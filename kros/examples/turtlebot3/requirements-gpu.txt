@@ -1,0 +1,4 @@
+# 선택: NVIDIA GPU(CUDA 13 드라이버)가 있을 때 라이다 같은 큰 계산을 GPU로. 없으면 설치하지 않아도 CPU로 돈다.
+cupy-cuda13x
+nvidia-cuda-nvrtc
+nvidia-cuda-runtime
