@@ -3,11 +3,14 @@ import threading
 import time
 from pathlib import Path
 
+from direct.gui import DirectGuiGlobals as DGG
+from direct.gui.DirectCheckButton import DirectCheckButton
 from direct.gui.OnscreenText import OnscreenText
+from direct.showbase.DirectObject import DirectObject
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, ButtonThrower, Camera, CardMaker, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
-    LineSegs, MouseAndKeyboard, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
+    LineSegs, MouseAndKeyboard, OrthographicLens, PGTop, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
     LVecBase4f, GraphicsWindow,
 )
 
@@ -23,8 +26,8 @@ from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
 from kros.viewer.urdf_model import UrdfModel
 
 NAME = "Viz"
-HELP = "left drag: orbit    right drag: pan    wheel: zoom    click panel row: show/hide    esc: close"
-PANEL_RIGHT, ROW_TOP, ROW_STEP = -0.7, 0.84, 0.13  # 2D 장면 좌표 (가로 +-1.333, 세로 +-1)
+HELP = "left drag: orbit    right drag: pan    wheel: zoom    checkbox: show/hide    esc: close"
+PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.84, 0.13  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
 TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "scan", "imu", "odom")  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
 
 
@@ -111,19 +114,27 @@ class Viz:
         self._last_mouse: tuple[float, float] | None = None
         self._closed = False
         self._build_input()
+        self.enabled = {name: True for name in TOGGLES}
+        self.checks: dict[str, DirectCheckButton] = {}  # 체크박스 (grid, tf, 모델, scan, imu, odom)
+        self.rows: dict[str, OnscreenText] = {}  # 줄마다 토픽 상태 글자 (grid는 토픽이 아니라 맨 위 줄)
         card = CardMaker("panel")
-        card.setFrame(-1.333, -0.7, -1, 1)
-        panel = self.aspect.attachNewNode(card.generate())
+        card.setFrame(0, PANEL_WIDTH, -1, 1)
+        panel = self.left.attachNewNode(card.generate())
         panel.setColor(0.08, 0.09, 0.13, 0.85)
         panel.setTransparency(True)
-        OnscreenText(text="Subscriptions", parent=self.aspect, pos=(-1.3, 0.92), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.05)
-        self.enabled = {name: True for name in TOGGLES}
-        self.rows: dict[str, OnscreenText] = {}  # 패널의 한 줄 = 구독 토픽 하나 (grid는 토픽이 아니라 맨 위 줄)
+        OnscreenText(text="Subscriptions", parent=self.left, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.05)
         for index, name in enumerate(("grid", *self.node.topic_rows())):
-            self.rows[name] = OnscreenText(parent=self.aspect, pos=(-1.3, ROW_TOP - index * ROW_STEP), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.04, mayChange=True)
-        self._was_down = False
-        self.hud = OnscreenText(parent=self.aspect, pos=(-0.65, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
-        OnscreenText(text=HELP, parent=self.aspect, pos=(-0.65, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
+            y = ROW_TOP - index * ROW_STEP
+            if name in self.enabled:
+                self.checks[name] = DirectCheckButton(
+                    parent=self.left, text=name, text_align=TextNode.ALeft, text_fg=(1, 1, 1, 1), scale=0.045, pos=(0.07, 0, y), relief=None,
+                    indicatorValue=1, boxPlacement="left", boxBorder=0.08, boxRelief=DGG.FLAT, indicator_frameColor=(0.2, 0.24, 0.34, 1), indicator_text_fg=(0.4, 1, 0.5, 1), indicator_text_pos=(0, -0.01), indicator_text_scale=1.2, command=self._set_enabled, extraArgs=[name],
+                )  # 사각형 체크박스: 누르면 command(체크 여부, 이름)
+            else:
+                OnscreenText(text=name, parent=self.left, pos=(0.11, y), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.045)
+            self.rows[name] = OnscreenText(parent=self.left, pos=(0.11, y - 0.05), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
+        self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
+        OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
         self.base.taskMgr.add(self._update, "viz-update")
 
     # ---- 만들기 ------------------------------------------------------------------------------
@@ -139,8 +150,7 @@ class Viz:
         region.setClearColor(LVecBase4f(0.05, 0.05, 0.08, 1))
         region.setClearColorActive(True)
         region.setClearDepthActive(True)
-        self.aspect = NodePath("viz-2d")  # 글자용 2D 장면
-        self.aspect.reparentTo(self._make_2d())
+        self._make_2d()
         ambient = AmbientLight("ambient")
         ambient.setColor((0.6, 0.6, 0.65, 1))
         self.scene.setLight(self.scene.attachNewNode(ambient))
@@ -159,21 +169,31 @@ class Viz:
         self.grid_np = self.scene.attachNewNode(grid.create())
         self.grid_np.setLightOff()
 
-    def _make_2d(self) -> NodePath:
+    def _make_2d(self) -> None:
+        """글자와 체크박스를 올리는 2D 장면 (세로 +-1, 가로는 창 비율). PGTop이 DirectGUI 위젯의 마우스 영역을 이 창의 마우스 감시기에 연결한다."""
         root = NodePath("viz-render2d")
         root.setDepthTest(False)
         root.setDepthWrite(False)
         cam = root.attachNewNode(Camera("viz-cam2d"))
-        from panda3d.core import OrthographicLens
-
-        lens = OrthographicLens()
-        lens.setFilmSize(2 * 1.333, 2)
-        lens.setNearFar(-1000, 1000)
-        cam.node().setLens(lens)
+        self._lens2d = OrthographicLens()
+        self._lens2d.setNearFar(-1000, 1000)
+        cam.node().setLens(self._lens2d)
         region = self.win.makeDisplayRegion()
         region.setSort(10)
         region.setCamera(cam)
-        return root
+        self.aspect = root.attachNewNode(PGTop("viz-aspect2d"))
+        self.left = self.aspect.attachNewNode("left")  # 창의 왼쪽 끝에 붙는 패널의 기준
+        self.hud_anchor = self.aspect.attachNewNode("hud")  # 패널 오른쪽
+        self._resize()
+
+    def _resize(self) -> None:
+        ratio = self.win.getXSize() / max(1, self.win.getYSize())
+        self._lens2d.setFilmSize(2 * ratio, 2)
+        self.left.setX(-ratio)
+        self.hud_anchor.setX(-ratio + PANEL_WIDTH)
+
+    def _set_enabled(self, checked: int, name: str) -> None:
+        self.enabled[name] = bool(checked)
 
     def _build_input(self) -> None:
         """이 창만의 마우스/키 입력 (ShowBase의 전역 입력과 섞이지 않게 'viz-' 접두사 이벤트로)."""
@@ -182,10 +202,12 @@ class Viz:
             mk = self.base.dataRoot.attachNewNode(MouseAndKeyboard(self.win, 0, "viz"))
             self.mouse.reparentTo(mk)
             self.mouse.attachNewNode(ButtonThrower("viz")).node().setPrefix("viz-")
-        self.base.accept("viz-wheel_up", self._zoom, [0.88])
-        self.base.accept("viz-wheel_down", self._zoom, [1 / 0.88])
-        self.base.accept("viz-escape", self.close)
-        self.base.accept("window-event", self._window_event)
+        self.aspect.node().setMouseWatcher(self.mouse.node())
+        self._events = DirectObject()  # 이벤트는 이 객체 이름으로 받는다 (base.accept로 받으면 ShowBase 자신의 window-event 처리를 덮어써서 Viewer가 창 이벤트를 못 받는다)
+        self._events.accept("viz-wheel_up", self._zoom, [0.88])
+        self._events.accept("viz-wheel_down", self._zoom, [1 / 0.88])
+        self._events.accept("viz-escape", self.close)
+        self._events.accept("window-event", self._window_event)
 
     # ---- 매 프레임 ---------------------------------------------------------------------------
 
@@ -210,37 +232,26 @@ class Viz:
         self._update_tf()
         self._update_scan()
         self.hud.setText(self._hud_text())
-        self._click()
+        self._resize()
         texts = {"grid": "grid", **self.node.topic_rows()}
         for name, row in self.rows.items():
-            box = "[x] " if self.enabled.get(name) else "[ ] " if name in self.enabled else "     "
-            row.setText(box + texts[name])
+            first, _, second = texts[name].partition("\n")
+            row.setText(f"{first[0]} {second.strip()}" if second else "")  # "* LaserScan  n=..  ..Hz": 앞 글자는 최근에 받았는지
         self.grid_np.show() if self.enabled["grid"] else self.grid_np.hide()
         return task.cont
 
-    def _click(self) -> None:
-        """패널 줄을 왼쪽 클릭하면 그 표시를 껐다 켠다 (누르는 순간 한 번)."""
+    def _over_gui(self) -> bool:
+        return self._pointer_in_panel()
+
+    def _pointer_in_panel(self) -> bool:
         mouse = self.mouse.node()
-        down = mouse.hasMouse() and mouse.isButtonDown(MouseButton.one())
-        if down and not self._was_down and mouse.hasMouse() and self._in_panel(mouse.getMouseX(), mouse.getMouseY()):
-            self.toggle_row_at(mouse.getMouseY())
-        self._was_down = down
-
-    def toggle_row_at(self, y: float) -> None:
-        """패널의 세로 위치 y(-1..1)에 있는 줄의 표시를 껐다 켠다. 체크박스가 없는 줄이나 빈 곳이면 아무 일도 없다."""
-        index = math.floor((ROW_TOP + 0.04 - y) / ROW_STEP)  # 줄 글자의 위쪽 기준
-        names = list(self.rows)
-        if 0 <= index < len(names) and names[index] in self.enabled:
-            self.enabled[names[index]] = not self.enabled[names[index]]
-
-    @staticmethod
-    def _in_panel(mouse_x: float, mouse_y: float) -> bool:
-        return mouse_x * 1.333 < PANEL_RIGHT
+        ratio = self.win.getXSize() / max(1, self.win.getYSize())
+        return bool(mouse.hasMouse() and (mouse.getMouseX() + 1) * ratio < PANEL_WIDTH)
 
     def _camera(self) -> None:
         mouse = self.mouse.node()
         pos = (mouse.getMouseX(), mouse.getMouseY()) if mouse.hasMouse() else None
-        if pos and self._last_mouse and not self._in_panel(*pos):  # 패널 위의 드래그는 카메라를 움직이지 않는다
+        if pos and self._last_mouse and not self._over_gui():  # 패널 위의 드래그는 카메라를 움직이지 않는다
             dx, dy = pos[0] - self._last_mouse[0], pos[1] - self._last_mouse[1]
             if mouse.isButtonDown(MouseButton.one()):
                 self.yaw -= dx * 3.0
@@ -356,10 +367,9 @@ class Viz:
         if self._closed:
             return
         self._closed = True
-        self.base.ignore("viz-wheel_up")
-        self.base.ignore("viz-wheel_down")
-        self.base.ignore("viz-escape")
-        self.base.ignore("window-event")
+        self._events.ignoreAll()
+        for check in self.checks.values():
+            check.destroy()
         if self.own_base:
             self.base.destroy()
         else:

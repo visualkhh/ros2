@@ -51,6 +51,14 @@ class TestViewerSmoke(unittest.TestCase):
         self.assertIsNot(viewer.recorder, recorder)  # ShowBase 고유의 recorder 속성을 우리 객체로 덮어쓰지 않았다
         self.assertIs(viewer.snapshots, recorder)
 
+    def test_physical_keys_read_without_a_window_or_return_none(self) -> None:
+        from kros.viewer.physical_keys import PhysicalKeys
+
+        keys = PhysicalKeys()  # X11이 없으면 None, 있으면 지금 눌린 조종 키 집합 (아무 키도 안 누르고 돌린다)
+        self.addCleanup(keys.close)
+        pressed = keys.pressed()
+        self.assertTrue(pressed is None or pressed <= {"q", "w", "a", "s", "d", "z", "up", "down", "left", "right"})
+
 
 if __name__ == "__main__":
     unittest.main()

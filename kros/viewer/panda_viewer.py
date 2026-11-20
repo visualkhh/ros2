@@ -14,6 +14,7 @@ from panda3d.core import (
     GeomVertexData,
     GeomVertexFormat,
     GeomVertexWriter,
+    GraphicsWindow,
     LineSegs,
     NodePath,
     TextNode,
@@ -27,6 +28,7 @@ from kros.worlds.maze.track import CENTER, SIZE, Track
 
 from kros.viewer.snapshot import Snapshot
 from kros.viewer.snapshot_recorder import SnapshotRecorder
+from .physical_keys import PhysicalKeys
 from .shapes import box, cylinder
 from .urdf_model import UrdfModel
 
@@ -52,6 +54,7 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
         self._scan_drawn: object = None
         self._scan_np: NodePath | None = None
         self.keys: set[str] = set()
+        self.physical = PhysicalKeys()  # 한글 배열에서도 조종 키가 먹게 물리 키를 읽는다 (X11이 아니면 이벤트 방식만)
         self.follow = True
         self.yaw, self.pitch, self.dist = VIEWS[True]
         self.show_scan = False
@@ -190,7 +193,12 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
         self.dist = min(12.0, max(0.3, self.dist * factor))
 
     def _update(self, task):  # type: ignore[no-untyped-def]
+        if getattr(self, "win", None) is None:
+            return task.done  # destroy()된 뒤에도 전역 작업 관리자에 남은 이 작업은 끝낸다
         dt = min(ClockObject.getGlobalClock().getDt(), 0.1)
+        physical = self.physical.pressed() if isinstance(self.win, GraphicsWindow) and self.win.getProperties().getForeground() else None
+        if physical is not None:  # 물리 키를 읽을 수 있으면 그것이 기준이다 (키 이벤트는 배열에 따라 글자가 달라진다)
+            self.keys = physical
         self.on_keys(frozenset(self.keys))
         self.snap = snap = self.snapshots.latest  # 월드는 따로 돌고 있다. 화면은 가장 최근 스냅샷을 그리기만 한다
         p, cmd = snap.poses[snap.robot_index], snap.command
