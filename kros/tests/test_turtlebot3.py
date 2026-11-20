@@ -14,7 +14,7 @@ from kros.worlds.objects import Puck, PuckShape
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.robots.turtlebot3.turtlebot3 import LIDAR_MOUNT_HEIGHT, LIDAR_MOUNT_X
 from kros.worlds.world import World
-from kros.worlds.world_object import WorldObject
+from kros.worlds.objects.world_object import WorldObject
 
 WORLD = MazeWorld(puck_count=0)
 START = WORLD.start_pose

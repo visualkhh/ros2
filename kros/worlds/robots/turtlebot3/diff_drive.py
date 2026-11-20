@@ -4,7 +4,7 @@ from kros.msgs.geometry_msgs import Pose2D, Twist
 from kros.worlds.clock import Clock
 from kros.worlds.hardwares import Actuator, Motor
 from kros.worlds.world import World
-from kros.worlds.world_object import WorldObject
+from kros.worlds.objects.world_object import WorldObject
 
 MAX_SUBSTEP = 0.05  # m, 한 번에 크게 움직이면 벽을 통째로 건너뛰므로 이 이하로 쪼갠다
 

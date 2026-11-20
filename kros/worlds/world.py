@@ -6,7 +6,7 @@ from kros.msgs.geometry_msgs import Pose2D
 from kros.worlds.clock import Clock
 from kros.worlds.collision import Box, Circle, Compound, circle_vs, ray_distances_batch, ray_hit
 from kros.worlds.compute import Compute, compute
-from kros.worlds.world_object import WorldObject
+from kros.worlds.objects.world_object import WorldObject
 
 EARTH_GRAVITY = 9.81  # m/s^2
 MAX_MOVE_STEP = 0.02  # m, 벽 중심선을 건너뛰지 않도록 한 번에 이 이하로만 옮긴다

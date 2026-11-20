@@ -6,7 +6,7 @@ from kros.msgs.geometry_msgs import Pose2D
 from kros.worlds.clock import Clock
 from kros.worlds.collision import Box, Compound, Shape
 from kros.worlds.world import World
-from kros.worlds.world_object import WorldObject
+from kros.worlds.objects.world_object import WorldObject
 
 # isaac rl_maze 트랙(track_source/grid.npz)의 벽 중심선 (x1, y1, x2, y2) m. 바깥 4.48 x 6.37 m 방 + 안쪽 벽
 WALLS: tuple[tuple[float, float, float, float], ...] = (

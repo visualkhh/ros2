@@ -6,7 +6,7 @@ from kros.msgs.sensor_msgs import LaserScan
 from kros.worlds.clock import Clock
 from kros.worlds.hardwares.lidars.lidar import Lidar
 from kros.worlds.world import World
-from kros.worlds.world_object import WorldObject
+from kros.worlds.objects.world_object import WorldObject
 
 SAMPLES = 360  # 1도 간격
 RANGE_MIN, RANGE_MAX = 0.12, 3.5  # m

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from kros.msgs.geometry_msgs import Pose2D
 from kros.worlds.clock import Clock
-from kros.worlds.world import World
-from kros.worlds.world_object import WorldObject
+from kros.worlds.objects.world_object import WorldObject
+
+if TYPE_CHECKING:  # 월드가 objects 패키지를 import하므로 실행 때는 import하지 않는다 (순환 방지)
+    from kros.worlds.world import World
 
 
 class PuckShape(Enum):

@@ -9,7 +9,7 @@ from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.maze.track import WALL_THICKNESS, WALLS
 from kros.worlds.objects import Puck, PuckShape
 from kros.worlds.world import World
-from kros.worlds.world_object import WorldObject
+from kros.worlds.objects.world_object import WorldObject
 
 
 class DummyObject(WorldObject):
