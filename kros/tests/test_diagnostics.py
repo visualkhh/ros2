@@ -11,7 +11,7 @@ from kros.msgs.std_msgs import Header
 from kros.nodes import Node
 from kros.nodes import DiagnosticAggregator
 from kros.timer import SimulatedTimeSource
-from kros.worlds.hardwares import Sensor
+from kros.hardwares import Sensor
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 

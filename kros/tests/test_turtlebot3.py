@@ -5,9 +5,9 @@ from unittest import mock
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
 from kros.msgs.sensor_msgs import LaserScan
 from kros.worlds.clock import Clock
-from kros.worlds.hardwares import Actuator, Hardware, HardwareError, Lidar, Motor, Sensor
-from kros.worlds.hardwares.lidars.lds_01 import RANGE_MAX, SAMPLES, DummyLds01, SimulatedLds01, make_scan
-from kros.worlds.hardwares.motors.xl430_w250 import SimulatedXl430W250
+from kros.hardwares import Actuator, Hardware, HardwareError, Lidar, Motor, Sensor
+from kros.hardwares.lidars.lds_01 import RANGE_MAX, SAMPLES, DummyLds01, SimulatedLds01, make_scan
+from kros.hardwares.motors.xl430_w250 import SimulatedXl430W250
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.maze.track import WALL_THICKNESS
 from kros.worlds.objects import Puck, PuckShape

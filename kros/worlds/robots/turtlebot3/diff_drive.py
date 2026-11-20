@@ -2,7 +2,7 @@ import math
 
 from kros.msgs.geometry_msgs import Pose2D, Twist
 from kros.worlds.clock import Clock
-from kros.worlds.hardwares import Actuator, Motor
+from kros.hardwares import Actuator, Motor
 from kros.worlds.world import World
 from kros.worlds.objects.world_object import WorldObject
 

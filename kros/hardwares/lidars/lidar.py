@@ -2,7 +2,7 @@ import math
 
 from kros.msgs.geometry_msgs import Pose2D
 from kros.msgs.sensor_msgs import LaserScan
-from kros.worlds.hardwares.hardware import Sensor
+from kros.hardwares.hardware import Sensor
 
 
 class Lidar(Sensor[LaserScan]):

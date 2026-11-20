@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 from kros.diagnostics import DiagnosticStatusWrapper
 from kros.msgs.diagnostic_msgs import DiagnosticLevel
-from kros.worlds.hardwares import Actuator, Hardware, Sensor
+from kros.hardwares import Actuator, Hardware, Sensor
 
 
 def hardware_path(hardware: Hardware) -> str:

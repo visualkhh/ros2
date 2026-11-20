@@ -206,14 +206,14 @@ class TestMazeWorld(unittest.TestCase):
     def test_reality_side_does_not_depend_on_kros_nodes(self) -> None:
         root = pathlib.Path(__file__).parent.parent
         banned = re.compile(r"^\s*(from|import)\s+kros\.(node|context|topic|service|action)\b|^\s*from\s+kros\s+import|\bimport Node\b", re.M)
-        for pkg in ("worlds", "interactions", "viewer"):  # worlds에는 robots도 들어 있다
+        for pkg in ("worlds", "hardwares", "interactions", "viewer"):  # worlds에는 robots도 들어 있다
             for f in (root / pkg).rglob("*.py"):
                 self.assertIsNone(banned.search(f.read_text()), f"{f}는 kros의 Node/Context 쪽을 import한다")
 
     def test_only_the_viewer_depends_on_panda3d(self) -> None:
         root = pathlib.Path(__file__).parent.parent
         banned = re.compile(r"^\s*(from|import)\s+(panda3d|direct)\b", re.M)
-        for pkg in ("worlds", "interactions", "node", "topic", "service", "action", "msgs"):
+        for pkg in ("worlds", "hardwares", "interactions", "topic", "service", "action", "msgs"):
             for f in (root / pkg).rglob("*.py"):
                 self.assertIsNone(banned.search(f.read_text()), f"{f}는 panda3d를 import한다 (화면은 viewer/ 에만)")
         for name in ("snapshot.py", "snapshot_recorder.py"):  # viewer/ 안이어도 스냅샷과 기록기는 panda3d 없이 돈다
@@ -222,7 +222,7 @@ class TestMazeWorld(unittest.TestCase):
     def test_world_knows_nothing_about_robot_or_sensors(self) -> None:
         root = pathlib.Path(__file__).parent.parent / "worlds"
         for f in root.rglob("*.py"):
-            if {"robots", "hardwares"} & set(f.relative_to(root).parts):  # 로봇과 하드웨어 부품은 월드 안에 놓이는 것들: 월드 쪽 파일만 검사
+            if "robots" in f.relative_to(root).parts:  # 로봇은 월드 안에 놓이는 것: 월드 쪽 파일만 검사
                 continue
             body = f.read_text()
             for banned in ("LaserScan", "Twist", "kros.worlds.robots", "kros.viewer"):
@@ -257,7 +257,7 @@ if __name__ == "__main__":
 class TestHardwareLayout(unittest.TestCase):
     """hardwares/는 종류별 패키지로 나눈다: 인터페이스와 모델 구현이 종류 안에 함께 있고, 최상위(hardware.py)만 바깥에 있다."""
 
-    root = pathlib.Path(__file__).parent.parent / "worlds" / "hardwares"
+    root = pathlib.Path(__file__).parent.parent / "hardwares"
 
     def test_top_level_holds_only_the_base_and_kind_packages(self) -> None:
         files = {p.name for p in self.root.glob("*.py")}
@@ -271,9 +271,9 @@ class TestHardwareLayout(unittest.TestCase):
             self.assertGreater(len(names - {"__init__.py", interface}), 0, f"{kind}에 모델 구현 파일이 없다")
 
     def test_public_names_are_still_importable_from_the_top(self) -> None:
-        from kros.worlds.hardwares import Actuator, Hardware, HardwareError, Lidar, Motor, Sensor  # noqa: F401
-        from kros.worlds.hardwares.lidars import Lidar as KindLidar
-        from kros.worlds.hardwares.motors import Motor as KindMotor
+        from kros.hardwares import Actuator, Hardware, HardwareError, Lidar, Motor, Sensor  # noqa: F401
+        from kros.hardwares.lidars import Lidar as KindLidar
+        from kros.hardwares.motors import Motor as KindMotor
 
         self.assertIs(Lidar, KindLidar)
         self.assertIs(Motor, KindMotor)

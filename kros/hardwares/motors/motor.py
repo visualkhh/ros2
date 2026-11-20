@@ -1,4 +1,4 @@
-from kros.worlds.hardwares.hardware import Actuator
+from kros.hardwares.hardware import Actuator
 
 
 class Motor(Actuator[float]):

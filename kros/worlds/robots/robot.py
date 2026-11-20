@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from kros.msgs.geometry_msgs import Twist
-from kros.worlds.hardwares import Hardware
+from kros.hardwares import Hardware
 from kros.interactions import Interaction
 from kros.worlds.objects.world_object import WorldObject
 
