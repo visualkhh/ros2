@@ -9,6 +9,17 @@ from kros.worlds.world import World
 MAX_SUBSTEP = 0.05  # m, 한 번에 크게 움직이면 벽을 통째로 건너뛰므로 이 이하로 쪼갠다
 
 
+def wheel_speeds(command: Twist, wheel_radius: float, wheel_separation: float, max_wheel: float | None = None) -> tuple[float, float]:
+    """역기구학: 몸체 속도 명령 -> (왼쪽, 오른쪽) 바퀴 속도 rad/s. max_wheel을 주면 한쪽 바퀴가 그걸 넘을 때 두 바퀴를 같은 비율로 줄인다
+    (바퀴마다 따로 자르면 빠른 호가 안쪽 바퀴만 도는 제자리 회전이 된다)."""
+    v, w, half = command.linear.x, command.angular.z, wheel_separation / 2
+    left, right = (v - w * half) / wheel_radius, (v + w * half) / wheel_radius
+    peak = max(abs(left), abs(right))
+    if max_wheel is not None and peak > max_wheel:
+        left, right = left * max_wheel / peak, right * max_wheel / peak
+    return left, right
+
+
 class DiffDrive(Actuator[Twist]):
     """차동구동 구동부 (TurtleBot3의 OpenCR가 쓴다): 바퀴 모터 둘(left, right)로 차동구동한다. write(Twist)로 몸체 속도 명령을 내리면
     바퀴 속도로 바꿔 모터에 주고(역기구학), 모터가 실제로 돈 속도로 몸체를 움직인다(정기구학). 환경(벽)에 닿으면 world가 밀어낸다.
@@ -25,9 +36,9 @@ class DiffDrive(Actuator[Twist]):
 
     def apply(self, command: Twist, clock: Clock) -> None:
         """역기구학: 몸체 속도 명령 -> 바퀴 속도 목표."""
-        v, w, r, half = command.linear.x, command.angular.z, self.wheel_radius, self.wheel_separation / 2
-        self.left.write((v - w * half) / r)
-        self.right.write((v + w * half) / r)
+        left, right = wheel_speeds(command, self.wheel_radius, self.wheel_separation)
+        self.left.write(left)
+        self.right.write(right)
 
     def tick(self, clock: Clock) -> None:
         super().tick(clock)  # 목표를 바퀴에 주고(apply), 바퀴 모터들이 돈다
