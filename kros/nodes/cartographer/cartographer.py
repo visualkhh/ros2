@@ -122,7 +122,10 @@ class Cartographer(Node):
         try:  # 스캔을 잰 순간의 센서 위치 (odom 기준)
             t = self.buffer.lookup_transform(self.odom_frame.value, scan.header.frame_id, scan.header.stamp).transform
         except TransformException:
-            return
+            try:  # 그 시각의 TF가 아직 없다 (스캔이 TF보다 먼저 왔다): 최신 TF로. 버리면 바퀴가 헛돌 때 스캔이 연달아 빠져 위치를 놓친다
+                t = self.buffer.lookup_transform(self.odom_frame.value, scan.header.frame_id).transform
+            except TransformException:
+                return
         sensor_in_odom = (t.translation.x, t.translation.y, yaw_of(t.rotation))
         points = []  # 센서 좌표의 스캔 끝점 (잰 것만)
         for i, r in enumerate(scan.ranges):

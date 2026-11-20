@@ -1,2 +1,3 @@
 panda3d==1.10.16
 numpy
+onnxruntime  # rl_nav_controller가 학습한 정책(policy.onnx)을 돌린다 (없으면 MPPI로)

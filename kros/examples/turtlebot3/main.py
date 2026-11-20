@@ -31,9 +31,12 @@ from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARATION
 from kros.worlds.simulation_runner import SimulationRunner
 
+from . import rl_nav_controller  # noqa: F401  # 이 예제의 controller: controller_server 플러그인 표에 rl_nav_controller::RlNavController를 넣는다
 from .robot_bridge import RobotBridge
 
-MAPS_DIRECTORY = Path(__file__).resolve().parent / "artifacts" / "maps"  # 저장한 지도 (git에는 안 올린다: kros/.gitignore)
+MAPS_DIRECTORY = Path(__file__).resolve().parent / "artifacts" / "maps"
+# isaac/training/rl_maze에서 학습해 export한 정책 (policy.onnx + policy.onnx.data). isaac/artifacts는 git에 없다: 없으면 MPPI로 돈다
+RL_POLICY = Path(__file__).resolve().parents[3] / "isaac/artifacts/rl_maze/training/2026-11-19_11-38-08_nodyn1k/exported/policy.onnx"  # 저장한 지도 (git에는 안 올린다: kros/.gitignore)
 
 # robot_localization의 *_config 15칸 (x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az) 중 켤 칸
 ODOM_CONFIG = tuple(i in (6, 11) for i in range(15))  # 바퀴: vx, vyaw (위치는 바퀴가 적분한 것이라 다시 넣지 않는다)
@@ -65,7 +68,17 @@ def main() -> None:
         # 내비게이션 (nav2처럼): 경로 계획은 Smac(Hybrid-A*), 따라가기는 MPPI. 둘 다 안에 costmap을 만든다 (로봇 몸 반지름으로 inflation)
         footprint = {"robot_radius": robot.radius}
         planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
-        controller_parameters: dict[str, ParameterValue] = {"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController", "cmd_vel_topic": "cmd_vel_nav"}
+        # controller_parameters: dict[str, ParameterValue] = {"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController", "cmd_vel_topic": "cmd_vel_nav"}
+        # 따라가기는 isaac/training/rl_maze에서 학습한 정책 (rl_nav_controller: 실기와 같은 관측/행동). 모델이 없거나 못 읽으면 안에 품은 MPPI로 돈다
+        controller_parameters: dict[str, ParameterValue] = {
+            "odom_topic": "odometry/filtered",
+            "cmd_vel_topic": "cmd_vel_nav",
+            "FollowPath.plugin": "rl_nav_controller::RlNavController",
+            "FollowPath.enable": True,
+            "FollowPath.model_path": str(RL_POLICY),
+            "FollowPath.lidar_inflation": 0.03,  # 이 정책은 inflation 0.01~0.05m로 학습했다 (params/env.yaml의 inflation_range)
+            "FollowPath.fallback_controller": "mppi",
+        }
         controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
         # 속도 명령의 길: controller -> cmd_vel_nav -+-> twist_mux -> cmd_vel_mux -> collision_monitor -> cmd_vel -> RobotBridge
         #                 (다른 프로그램의) teleop -> cmd_vel_teleop -+   (사람이 이긴다)       (라이다로 앞이 막히면 멈추거나 늦춘다)

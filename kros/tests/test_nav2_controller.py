@@ -17,6 +17,7 @@ from kros.nodes.nav2.controller import ControllerError, ControllerServer, DWBLoc
 from kros.nodes.nav2.controller.controller import Controller, Pose2, blocked
 from kros.nodes.nav2.costmap_2d import Costmap
 from kros.nodes.nav2.planner import PlannerServer
+from kros.parameter import ParameterValue
 from kros.tf import TransformBroadcaster
 from kros.timer import SimulatedTimeSource
 from kros.topic import QOS_LATCHED
@@ -233,7 +234,7 @@ class TestControllerServer(unittest.TestCase):
 class TestNavigationInSimulation(unittest.TestCase):
     """노이즈 TurtleBot3 + EKF + Cartographer(SLAM) + planner + controller: 왼쪽 위 목표까지 실제로 간다."""
 
-    def go(self, plugin: str, planner: str = "nav2_navfn_planner::NavfnPlanner") -> tuple[float, FollowPathResult]:
+    def go(self, plugin: str, planner: str = "nav2_navfn_planner::NavfnPlanner", extra: dict[str, ParameterValue] | None = None) -> tuple[float, FollowPathResult]:
         world, robot = MazeWorld(puck_count=0), TurtleBot3(noisy=True, seed=1)
         world.add(robot)
         source = SimulatedTimeSource()
@@ -243,7 +244,8 @@ class TestNavigationInSimulation(unittest.TestCase):
         def create(ctx: Context) -> list[Node]:
             made["user"] = Node(ctx, "User")
             ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
-            controller = ControllerServer(ctx, parameters={"odom_topic": "odometry/filtered", "FollowPath.plugin": plugin}, costmap_parameters=footprint)
+            controller = ControllerServer(ctx, parameters={"odom_topic": "odometry/filtered", "FollowPath.plugin": plugin, **(extra or {})}, costmap_parameters=footprint)
+            self.server = controller
             description = RobotStatePublisher(ctx, parameters={"robot_description": TurtleBot3.urdf_path.read_text()})
             return [made["user"], RobotBridge(ctx, robot), description, DiffDriveOdometry(ctx, parameters={"publish_tf": False}), ekf, Cartographer(ctx), PlannerServer(ctx, parameters={"GridBased.plugin": planner}, costmap_parameters=footprint), controller]
 
