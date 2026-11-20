@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from direct.gui import DirectGuiGlobals as DGG
-from direct.gui.DirectCheckButton import DirectCheckButton
+from direct.gui.DirectButton import DirectButton
 from direct.gui.DirectOptionMenu import DirectOptionMenu
 from direct.gui.OnscreenText import OnscreenText
 from direct.showbase.DirectObject import DirectObject
@@ -12,12 +12,13 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, ButtonThrower, Camera, CardMaker, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
     LineSegs, MouseAndKeyboard, OrthographicLens, PGTop, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
-    LVecBase4f, GraphicsWindow, SamplerState, Texture, Point2, Point3,
+    LVecBase4f, GraphicsWindow, Point2, Point3,
 )
 
 from kros import Kros
 from kros.msgs.geometry_msgs import TransformStamped
-from kros.msgs.nav_msgs import UNKNOWN, OccupancyGrid, Odometry
+from kros.msgs.nav_msgs import OccupancyGrid, Odometry
+from kros.msgs.nav_msgs import Path as NavPath  # pathlib.Path와 겹치지 않게
 from kros.msgs.sensor_msgs import Imu, LaserScan
 from kros.msgs.std_msgs import String
 from kros.nodes import Node
@@ -26,17 +27,21 @@ from kros.tf import QOS_TF, QOS_TF_STATIC, ROBOT_DESCRIPTION_TOPIC_NAME, TF_STAT
 from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
 from kros.viewer.urdf_model import UrdfModel
 
+from .nav_display import NavDisplay
 from .slam_panel import BUTTON_COLOR, SlamPanel
 
 NAME = "Viz"
-HELP = "left drag: orbit (pose tool: set pose)    right drag: pan    wheel: zoom    checkbox: show/hide    esc: close"
-PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.84, 0.13  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
+HELP = "left drag: orbit (pose/goal tool: press = position, drag = heading)    right drag: pan    wheel: zoom    esc: close"
+PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.86, 0.072  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
 ODOMETRY_ARROWS = {"odom": (1.0, 0.35, 0.85, 1.0), "odometry/filtered": (0.3, 0.9, 1.0, 1.0)}  # 바퀴 오도메트리(분홍, TF 부모 선이 노랑이라)와 EKF 결과(하늘색)를 화살표로 겹쳐 본다
-TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "map", "scan", "imu", *ODOMETRY_ARROWS)
+# 패널 줄 순서. tf_static은 tf 화면에 같이 쓰여서 토글이 없다. grid, trail은 토픽이 아니다 (trail: 로봇이 fixed frame에서 지나온 궤적)
+ROWS = ("grid", "tf", TF_STATIC_TOPIC_NAME, ROBOT_DESCRIPTION_TOPIC_NAME, "map", "global_costmap/costmap", "local_costmap/costmap", "plan", "local_plan", "trail", "scan", "imu", *ODOMETRY_ARROWS)
+TOGGLES = tuple(name for name in ROWS if name != TF_STATIC_TOPIC_NAME)
+LABELS = {"global_costmap/costmap": "global_costmap", "local_costmap/costmap": "local_costmap"}  # 패널에 짧게
+TOGGLE_ON, TOGGLE_OFF = (0.16, 0.42, 0.28, 1.0), (0.2, 0.21, 0.25, 1.0)  # 켜짐(초록)/꺼짐(회색) 토글 버튼 색
+MODE_COLORS = {"mapping": (1.0, 0.6, 0.15, 1.0), "localization": (0.35, 1.0, 0.5, 1.0), "idle": (0.7, 0.7, 0.7, 1.0)}
 SPECIAL_FRAMES = {"map": (1.0, 0.55, 0.1, 1.0), "odom": (0.3, 0.9, 1.0, 1.0)}  # 위치 추정의 기준 좌표계: 굵고 긴 축과 색 이름표로 눈에 띄게
 FIXED_FRAMES = ("odom", "map")  # rviz의 Fixed Frame: 무엇을 기준으로 그릴지 (map은 SLAM/위치추정이 map -> odom TF를 낼 때만 있다)
-# 지도 칸 색 (rviz map 색과 비슷하게): 모름은 어두운 청회색, 점유 확률 0(빈 곳)~100(벽)은 밝은 회색~검정
-MAP_COLORS = {UNKNOWN: bytes((60, 66, 78, 255)), **{v: bytes((round(225 - 2.15 * v),) * 3 + (255,)) for v in range(101)}}  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
 
 
 class VizNode(Node):
@@ -54,6 +59,10 @@ class VizNode(Node):
             (TF_STATIC_TOPIC_NAME, TFMessage, QOS_TF_STATIC),
             (ROBOT_DESCRIPTION_TOPIC_NAME, String, QOS_LATCHED),
             ("map", OccupancyGrid, QOS_LATCHED),  # 지도는 한 번 내고 바뀔 때만 다시 낸다 (늦게 켜도 받는다)
+            ("global_costmap/costmap", OccupancyGrid, QOS_LATCHED),  # planner_server 안의 costmap
+            ("local_costmap/costmap", OccupancyGrid, QOS_LATCHED),  # controller_server 안의 costmap
+            ("plan", NavPath, QOS_LATCHED),  # planner가 낸 경로 (웨이포인트)
+            ("local_plan", NavPath, QOS_SENSOR_DATA),  # controller가 고른 명령의 예상 자취
             ("scan", LaserScan, QOS_SENSOR_DATA),
             ("imu", Imu, QOS_SENSOR_DATA),
             ("odom", Odometry, QOS_SENSOR_DATA),
@@ -69,16 +78,15 @@ class VizNode(Node):
             kind, count, first, _ = self._stats[key]
             self._stats[key] = (kind, count + 1, first or now, now)
 
-    def topic_rows(self) -> dict[str, str]:
-        """구독 중인 토픽 한 줄씩: 상태(* 최근에 받음, - 2초 넘게 조용함/아직 없음), 이름, 타입, 개수, 평균 Hz."""
+    def topic_rows(self) -> dict[str, tuple[bool, str]]:
+        """구독 중인 토픽마다 (최근 2초 안에 받았나, "타입 n=개수 평균Hz")."""
         now = time.monotonic()
         with self._lock:
             stats = dict(self._stats)
         rows = {}
         for topic, (kind, count, first, last) in stats.items():
-            live = count > 0 and now - last < 2.0
             hz = (count - 1) / (last - first) if count > 1 and last > first else 0.0
-            rows[topic] = f"{'*' if live else '-'} {topic}\n      {kind}  n={count}  {hz:.1f}Hz"
+            rows[topic] = (count > 0 and now - last < 2.0, f"{kind} n={count} {hz:.1f}Hz")
         return rows
 
     def latest(self, topic: str) -> object | None:
@@ -122,32 +130,33 @@ class Viz:
         self._scan_drawn: object = None
         self._scan_np: NodePath | None = None
         self._tf_np: NodePath | None = None
-        self._map_drawn: object = None
-        self._map_np = self.scene.attachNewNode("map")  # 지도 header의 frame_id에 TF로 놓는다
-        self._map_np.hide()
         self._labels: dict[str, NodePath] = {}  # TF 프레임 이름 글자 (rviz의 Show Names)
         self._last_mouse: tuple[float, float] | None = None
         self._closed = False
         self._build_input()
         self.enabled = {name: True for name in TOGGLES}
-        self.checks: dict[str, DirectCheckButton] = {}  # 체크박스 (grid, tf, 모델, scan, imu, odom)
-        self.rows: dict[str, OnscreenText] = {}  # 줄마다 토픽 상태 글자 (grid는 토픽이 아니라 맨 위 줄)
+        self.checks: dict[str, DirectButton] = {}  # 토글 버튼 (켜짐 초록, 꺼짐 회색)
+        self.rows: dict[str, OnscreenText] = {}  # 줄마다 토픽 상태 글자 (받은 개수, Hz)
         card = CardMaker("panel")
         card.setFrame(0, PANEL_WIDTH, -1, 1)
         panel = self.left.attachNewNode(card.generate())
         panel.setColor(0.08, 0.09, 0.13, 0.85)
         panel.setTransparency(True)
-        OnscreenText(text="Subscriptions", parent=self.left, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.05)
-        for index, name in enumerate(("grid", *self.node.topic_rows())):
+        OnscreenText(text="Displays", parent=self.left, pos=(0.04, 0.925), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.05)
+        scale = 0.036
+        for index, name in enumerate(ROWS):
             y = ROW_TOP - index * ROW_STEP
-            if name in self.enabled:
-                self.checks[name] = DirectCheckButton(
-                    parent=self.left, text=name, text_align=TextNode.ALeft, text_fg=(1, 1, 1, 1), scale=0.045, pos=(0.07, 0, y), relief=None,
-                    indicatorValue=1, boxPlacement="left", boxBorder=0.08, boxRelief=DGG.FLAT, indicator_frameColor=(0.2, 0.24, 0.34, 1), indicator_text_fg=(0.4, 1, 0.5, 1), indicator_text_pos=(0, -0.01), indicator_text_scale=1.2, command=self._set_enabled, extraArgs=[name],
-                )  # 사각형 체크박스: 누르면 command(체크 여부, 이름)
+            label = LABELS.get(name, name)
+            if name in self.enabled:  # 누르면 켜고 끄는 버튼 (입체 테두리, 누르는 동안 들어간다)
+                self.checks[name] = DirectButton(
+                    parent=self.left, text=label, text_align=TextNode.ALeft, text_pos=(0.3, 0), scale=scale, pos=(0.04, 0, y), frameSize=(0, 0.36 / scale, -0.45, 1.05),
+                    relief=DGG.RAISED, borderWidth=(0.1, 0.1), command=self.toggle, extraArgs=[name],
+                )
+                self._style(name)
             else:
-                OnscreenText(text=name, parent=self.left, pos=(0.11, y), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.045)
-            self.rows[name] = OnscreenText(parent=self.left, pos=(0.11, y - 0.05), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
+                OnscreenText(text=label, parent=self.left, pos=(0.055, y), align=TextNode.ALeft, fg=(0.6, 0.6, 0.65, 1), scale=scale)
+            self.rows[name] = OnscreenText(parent=self.left, pos=(0.42, y), align=TextNode.ALeft, fg=(0.7, 0.75, 0.85, 1), scale=0.026, mayChange=True)
+        self.mode_banner = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.68), align=TextNode.ALeft, scale=0.065, bg=(0.05, 0.05, 0.08, 0.8), mayChange=True)
         shade = (0.05, 0.05, 0.08, 0.75)  # 밝은 지도 위에서도 읽히게
         self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), bg=shade, scale=0.05, mayChange=True)
         OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.8, 0.8, 0.8, 1), bg=shade, scale=0.04)
@@ -158,6 +167,7 @@ class Viz:
             text_fg=(1, 1, 1, 1), frameColor=BUTTON_COLOR, relief=DGG.RAISED, borderWidth=(0.12, 0.12), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
         )
         self.slam = SlamPanel(self)
+        self.nav = NavDisplay(self)
         self.base.taskMgr.add(self._update, "viz-update")
 
     # ---- 만들기 ------------------------------------------------------------------------------
@@ -244,8 +254,15 @@ class Viz:
     def _set_fixed_frame(self, frame: str) -> None:
         self.fixed_frame = frame
 
-    def _set_enabled(self, checked: int, name: str) -> None:
-        self.enabled[name] = bool(checked)
+    def toggle(self, name: str) -> None:
+        """패널의 토글 버튼: 그 표시를 켜고 끈다."""
+        self.enabled[name] = not self.enabled[name]
+        self._style(name)
+
+    def _style(self, name: str) -> None:
+        on = self.enabled[name]
+        self.checks[name]["frameColor"] = TOGGLE_ON if on else TOGGLE_OFF
+        self.checks[name]["text_fg"] = (1, 1, 1, 1) if on else (0.55, 0.55, 0.6, 1)
 
     def _build_input(self) -> None:
         """이 창만의 마우스/키 입력 (ShowBase의 전역 입력과 섞이지 않게 'viz-' 접두사 이벤트로)."""
@@ -285,15 +302,19 @@ class Viz:
         mouse = self.mouse.node()
         pressed = mouse.hasMouse() and mouse.isButtonDown(MouseButton.one()) and not self._over_gui()
         self.slam.update(self.ground_point(mouse.getMouseX(), mouse.getMouseY()) if mouse.hasMouse() else None, pressed)
-        self._update_map()
+        self.nav.update(self._lookup)
         self._update_scan()
         self._update_odometry()
         self.hud.setText(self._hud_text())
         self._resize()
-        texts = {"grid": "grid", **self.node.topic_rows()}
+        stats = self.node.topic_rows()
         for name, row in self.rows.items():
-            first, _, second = texts[name].partition("\n")
-            row.setText(f"{first[0]} {second.strip()}" if second else "")  # "* LaserScan  n=..  ..Hz": 앞 글자는 최근에 받았는지
+            live, text = stats.get(name, (False, ""))
+            row.setText(text.split(" ", 1)[1] if text else "")  # "n=..  ..Hz" (타입은 길어서 뺀다)
+            row["fg"] = (0.4, 1.0, 0.5, 1) if live else (0.6, 0.62, 0.7, 1)  # 최근 2초 안에 받았으면 초록
+        mode = self.slam.mode
+        self.mode_banner.setText({"mapping": " SLAM (mapping) ", "localization": " LOCALIZATION ", "idle": " IDLE (no SLAM) "}.get(mode, ""))
+        self.mode_banner["fg"] = MODE_COLORS.get(mode, (1, 1, 1, 1))
         self.grid_np.show() if self.enabled["grid"] else self.grid_np.hide()
         return task.cont
 
@@ -394,37 +415,6 @@ class Viz:
             label.setDepthTest(False)
             self._labels[frame] = label
         return self._labels[frame]
-
-    def _update_map(self) -> None:
-        """OccupancyGrid를 칸마다 색을 칠한 텍스처 한 장으로 바닥에 깐다 (새 지도일 때만 만든다)."""
-        grid = self.node.latest("map")
-        if isinstance(grid, OccupancyGrid) and grid is not self._map_drawn:
-            self._map_drawn = grid
-            self._map_np.getChildren().detach()
-            info = grid.info
-            if info.width and info.height and len(grid.data) == info.width * info.height:
-                texture = Texture("map")
-                texture.setup2dTexture(info.width, info.height, Texture.T_unsigned_byte, Texture.F_rgba)
-                texture.setRamImageAs(b"".join(MAP_COLORS.get(v, MAP_COLORS[UNKNOWN]) for v in grid.data), "RGBA")  # 텍스처 첫 줄이 아래(y가 작은 쪽): 지도의 행 순서와 같다
-                texture.setMagfilter(SamplerState.FT_nearest)  # 칸이 번지지 않게
-                texture.setMinfilter(SamplerState.FT_nearest)
-                card = CardMaker("map-card")
-                card.setFrame(0, info.width * info.resolution, 0, info.height * info.resolution)
-                o, q = info.origin.position, info.origin.orientation
-                origin = self._map_np.attachNewNode("map-origin")
-                origin.setPos(o.x, o.y, o.z - 0.002)  # 격자선보다 살짝 아래
-                origin.setQuat(LQuaternionf(q.w, q.x, q.y, q.z))
-                plane = origin.attachNewNode(card.generate())
-                plane.setP(-90)  # CardMaker는 xz 평면에 만든다: 바닥(xy)으로 눕힌다
-                plane.setTexture(texture)
-                plane.setLightOff()
-                plane.setTwoSided(True)
-        stamped = self._lookup(grid.header.frame_id) if isinstance(grid, OccupancyGrid) and self.enabled["map"] else None
-        if stamped is None:
-            self._map_np.hide()
-        else:
-            _mat_of(stamped, self._map_np)
-            self._map_np.show()
 
     def _update_scan(self) -> None:
         """scan의 점을 센서 프레임 기준으로 한 번 만들고, 센서의 TF에 맞춰 놓는다 (새 스캔일 때만 만든다)."""

@@ -22,16 +22,18 @@ if HAS_PANDA:
     from kros.nodes import DiffDriveOdometry, Ekf, RobotStatePublisher
     from kros.timer import SimulatedTimeSource
     from kros.context import Context
-    from kros.msgs.geometry_msgs import Point, Pose, Transform, TransformStamped
+    from kros.msgs.geometry_msgs import Point, Pose, Transform, TransformStamped, Vector3
+    from kros.msgs.nav_msgs import Path as NavPath  # pathlib.Path와 겹치지 않게
     from kros.tf import TransformBroadcaster
     from kros.msgs.nav_msgs import FREE, OCCUPIED, UNKNOWN, MapMetaData, OccupancyGrid
     from kros.msgs.std_msgs import Header
     from kros.nodes import Node
     from kros.topic import QOS_LATCHED
     from kros.viz import Viz
-    from kros.viz.viz import MAP_COLORS
+    from kros.viz.nav_display import MAP_COLORS
+    from kros.viz.viz import TOGGLE_OFF, TOGGLE_ON
     from panda3d.core import Vec3
-    from kros.msgs.geometry_msgs import PoseWithCovarianceStamped
+    from kros.msgs.geometry_msgs import PoseStamped, PoseWithCovarianceStamped
     from kros.nodes import Cartographer, MapSaver, MapServer
     from panda3d.core import MouseButton, VirtualMouse
     from kros.worlds.maze.maze_world import MazeWorld
@@ -77,10 +79,12 @@ class TestVizSmoke(unittest.TestCase):
         self.assertFalse(viz.arrows["odom"].isHidden())  # 바퀴 오도메트리 화살표
         self.assertGreater(viz.arrows["odom"].getX(), 0.1)  # 앞으로 간 만큼
         self.assertFalse(viz.arrows["odometry/filtered"].isHidden())
-        text = " ".join(row.getText() for row in viz.rows.values()) + " ".join(viz.rows)
-        for topic in ("tf", "tf_static", "robot_description", "scan", "imu", "odom", "odometry/filtered"):
-            self.assertIn(topic, text)  # 구독 중인 토픽이 패널에 나온다
-        self.assertIn("* LaserScan", text)
+        for topic in ("tf", "tf_static", "robot_description", "map", "global_costmap/costmap", "local_costmap/costmap", "plan", "local_plan", "scan", "imu", "odom", "odometry/filtered"):
+            self.assertIn(topic, viz.rows)  # 구독 중인 토픽이 패널에 줄로 나온다
+        self.assertIn("Hz", viz.rows["scan"].getText())
+        color = viz.rows["scan"].textNode.getTextColor()
+        for got, want in zip(color, (0.4, 1.0, 0.5)):  # 방금 받았다: 초록
+            self.assertAlmostEqual(got, want, places=2)
         viz.enabled["scan"] = viz.enabled["odom"] = viz.enabled["robot_description"] = False  # 체크 해제
         viz.base.taskMgr.step()
         self.assertTrue(viz.model.links["base_link"].isHidden())
@@ -92,14 +96,13 @@ class TestVizSmoke(unittest.TestCase):
         self.assertTrue(viz._labels["odom"].isHidden())  # tf를 끄면 이름도 숨는다
         viz.enabled["tf"] = True
         self.assertFalse(viz.enabled["scan"])
-        self.assertIn("LaserScan", viz.rows["scan"].getText())
         self.assertTrue(viz.enabled["imu"])
-        for name, check in viz.checks.items():  # 체크박스를 누르면 (눌린 것처럼 commandFunc) 그 표시가 바뀐다
-            check["indicatorValue"] = viz.enabled[name]  # 앞에서 값만 바꿨으니 체크박스 모양을 맞춘다
+        for name, check in viz.checks.items():  # 토글 버튼을 누르면 그 표시가 바뀌고 버튼 색도 바뀐다
             before = viz.enabled[name]
-            check.commandFunc(None)
+            check["command"](*check["extraArgs"])
             self.assertEqual(viz.enabled[name], not before, name)
-        self.assertNotIn("tf_static", viz.checks)  # tf_static은 체크박스가 없다
+            self.assertEqual(tuple(check["frameColor"]), TOGGLE_OFF if before else TOGGLE_ON, name)
+        self.assertNotIn("tf_static", viz.checks)  # tf_static은 토글이 없다
         self.assertTrue(viz.base.isAccepting("window-event"))  # ShowBase 자신의 창 이벤트 처리를 덮어쓰지 않았다
         viz._lens3d.setAspectRatio(3.0)  # 창 비율과 다른 렌즈 (오프스크린 버퍼는 크기를 못 바꿔서 이렇게 시험한다)
         viz.base.taskMgr.step()
@@ -130,11 +133,11 @@ class TestVizMap(unittest.TestCase):
         TransformBroadcaster(made["mapper"]).send_transform(TransformStamped(Header(0.0, "odom"), "base_footprint", Transform()))  # odom 프레임이 있게 (tf는 latch가 아니라 viz가 켜진 뒤에)
         kros.context.topic_manager.join()
         viz.base.taskMgr.step()
-        self.assertFalse(viz._map_np.isHidden())
-        low, high = viz._map_np.getTightBounds()
+        self.assertFalse(viz.nav.grids["map"].isHidden())
+        low, high = viz.nav.grids["map"].getTightBounds()
         for got, want in zip((low.x, low.y, high.x, high.y), (1.0, 2.0, 3.0, 3.5)):  # 원점에서 4*0.5 x 3*0.5 m
             self.assertAlmostEqual(got, want, places=3)
-        texture = viz._map_np.findAllTextures()[0]
+        texture = viz.nav.grids["map"].findAllTextures()[0]
         self.assertEqual((texture.getXSize(), texture.getYSize()), (4, 3))
         image = texture.getRamImageAs("RGBA").getData()
         self.assertEqual(tuple(image[0:4]), tuple(MAP_COLORS[OCCUPIED]))  # 칸 (0, 0) = 벽 = 어두움
@@ -143,12 +146,12 @@ class TestVizMap(unittest.TestCase):
         viz.fixed_menu.set(viz.fixed_menu["items"].index("map"))  # 패널에서 Fixed Frame을 map으로 고른다
         viz.base.taskMgr.step()
         self.assertEqual(viz.fixed_frame, "map")
-        self.assertTrue(viz._map_np.isHidden())  # map -> odom TF가 없으니 odom에 있는 지도를 놓을 수 없다
+        self.assertTrue(viz.nav.grids["map"].isHidden())  # map -> odom TF가 없으니 odom에 있는 지도를 놓을 수 없다
         self.assertIn("no tf yet", viz.hud.getText())
         viz.enabled["map"] = False
         viz._set_fixed_frame("odom")
         viz.base.taskMgr.step()
-        self.assertTrue(viz._map_np.isHidden())  # 체크를 끄면 숨는다
+        self.assertTrue(viz.nav.grids["map"].isHidden())  # 체크를 끄면 숨는다
 
 
 @unittest.skipUnless(HAS_PANDA, "panda3d 없음")
@@ -215,6 +218,31 @@ class TestVizSlamPanel(unittest.TestCase):
         self.panel.publish_initial_pose((0.0, 0.0, 0.0))  # map TF가 없으면 map 좌표로 못 바꾼다
         self.assertIn("map TF", self.panel.status.getText())
 
+    def test_goal_tool_needs_localization_previews_an_arrow_and_publishes_goal_pose(self) -> None:
+        got: list[PoseStamped] = []
+        self.watcher.subscribe("goal_pose", PoseStamped, got.append)
+        self.panel.toggle_tool("goal")
+        self.assertIsNone(self.panel.tool)  # idle: 지도에서 위치를 잡기 전에는 목표를 못 찍는다
+        self.assertIn("localization", self.panel.status.getText())
+        self.cartographer.set_parameter("mode", "localization")
+        self.viz.base.taskMgr.step()
+        self.assertIn("LOCALIZATION", self.viz.mode_banner.getText())  # 지금 모드를 크게 보인다
+        self.viz.fixed_frame = "map"
+        self.panel.toggle_tool("goal")
+        self.assertEqual(self.panel.tool, "goal")
+        self.panel.update((1.0, 2.0), True)  # 누른 곳 = 위치
+        self.panel.update((0.0, 2.0), True)  # -x 쪽으로 끄는 중
+        arrow = self.panel._preview["goal"]
+        self.assertFalse(arrow.isHidden())  # 끄는 동안 화살표로 미리 보인다
+        self.assertAlmostEqual(arrow.getH() % 360, 180.0, places=3)
+        self.panel.update((0.0, 2.0), False)  # 놓으면 낸다
+        self.kros.context.topic_manager.join()
+        self.assertTrue(arrow.isHidden())
+        self.assertIsNone(self.panel.tool)
+        self.assertEqual((got[-1].header.frame_id, got[-1].pose.position.x, got[-1].pose.position.y), ("map", 1.0, 2.0))
+        q = got[-1].pose.orientation
+        self.assertAlmostEqual(abs(2 * math.atan2(q.z, q.w)), math.pi)  # 끈 방향 = yaw
+
     def test_ground_point_under_the_screen_center_is_the_camera_target(self) -> None:
         self.viz.target = Vec3(0.7, -0.4, 0.0)
         self.viz.base.taskMgr.step()
@@ -266,6 +294,48 @@ class TestVizSlamPanel(unittest.TestCase):
         self.panel.cartographer = "nobody"
         self.panel.set_mode("mapping")
         self.assertIn("no node 'nobody'", self.panel.status.getText())
+
+
+@unittest.skipUnless(HAS_PANDA, "panda3d 없음")
+class TestVizNavigationDisplays(unittest.TestCase):
+    def test_costmaps_plans_and_trail_are_drawn_where_their_frames_are(self) -> None:
+        made: dict[str, Node] = {}
+        kros = Kros(lambda ctx: [made.setdefault("n", Node(ctx, "Nav"))], time_source=SimulatedTimeSource())
+        self.addCleanup(kros.shutdown)
+        node = made["n"]
+        viz = Viz(kros, TurtleBot3.description_dir)
+        self.addCleanup(viz.close)
+        broadcaster = TransformBroadcaster(node)
+        broadcaster.send_transform(TransformStamped(Header(0.0, "odom"), "base_footprint", Transform()))
+        grid = OccupancyGrid(Header(0.0, "odom"), MapMetaData(0.0, 0.5, 2, 1, Pose(Point(1.0, 0.0, 0.0))), (100, 50))
+        for topic in ("global_costmap/costmap", "local_costmap/costmap"):
+            node.publish(topic, grid, QOS_LATCHED)
+        path = NavPath(Header(0.0, "odom"), tuple(PoseStamped(Header(0.0, "odom"), Pose(Point(x / 10, 0.0, 0.0))) for x in range(10)))
+        node.publish("plan", path, QOS_LATCHED)
+        node.publish("local_plan", path)
+        kros.context.topic_manager.join()
+        viz.base.taskMgr.step()
+        for name in ("global_costmap/costmap", "local_costmap/costmap"):
+            root = viz.nav.grids[name]
+            self.assertFalse(root.isHidden(), name)
+            low, high = root.getTightBounds()
+            self.assertAlmostEqual(low.x, 1.0, places=3)  # costmap origin 자리부터
+            self.assertAlmostEqual(high.x, 2.0, places=3)
+        for name in ("plan", "local_plan"):
+            self.assertFalse(viz.nav.paths[name].isHidden(), name)
+        self.assertAlmostEqual(viz.nav.paths["plan"].getTightBounds()[1].x, 0.9, places=2)
+        viz.toggle("global_costmap/costmap")
+        viz.toggle("plan")
+        viz.base.taskMgr.step()
+        self.assertTrue(viz.nav.grids["global_costmap/costmap"].isHidden())  # 따로 끈다
+        self.assertFalse(viz.nav.grids["local_costmap/costmap"].isHidden())
+        self.assertTrue(viz.nav.paths["plan"].isHidden())
+        for x in (0.1, 0.2, 0.3):  # 로봇이 움직이면 지나온 궤적이 쌓인다
+            broadcaster.send_transform(TransformStamped(Header(x, "odom"), "base_footprint", Transform(Vector3(x, 0.0, 0.0))))
+            kros.context.topic_manager.join()
+            viz.base.taskMgr.step()
+        self.assertEqual(len(viz.nav.trail), 4)
+        self.assertAlmostEqual(viz.nav.trail[-1][0], 0.3)
 
 
 if __name__ == "__main__":

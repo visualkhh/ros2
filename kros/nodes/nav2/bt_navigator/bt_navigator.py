@@ -73,7 +73,10 @@ class BtNavigator(Node):
             time.sleep(0.01)  # 실제 시간으로 조금씩 (따라가기는 controller_server가 한다; 여기서는 지켜보고 다시 계획만)
             if handle.is_cancel_requested or self._preempt.is_set():
                 if handle.is_cancel_requested:
-                    follow.cancel(5.0)
+                    try:
+                        follow.cancel(5.0)
+                    except LookupError:
+                        pass  # controller_server가 이미 내려갔다 (종료 중)
                 return R(R.NONE, "취소" if handle.is_cancel_requested else "새 goal로 바뀌었다")
             if follow.status != GoalStatus.ACCEPTED:  # 따라가기가 끝났다
                 result = follow.result(5.0).result

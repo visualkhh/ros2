@@ -15,12 +15,13 @@ from direct.gui import DirectGuiGlobals as DGG
 from direct.gui.DirectButton import DirectButton
 from direct.gui.DirectOptionMenu import DirectOptionMenu
 from direct.gui.OnscreenText import OnscreenText
-from panda3d.core import TextNode
+from panda3d.core import LineSegs, NodePath, TextNode
 
-from kros.msgs.geometry_msgs import Point, Pose, PoseWithCovariance, PoseWithCovarianceStamped, Quaternion
+from kros.msgs.geometry_msgs import Point, Pose, PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Quaternion
 from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse, SaveMap, SaveMapRequest, SaveMapResponse
 from kros.msgs.std_msgs import Header
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
+from kros.nodes.nav2.bt_navigator import GOAL_POSE_TOPIC_NAME
 from kros.parameter import ParameterNotDeclaredError, ParameterRejectedError
 from kros.service.service_type import Req, Res, ServiceType
 from kros.tf import TransformException
@@ -28,40 +29,63 @@ from kros.tf import TransformException
 if TYPE_CHECKING:
     from .viz import Viz
 
-TOP = -0.33  # 패널에서 SLAM 칸이 시작하는 높이
+TOP = -0.17  # 패널에서 SLAM 칸이 시작하는 높이
+TOOL_COLORS = {"initialpose": (0.3, 1.0, 0.4, 1.0), "goal": (1.0, 0.35, 0.8, 1.0)}  # 드래그 중 미리 보는 화살표 색 (rviz처럼 도구마다)
+TOOL_ACTIVE = (0.6, 0.35, 0.1, 1)  # 켜진 도구 버튼 색
 INITIAL_POSE_COVARIANCE = tuple(0.25 if i in (0, 7) else 0.0685 if i == 35 else 0.0 for i in range(36))  # rviz 2D Pose Estimate의 기본 공분산
 BUTTON_COLOR = (0.26, 0.31, 0.44, 1)
 # 입체 테두리(RAISED: 누르는 동안 SUNKEN으로 들어간다), 글자 둘레 여백
 GUI = {"scale": 0.04, "text_fg": (1, 1, 1, 1), "frameColor": BUTTON_COLOR, "relief": DGG.RAISED, "borderWidth": (0.12, 0.12), "pad": (0.3, 0.25)}
 
 
-def _button(parent: object, text: str, left: float, right: float, y: float, command: Callable[[], None]) -> DirectButton:
+def _button(parent: object, text: str, left: float, right: float, y: float, command: Callable[[], None], scale: float = 0.04) -> DirectButton:
     """패널 좌표 left~right 폭을 꽉 채운 버튼 (글자는 가운데). 같은 줄/열의 버튼 끝이 맞는다."""
-    half = (right - left) / 2 / GUI["scale"]
-    return DirectButton(parent=parent, text=text, pos=((left + right) / 2, 0, y), frameSize=(-half, half, -0.5, 1.0), command=command, **{**GUI, "pad": (0, 0)})
+    half = (right - left) / 2 / scale
+    return DirectButton(parent=parent, text=text, pos=((left + right) / 2, 0, y), frameSize=(-half, half, -0.5, 1.0), command=command, **{**GUI, "pad": (0, 0), "scale": scale})
+
+
+def _arrow(color: tuple[float, float, float, float]) -> NodePath:
+    """길이 1의 바닥 화살표 (+x 방향). 드래그하는 동안 위치/방향을 미리 보여 준다."""
+    segs = LineSegs()
+    segs.setColor(*color)
+    segs.setThickness(4)
+    for start, end in (((0, 0), (1, 0)), ((1, 0), (0.8, 0.12)), ((1, 0), (0.8, -0.12))):
+        segs.moveTo(start[0], start[1], 0.05)
+        segs.drawTo(end[0], end[1], 0.05)
+    node = NodePath(segs.create())
+    node.setLightOff()
+    node.setBin("fixed", 2)
+    node.setDepthTest(False)
+    node.hide()
+    return node
 
 
 class SlamPanel:
     def __init__(self, viz: "Viz", cartographer: str = "cartographer", map_server: str = "map_server", map_saver: str = "map_saver") -> None:
         self.viz, self.node = viz, viz.node
         self.cartographer, self.map_server, self.map_saver = cartographer, map_server, map_saver
-        self.pose_tool = False  # 2D Pose Estimate: 켜지면 3D 화면의 왼쪽 드래그가 카메라 대신 위치/방향을 찍는다
+        self.tool: str | None = None  # "initialpose"(2D Pose Estimate) 또는 "goal"(2D Goal Pose): 켜지면 3D 화면의 왼쪽 드래그가 카메라 대신 위치/방향을 찍는다
+        self.mode = ""  # Cartographer의 지금 모드 (매 프레임 갱신)
         self._drag_start: tuple[float, float] | None = None
+        self._preview = {tool: _arrow(color) for tool, color in TOOL_COLORS.items()}
+        for arrow in self._preview.values():
+            arrow.reparentTo(viz.scene)
         self._pending: list[tuple[Future[Any], Callable[[object], None]]] = []  # 응답을 기다리는 서비스 호출 (UI는 매 프레임 확인한다)
         left = viz.left
         OnscreenText(text="SLAM", parent=left, pos=(0.04, TOP), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
         self.mode_text = OnscreenText(parent=left, pos=(0.2, TOP), align=TextNode.ALeft, fg=(1, 0.75, 0.3, 1), scale=0.04, mayChange=True)
-        self.slam_button = _button(left, "start SLAM", 0.06, 0.32, TOP - 0.1, self.toggle_slam)
-        self.save_button = _button(left, "save map", 0.36, 0.62, TOP - 0.1, self.save_map)
+        self.slam_button = _button(left, "start SLAM", 0.06, 0.32, TOP - 0.09, self.toggle_slam)
+        self.save_button = _button(left, "save map", 0.36, 0.62, TOP - 0.09, self.save_map)
         maps = self.map_names()
         self.map_menu = DirectOptionMenu(
-            parent=left, items=maps or ["(no maps)"], pos=(0.075, 0, TOP - 0.21), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
+            parent=left, items=maps or ["(no maps)"], pos=(0.075, 0, TOP - 0.19), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
             **{**GUI, "frameColor": (0.12, 0.14, 0.2, 1), "relief": DGG.SUNKEN},  # 고르는 칸은 들어간 모양 (버튼과 구별)
         )
-        self.map_menu["frameSize"] = (-0.4, (0.62 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # 한 줄을 다 쓴다 (지도 이름이 길다)
-        self.load_button = _button(left, "load", 0.06, 0.22, TOP - 0.32, self.load_map)
-        self.pose_button = _button(left, "2D Pose Estimate", 0.26, 0.62, TOP - 0.32, self.toggle_pose_tool)
-        self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.41), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
+        self.map_menu["frameSize"] = (-0.4, (0.44 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # 지도 이름이 길다
+        self.load_button = _button(left, "load", 0.47, 0.62, TOP - 0.19, self.load_map)
+        self.pose_button = _button(left, "2D Pose Estimate", 0.06, 0.33, TOP - 0.29, lambda: self.toggle_tool("initialpose"), scale=0.032)
+        self.goal_button = _button(left, "2D Goal Pose", 0.36, 0.62, TOP - 0.29, lambda: self.toggle_tool("goal"), scale=0.032)
+        self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.38), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.033, mayChange=True)
 
     # ---- 버튼 -----------------------------------------------------------------------------------
 
@@ -130,17 +154,30 @@ class SlamPanel:
             return
         self._pending.append((future, done))
 
-    def toggle_pose_tool(self) -> None:
-        self.pose_tool = not self.pose_tool
+    def toggle_tool(self, tool: str) -> None:
+        """2D Pose Estimate / 2D Goal Pose 버튼 (rviz처럼: 누른 곳이 위치, 끄는 방향이 yaw). 같은 버튼을 다시 누르면 끈다."""
+        if self.tool != tool and tool == "goal" and self._get_mode() != "localization":
+            self.status.setText("2D Goal Pose: load a map first (localization)")  # 목표는 저장한 지도에서 위치를 잡은 뒤에 찍는다
+            return
+        self.tool = None if self.tool == tool else tool
         self._drag_start = None
-        self.pose_button["frameColor"] = (0.6, 0.35, 0.1, 1) if self.pose_tool else BUTTON_COLOR
-        self.status.setText("drag on the floor: position -> heading" if self.pose_tool else "")
+        self.pose_button["frameColor"] = TOOL_ACTIVE if self.tool == "initialpose" else BUTTON_COLOR
+        self.goal_button["frameColor"] = TOOL_ACTIVE if self.tool == "goal" else BUTTON_COLOR
+        self.status.setText("press = position, drag = heading" if self.tool else "")
+
+    def toggle_pose_tool(self) -> None:
+        self.toggle_tool("initialpose")
+
+    @property
+    def pose_tool(self) -> bool:
+        """어떤 도구든 켜져 있다 (그동안 왼쪽 드래그는 카메라를 돌리지 않는다)."""
+        return self.tool is not None
 
     # ---- 매 프레임 --------------------------------------------------------------------------------
 
     def update(self, ground: tuple[float, float] | None, pressed: bool) -> None:
         """Viz가 매 프레임 부른다: 모드 표시, 끝난 서비스 응답, 2D Pose Estimate 드래그 (ground: 마우스 아래 바닥점, fixed frame)."""
-        mode = self._get_mode()  # 다른 곳(ros2 param set 같은)에서 바꿔도 따라간다
+        self.mode = mode = self._get_mode()  # 다른 곳(ros2 param set 같은)에서 바꿔도 따라간다
         self.mode_text.setText(mode or "(no cartographer)")
         mapping = mode == "mapping"
         self.slam_button["text"] = "stop SLAM" if mapping else "start SLAM"
@@ -152,32 +189,68 @@ class SlamPanel:
                 done(future.result())
             else:  # 핸들러가 던진 예외: 화면에 알리고 계속 돈다
                 self.status.setText(f"{type(error).__name__}: {error}")
-        if not self.pose_tool:
+        tool = self.tool
+        for name, arrow in self._preview.items():
+            if name != tool or self._drag_start is None:
+                arrow.hide()
+        if tool is None:
             return
         if pressed and ground is not None and self._drag_start is None:
             self._drag_start = ground
-        elif not pressed and self._drag_start is not None:
-            start, end = self._drag_start, ground or self._drag_start
-            self._drag_start = None
-            yaw = math.atan2(end[1] - start[1], end[0] - start[0]) if end != start else 0.0
+        start = self._drag_start
+        if start is None:
+            return
+        end = ground or start
+        yaw = math.atan2(end[1] - start[1], end[0] - start[0]) if math.dist(start, end) > 1e-3 else 0.0
+        if pressed:  # 끄는 동안: 위치와 방향을 화살표로 미리 보인다
+            arrow = self._preview[tool]
+            arrow.setPos(start[0], start[1], 0)
+            arrow.setH(math.degrees(yaw))
+            arrow.setScale(max(0.3, math.dist(start, end)))
+            arrow.show()
+            return
+        self._drag_start = None
+        self._preview[tool].hide()
+        if tool == "initialpose":
             self.publish_initial_pose((start[0], start[1], yaw))
-            self.toggle_pose_tool()
+        else:
+            self.publish_goal((start[0], start[1], yaw))
+        self.toggle_tool(tool)  # 한 번 찍으면 끈다 (rviz와 같다)
+
+    def _in_map(self, pose: tuple[float, float, float]) -> tuple[float, float, float] | None:
+        """fixed frame에서 찍은 위치를 map 좌표로 (Cartographer/nav2는 map 좌표로 받는다). map TF가 없으면 None."""
+        fixed = self.viz.fixed_frame
+        if fixed == "map":
+            return pose
+        try:
+            t = self.node.buffer.lookup_transform("map", fixed).transform
+        except TransformException:
+            self.status.setText("no map TF: start SLAM or load a map")
+            return None
+        return compose((t.translation.x, t.translation.y, yaw_of(t.rotation)), pose)
+
+    def publish_goal(self, pose: tuple[float, float, float]) -> None:
+        """2D Goal Pose: /goal_pose (PoseStamped, map). bt_navigator가 받아 계획하고 따라간다."""
+        in_map = self._in_map(pose)
+        if in_map is None:
+            return
+        x, y, yaw = in_map
+        self.node.publish(GOAL_POSE_TOPIC_NAME, PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))))
+        self.status.setText(f"goal ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
 
     def publish_initial_pose(self, pose: tuple[float, float, float]) -> None:
-        """fixed frame에서 찍은 위치를 map 좌표로 바꿔 /initialpose로 낸다 (Cartographer는 map 좌표만 받는다)."""
-        fixed = self.viz.fixed_frame
-        if fixed != "map":
-            try:
-                t = self.node.buffer.lookup_transform("map", fixed).transform
-            except TransformException:
-                self.status.setText("no map TF: start SLAM or load a map")
-                return
-            pose = compose((t.translation.x, t.translation.y, yaw_of(t.rotation)), pose)
+        """2D Pose Estimate: /initialpose (PoseWithCovarianceStamped, map)."""
+        in_map = self._in_map(pose)
+        if in_map is None:
+            return
+        pose = in_map
         x, y, yaw = pose
         orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
         self.node.publish(INITIAL_POSE_TOPIC_NAME, PoseWithCovarianceStamped(Header(self.node.now(), "map"), PoseWithCovariance(Pose(Point(x, y, 0.0), orientation), INITIAL_POSE_COVARIANCE)))
         self.status.setText(f"initialpose ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
 
     def destroy(self) -> None:
-        for widget in (self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button):
+        for arrow in self._preview.values():
+            arrow.removeNode()
+        for widget in (self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button):
             widget.destroy()

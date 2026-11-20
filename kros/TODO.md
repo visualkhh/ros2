@@ -29,7 +29,7 @@
 ## 나중에 (설계가 필요)
 
 - [x] **`Ekf` 노드** (robot_localization의 ekf_node): 바퀴 오도메트리 + IMU를 합쳐 `odometry/filtered`와 `odom -> base_footprint` TF를 낸다. 메시지 공분산, 시뮬레이션 IMU/`DiffDriveOdometry`가 공분산을 채움, `kros/nodes/ekf.py`, 예제 `main.py` 연결(바퀴 odom은 TF 끔), viz에서 odom/EKF 화살표. (`map -> odom`은 SLAM/위치추정이 낸다)
-- [ ] **내비게이션** (nav2 흉내, `nodes/nav2/`): [x] `costmap_2d` (static + inflation). [x] `planner_server` (NavfnPlanner Dijkstra/A*, ThetaStarPlanner). [x] `controller_server` (RegulatedPurePursuit, DWB). [x] MPPI, Smac planner(2D, Hybrid), 예제 기본 Smac Hybrid + MPPI. [x] `bt_navigator` (NavigateToPose, goal_pose, 재계획). [ ] viz 2D Goal Pose, 경로/costmap 그리기. [ ] obstacle layer / local costmap
+- [ ] **내비게이션** (nav2 흉내, `nodes/nav2/`): [x] `costmap_2d` (static + inflation). [x] `planner_server` (NavfnPlanner Dijkstra/A*, ThetaStarPlanner). [x] `controller_server` (RegulatedPurePursuit, DWB). [x] MPPI, Smac planner(2D, Hybrid), 예제 기본 Smac Hybrid + MPPI. [x] `bt_navigator` (NavigateToPose, goal_pose, 재계획). [x] viz 2D Goal Pose(드래그 미리보기), 경로/웨이포인트/local_plan/궤적, global/local costmap 토글, 모드 표시, 토글 버튼. [ ] obstacle layer / local costmap
 - [ ] **SLAM / 지도** (cartographer 흉내): [x] `OccupancyGrid`, viz 지도/Fixed Frame. [x] `MapServer`/`MapSaver` (yaml + pgm, 예제는 `examples/turtlebot3/artifacts/maps/`). [x] `nodes/cartographer/`: 스캔 매칭 하나로 SLAM 모드(지도 갱신)와 localization 모드(저장한 지도에서 위치만), `map -> odom` TF. [x] `/initialpose`. [ ] 루프 클로저, 스캔 매칭 속도. [x] viz 패널: SLAM 모드, 지도 저장/불러오기, 2D Pose Estimate, map/odom 강조
 - [ ] TF: 벡터/PointCloud 변환 편의 함수, URDF 파서와 `viewer/urdf_model.py`(panda3d용)의 중복 정리 (뷰어가 `kros/urdf` 파서를 쓰도록)
 - [ ] `RobotStatePublisher`: 움직이는 관절 값이 안 오면 아무것도 안 낸다 (ROS도 같음). mimic 관절, floating/planar 관절은 미지원
