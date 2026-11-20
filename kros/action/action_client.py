@@ -76,4 +76,10 @@ class ActionClient(Generic[Goal, Feedback, Result]):
             handle.feedback_callback(event.feedback)
 
     def destroy(self) -> None:
+        """클라이언트를 내린다. 결과를 기다리던 핸들은 영원히 기다리지 않게 ABORTED로 끝낸다 (여러 번 불러도 안전)."""
         self._topics.unsubscribe(self._event_sub)
+        with self._lock:
+            pending = list(self._handles.items())
+            self._handles.clear()
+        for goal_id, handle in pending:
+            handle.finish(ResultMessage(goal_id, GoalStatus.ABORTED, None))

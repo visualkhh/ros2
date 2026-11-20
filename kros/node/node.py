@@ -74,12 +74,18 @@ class Node:
         execute: Callable[[ServerGoalHandle[Goal, Feedback]], Result],
         goal_callback: Callable[[Goal], bool] | None = None,
     ) -> ActionServer[Goal, Feedback, Result]:
-        return ActionServer(name, action_type, execute, self.context.topic_manager, self.context.service_manager, goal_callback)
+        return self.context.action_manager.create_server(name, action_type, execute, goal_callback)
+
+    def destroy_action_server(self, server: ActionServer[Goal, Feedback, Result]) -> None:
+        self.context.action_manager.destroy_server(server)
 
     def create_action_client(
         self, name: str, action_type: ActionType[Goal, Feedback, Result]
     ) -> ActionClient[Goal, Feedback, Result]:
-        return ActionClient(name, action_type, self.context.topic_manager, self.context.service_manager)
+        return self.context.action_manager.create_client(name, action_type)
+
+    def destroy_action_client(self, client: ActionClient[Goal, Feedback, Result]) -> None:
+        self.context.action_manager.destroy_client(client)
 
     def __repr__(self) -> str:
         return f"Node({self.name!r})"

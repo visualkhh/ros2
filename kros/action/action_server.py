@@ -48,6 +48,9 @@ class ActionServer(Generic[Goal, Feedback, Result]):
         self._sm = service_manager
         self._lock = threading.Lock()
         self._goals: dict[str, ServerGoalHandle[Goal, Feedback]] = {}
+        self._started: set[str] = set()  # 실행을 시작한 goal
+        self._abandoned: set[str] = set()  # destroy로 시작도 못 하고 버려진 goal
+        self._destroyed = False
         self._send = service_manager.create_service(send_goal_service(name), SEND_GOAL, self._on_send_goal)
         self._cancel = service_manager.create_service(cancel_goal_service(name), CANCEL_GOAL, self._on_cancel_goal)
         self._goal_sub = topic_manager.subscribe(goal_topic(name), GoalMessage, self._run_goal)
@@ -78,7 +81,10 @@ class ActionServer(Generic[Goal, Feedback, Result]):
 
     def _run_goal(self, msg: GoalMessage) -> None:
         with self._lock:
+            if msg.goal_id in self._abandoned:  # destroy가 이미 CANCELED로 끝냈다
+                return
             handle = self._goals[msg.goal_id]
+            self._started.add(msg.goal_id)
         status, result = GoalStatus.CANCELED, None  # 시작 전에 취소됐으면 실행하지 않는다
         if not handle.is_cancel_requested:
             try:
@@ -93,12 +99,25 @@ class ActionServer(Generic[Goal, Feedback, Result]):
                 status, result = GoalStatus.ABORTED, None
         with self._lock:
             del self._goals[msg.goal_id]
+            self._started.discard(msg.goal_id)
         self._topics.publish(event_topic(self.name), ActionEvent(msg.goal_id, result=ResultMessage(msg.goal_id, status, result)))
 
     def destroy(self) -> None:
+        """서버를 내린다 (여러 번 불러도 안전). 실행 중인 goal은 취소 요청, 시작도 못 한 goal은 CANCELED로 끝낸다."""
+        with self._lock:
+            if self._destroyed:
+                return
+            self._destroyed = True
         self._sm.destroy_service(self._send)
         self._sm.destroy_service(self._cancel)
-        self._topics.unsubscribe(self._goal_sub)  # 대기 중인 goal은 버려진다
+        self._topics.unsubscribe(self._goal_sub)  # 큐에 남은 goal은 버려진다
         with self._lock:
-            for handle in self._goals.values():
-                handle.request_cancel()  # 실행 중인 goal은 취소 요청
+            handles = dict(self._goals)
+            queued = [goal_id for goal_id in handles if goal_id not in self._started]
+            self._abandoned.update(queued)
+            for goal_id in queued:
+                del self._goals[goal_id]
+        for handle in handles.values():
+            handle.request_cancel()  # 실행 중인 goal은 취소 요청
+        for goal_id in queued:  # 클라이언트가 결과를 영원히 기다리지 않게
+            self._topics.publish(event_topic(self.name), ActionEvent(goal_id, result=ResultMessage(goal_id, GoalStatus.CANCELED, None)))

@@ -341,7 +341,7 @@ class TestManagersAreNotTiedTogether(unittest.TestCase):
         root = pathlib.Path(__file__).parent.parent
         managers = ("topic", "service", "parameter")
         for manager in managers:
-            others = [m for m in managers if m != manager]
+            others = [m for m in managers if m != manager] + ["action"]  # 액션은 토픽/서비스 위에 올라가는 기능이라, 아래 매니저가 위를 import하면 안 된다
             banned = re.compile(rf"^\s*(from|import)\s+kros\.({'|'.join(others)})\b", re.M)
             for f in (root / manager).rglob("*.py"):
                 self.assertIsNone(banned.search(f.read_text()), f"{f}: {manager} 매니저가 다른 매니저를 import한다 (연결은 Context에서)")
