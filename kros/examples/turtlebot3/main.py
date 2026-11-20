@@ -16,6 +16,8 @@ from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.nodes import Node
 from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapSaver, MapServer, RobotStatePublisher
+from kros.nodes.nav2.controller import ControllerServer
+from kros.nodes.nav2.planner import PlannerServer
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
 from kros.viewer.snapshot_recorder import SnapshotRecorder
@@ -56,7 +58,11 @@ def main() -> None:
         # SLAM/위치 추정 (map -> odom)과 지도 파일 (이 예제 폴더의 artifacts/maps). viz 패널에서 모드를 바꾸고, 지도를 저장/불러오고, 2D Pose Estimate를 찍는다
         slam = Cartographer(ctx, parameters={"mode": "idle"})
         maps = {"maps_directory": str(MAPS_DIRECTORY)}
-        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps)]
+        # 내비게이션 (nav2처럼): 경로 계획은 Smac(Hybrid-A*), 따라가기는 MPPI. 둘 다 안에 costmap을 만든다 (로봇 몸 반지름으로 inflation)
+        footprint = {"robot_radius": robot.radius}
+        planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
+        controller = ControllerServer(ctx, parameters={"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController"}, costmap_parameters=footprint)
+        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()

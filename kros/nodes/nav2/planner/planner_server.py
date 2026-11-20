@@ -15,11 +15,15 @@ from kros.tf import TransformException
 
 from .global_planner import GlobalPlanner, PlannerError
 from .navfn_planner import NavfnPlanner
+from .smac_planner_2d import SmacPlanner2D
+from .smac_planner_hybrid import SmacPlannerHybrid
 from .theta_star_planner import ThetaStarPlanner
 
 PLUGINS: dict[str, type[GlobalPlanner]] = {  # nav2처럼 플러그인 이름으로 알고리즘을 고른다
     "nav2_navfn_planner::NavfnPlanner": NavfnPlanner,
     "nav2_theta_star_planner::ThetaStarPlanner": ThetaStarPlanner,
+    "nav2_smac_planner::SmacPlanner2D": SmacPlanner2D,
+    "nav2_smac_planner::SmacPlannerHybrid": SmacPlannerHybrid,
 }
 R = ComputePathToPoseResult
 
@@ -78,7 +82,7 @@ class PlannerServer(Node):
         if start is None:
             return self._fail(R.TF_ERROR, f"{frame} -> {self.costmap_ros.robot_base_frame.value} TF가 없어 로봇 위치를 모른다")
         try:
-            points = planner.create_plan(costmap, start[:2], target[:2])
+            points = planner.create_plan(costmap, start, target)
         except PlannerError as error:
             return self._fail(error.code, str(error))
         points[-1] = target[:2]  # 마지막 점은 칸 중심이 아니라 목표 그대로 (tolerance로 옮겼으면 옮긴 칸 그대로 둔다)

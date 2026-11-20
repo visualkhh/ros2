@@ -6,7 +6,7 @@ from kros.msgs.nav2_msgs import ComputePathToPoseResult
 from kros.nodes.nav2.costmap_2d import Costmap
 from kros.nodes.node import Node
 
-from .global_planner import NEIGHBORS, Cell, GlobalPlanner, PlannerError, endpoints, make_passable, step_cost, to_world, walk_back
+from .global_planner import NEIGHBORS, Pose2, Cell, GlobalPlanner, PlannerError, endpoints, make_passable, step_cost, to_world, walk_back
 
 NEUTRAL_COST, COST_FACTOR = 50.0, 0.8  # nav2 navfn의 COST_NEUTRAL, COST_FACTOR
 
@@ -22,7 +22,7 @@ class NavfnPlanner(GlobalPlanner):
         self.allow_unknown = node.declare_parameter(f"{name}.allow_unknown", True)
         self.expanded = 0  # 지난 계획에서 펼친 칸 수 (Dijkstra와 A*의 차이를 본다)
 
-    def create_plan(self, costmap: Costmap, start: tuple[float, float], goal: tuple[float, float]) -> list[tuple[float, float]]:
+    def create_plan(self, costmap: Costmap, start: Pose2, goal: Pose2) -> list[tuple[float, float]]:
         allow_unknown = self.allow_unknown.value
         s, g = endpoints(costmap, start, goal, self.tolerance.value, allow_unknown)
         ok = make_passable(costmap, s, allow_unknown)

@@ -8,7 +8,7 @@ from kros.msgs.nav2_msgs import ComputePathToPoseResult
 from kros.nodes.nav2.costmap_2d import INSCRIBED_INFLATED_OBSTACLE, NO_INFORMATION, Costmap
 from kros.nodes.node import Node
 
-from .global_planner import NEIGHBORS, Cell, GlobalPlanner, PlannerError, endpoints, make_passable, walk_back
+from .global_planner import NEIGHBORS, Pose2, Cell, GlobalPlanner, PlannerError, endpoints, make_passable, walk_back
 
 
 class ThetaStarPlanner(GlobalPlanner):
@@ -23,7 +23,7 @@ class ThetaStarPlanner(GlobalPlanner):
         self.tolerance = node.declare_parameter(f"{name}.tolerance", 0.5, validator=non_negative)
         self.expanded = 0
 
-    def create_plan(self, costmap: Costmap, start: tuple[float, float], goal: tuple[float, float]) -> list[tuple[float, float]]:
+    def create_plan(self, costmap: Costmap, start: Pose2, goal: Pose2) -> list[tuple[float, float]]:
         s, g = endpoints(costmap, start, goal, self.tolerance.value, self.allow_unknown.value)
         ok = make_passable(costmap, s, self.allow_unknown.value)
         w_euc, w_trav = self.w_euc_cost.value, self.w_traversal_cost.value

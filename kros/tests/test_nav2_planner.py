@@ -10,7 +10,7 @@ from kros.msgs.nav_msgs import FREE, OCCUPIED, MapMetaData, OccupancyGrid, Path
 from kros.msgs.std_msgs import Header
 from kros.nodes import Node
 from kros.nodes.nav2.costmap_2d import INSCRIBED_INFLATED_OBSTACLE, Costmap
-from kros.nodes.nav2.planner import NavfnPlanner, PlannerError, PlannerServer, ThetaStarPlanner
+from kros.nodes.nav2.planner import NavfnPlanner, PlannerError, PlannerServer, SmacPlanner2D, SmacPlannerHybrid, ThetaStarPlanner
 from kros.nodes.nav2.planner.global_planner import GlobalPlanner
 from kros.parameter import ParameterValue
 from kros.tf import TransformBroadcaster
@@ -50,6 +50,16 @@ def length(points: list[tuple[float, float]]) -> float:
     return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
 
 
+def min_radius(points: list[tuple[float, float]]) -> float:
+    """연속한 세 점의 외접원 반지름 중 가장 작은 것 (경로가 가장 급하게 도는 곳)."""
+    radius = math.inf
+    for a, b, c in zip(points, points[1:], points[2:]):
+        area = abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
+        if area > 1e-9:
+            radius = min(radius, math.dist(a, b) * math.dist(b, c) * math.dist(c, a) / (4 * area))
+    return radius
+
+
 def turns(points: list[tuple[float, float]]) -> int:
     """방향이 바뀌는 횟수."""
     headings = [round(math.atan2(b[1] - a[1], b[0] - a[0]), 3) for a, b in zip(points, points[1:]) if a != b]
@@ -57,11 +67,11 @@ def turns(points: list[tuple[float, float]]) -> int:
 
 
 class TestPlanners(unittest.TestCase):
-    START, GOAL = (0.5, 0.5), (2.5, 0.5)  # 벽 왼쪽 아래 -> 오른쪽 아래: 위쪽 틈으로 돌아가야 한다
+    START, GOAL = (0.5, 0.5, 0.0), (2.5, 0.5, 0.0)  # 벽 왼쪽 아래 -> 오른쪽 아래: 위쪽 틈으로 돌아가야 한다
 
     def check_path(self, grid: Costmap, points: list[tuple[float, float]]) -> None:
-        self.assertLess(math.dist(points[0], self.START), RES)
-        self.assertLess(math.dist(points[-1], self.GOAL), RES)
+        self.assertLess(math.dist(points[0], self.START[:2]), RES)
+        self.assertLess(math.dist(points[-1], self.GOAL[:2]), RES)
         self.assertGreater(max(y for _, y in points), 1.5)  # 틈으로 갔다
         for x, y in points:
             self.assertLess(grid.cost_at(x, y), INSCRIBED_INFLATED_OBSTACLE, (x, y))  # 몸이 벽에 닿는 곳을 지나지 않는다
@@ -89,28 +99,44 @@ class TestPlanners(unittest.TestCase):
 
     def test_theta_star_goes_straight_at_any_angle_in_open_space(self) -> None:
         grid = costmap()
-        start, goal = (0.33, 0.33), (1.23, 0.78)  # 막힘 없는 왼쪽 방, 26도쯤: 8방향 격자로는 한 번 꺾어야 한다
+        start, goal = (0.33, 0.33, 0.0), (1.23, 0.78, 0.0)  # 막힘 없는 왼쪽 방, 26도쯤: 8방향 격자로는 한 번 꺾어야 한다
         straight = plugin(ThetaStarPlanner, w_traversal_cost=0.0).create_plan(grid, start, goal)
         self.assertEqual(turns(straight), 0)
         self.assertGreater(turns(plugin(NavfnPlanner, use_astar=True).create_plan(grid, start, goal)), 0)
+
+    def test_smac_2d_smoother_rounds_the_corners(self) -> None:
+        grid = costmap()
+        smooth = plugin(SmacPlanner2D).create_plan(grid, self.START, self.GOAL)
+        raw = plugin(SmacPlanner2D, smooth_path=False).create_plan(grid, self.START, self.GOAL)
+        self.check_path(grid, smooth)
+        self.assertGreater(min_radius(smooth), min_radius(raw) * 1.2)  # 꺾인 칸 경로를 편다
+
+    def test_smac_hybrid_respects_the_turning_radius_and_start_heading(self) -> None:
+        grid = costmap()
+        for heading in (0.0, math.pi / 2):
+            points = plugin(SmacPlannerHybrid, minimum_turning_radius=0.3).create_plan(grid, (0.5, 0.5, heading), self.GOAL)
+            self.check_path(grid, points)
+            self.assertGreater(min_radius(points), 0.3 * 0.95)  # 로봇이 달릴 수 있는 곡률
+            first = math.atan2(points[1][1] - points[0][1], points[1][0] - points[0][0])
+            self.assertAlmostEqual(first, heading, delta=0.2)  # 지금 보는 방향으로 출발한다
 
     def test_failures_have_nav2_error_codes(self) -> None:
         navfn = plugin(NavfnPlanner, tolerance=0.0)
         with self.assertRaises(PlannerError) as caught:
             navfn.create_plan(costmap(gap=False), self.START, self.GOAL)
         self.assertEqual(caught.exception.code, ComputePathToPoseResult.NO_VALID_PATH)
-        for goal, code in (((9.0, 0.5), ComputePathToPoseResult.GOAL_OUTSIDE_MAP), ((1.52, 0.5), ComputePathToPoseResult.GOAL_OCCUPIED)):
+        for goal, code in (((9.0, 0.5, 0.0), ComputePathToPoseResult.GOAL_OUTSIDE_MAP), ((1.52, 0.5, 0.0), ComputePathToPoseResult.GOAL_OCCUPIED)):
             with self.assertRaises(PlannerError) as caught:
                 navfn.create_plan(costmap(), self.START, goal)
             self.assertEqual(caught.exception.code, code)
 
     def test_goal_in_a_wall_moves_within_tolerance_and_a_robot_against_a_wall_can_leave(self) -> None:
         grid = costmap()
-        points = plugin(NavfnPlanner, tolerance=0.5).create_plan(grid, self.START, (1.52, 0.5))  # 벽 속 목표
+        points = plugin(NavfnPlanner, tolerance=0.5).create_plan(grid, self.START, (1.52, 0.5, 0.0))  # 벽 속 목표
         self.assertLess(math.dist(points[-1], (1.52, 0.5)), 0.5)
         self.assertLess(grid.cost_at(*points[-1]), INSCRIBED_INFLATED_OBSTACLE)
-        hugging = (1.43, 0.5)  # 벽에서 0.07m: 몸이 닿는 칸에 서 있다
-        self.assertGreaterEqual(grid.cost_at(*hugging), INSCRIBED_INFLATED_OBSTACLE)
+        hugging = (1.43, 0.5, 0.0)  # 벽에서 0.07m: 몸이 닿는 칸에 서 있다
+        self.assertGreaterEqual(grid.cost_at(*hugging[:2]), INSCRIBED_INFLATED_OBSTACLE)
         self.assertTrue(plugin(NavfnPlanner).create_plan(grid, hugging, self.START))
 
 

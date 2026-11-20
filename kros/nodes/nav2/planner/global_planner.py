@@ -18,13 +18,17 @@ class PlannerError(Exception):
         self.code = code
 
 
+Pose2 = tuple[float, float, float]  # (x, y, yaw)
+
+
 class GlobalPlanner:
-    """플러그인: configure(node, name)에서 "<name>.<파라미터>"를 선언하고, create_plan이 world 좌표 점들을 돌려준다 (실패면 PlannerError)."""
+    """플러그인: configure(node, name)에서 "<name>.<파라미터>"를 선언하고, create_plan이 world 좌표 점들을 돌려준다 (실패면 PlannerError).
+    start/goal은 (x, y, yaw): 격자 플래너는 x, y만 보고, Hybrid-A*처럼 방향을 아는 플래너는 yaw도 본다."""
 
     def configure(self, node: Node, name: str) -> None:
         self.node, self.name = node, name
 
-    def create_plan(self, costmap: Costmap, start: tuple[float, float], goal: tuple[float, float]) -> list[tuple[float, float]]:
+    def create_plan(self, costmap: Costmap, start: Pose2, goal: Pose2) -> list[tuple[float, float]]:
         raise NotImplementedError
 
 
@@ -33,9 +37,9 @@ def passable(cost: int, allow_unknown: bool) -> bool:
     return cost < INSCRIBED_INFLATED_OBSTACLE or (cost == NO_INFORMATION and allow_unknown)
 
 
-def endpoints(costmap: Costmap, start: tuple[float, float], goal: tuple[float, float], tolerance: float, allow_unknown: bool) -> tuple[Cell, Cell]:
+def endpoints(costmap: Costmap, start: Pose2 | tuple[float, float], goal: Pose2 | tuple[float, float], tolerance: float, allow_unknown: bool) -> tuple[Cell, Cell]:
     """시작/목표 칸. 목표가 못 가는 칸이면 tolerance(m) 안에서 가장 가까운 갈 수 있는 칸으로 (nav2 navfn의 tolerance)."""
-    s, g = costmap.world_to_map(*start), costmap.world_to_map(*goal)
+    s, g = costmap.world_to_map(start[0], start[1]), costmap.world_to_map(goal[0], goal[1])
     if s is None:
         raise PlannerError(R.START_OUTSIDE_MAP, f"시작 {start}이 지도 밖이다")
     if g is None:

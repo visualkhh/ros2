@@ -13,7 +13,7 @@ from kros.msgs.nav2_msgs import ComputePathToPose, ComputePathToPoseGoal, Comput
 from kros.msgs.nav_msgs import FREE, OCCUPIED, MapMetaData, OccupancyGrid, Path
 from kros.msgs.std_msgs import Header
 from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, Node, RobotStatePublisher
-from kros.nodes.nav2.controller import ControllerError, ControllerServer, DWBLocalPlanner, RegulatedPurePursuitController, SimpleGoalChecker, SimpleProgressChecker
+from kros.nodes.nav2.controller import ControllerError, ControllerServer, DWBLocalPlanner, MPPIController, RegulatedPurePursuitController, SimpleGoalChecker, SimpleProgressChecker
 from kros.nodes.nav2.controller.controller import Controller, Pose2, blocked
 from kros.nodes.nav2.costmap_2d import Costmap
 from kros.nodes.nav2.planner import PlannerServer
@@ -123,6 +123,36 @@ class TestDwb(unittest.TestCase):
         self.assertGreater(w, 0.0)
 
 
+class TestMppi(unittest.TestCase):
+    def make(self, **parameters: float | bool) -> MPPIController:
+        mppi = Plugins(self, **parameters).make(MPPIController)
+        assert isinstance(mppi, MPPIController)
+        return mppi
+
+    def test_drives_forward_along_a_straight_path(self) -> None:
+        mppi = self.make()
+        path = line((0.0, 0.0), (1.5, 0.0))
+        for _ in range(10):  # warm start: 몇 주기 지나면 시퀀스가 경로를 따른다
+            v, w = mppi.compute_velocity_commands((0.0, 0.0, 0.0), (0.1, 0.0), path, costmap(), 0.05)
+        self.assertGreater(v, 0.1)
+        self.assertLess(abs(w), 0.3)
+        self.assertGreater(mppi.best[-1][0], 0.2)  # 고른 자취가 앞으로 뻗는다 (2초 x 최고 0.22m/s 안)
+
+    def test_turns_toward_a_path_behind(self) -> None:
+        mppi = self.make()
+        for _ in range(10):
+            _, w = mppi.compute_velocity_commands((0.0, 0.0, 0.0), (0.0, 0.0), line((0.0, 0.0), (0.0, 1.5)), costmap(), 0.05)
+        self.assertGreater(w, 0.3)  # 왼쪽 경로를 향해 돈다
+
+    def test_same_seed_same_command_and_walls_all_around_fail(self) -> None:
+        a, b = self.make(seed=3), self.make(seed=3)
+        path = line((0.0, 0.0), (1.5, 0.0))
+        self.assertEqual(a.compute_velocity_commands((0.0, 0.0, 0.0), (0.1, 0.0), path, costmap(), 0.05), b.compute_velocity_commands((0.0, 0.0, 0.0), (0.1, 0.0), path, costmap(), 0.05))
+        walls = [(x / 100, y / 100) for x in range(-30, 31) for y in range(-30, 31) if max(abs(x), abs(y)) >= 25]
+        with self.assertRaises(ControllerError):  # 0.25m 상자 (몸 반지름 0.2 + 잡음 자취는 모두 닿는다)
+            self.make(vx_min=0.0, wz_max=0.01).compute_velocity_commands((0.0, 0.0, 0.0), (0.2, 0.0), path, costmap(walls), 0.05)
+
+
 class TestCheckers(unittest.TestCase):
     def test_goal_and_progress_checkers(self) -> None:
         node = Plugins(self).node
@@ -203,7 +233,7 @@ class TestControllerServer(unittest.TestCase):
 class TestNavigationInSimulation(unittest.TestCase):
     """노이즈 TurtleBot3 + EKF + Cartographer(SLAM) + planner + controller: 왼쪽 위 목표까지 실제로 간다."""
 
-    def go(self, plugin: str) -> tuple[float, FollowPathResult]:
+    def go(self, plugin: str, planner: str = "nav2_navfn_planner::NavfnPlanner") -> tuple[float, FollowPathResult]:
         world, robot = MazeWorld(puck_count=0), TurtleBot3(noisy=True, seed=1)
         world.add(robot)
         source = SimulatedTimeSource()
@@ -215,7 +245,7 @@ class TestNavigationInSimulation(unittest.TestCase):
             ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
             controller = ControllerServer(ctx, parameters={"odom_topic": "odometry/filtered", "FollowPath.plugin": plugin}, costmap_parameters=footprint)
             description = RobotStatePublisher(ctx, parameters={"robot_description": TurtleBot3.urdf_path.read_text()})
-            return [made["user"], RobotBridge(ctx, robot), description, DiffDriveOdometry(ctx, parameters={"publish_tf": False}), ekf, Cartographer(ctx), PlannerServer(ctx, costmap_parameters=footprint), controller]
+            return [made["user"], RobotBridge(ctx, robot), description, DiffDriveOdometry(ctx, parameters={"publish_tf": False}), ekf, Cartographer(ctx), PlannerServer(ctx, parameters={"GridBased.plugin": planner}, costmap_parameters=footprint), controller]
 
         kros = Kros(create, time_source=source)
         self.addCleanup(kros.shutdown)
@@ -243,6 +273,11 @@ class TestNavigationInSimulation(unittest.TestCase):
         error, result = self.go("nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController")
         self.assertEqual(result.error_code, FollowPathResult.NONE)
         self.assertLess(error, 0.3)  # xy_goal_tolerance 0.25 + SLAM 오차
+
+    def test_mppi_with_smac_hybrid_reaches_the_goal(self) -> None:
+        error, result = self.go("nav2_mppi_controller::MPPIController", "nav2_smac_planner::SmacPlannerHybrid")
+        self.assertEqual(result.error_code, FollowPathResult.NONE)
+        self.assertLess(error, 0.3)
 
     def test_dwb_reaches_the_goal(self) -> None:
         error, result = self.go("dwb_core::DWBLocalPlanner")

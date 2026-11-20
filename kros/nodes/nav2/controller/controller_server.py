@@ -13,12 +13,14 @@ from kros.parameter import ParameterValue
 
 from .controller import Controller, ControllerError, Velocity
 from .dwb import DWBLocalPlanner
+from .mppi import MPPIController
 from .goal_checker import SimpleGoalChecker, SimpleProgressChecker
 from .regulated_pure_pursuit import RegulatedPurePursuitController
 
 PLUGINS: dict[str, type[Controller]] = {  # nav2처럼 플러그인 이름으로 알고리즘을 고른다
     "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController": RegulatedPurePursuitController,
     "dwb_core::DWBLocalPlanner": DWBLocalPlanner,
+    "nav2_mppi_controller::MPPIController": MPPIController,
 }
 R = FollowPathResult
 CMD_VEL_TOPIC_NAME = "cmd_vel"
