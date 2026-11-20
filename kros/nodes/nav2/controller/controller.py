@@ -22,6 +22,7 @@ class Controller:
 
     def configure(self, node: Node, name: str) -> None:
         self.node, self.name = node, name
+        self.local_plan: list[Pose2] = []  # 이번 명령으로 앞으로 굴러갈 예상 자취 (controller_server가 local_plan 토픽으로 낸다)
 
     def compute_velocity_commands(self, pose: Pose2, velocity: Velocity, path: list[Pose2], costmap: Costmap, dt: float) -> Velocity:
         raise NotImplementedError

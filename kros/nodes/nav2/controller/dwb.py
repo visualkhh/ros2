@@ -81,7 +81,7 @@ class DWBLocalPlanner(Controller):
                         best = (score, (v, w), trajectory)
         if best is None:
             raise ControllerError(FollowPathResult.NO_VALID_CONTROL, "모든 자취가 벽에 닿는다")
-        self.best = best[2]
+        self.best = self.local_plan = best[2]
         return best[1]
 
     def _local_plan(self, pose: Pose2, path: list[Pose2]) -> list[Pose2]:

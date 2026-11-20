@@ -4,9 +4,10 @@ from collections.abc import Mapping
 
 from kros.action.server_goal_handle import ServerGoalHandle
 from kros.context import Context
-from kros.msgs.geometry_msgs import Quaternion, Twist, Vector3
+from kros.msgs.geometry_msgs import Point, Pose, PoseStamped, Quaternion, Twist, Vector3
 from kros.msgs.nav2_msgs import FollowPath, FollowPathFeedback, FollowPathGoal, FollowPathResult
-from kros.msgs.nav_msgs import Odometry
+from kros.msgs.nav_msgs import Odometry, Path
+from kros.msgs.std_msgs import Header
 from kros.nodes.nav2.costmap_2d import Costmap2DROS
 from kros.nodes.node import Node
 from kros.parameter import ParameterValue
@@ -24,6 +25,7 @@ PLUGINS: dict[str, type[Controller]] = {  # nav2처럼 플러그인 이름으로
 }
 R = FollowPathResult
 CMD_VEL_TOPIC_NAME = "cmd_vel"
+LOCAL_PLAN_TOPIC_NAME = "local_plan"
 
 
 class ControllerServer(Node):
@@ -105,6 +107,9 @@ class ControllerServer(Node):
             except ControllerError as error:
                 return self._fail(error.code, str(error))
             self.publish(CMD_VEL_TOPIC_NAME, Twist(Vector3(x=v), Vector3(z=w)))
+            stamp = self.now()
+            local = tuple(PoseStamped(Header(stamp, frame), Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))) for x, y, yaw in controller.local_plan)
+            self.publish(LOCAL_PLAN_TOPIC_NAME, Path(Header(stamp, frame), local))  # nav2처럼: 고른 명령의 예상 자취
             handle.publish_feedback(FollowPathFeedback(math.hypot(path[-1][0] - pose[0], path[-1][1] - pose[1]), v))
 
     def _fail(self, code: int, message: str) -> FollowPathResult:

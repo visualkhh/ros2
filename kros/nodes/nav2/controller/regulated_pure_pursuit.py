@@ -43,6 +43,7 @@ class RegulatedPurePursuitController(Controller):
     def compute_velocity_commands(self, pose: Pose2, velocity: Velocity, path: list[Pose2], costmap: Costmap, dt: float) -> Velocity:
         rest = path[closest_index(pose, path):]
         goal = path[-1]
+        self.local_plan = []
         if math.hypot(goal[0] - pose[0], goal[1] - pose[1]) < self.goal_dist_tol.value:  # 거의 왔다: 목표 방향으로만 돈다
             return 0.0, self._rotate(wrap(goal[2] - pose[2]), velocity[1], dt)
         lookahead = self.lookahead_dist.value
@@ -65,9 +66,10 @@ class RegulatedPurePursuitController(Controller):
         if remaining < self.approach_velocity_scaling_dist.value:  # 목표 가까이: 남은 거리에 비례해 늦춘다
             v = max(v * remaining / self.approach_velocity_scaling_dist.value, self.min_approach_linear_velocity.value)
         w = v * curvature
+        seconds = min(self.max_allowed_time_to_collision_up_to_carrot.value, math.sqrt(distance2) / max(v, 1e-6))
+        self.local_plan = simulate(pose, v, w, seconds, costmap.resolution / max(v, 1e-6))  # carrot까지의 원호
         if self.use_collision_detection.value:
-            seconds = min(self.max_allowed_time_to_collision_up_to_carrot.value, math.sqrt(distance2) / max(v, 1e-6))
-            for x, y, _ in simulate(pose, v, w, seconds, costmap.resolution / max(v, 1e-6)):
+            for x, y, _ in self.local_plan:
                 if math.hypot(x - pose[0], y - pose[1]) > 0.1 and blocked(costmap, x, y):  # 바로 둘레는 빼고 (벽에 붙어 있어도 빠져나간다)
                     raise ControllerError(FollowPathResult.NO_VALID_CONTROL, f"앞 경로 ({x:.2f}, {y:.2f})에서 벽에 닿는다")
         return v, w

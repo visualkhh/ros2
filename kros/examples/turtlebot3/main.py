@@ -16,6 +16,7 @@ from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.nodes import Node
 from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapSaver, MapServer, RobotStatePublisher
+from kros.nodes.nav2.bt_navigator import BtNavigator
 from kros.nodes.nav2.controller import ControllerServer
 from kros.nodes.nav2.planner import PlannerServer
 from kros.timer import SimulatedTimeSource
@@ -62,7 +63,8 @@ def main() -> None:
         footprint = {"robot_radius": robot.radius}
         planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
         controller = ControllerServer(ctx, parameters={"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController"}, costmap_parameters=footprint)
-        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller]
+        navigator = BtNavigator(ctx)  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 1초마다 재계획
+        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller, navigator]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()

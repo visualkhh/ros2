@@ -85,7 +85,7 @@ class MPPIController(Controller):
         self.control = [
             (sum(wt * c[1][t][0] for wt, c in zip(weights, candidates)) / total, sum(wt * c[1][t][1] for wt, c in zip(weights, candidates)) / total) for t in range(steps)
         ]
-        self.best = _rollout(pose, self.control, model_dt)
+        self.best = self.local_plan = _rollout(pose, self.control, model_dt)
         command = self.control[0]
         self.control = self.control[1:] + self.control[-1:]  # 한 칸 밀어 다음 주기의 출발점으로
         return command

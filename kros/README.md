@@ -109,6 +109,8 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
   - `nav2_mppi_controller::MPPIController`: 지난 제어 시퀀스(`time_steps` x `model_dt`)에 잡음(`vx_std`, `wz_std`)을 섞은 후보 `batch_size`개를 굴려 critic(CostCritic, GoalCritic, GoalAngleCritic, PathAlignCritic, PathFollowCritic, PathAngleCritic, PreferForwardCritic; nav2 기본 cost_weight)으로 매기고 `exp(-비용/temperature)` 가중 평균의 첫 명령을 낸다(warm start로 한 칸씩 민다). 기본 샘플 수는 nav2(2000 x 56)보다 훨씬 작다(80 x 20, 한 번에 약 4ms). `seed`가 같으면 같은 잡음.
   - 테스트: 노이즈 TurtleBot3 + EKF + Cartographer + planner + controller로 RPP, DWB, MPPI(+Smac Hybrid) 모두 실제로 목표까지 간다.
   - 예제 `main.py`의 기본: planner는 Smac Hybrid, controller는 MPPI.
+  - controller는 nav2처럼 `local_plan`(`nav_msgs/Path`: 고른 명령의 예상 자취)도 낸다.
+- `bt_navigator`: `BtNavigator` 노드가 `navigate_to_pose` 액션(`nav2_msgs/NavigateToPose`)을 받아 `compute_path_to_pose`로 계획하고 `follow_path`로 따라가게 한다. nav2 기본 BT의 흐름을 코드로 고정했다: `replanning_period`(1초)마다 다시 계획해 새 경로를 보내고(controller가 갈아탄다), controller가 실패하면 `number_of_recoveries`번까지 다시 계획해 이어 간다. 피드백은 지금 위치/남은 거리/걸린 시간. `goal_pose` 토픽(rviz의 2D Goal Pose)을 받으면 자기에게 goal을 보낸다. 새 goal이 오면 지금 goal은 물러난다.
   - 주의(테스트): goal 실행은 액션 서버의 구독 스레드에서 돌아서, goal이 도는 동안 `topic_manager.join()`을 부르면 끝나지 않는다.
 
 **SLAM / 위치 추정**: `nodes/cartographer/`의 `Cartographer`(노드 이름 `cartographer`)는 라이다 스캔을 격자 지도에 맞춰(스캔 매칭) 로봇 위치를 바로잡고 `map -> odom` TF를 낸다. odom 아래(`odom -> base_footprint`)는 EKF가 그대로 내고, 이 노드는 그 위에 하나만 얹는다(REP-105).
