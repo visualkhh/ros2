@@ -25,8 +25,8 @@ from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.objects import Puck, Wall
 from kros.worlds.maze.track import CENTER, SIZE
 
-from kros.viewer.simulation_runner import SimulationRunner
 from kros.viewer.snapshot import Snapshot
+from kros.viewer.snapshot_recorder import SnapshotRecorder
 from .shapes import box, cylinder
 from .urdf_model import UrdfModel
 
@@ -40,14 +40,14 @@ ARROWS = {"arrow_up": "up", "arrow_down": "down", "arrow_left": "left", "arrow_r
 
 
 class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없다
-    """Panda3D 3D 창(GPU 렌더링): 키 입력 -> on_keys, 매 프레임 runner.latest(Snapshot)를 그린다 (월드는 따로 돈다)."""
+    """Panda3D 3D 창(GPU 렌더링): 키 입력 -> on_keys, 매 프레임 recorder.latest(Snapshot)를 그린다 (월드는 따로 돈다)."""
 
-    def __init__(self, runner: SimulationRunner, on_keys: Callable[[frozenset[str]], None]) -> None:
+    def __init__(self, recorder: SnapshotRecorder, on_keys: Callable[[frozenset[str]], None]) -> None:
         loadPrcFileData("", "window-title kros TurtleBot3 simulator\nframebuffer-multisample 1\nmultisamples 4\nsync-video 1")
         super().__init__()
-        self.runner = runner  # 화면은 runner.latest(Snapshot)만 읽는다. 월드는 만지지 않는다
-        self.world, self.robot_hw = runner.world, runner.robot  # 장면을 처음 만들 때만 쓴다 (모양, 크기, URDF)
-        self.snap: Snapshot = runner.latest
+        self.snapshots = recorder  # 화면은 snapshots.latest(Snapshot)만 읽는다. 월드는 만지지 않는다 (self.recorder는 ShowBase가 쓰는 이름이라 피한다)
+        self.world, self.robot_hw = recorder.world, recorder.robot  # 장면을 처음 만들 때만 쓴다 (모양, 크기, URDF)
+        self.snap: Snapshot = recorder.latest
         self.on_keys = on_keys  # 창이 받은 키를 바깥으로 넘기는 통로
         self._scan_drawn: object = None
         self._scan_np: NodePath | None = None
@@ -191,7 +191,7 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
     def _update(self, task):  # type: ignore[no-untyped-def]
         dt = min(ClockObject.getGlobalClock().getDt(), 0.1)
         self.on_keys(frozenset(self.keys))
-        self.snap = snap = self.runner.latest  # 월드는 따로 돌고 있다. 화면은 가장 최근 스냅샷을 그리기만 한다
+        self.snap = snap = self.snapshots.latest  # 월드는 따로 돌고 있다. 화면은 가장 최근 스냅샷을 그리기만 한다
         p, cmd = snap.poses[snap.robot_index], snap.command
         self.robot.setPos(p.x, p.y, 0)
         self.robot.setH(math.degrees(p.theta))

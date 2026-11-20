@@ -24,7 +24,7 @@ kros/
 │   │                  lds_01.py(LDS-01 라이다), xl430_w250.py(XL430-W250 모터 한 개): 모델 번호별 구현 (시뮬레이션/더미, 진짜도 여기에)
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
 │       └── turtlebot3/  TurtleBot3(Robot): diff_drive.py(DiffDrive: XL430-W250 바퀴 모터 둘을 묶은 구동부) + LDS-01 라이다를 달고, 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
-├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 월드를 화면과 따로 고정 간격으로 돌리는 simulation_runner.py(SimulationRunner)와 그 순간의 불변 데이터 snapshot.py(Snapshot)도 여기에 있다(이 둘은 panda3d 없이 돈다). kros와 무관
+├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 스텝마다 그 순간을 불변 데이터 Snapshot(snapshot.py)으로 만드는 SnapshotRecorder(snapshot_recorder.py: 월드와 로봇을 아는 곳)가 러너의 리스너로 달리고, Viewer는 그 최신 스냅샷만 그린다. snapshot/recorder는 panda3d 없이 돈다. kros와 무관
 ├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성
@@ -58,7 +58,7 @@ pub.publish("chat", "hello")   # -> hello
 - **타이머**: `node.create_timer(period, callback)` -> `Timer`, `node.destroy_timer(timer)`/`timer.cancel()`. 첫 호출은 만든 뒤 `period`가 지났을 때다. 콜백은 **그 타이머 전용 워커 스레드 하나**에서 순서대로 돌고(구독과 같은 결), 예외는 로그만 남기고 타이머는 계속 돈다.
 - **사실만 노출한다**: `timer.calls`(실제로 불린 횟수), `timer.missed`(주기가 됐지만 부르지 못한 횟수). 지난 콜백이 아직 실행 중이면 새 호출은 쌓지 않고 버리며 `missed`로 센다. 시간이 한꺼번에 건너뛰면(예: 시뮬레이션 `dt`가 큼) 한 번만 부르고 나머지는 `missed`로 세되, 박자는 유지한다.
 - **동작 방식**: 실제 시간이면 스케줄 스레드 하나가 가장 가까운 주기까지 기다렸다 깨운다(타이머가 없으면 스레드도 없다). 시뮬레이션 시간이면 시간을 `set`하는 쪽이 **그 스레드에서 바로** 타이머를 판정하므로 스레드 없이 결정적으로 동작한다.
-- 이 예제(`examples/turtlebot3`)에서는 `SimulationRunner.add_listener`로 매 스텝 시뮬레이션 시간을 `SimulatedTimeSource`에 밀어 준다.
+- 이 예제(`examples/turtlebot3`)에서는 `SimulationRunner.add_listener`로 매 스텝 `world.time`을 `SimulatedTimeSource`에 밀어 준다. 러너는 월드만 알고, 스텝마다 월드를 읽어야 하는 쪽(스냅샷 기록기, kros 시간)이 리스너로 달린다.
 
 ## 파라미터
 
@@ -196,7 +196,7 @@ kros/examples/turtlebot3/run.sh
 
 **화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `viewer/urdf_model.py`가 읽어 만들고(STL은 `viewer/stl.py`), 바닥/벽은 `viewer/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
 
-**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_simulation_runner.py`(러너 스레드, 스냅샷), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`는 자동 테스트가 없다(스크린샷으로 수동 확인).
+**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
 
 ## TODO
 
