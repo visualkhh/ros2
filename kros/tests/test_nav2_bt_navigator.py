@@ -81,7 +81,7 @@ class TestBtNavigator(unittest.TestCase):
             nav.run(0.5)
             if nav.error_to(0.6, 0.9) < 0.3 and abs(nav.robot.pose.theta) < 0.3:
                 break
-        self.assertLess(nav.error_to(0.6, 0.9), 0.4)  # 도착 허용 0.25m(map 기준) + SLAM 위치 오차
+        self.assertLess(nav.error_to(0.6, 0.9), 0.3)  # 도착 허용 0.25m(map 기준) + SLAM 위치 오차
 
     def test_unreachable_goal_fails_with_the_planner_error(self) -> None:
         nav = Navigation(self)

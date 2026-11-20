@@ -46,7 +46,7 @@ class MPPIController(Controller):
         self.seed = node.declare_parameter(f"{name}.seed", 0)
         self.weights = {critic: node.declare_parameter(f"{name}.{critic}.cost_weight", weight, validator=non_negative) for critic, weight in CRITIC_WEIGHTS.items()}
         self.goal_threshold = node.declare_parameter(f"{name}.GoalCritic.threshold_to_consider", 1.0, validator=positive)
-        self.goal_angle_threshold = node.declare_parameter(f"{name}.GoalAngleCritic.threshold_to_consider", 0.5, validator=positive)
+        self.goal_angle_threshold = node.declare_parameter(f"{name}.GoalAngleCritic.threshold_to_consider", 0.2, validator=positive)  # 도착 허용(0.25)보다 작게: 먼저 자리, 그다음 방향 (차동 구동은 옆으로 못 가서, 멀리서 방향부터 맞추면 멈춘다)
         self.path_follow_threshold = node.declare_parameter(f"{name}.PathFollowCritic.threshold_to_consider", 1.0, validator=positive)
         self.path_follow_offset = node.declare_parameter(f"{name}.PathFollowCritic.offset_from_furthest", 6, validator=positive)
         self.path_angle_offset = node.declare_parameter(f"{name}.PathAngleCritic.offset_from_furthest", 4, validator=positive)

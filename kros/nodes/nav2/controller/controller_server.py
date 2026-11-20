@@ -33,7 +33,7 @@ class ControllerServer(Node):
     nav2처럼 자기 안에 local_costmap(Costmap2DROS) 노드를 만든다 (파라미터는 costmap_parameters).
     shortcut: local_costmap은 nav2의 rolling window + obstacle layer가 아니라 지도 기반이다, 지도에 없는 장애물을 피해야 할 때 바꾼다.
 
-    파라미터: controller_frequency (Hz), controller_plugins (기본 ("FollowPath",)), "<이름>.plugin" (PLUGINS의 키), odom_topic (지금 속도),
+    파라미터: cmd_vel_topic (내보낼 토픽, 기본 cmd_vel), controller_frequency (Hz), controller_plugins (기본 ("FollowPath",)), "<이름>.plugin" (PLUGINS의 키), odom_topic (지금 속도),
     general_goal_checker.xy_goal_tolerance/yaw_goal_tolerance (도착), progress_checker.required_movement_radius/movement_time_allowance (막힘).
     새 경로(goal)가 오면 앞의 것은 물러나고 새 경로를 따른다 (nav2가 재계획한 경로로 갈아타듯).
     """
@@ -46,6 +46,7 @@ class ControllerServer(Node):
         self.controller_frequency = self.declare_parameter("controller_frequency", 20.0, validator=lambda value: value > 0)
         self.controller_plugins = self.declare_parameter("controller_plugins", ("FollowPath",), validator=lambda ids: len(ids) > 0)
         self.odom_topic = self.declare_parameter("odom_topic", "odom")
+        self.cmd_vel_topic = self.declare_parameter("cmd_vel_topic", CMD_VEL_TOPIC_NAME)  # ROS에서는 remap으로 바꾸는 자리 (twist_mux 앞이면 cmd_vel_nav)
         self.controllers: dict[str, Controller] = {}
         for plugin_id in self.controller_plugins.value:
             kind = self.declare_parameter(f"{plugin_id}.plugin", "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController", validator=lambda value: value in PLUGINS)
@@ -69,7 +70,7 @@ class ControllerServer(Node):
         self.velocity = (odom.twist.twist.linear.x, odom.twist.twist.angular.z)
 
     def _stop(self) -> None:
-        self.publish(CMD_VEL_TOPIC_NAME, Twist())
+        self.publish(self.cmd_vel_topic.value, Twist())
 
     def _execute(self, handle: ServerGoalHandle[FollowPathGoal, FollowPathFeedback]) -> FollowPathResult:
         goal = handle.goal
@@ -106,7 +107,7 @@ class ControllerServer(Node):
                 v, w = controller.compute_velocity_commands(pose, self.velocity, path, costmap, period)
             except ControllerError as error:
                 return self._fail(error.code, str(error))
-            self.publish(CMD_VEL_TOPIC_NAME, Twist(Vector3(x=v), Vector3(z=w)))
+            self.publish(self.cmd_vel_topic.value, Twist(Vector3(x=v), Vector3(z=w)))
             stamp = self.now()
             local = tuple(PoseStamped(Header(stamp, frame), Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))) for x, y, yaw in controller.local_plan)
             self.publish(LOCAL_PLAN_TOPIC_NAME, Path(Header(stamp, frame), local))  # nav2처럼: 고른 명령의 예상 자취
