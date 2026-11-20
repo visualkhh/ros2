@@ -55,3 +55,6 @@
 - [ ] `Subscription`/`TopicManager` 스트레스 테스트 (publish/unsubscribe 동시 호출)
 - [ ] 프로세스 분리 (소켓) -> 분산 디스커버리
 - [ ] QoS: `reliability`, `deadline`, `lifespan`, `liveliness` (depth와 durability는 있음). 네트워크를 붙일 때 필요
+
+- [x] viz: rviz 같은 두 번째 창 (격자, TF, 로봇 모델, 라이다, IMU/odom 글자)
+- [ ] viz 확장: IMU 화살표, odom 궤적, 오른쪽 클릭 목표, 디스플레이 on/off 패널, scan_frame을 토픽 header에서 읽기 (지금은 LaserScan에 header가 없어 파라미터), 눈으로 확인은 아직 못 했다 (스크린샷)

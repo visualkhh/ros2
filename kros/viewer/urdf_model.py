@@ -41,9 +41,9 @@ class UrdfModel:
     지원: mesh(STL) visual, material 색, fixed/continuous 조인트. (box/cylinder visual, mimic 등은 미지원)
     """
 
-    def __init__(self, urdf_path: Path, package_root: Path) -> None:
+    def __init__(self, urdf_text: str, package_root: Path) -> None:
         """package_root: `package://<패키지>/` 뒤의 경로가 놓인 폴더."""
-        xml = ET.fromstring(urdf_path.read_text().replace("${namespace}", ""))  # xacro 인자는 빈 값으로만 처리
+        xml = ET.fromstring(urdf_text.replace("${namespace}", ""))  # xacro 인자는 빈 값으로만 처리
         colors = {m.get("name"): _floats(m.find("color").get("rgba"), (1, 1, 1, 1)) for m in xml.findall("material")}  # type: ignore[union-attr]
         self.links: dict[str, NodePath] = {}
         for link in xml.findall("link"):

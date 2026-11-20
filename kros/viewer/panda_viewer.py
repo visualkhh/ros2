@@ -152,7 +152,7 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
     def _build_robot(self) -> None:
         """Robot이 알려 주는 URDF를 읽어 만든다. 앞쪽이 +x."""
         self.robot = self.render.attachNewNode("robot")
-        self.model = UrdfModel(self.robot_hw.urdf_path, self.robot_hw.description_dir)
+        self.model = UrdfModel(self.robot_hw.urdf_path.read_text(), self.robot_hw.description_dir)
         self.model.root.reparentTo(self.robot)
 
     # ---- 매 프레임 ---------------------------------------------------------------------------

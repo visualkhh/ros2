@@ -35,7 +35,7 @@ class TestStl(unittest.TestCase):
 @unittest.skipUnless(HAS_PANDA, "panda3d 없음")
 class TestUrdfModel(unittest.TestCase):
     def setUp(self) -> None:
-        self.model = UrdfModel(ROBOT / "urdf" / "turtlebot3_waffle_pi.urdf", ROBOT)
+        self.model = UrdfModel((ROBOT / "urdf" / "turtlebot3_waffle_pi.urdf").read_text(), ROBOT)
 
     def test_links_and_root(self) -> None:
         self.assertEqual(self.model.root.getName(), "base_footprint")
@@ -59,4 +59,4 @@ class TestUrdfModel(unittest.TestCase):
             urdf = Path(d, "r.urdf")
             urdf.write_text('<robot name="r"><link name="l"><visual><geometry><box size="1 1 1"/></geometry></visual></link></robot>')
             with self.assertRaises(NotImplementedError):
-                UrdfModel(urdf, Path(d))
+                UrdfModel(urdf.read_text(), Path(d))

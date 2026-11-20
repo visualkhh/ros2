@@ -215,7 +215,7 @@ class TestMazeWorld(unittest.TestCase):
         banned = re.compile(r"^\s*(from|import)\s+(panda3d|direct)\b", re.M)
         for pkg in ("worlds", "hardwares", "interactions", "topic", "service", "action", "msgs"):
             for f in (root / pkg).rglob("*.py"):
-                self.assertIsNone(banned.search(f.read_text()), f"{f}는 panda3d를 import한다 (화면은 viewer/ 에만)")
+                self.assertIsNone(banned.search(f.read_text()), f"{f}는 panda3d를 import한다 (화면은 viewer/, viz/ 에만)")
         for name in ("snapshot.py", "snapshot_recorder.py"):  # viewer/ 안이어도 스냅샷과 기록기는 panda3d 없이 돈다
             self.assertIsNone(banned.search((root / "viewer" / name).read_text()), f"viewer/{name}는 panda3d를 import하면 안 된다")
 

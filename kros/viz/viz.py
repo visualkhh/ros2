@@ -1,0 +1,306 @@
+import math
+import threading
+from pathlib import Path
+
+from direct.gui.OnscreenText import OnscreenText
+from direct.showbase.ShowBase import ShowBase
+from panda3d.core import (
+    AmbientLight, ButtonThrower, Camera, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
+    LineSegs, MouseAndKeyboard, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
+    LVecBase4f, GraphicsWindow,
+)
+
+from kros import Kros
+from kros.msgs.geometry_msgs import TransformStamped
+from kros.msgs.nav_msgs import Odometry
+from kros.msgs.sensor_msgs import Imu, LaserScan
+from kros.msgs.std_msgs import String
+from kros.nodes import Node
+from kros.tf import ROBOT_DESCRIPTION_TOPIC_NAME, Buffer, TransformException, TransformListener
+from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
+from kros.viewer.urdf_model import UrdfModel
+
+NAME = "Viz"
+HELP = "left drag: orbit    right drag: pan    wheel: zoom    esc: close"
+
+
+class VizNode(Node):
+    """Viz가 쓰는 구독 노드. 받은 값은 락 안에서 최신 것만 들고 있고, 화면은 매 프레임 가져가 그린다 (구독 콜백은 다른 스레드)."""
+
+    def __init__(self, context, name: str = NAME) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(context, name)
+        self.buffer = Buffer()
+        self._listener = TransformListener(self.buffer, self)
+        self._lock = threading.Lock()
+        self._latest: dict[str, object] = {}
+        for topic, msg_type, qos in (
+            (ROBOT_DESCRIPTION_TOPIC_NAME, String, QOS_LATCHED),
+            ("scan", LaserScan, QOS_SENSOR_DATA),
+            ("imu", Imu, QOS_SENSOR_DATA),
+            ("odom", Odometry, QOS_SENSOR_DATA),
+        ):
+            self.subscribe(topic, msg_type, lambda message, key=topic: self._store(key, message), qos)  # type: ignore[misc]
+
+    def _store(self, key: str, message: object) -> None:
+        with self._lock:
+            self._latest[key] = message
+
+    def latest(self, topic: str) -> object | None:
+        with self._lock:
+            return self._latest.get(topic)
+
+
+def _mat_of(stamped: TransformStamped, node: NodePath) -> None:
+    t, q = stamped.transform.translation, stamped.transform.rotation
+    node.setPos(t.x, t.y, t.z)
+    node.setQuat(LQuaternionf(q.w, q.x, q.y, q.z))
+
+
+class Viz:
+    """Viz(kros, package_root).run(): kros 안의 토픽을 구독해 그린다. (network 없이 같은 프로세스의 Kros 하나만 받는다)
+
+    base를 주면 그 ShowBase에 두 번째 창을 열고, 안 주면 자기 ShowBase를 만든다 (창은 프로세스에 ShowBase 하나만 가능).
+    package_root: URDF의 package://<pkg>/ 뒤 경로가 놓인 폴더 (메시 파일 위치). fixed_frame: 화면의 기준 프레임.
+    그리는 것: 바닥 격자, TF 축과 부모 선, robot_description 모델(TF로 배치), 라이다 점(scan_frame에서), IMU/odom 글자.
+    """
+
+    def __init__(self, kros: Kros, package_root: Path, base: ShowBase | None = None, fixed_frame: str = "odom", scan_frame: str = "base_scan", imu_frame: str = "imu_link") -> None:
+        self.kros, self.package_root = kros, package_root
+        self.fixed_frame, self.scan_frame = fixed_frame, scan_frame
+        self.node = VizNode(kros.context)
+        self.own_base = base is None
+        self.base = base or ShowBase()
+        if base is None:
+            props, self.win = None, self.base.win
+        else:
+            props = WindowProperties()
+            props.setTitle("kros viz")
+            props.setSize(900, 700)
+            self.win = base.openWindow(props=props, makeCamera=False)
+        self.scene = NodePath("viz")
+        self._build_scene()
+        self.yaw, self.pitch, self.dist, self.target = 0.8, 0.8, 2.5, Vec3(0, 0, 0.1)
+        self.model: UrdfModel | None = None
+        self.model_text: object = None
+        self._scan_drawn: object = None
+        self._scan_np: NodePath | None = None
+        self._tf_np: NodePath | None = None
+        self._last_mouse: tuple[float, float] | None = None
+        self._closed = False
+        self._build_input()
+        self.hud = OnscreenText(parent=self.aspect, pos=(-1.3, 0.9), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
+        OnscreenText(text=HELP, parent=self.aspect, pos=(-1.3, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
+        self.base.taskMgr.add(self._update, "viz-update")
+
+    # ---- 만들기 ------------------------------------------------------------------------------
+
+    def _build_scene(self) -> None:
+        self.camera = self.scene.attachNewNode(Camera("viz-cam"))
+        lens = PerspectiveLens()
+        lens.setFov(65)
+        lens.setNear(0.02)
+        self.camera.node().setLens(lens)
+        region = self.win.makeDisplayRegion()
+        region.setCamera(self.camera)
+        region.setClearColor(LVecBase4f(0.05, 0.05, 0.08, 1))
+        region.setClearColorActive(True)
+        region.setClearDepthActive(True)
+        self.aspect = NodePath("viz-2d")  # 글자용 2D 장면
+        self.aspect.reparentTo(self._make_2d())
+        ambient = AmbientLight("ambient")
+        ambient.setColor((0.6, 0.6, 0.65, 1))
+        self.scene.setLight(self.scene.attachNewNode(ambient))
+        sun = DirectionalLight("sun")
+        sun.setColor((0.7, 0.7, 0.65, 1))
+        sun_np = self.scene.attachNewNode(sun)
+        sun_np.setHpr(-30, -50, 0)
+        self.scene.setLight(sun_np)
+        grid = LineSegs()
+        grid.setColor(0.3, 0.33, 0.4, 1)
+        for i in range(-10, 11):
+            grid.moveTo(i * 0.5, -5, 0)
+            grid.drawTo(i * 0.5, 5, 0)
+            grid.moveTo(-5, i * 0.5, 0)
+            grid.drawTo(5, i * 0.5, 0)
+        self.scene.attachNewNode(grid.create()).setLightOff()
+
+    def _make_2d(self) -> NodePath:
+        root = NodePath("viz-render2d")
+        root.setDepthTest(False)
+        root.setDepthWrite(False)
+        cam = root.attachNewNode(Camera("viz-cam2d"))
+        from panda3d.core import OrthographicLens
+
+        lens = OrthographicLens()
+        lens.setFilmSize(2 * 1.333, 2)
+        lens.setNearFar(-1000, 1000)
+        cam.node().setLens(lens)
+        region = self.win.makeDisplayRegion()
+        region.setSort(10)
+        region.setCamera(cam)
+        return root
+
+    def _build_input(self) -> None:
+        """이 창만의 마우스/키 입력 (ShowBase의 전역 입력과 섞이지 않게 'viz-' 접두사 이벤트로)."""
+        self.mouse = NodePath(MouseWatcher("viz"))  # 오프스크린(GraphicsBuffer)은 입력 장치가 없어서 연결하지 않는다
+        if isinstance(self.win, GraphicsWindow):
+            mk = self.base.dataRoot.attachNewNode(MouseAndKeyboard(self.win, 0, "viz"))
+            self.mouse.reparentTo(mk)
+            self.mouse.attachNewNode(ButtonThrower("viz")).node().setPrefix("viz-")
+        self.base.accept("viz-wheel_up", self._zoom, [0.88])
+        self.base.accept("viz-wheel_down", self._zoom, [1 / 0.88])
+        self.base.accept("viz-escape", self.close)
+        self.base.accept("window-event", self._window_event)
+
+    # ---- 매 프레임 ---------------------------------------------------------------------------
+
+    def _zoom(self, factor: float) -> None:
+        self.dist = min(20.0, max(0.3, self.dist * factor))
+
+    def _window_event(self, win: GraphicsWindow) -> None:
+        if win is self.win and not win.isValid() and not self.own_base:
+            self.close()
+
+    def _lookup(self, frame: str) -> TransformStamped | None:
+        try:
+            return self.node.buffer.lookup_transform(self.fixed_frame, frame)
+        except TransformException:
+            return None
+
+    def _update(self, task):  # type: ignore[no-untyped-def]
+        if self._closed:
+            return task.done
+        self._camera()
+        self._update_model()
+        self._update_tf()
+        self._update_scan()
+        self.hud.setText(self._hud_text())
+        return task.cont
+
+    def _camera(self) -> None:
+        mouse = self.mouse.node()
+        pos = (mouse.getMouseX(), mouse.getMouseY()) if mouse.hasMouse() else None
+        if pos and self._last_mouse:
+            dx, dy = pos[0] - self._last_mouse[0], pos[1] - self._last_mouse[1]
+            if mouse.isButtonDown(MouseButton.one()):
+                self.yaw -= dx * 3.0
+                self.pitch = min(1.5, max(0.05, self.pitch - dy * 2.0))
+            if mouse.isButtonDown(MouseButton.three()):
+                k = self.dist * 0.8
+                self.target -= Vec3(-math.sin(self.yaw), math.cos(self.yaw), 0) * dx * k + Vec3(-math.cos(self.yaw), -math.sin(self.yaw), 0) * dy * k
+        self._last_mouse = pos
+        offset = Vec3(math.cos(self.pitch) * math.cos(self.yaw), math.cos(self.pitch) * math.sin(self.yaw), math.sin(self.pitch)) * self.dist
+        self.camera.setPos(self.target + offset)
+        self.camera.lookAt(self.target)
+
+    def _update_model(self) -> None:
+        text = self.node.latest(ROBOT_DESCRIPTION_TOPIC_NAME)
+        if text is not self.model_text and isinstance(text, String):
+            self.model_text = text
+            if self.model:
+                self.model.root.removeNode()
+            self.model = UrdfModel(text.data, self.package_root)
+            for link in self.model.links.values():  # 링크를 트리에서 떼어 내 TF로 직접 놓는다
+                link.reparentTo(self.scene)
+                link.hide()
+        if self.model:
+            for name, link in self.model.links.items():
+                stamped = self._lookup(name)
+                if stamped is None:
+                    link.hide()
+                else:
+                    _mat_of(stamped, link)
+                    link.show()
+
+    def _update_tf(self) -> None:
+        """모든 프레임에 축(x 빨강, y 초록, z 파랑)과 부모로 가는 노란 선."""
+        lines = LineSegs()
+        for frame in self.node.buffer.all_frames():
+            stamped = self._lookup(frame)
+            if stamped is None:
+                continue
+            t, q = stamped.transform.translation, stamped.transform.rotation
+            origin = Vec3(t.x, t.y, t.z)
+            rotation = LQuaternionf(q.w, q.x, q.y, q.z)
+            for axis, color in ((Vec3(1, 0, 0), (1, 0, 0, 1)), (Vec3(0, 1, 0), (0, 1, 0, 1)), (Vec3(0, 0, 1), (0.2, 0.4, 1, 1))):
+                lines.setColor(*color)
+                lines.moveTo(origin)
+                lines.drawTo(origin + rotation.xform(axis) * 0.05)
+            parent = self.node.buffer.parent_of(frame)
+            parent_pose = self._lookup(parent) if parent else None
+            if parent_pose is not None:
+                p = parent_pose.transform.translation
+                lines.setColor(1, 0.9, 0.2, 1)
+                lines.moveTo(origin)
+                lines.drawTo(Vec3(p.x, p.y, p.z))
+        if self._tf_np is not None:
+            self._tf_np.removeNode()
+        self._tf_np = self.scene.attachNewNode(lines.create())
+        self._tf_np.setLightOff()
+        self._tf_np.setBin("fixed", 0)  # 모델에 가려지지 않게 위에 그린다
+        self._tf_np.setDepthTest(False)
+
+    def _update_scan(self) -> None:
+        """scan의 점을 센서 프레임 기준으로 한 번 만들고, 센서의 TF에 맞춰 놓는다 (새 스캔일 때만 만든다)."""
+        scan = self.node.latest("scan")
+        if isinstance(scan, LaserScan) and scan is not self._scan_drawn:
+            self._scan_drawn = scan
+            vdata = GeomVertexData("scan", GeomVertexFormat.getV3(), Geom.UHStatic)
+            vertex = GeomVertexWriter(vdata, "vertex")
+            for i, r in enumerate(scan.ranges):
+                if math.isfinite(r):
+                    a = scan.angle_min + i * scan.angle_increment
+                    vertex.addData3(r * math.cos(a), r * math.sin(a), 0)
+            prim = GeomPoints(Geom.UHStatic)
+            prim.addConsecutiveVertices(0, vdata.getNumRows())
+            geom = Geom(vdata)
+            geom.addPrimitive(prim)
+            node = GeomNode("scan")
+            node.addGeom(geom)
+            if self._scan_np is not None:
+                self._scan_np.removeNode()
+            self._scan_np = self.scene.attachNewNode(node)
+            self._scan_np.setLightOff()
+            self._scan_np.setColor(1, 0.15, 0.15, 1)
+            self._scan_np.setRenderModeThickness(4)
+            self._scan_np.hide()
+        if self._scan_np is not None:
+            stamped = self._lookup(self.scan_frame)
+            if stamped is None:
+                self._scan_np.hide()
+            else:
+                _mat_of(stamped, self._scan_np)
+                self._scan_np.show()
+
+    def _hud_text(self) -> str:
+        odom, imu = self.node.latest("odom"), self.node.latest("imu")
+        rows = [f"fixed frame: {self.fixed_frame}   frames: {len(self.node.buffer.all_frames())}"]
+        if isinstance(odom, Odometry):
+            p = odom.pose.position
+            rows.append(f"odom x={p.x:.2f} y={p.y:.2f}   v={odom.twist.linear.x:.2f} w={odom.twist.angular.z:.2f}")
+        if isinstance(imu, Imu):
+            a, w = imu.linear_acceleration, imu.angular_velocity
+            rows.append(f"imu a=({a.x:.1f},{a.y:.1f},{a.z:.1f}) gyro_z={w.z:.2f}")
+        return "\n".join(rows)
+
+    # ---- 끝내기 ------------------------------------------------------------------------------
+
+    def run(self) -> None:
+        """자기 ShowBase를 쓸 때: 창을 닫을 때까지 돈다."""
+        try:
+            self.base.run()
+        finally:
+            self.close()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self.base.ignore("viz-wheel_up")
+        self.base.ignore("viz-wheel_down")
+        self.base.ignore("viz-escape")
+        self.base.ignore("window-event")
+        if self.own_base:
+            self.base.destroy()
+        else:
+            self.base.closeWindow(self.win)
