@@ -155,8 +155,9 @@ class TestAgainstTheSimulation(unittest.TestCase):
         filtered: list[Odometry] = []
         made["watcher"].subscribe("odom", Odometry, odom.append)
         made["watcher"].subscribe("odometry/filtered", Odometry, filtered.append)
-        robot.command = Twist(Vector3(x=0.15), Vector3(z=0.3))
-        for _ in range(round(8.0 / 0.02)):
+        for step in range(round(11.0 / 0.02)):
+            if step == round(3.0 / 0.02):
+                robot.command = Twist(Vector3(x=0.15), Vector3(z=0.3))  # 켜진 뒤 IMU가 자이로를 보정하는 2초 동안은 서 있는다 (진짜 OpenCR처럼)
             world.step(0.02)
             source.set(world.time)
             kros.context.timer_manager.join()

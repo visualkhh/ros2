@@ -7,7 +7,8 @@ from kros.hardwares.noise import Noise
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
-from kros.worlds.robots.turtlebot3.turtlebot3 import ACCEL, GYRO
+from kros.hardwares.imus.mpu9250 import SimulatedMpu9250
+from kros.worlds.robots.turtlebot3.turtlebot3 import ACCEL, GYRO, GYRO_CALIBRATION
 
 DT = 1 / 60
 
@@ -59,14 +60,18 @@ class TestNoise(unittest.TestCase):
         for angle in robot.joint_positions().values():
             self.assertAlmostEqual(angle / step, round(angle / step), places=6)
 
-    def test_imu_reads_bias_at_rest_and_orientation_drifts(self) -> None:
-        robot = TurtleBot3(noisy=True, seed=1)
-        drive(robot, 20.0, Twist())
-        data = robot.imu.read()
-        assert data is not None
-        self.assertNotEqual(data.angular_velocity.z, 0.0)
-        yaw = 2 * math.atan2(data.orientation.z, data.orientation.w)
-        self.assertGreater(abs(yaw), 0.01)  # 가만히 서 있는데 방향이 서서히 틀어졌다
+    def test_gyro_calibration_at_boot_keeps_orientation_still_at_rest(self) -> None:
+        def yaw_after_rest(calibration: float) -> float:
+            robot = TurtleBot3(noisy=True, seed=1)
+            assert isinstance(robot.imu, SimulatedMpu9250)
+            robot.imu.calibration_time = calibration
+            drive(robot, 60.0, Twist())
+            data = robot.imu.read()
+            assert data is not None
+            return 2 * math.atan2(data.orientation.z, data.orientation.w)  # 시작 방향은 0
+
+        self.assertGreater(abs(yaw_after_rest(0)), 0.2)  # 보정 없이: 편향(0.005rad/s)이 1분이면 0.3rad 쌓인다
+        self.assertLess(abs(yaw_after_rest(GYRO_CALIBRATION)), math.radians(2))  # OpenCR처럼 켜질 때 보정하면 1분 서 있어도 거의 그대로
 
     def test_imu_covariance_comes_from_the_noise_and_orientation_grows_honestly(self) -> None:
         robot = TurtleBot3(noisy=True, seed=1)
@@ -75,7 +80,10 @@ class TestNoise(unittest.TestCase):
         drive(robot, 15.0, Twist())  # 이어서 (같은 로봇, 새 월드지만 IMU는 계속 쌓는다)
         data = robot.imu.read()
         assert early is not None and data is not None
-        self.assertEqual(data.angular_velocity_covariance, (GYRO.variance, 0, 0, 0, GYRO.variance, 0, 0, 0, GYRO.variance))
+        samples = round(GYRO_CALIBRATION * 60)  # 보정한 2초 동안의 값 수 (이 테스트는 60Hz로 돈다)
+        gyro = GYRO.sigma**2 * (1 + 1 / samples)  # 보정 뒤: 잡음 + 평균의 오차로 남은 편향
+        for i, value in enumerate(data.angular_velocity_covariance):
+            self.assertAlmostEqual(value, gyro if i % 4 == 0 else 0.0, delta=gyro * 0.02)
         self.assertEqual(data.linear_acceleration_covariance[0], ACCEL.variance)
         self.assertGreater(data.orientation_covariance[8], early.orientation_covariance[8])  # 오래 쌓을수록 덜 믿는다
         yaw = 2 * math.atan2(data.orientation.z, data.orientation.w)

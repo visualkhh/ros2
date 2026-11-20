@@ -27,7 +27,8 @@ SPEED_STEP = 1.25  # q/z를 한 번 누를 때 곱하는 배율
 # 진짜 같은 오차 (noisy=True일 때): 대략적인 값이라 필요하면 고친다
 ENCODER_TICKS = 4096  # XL430 한 바퀴
 WHEEL_SLIP = (Noise(sigma=0.05, scale=-0.01), Noise(sigma=0.05, scale=0.015))  # 왼쪽/오른쪽 바퀴: 반지름 오차 -1%/+1.5%와 바닥에서의 흔들림 (rad/s)
-GYRO, GYRO_BIAS_WALK = Noise(sigma=0.01, bias=0.005), 0.001  # rad/s, rad/s/sqrt(s)
+GYRO, GYRO_BIAS_WALK = Noise(sigma=0.01, bias=0.005), 2e-5  # rad/s, rad/s/sqrt(s) (MEMS 자이로의 편향은 수 분에 걸쳐 아주 조금 떠돈다)
+GYRO_CALIBRATION = 2.0  # 초: OpenCR처럼 켜질 때 가만히 서서 자이로 편향을 잰다
 ACCEL = Noise(sigma=0.05, bias=0.02)  # m/s^2
 IMU_DELAY, LIDAR_DELAY = (0.01, 0.004), (0.05, 0.02)  # (지연, 흔들림) 초: 시리얼/USB로 값이 오기까지
 LIDAR_RANGE, LIDAR_DROPOUT = Noise(sigma=0.01), 0.01  # 거리 m, 측정 실패 확률
@@ -67,7 +68,7 @@ class TurtleBot3(Robot):
             return OpenCr(SimulatedXl430W250(), SimulatedXl430W250(), SimulatedMpu9250(), WHEEL_RADIUS, WHEEL_SEPARATION, self.radius)
         base = 0 if self.seed is None else self.seed * 10  # 부품마다 다른 시드 (같은 난수열이 겹치지 않게)
         wheels = [SimulatedXl430W250(ticks_per_rev=ENCODER_TICKS, slip=slip, seed=None if self.seed is None else base + i) for i, slip in enumerate(WHEEL_SLIP)]
-        imu = SimulatedMpu9250(gyro=GYRO, accel=ACCEL, gyro_bias_walk=GYRO_BIAS_WALK, seed=None if self.seed is None else base + 2)
+        imu = SimulatedMpu9250(gyro=GYRO, accel=ACCEL, gyro_bias_walk=GYRO_BIAS_WALK, seed=None if self.seed is None else base + 2, calibration_time=GYRO_CALIBRATION)
         imu.latency, imu.jitter, imu.delay_seed = *IMU_DELAY, None if self.seed is None else base + 4
         return OpenCr(wheels[0], wheels[1], imu, WHEEL_RADIUS, WHEEL_SEPARATION, self.radius)
 

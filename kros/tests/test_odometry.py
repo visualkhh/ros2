@@ -9,6 +9,7 @@ from kros.msgs.nav_msgs import Odometry
 from kros.msgs.sensor_msgs import JointState
 from kros.msgs.std_msgs import Header
 from kros.nodes import DiffDriveOdometry, Node, RobotStatePublisher
+from kros.nodes.diff_drive_odometry import STOPPED_VARIANCE
 from kros.parameter import ParameterRejectedError
 from kros.tf import JOINT_STATES_TOPIC_NAME, Buffer, TransformListener
 from kros.tf.transform_math import to_rpy
@@ -144,12 +145,16 @@ class TestParameters(Setup):
     def test_covariance_diagonals_are_parameters_like_diff_drive_controller(self) -> None:
         self.make()
         self.wheels(1.0, 0.0, 0.0)
+        self.wheels(2.0, 0.3, 0.3)  # 굴러가는 중
         pose, twist = self.messages[-1].pose.covariance, self.messages[-1].twist.covariance
         self.assertEqual((pose[0], pose[7], pose[14], pose[35], pose[1]), (0.001, 0.001, 1e6, 0.01, 0.0))  # 대각만 채운다
         self.assertEqual(twist[35], 0.01)
         self.odom.set_parameter("twist_covariance_diagonal", (0.5, 0.5, 1e6, 1e6, 1e6, 0.2))
-        self.wheels(2.0, 0.0, 0.0)
+        self.wheels(3.0, 0.6, 0.6)
         self.assertEqual((self.messages[-1].twist.covariance[0], self.messages[-1].twist.covariance[35]), (0.5, 0.2))
+        self.wheels(4.0, 0.6, 0.6)  # 바퀴가 멈췄다: 미끄러질 수 없으니 정지는 확실하다
+        self.assertEqual((self.messages[-1].twist.covariance[0], self.messages[-1].twist.covariance[35]), (STOPPED_VARIANCE, STOPPED_VARIANCE))
+        self.assertEqual(self.messages[-1].twist.covariance[14], 1e6)  # 평면 로봇이 모르는 축은 그대로
         with self.assertRaises(ParameterRejectedError):
             self.odom.set_parameter("pose_covariance_diagonal", (0.1, 0.1, 0.1))
 

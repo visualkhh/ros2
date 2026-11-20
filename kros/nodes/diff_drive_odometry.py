@@ -9,6 +9,7 @@ from kros.nodes.node import Node
 from kros.tf import JOINT_STATES_TOPIC_NAME, TransformBroadcaster
 
 ODOM_TOPIC_NAME = "odom"
+STOPPED_VARIANCE = 1e-6  # 바퀴가 멈췄을 때의 속도 분산
 
 
 def _matrix(diagonal: tuple[float, ...]) -> tuple[float, ...]:
@@ -73,7 +74,10 @@ class DiffDriveOdometry(Node):
         orientation = Quaternion(0.0, 0.0, math.sin(self.yaw / 2), math.cos(self.yaw / 2))
         odom_frame, base_frame = self.odom_frame.value, self.base_frame.value
         pose = PoseWithCovariance(Pose(Point(self.x, self.y, 0.0), orientation), _matrix(self.pose_covariance_diagonal.value))
-        twist = TwistWithCovariance(Twist(Vector3(x=v), Vector3(z=w)), _matrix(self.twist_covariance_diagonal.value))
+        diagonal = self.twist_covariance_diagonal.value
+        if v == 0.0 and w == 0.0:  # 바퀴가 멈췄으면 미끄러질 수 없다: "서 있다"는 확실하다 (EKF가 자이로 편향보다 이것을 믿어 정지 중 방향이 흐르지 않는다)
+            diagonal = (STOPPED_VARIANCE, STOPPED_VARIANCE, *diagonal[2:5], STOPPED_VARIANCE)
+        twist = TwistWithCovariance(Twist(Vector3(x=v), Vector3(z=w)), _matrix(diagonal))
         self.publish(ODOM_TOPIC_NAME, Odometry(Header(stamp, odom_frame), base_frame, pose, twist))
         if self.publish_tf.value:
             transform = Transform(Vector3(self.x, self.y, 0.0), orientation)
