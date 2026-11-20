@@ -14,3 +14,8 @@ class Noise:
 
     def apply(self, value: float, rng: random.Random) -> float:
         return value * (1.0 + self.scale) + self.bias + rng.gauss(0.0, self.sigma)
+
+    @property
+    def variance(self) -> float:
+        """받는 쪽이 공분산으로 쓸 오차 크기 (sigma^2 + bias^2): 편향은 받는 쪽이 모르니 오차로 친다. scale은 값에 비례해 뺐다 (shortcut: 빠르게 움직일 때 작게 잡힌다)."""
+        return self.sigma**2 + self.bias**2

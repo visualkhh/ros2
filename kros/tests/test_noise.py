@@ -7,6 +7,7 @@ from kros.hardwares.noise import Noise
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
+from kros.worlds.robots.turtlebot3.turtlebot3 import ACCEL, GYRO
 
 DT = 1 / 60
 
@@ -66,6 +67,23 @@ class TestNoise(unittest.TestCase):
         self.assertNotEqual(data.angular_velocity.z, 0.0)
         yaw = 2 * math.atan2(data.orientation.z, data.orientation.w)
         self.assertGreater(abs(yaw), 0.01)  # 가만히 서 있는데 방향이 서서히 틀어졌다
+
+    def test_imu_covariance_comes_from_the_noise_and_orientation_grows_honestly(self) -> None:
+        robot = TurtleBot3(noisy=True, seed=1)
+        drive(robot, 5.0, Twist())
+        early = robot.imu.read()
+        drive(robot, 15.0, Twist())  # 이어서 (같은 로봇, 새 월드지만 IMU는 계속 쌓는다)
+        data = robot.imu.read()
+        assert early is not None and data is not None
+        self.assertEqual(data.angular_velocity_covariance, (GYRO.variance, 0, 0, 0, GYRO.variance, 0, 0, 0, GYRO.variance))
+        self.assertEqual(data.linear_acceleration_covariance[0], ACCEL.variance)
+        self.assertGreater(data.orientation_covariance[8], early.orientation_covariance[8])  # 오래 쌓을수록 덜 믿는다
+        yaw = 2 * math.atan2(data.orientation.z, data.orientation.w)
+        self.assertLess(abs(yaw), 3 * math.sqrt(data.orientation_covariance[8]))  # 실제로 틀어진 양이 알려 준 크기 안에 있다
+        clean = TurtleBot3()
+        drive(clean, 1.0, Twist())
+        assert (zero := clean.imu.read()) is not None
+        self.assertEqual(zero.orientation_covariance + zero.angular_velocity_covariance, (0.0,) * 18)  # 오차 없는 시뮬레이션: ROS의 "모름"
 
     def test_lidar_noise_and_dropout(self) -> None:
         clean, noisy = TurtleBot3(), TurtleBot3(noisy=True, seed=1)

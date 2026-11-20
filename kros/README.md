@@ -90,7 +90,7 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
 - **`RobotStatePublisher`(노드, `kros.nodes`)**: 파라미터 `robot_description`(URDF 본문 문자열, 실행 중 바꾸면 다시 읽는다)으로 TF를 만든다. 고정 관절은 `tf_static`으로, 움직이는 관절(continuous/revolute/prismatic)은 `joint_states`(`JointState`)를 받을 때마다 `tf`로 낸다(그 관절의 값이 아직 안 왔으면 안 낸다). URDF 본문은 `robot_description` 토픽(latch)으로도 낸다. 잘못된 URDF(뿌리가 둘, 순환, 없는 링크 ...)는 파라미터가 거절하고 이전 로봇이 그대로 남는다. **kros가 제공하는 노드이고 쓸지는 사용자가 `node_create`에서 정한다**(안 만들면 아무 일도 안 한다).
 - **URDF 파서(`kros/urdf`)**: 표준 라이브러리만 쓴다. 링크/관절 트리를 검증하고(이름 중복, 없는 링크, 부모가 둘, 뿌리가 둘 이상, 순환), xacro는 **인자 치환(`${namespace}` 기본 빈 값)만** 지원한다. 그 밖의 `${...}`가 이름에 남으면 조용히 틀린 이름을 쓰지 않고 `UrdfError`다.
 - **하드웨어와의 연결(예제)**: `Robot.joint_positions()`(URDF 관절 이름 -> 위치, 바퀴 모터 엔코더 값)가 하드웨어가 남긴 사실이고, `RobotBridge`가 이걸 `joint_states` 토픽으로 낸다(`joint_states_period` 파라미터, 기본 0.05초). 그러면 `RobotStatePublisher`가 바퀴 TF를 만든다. URDF의 라이다 위치(`base_footprint` -> `base_scan` = (-0.064, 0, 0.132))가 `TurtleBot3`가 코드에 적은 `LIDAR_MOUNT_X/HEIGHT`와 같다는 걸 테스트가 확인한다.
-**오도메트리**: `DiffDriveOdometry`는 `joint_states`의 바퀴 각을 적분해 `odom` 토픽(`nav_msgs.Odometry`)과 TF(`odom -> base_footprint`)를 낸다. 파라미터: `wheel_radius`, `wheel_separation`, `left_joint`/`right_joint`, `odom_frame`/`base_frame`, `publish_tf`, `jump_threshold`(바퀴 각이 한 번에 이만큼(rad) 넘게 뛰면 보드 재부팅으로 보고 그 변화는 버린다). 한 조각은 시작 방향이 아니라 중간 방향으로 간 것으로 적분한다. 바퀴만 보므로 **바퀴가 헛돌면 오차가 쌓인다**(시뮬레이션에서 벽에 막혀도 바퀴 모터는 도는 것으로 세어져 벽을 뚫고 간 것으로 추정한다: 테스트가 이 한계를 확인한다). 정답 위치(월드의 로봇 pose)와 따로 계산하므로 둘의 차이가 곧 오도메트리 오차다.
+**오도메트리**: `DiffDriveOdometry`는 `joint_states`의 바퀴 각을 적분해 `odom` 토픽(`nav_msgs.Odometry`)과 TF(`odom -> base_footprint`)를 낸다. 파라미터: `wheel_radius`, `wheel_separation`, `left_joint`/`right_joint`, `odom_frame`/`base_frame`, `publish_tf`, `pose_covariance_diagonal`/`twist_covariance_diagonal`(ROS diff_drive_controller처럼 odom 공분산의 대각 6개), `jump_threshold`(바퀴 각이 한 번에 이만큼(rad) 넘게 뛰면 보드 재부팅으로 보고 그 변화는 버린다). 한 조각은 시작 방향이 아니라 중간 방향으로 간 것으로 적분한다. 바퀴만 보므로 **바퀴가 헛돌면 오차가 쌓인다**(시뮬레이션에서 벽에 막혀도 바퀴 모터는 도는 것으로 세어져 벽을 뚫고 간 것으로 추정한다: 테스트가 이 한계를 확인한다). 정답 위치(월드의 로봇 pose)와 따로 계산하므로 둘의 차이가 곧 오도메트리 오차다.
 
 ### TF 사용법 (노드에서)
 
@@ -344,7 +344,7 @@ board.stop()                         # C,0,0을 보내고 끈다
 
 - `hardwares/noise.py`의 `Noise(sigma, bias, scale)`: 측정 = 값 * (1 + scale) + bias + 가우시안(0, sigma).
 - 바퀴(`SimulatedXl430W250`): `ticks_per_rev`(엔코더 해상도), `slip`(바닥에 전달되는 속도의 오차: 몸체는 엔코더가 말하는 것과 다르게 움직인다 -> 오도메트리가 어긋난다).
-- IMU(`SimulatedMpu9250`): `gyro`/`accel` Noise, `gyro_bias_walk`(편향이 떠돎). 방향은 측정한 각속도를 쌓은 것이라 서서히 틀어진다.
+- IMU(`SimulatedMpu9250`): `gyro`/`accel` Noise, `gyro_bias_walk`(편향이 떠돎). 방향은 측정한 각속도를 쌓은 것이라 서서히 틀어진다. 공분산은 오차 크기(`Noise.variance` = sigma^2 + bias^2)에서 채우고, 방향(yaw) 공분산은 쌓은 시간에 따라 커진다. 오차가 0이면 공분산도 0(ROS의 "모름").
 - 라이다(`SimulatedLds01`): `range` Noise, `dropout`(측정 실패).
 - 지연: 모든 센서의 `latency`(초)와 `jitter`(흔들림). 값에 찍힌 시각은 측정한 때라 받는 쪽에는 그만큼 오래된 값이고, 값의 순서는 유지된다.
 - Viewer는 진실을, Viz는 오차 낀 측정값을 그리므로 둘을 나란히 보면 오도메트리가 어긋나는 것이 보인다.

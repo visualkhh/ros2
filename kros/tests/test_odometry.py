@@ -9,6 +9,7 @@ from kros.msgs.nav_msgs import Odometry
 from kros.msgs.sensor_msgs import JointState
 from kros.msgs.std_msgs import Header
 from kros.nodes import DiffDriveOdometry, Node, RobotStatePublisher
+from kros.parameter import ParameterRejectedError
 from kros.tf import JOINT_STATES_TOPIC_NAME, Buffer, TransformListener
 from kros.tf.transform_math import to_rpy
 from kros.timer import SimulatedTimeSource
@@ -139,6 +140,18 @@ class TestParameters(Setup):
         self.wheels(1.0, 0.0, 0.0)
         self.assertEqual((self.messages[0].header.frame_id, self.messages[0].child_frame_id), ("world", "base_link"))
         self.assertFalse(self.buffer.can_transform("world", "base_link"))  # TF는 안 낸다
+
+    def test_covariance_diagonals_are_parameters_like_diff_drive_controller(self) -> None:
+        self.make()
+        self.wheels(1.0, 0.0, 0.0)
+        pose, twist = self.messages[-1].pose.covariance, self.messages[-1].twist.covariance
+        self.assertEqual((pose[0], pose[7], pose[14], pose[35], pose[1]), (0.001, 0.001, 1e6, 0.01, 0.0))  # 대각만 채운다
+        self.assertEqual(twist[35], 0.01)
+        self.odom.set_parameter("twist_covariance_diagonal", (0.5, 0.5, 1e6, 1e6, 1e6, 0.2))
+        self.wheels(2.0, 0.0, 0.0)
+        self.assertEqual((self.messages[-1].twist.covariance[0], self.messages[-1].twist.covariance[35]), (0.5, 0.2))
+        with self.assertRaises(ParameterRejectedError):
+            self.odom.set_parameter("pose_covariance_diagonal", (0.1, 0.1, 0.1))
 
     def test_wheel_size_changes_the_distance_live(self) -> None:
         self.make()
