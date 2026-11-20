@@ -38,7 +38,7 @@ GUI = {"scale": 0.04, "text_fg": (1, 1, 1, 1), "frameColor": BUTTON_COLOR, "reli
 
 def _button(parent: object, text: str, left: float, right: float, y: float, command: Callable[[], None]) -> DirectButton:
     """패널 좌표 left~right 폭을 꽉 채운 버튼 (글자는 가운데). 같은 줄/열의 버튼 끝이 맞는다."""
-    half = (right - left) / 2 / GUI["scale"]  # type: ignore[operator]
+    half = (right - left) / 2 / GUI["scale"]
     return DirectButton(parent=parent, text=text, pos=((left + right) / 2, 0, y), frameSize=(-half, half, -0.5, 1.0), command=command, **{**GUI, "pad": (0, 0)})
 
 
@@ -59,7 +59,7 @@ class SlamPanel:
             parent=left, items=maps or ["(no maps)"], pos=(0.075, 0, TOP - 0.21), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
             **{**GUI, "frameColor": (0.12, 0.14, 0.2, 1), "relief": DGG.SUNKEN},  # 고르는 칸은 들어간 모양 (버튼과 구별)
         )
-        self.map_menu["frameSize"] = (-0.4, (0.62 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # type: ignore[operator]  # 한 줄을 다 쓴다 (지도 이름이 길다)
+        self.map_menu["frameSize"] = (-0.4, (0.62 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # 한 줄을 다 쓴다 (지도 이름이 길다)
         self.load_button = _button(left, "load", 0.06, 0.22, TOP - 0.32, self.load_map)
         self.pose_button = _button(left, "2D Pose Estimate", 0.26, 0.62, TOP - 0.32, self.toggle_pose_tool)
         self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.41), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.035, mayChange=True)
