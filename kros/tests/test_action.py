@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from kros.action import ActionType, GoalStatus, ServerGoalHandle
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 
 
 @dataclass(frozen=True)

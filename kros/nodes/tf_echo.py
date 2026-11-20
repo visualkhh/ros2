@@ -1,5 +1,5 @@
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 from kros.tf import Buffer, TransformException, TransformListener
 from kros.tf.transform_math import to_rpy
 

@@ -7,7 +7,7 @@ from kros import Kros
 from kros.context import Context
 from kros.msgs.geometry_msgs import Point, PointStamped, Pose, PoseStamped, Quaternion, Transform, TransformStamped, Vector3
 from kros.msgs.std_msgs import Header
-from kros.node import Node
+from kros.nodes import Node
 from kros.nodes import TfEcho
 from kros.tf import (
     Buffer,

@@ -4,7 +4,7 @@ from typing import Any
 from kros.context import Context
 from kros.examples.turtlebot3.robot_bridge import RobotBridge
 from kros.examples.turtlebot3.topics import CMD_VEL_TOPIC_NAME, SCAN_TOPIC_NAME
-from kros.node import Node
+from kros.nodes import Node
 from kros.msgs.geometry_msgs import Twist, Vector3
 from kros.msgs.sensor_msgs import LaserScan
 from kros.interactions import Interaction, Keyboard, KeyState

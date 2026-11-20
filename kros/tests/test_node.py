@@ -1,7 +1,7 @@
 import unittest
 
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 
 
 class TestNode(unittest.TestCase):
@@ -28,24 +28,24 @@ class TestNode(unittest.TestCase):
 
 
 class TestProvidedNodesLayout(unittest.TestCase):
-    """kros가 제공하는 노드는 nodes/에 모으고, 그 노드가 쓰는 도구 패키지와 기반 Node는 nodes/를 모른다 (순환 방지)."""
+    """kros가 제공하는 노드는 nodes/에 모으고, 그 노드가 쓰는 도구 패키지는 nodes/를 실행 때 import하지 않는다 (순환 방지: 타입 표기용 TYPE_CHECKING 안은 허용)."""
 
     root = __import__("pathlib").Path(__file__).parent.parent
 
     def test_provided_nodes_live_in_nodes(self) -> None:
         import kros.nodes as provided
 
-        self.assertEqual(sorted(provided.__all__), ["DiagnosticAggregator", "RobotStatePublisher", "TfEcho"])
+        self.assertEqual(sorted(provided.__all__), ["DiagnosticAggregator", "Node", "RobotStatePublisher", "TfEcho"])
         for name in provided.__all__:
             self.assertTrue(issubclass(getattr(provided, name), Node), name)
 
-    def test_tools_and_the_base_node_do_not_import_nodes(self) -> None:
+    def test_tools_do_not_import_nodes_at_runtime(self) -> None:
         import re
 
-        banned = re.compile(r"^\s*(from|import)\s+kros\.nodes\b", re.M)
-        for package in ("node", "tf", "diagnostics", "urdf", "log", "topic", "service", "action", "parameter", "timer"):
+        banned = re.compile(r"^(from|import)\s+kros\.nodes\b", re.M)  # 들여쓴 import(TYPE_CHECKING 안)는 실행 때 일어나지 않는다
+        for package in ("tf", "diagnostics", "urdf", "log", "topic", "service", "action", "parameter", "timer"):
             for f in (self.root / package).rglob("*.py"):
-                self.assertIsNone(banned.search(f.read_text()), f"{f}는 nodes/를 import한다 (의존 방향은 nodes -> 도구 -> node)")
+                self.assertIsNone(banned.search(f.read_text()), f"{f}는 nodes/를 실행 때 import한다 (의존 방향은 nodes -> 도구)")
 
     def test_tools_packages_no_longer_export_the_nodes(self) -> None:
         import kros.diagnostics

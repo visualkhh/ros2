@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from typing import Callable, Iterable
 
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 from kros.parameter import ParameterValue
 from kros.timer import TimeSource
 

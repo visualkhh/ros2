@@ -2,7 +2,7 @@ import unittest
 
 from kros import Kros
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 
 
 class TestKros(unittest.TestCase):

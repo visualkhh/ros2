@@ -3,7 +3,7 @@ from kros.diagnostics import DiagnosticUpdater
 from kros.msgs.geometry_msgs import Twist
 from kros.msgs.sensor_msgs import JointState, LaserScan
 from kros.msgs.std_msgs import Header
-from kros.node import Node
+from kros.nodes import Node
 from kros.tf import JOINT_STATES_TOPIC_NAME
 from kros.timer import Timer
 from kros.worlds.robots.turtlebot3 import TurtleBot3

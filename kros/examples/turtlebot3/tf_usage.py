@@ -11,7 +11,7 @@ from kros import Kros
 from kros.context import Context
 from kros.msgs.geometry_msgs import Quaternion, Transform, TransformStamped, Twist, Vector3
 from kros.msgs.std_msgs import Header
-from kros.node import Node
+from kros.nodes import Node
 from kros.nodes import RobotStatePublisher
 from kros.tf import Buffer, LookupException, TransformBroadcaster, TransformListener
 from kros.timer import SimulatedTimeSource

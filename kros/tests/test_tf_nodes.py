@@ -7,7 +7,7 @@ from kros.examples.turtlebot3.robot_bridge import RobotBridge
 from kros.msgs.geometry_msgs import Transform, TransformStamped, Vector3
 from kros.msgs.sensor_msgs import JointState
 from kros.msgs.std_msgs import Header, String
-from kros.node import Node
+from kros.nodes import Node
 from kros.nodes import RobotStatePublisher
 from kros.parameter import ParameterRejectedError
 from kros.tf import (

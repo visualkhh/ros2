@@ -2,7 +2,7 @@ import threading
 import unittest
 
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 from kros.topic import QOS_DEFAULT, QOS_LATCHED, QOS_SENSOR_DATA, Durability, QoS, TopicManager
 
 

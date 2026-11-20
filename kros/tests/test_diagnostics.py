@@ -8,7 +8,7 @@ from kros.examples.turtlebot3.hardware_status import hardware_path, leaves, make
 from kros.examples.turtlebot3.robot_bridge import RobotBridge
 from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel, DiagnosticStatus, KeyValue
 from kros.msgs.std_msgs import Header
-from kros.node import Node
+from kros.nodes import Node
 from kros.nodes import DiagnosticAggregator
 from kros.timer import SimulatedTimeSource
 from kros.worlds.hardwares import Sensor

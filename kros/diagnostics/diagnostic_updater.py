@@ -1,10 +1,13 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import logging
 import threading
 from collections.abc import Callable
 
 from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel, DiagnosticStatus
 from kros.msgs.std_msgs import Header
-from kros.node import Node
 from kros.timer import Timer
 
 from .status_wrapper import DiagnosticStatusWrapper
@@ -12,6 +15,9 @@ from .topics import DIAGNOSTICS_TOPIC_NAME
 
 logger = logging.getLogger(__name__)
 Task = Callable[[DiagnosticStatusWrapper], None]
+
+if TYPE_CHECKING:  # Node가 있는 nodes 패키지가 이 패키지를 import하므로 실행 때는 import하지 않는다 (순환 방지)
+    from kros.nodes import Node
 
 
 class DiagnosticUpdater:

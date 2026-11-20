@@ -3,7 +3,7 @@ import threading
 
 from kros.context import Context
 from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel, DiagnosticStatus
-from kros.node import Node
+from kros.nodes import Node
 
 from kros.diagnostics import DIAGNOSTICS_TOPIC_NAME
 

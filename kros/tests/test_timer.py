@@ -5,7 +5,7 @@ import unittest
 
 from kros import Kros
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 from kros.timer import SimulatedTimeSource, SystemTimeSource, TimerManager
 
 

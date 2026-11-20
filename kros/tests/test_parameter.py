@@ -3,7 +3,7 @@ import unittest
 
 from kros import Kros
 from kros.context import Context
-from kros.node import Node
+from kros.nodes import Node
 from kros.parameter import (
     PARAMETER_EVENTS_TOPIC_NAME,
     ParameterAlreadyDeclaredError,

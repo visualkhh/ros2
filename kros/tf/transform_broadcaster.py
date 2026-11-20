@@ -1,10 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from collections.abc import Sequence
 
 from kros.msgs.geometry_msgs import TransformStamped
 from kros.msgs.tf2_msgs import TFMessage
-from kros.node import Node
 
 from .topics import QOS_TF_STATIC, TF_STATIC_TOPIC_NAME, TF_TOPIC_NAME
+
+if TYPE_CHECKING:  # Node가 있는 nodes 패키지가 이 패키지를 import하므로 실행 때는 import하지 않는다 (순환 방지)
+    from kros.nodes import Node
 
 
 class TransformBroadcaster:

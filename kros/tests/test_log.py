@@ -6,7 +6,7 @@ from kros import Kros
 from kros.context import Context
 from kros.log import LOG_TOPIC_NAME, enable_console
 from kros.msgs.rcl_interfaces import Log, LogLevel
-from kros.node import Node
+from kros.nodes import Node
 from kros.parameter import ParameterRejectedError
 from kros.timer import SimulatedTimeSource
 

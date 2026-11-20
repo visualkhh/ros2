@@ -4,7 +4,7 @@ from kros.context import Context
 from kros.msgs.geometry_msgs import Transform, TransformStamped, Vector3
 from kros.msgs.sensor_msgs import JointState
 from kros.msgs.std_msgs import Header, String
-from kros.node import Node
+from kros.nodes import Node
 from kros.topic import QOS_LATCHED
 from kros.urdf import UrdfError, UrdfJoint, UrdfRobot, parse_urdf
 

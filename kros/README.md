@@ -8,14 +8,13 @@ ROS를 파이썬으로 직접 만들며 학습하는 프로젝트. 타입 힌트
 kros/
 ├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
 ├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, timer_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
-├── node/node.py       Node 기반 클래스(제공 노드는 nodes/): Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
 ├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan / std_msgs: Header, String / geometry_msgs: Quaternion, Transform, TransformStamped / tf2_msgs: TFMessage / sensor_msgs: JointState / diagnostic_msgs / rcl_interfaces: Log ... (ROS의 msg 흉내)
 ├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
 ├── tf/                TF 도구: Buffer(tf2_ros.Buffer, 좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, transform_math(순수 3D 계산)
 ├── urdf/              URDF 파서 (표준 라이브러리만, 링크/관절 트리 검증)
 ├── log/               NodeLogger(node.get_logger(): 파이썬 logging + rosout 토픽), enable_console
 ├── diagnostics/       진단 도구: DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticStatusWrapper
-├── nodes/             **kros가 제공하는 표준 노드들**: RobotStatePublisher(URDF -> TF), DiagnosticAggregator(진단 모으기, STALE 판단). 쓸지는 사용자가 node_create에서 정한다
+├── nodes/             node.py: Node 기반 클래스(Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터, 로거) + **kros가 제공하는 표준 노드들**: RobotStatePublisher(URDF -> TF), DiagnosticAggregator(진단 모으기, STALE 판단). 쓸지는 사용자가 node_create에서 정한다
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionManager(서버 레지스트리, 서버/클라이언트 수명), ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
@@ -42,7 +41,7 @@ kros/
 
 ```python
 from kros import Kros
-from kros.node import Node
+from kros.nodes import Node
 
 kros = Kros(lambda ctx: [Node(ctx, "pub"), Node(ctx, "sub")])
 pub, sub = kros.nodes
