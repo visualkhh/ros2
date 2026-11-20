@@ -25,9 +25,9 @@ from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.objects import Puck, Wall
 from kros.worlds.maze.track import CENTER, SIZE
 
-from .runner import SimulationRunner
+from kros.simulation.runner import SimulationRunner
+from kros.simulation.snapshot import Snapshot
 from .shapes import box, cylinder
-from .snapshot import Snapshot
 from .urdf_model import UrdfModel
 
 SHADOW_CAMERA = BitMask32.bit(5)

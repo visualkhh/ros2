@@ -7,9 +7,9 @@
 from kros import Kros
 from kros.context import Context
 from kros.node import Node
-from kros.simulation.runner import SimulationRunner
-from kros.simulation.viewer import Viewer
 from kros.interactions import Keyboard
+from kros.simulation.runner import SimulationRunner
+from kros.viewer.panda_viewer import Viewer
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 

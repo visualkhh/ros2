@@ -11,8 +11,8 @@ except ImportError:
     HAS_PANDA = False
 
 if HAS_PANDA:
-    from kros.simulation.stl import load_stl
-    from kros.simulation.urdf_model import UrdfModel
+    from kros.viewer.stl import load_stl
+    from kros.viewer.urdf_model import UrdfModel
 
 ROBOT = Path(__file__).parent.parent / "worlds" / "robots" / "turtlebot3" / "description"
 

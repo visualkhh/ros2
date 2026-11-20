@@ -22,7 +22,8 @@ kros/
 │   │                  lds_01.py(LDS-01 라이다), xl430_w250.py(XL430-W250 모터 한 개): 모델 번호별 구현 (시뮬레이션/더미, 진짜도 여기에)
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
 │       └── turtlebot3/  TurtleBot3(Robot): diff_drive.py(DiffDrive: XL430-W250 바퀴 모터 둘을 묶은 구동부) + LDS-01 라이다를 달고, 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
-├── simulation/        [현실] Panda3D 3D 창(Viewer)과 URDF/STL 로더. 월드를 돌리고 그 안의 로봇을 그린다. kros와 무관
+├── simulation/        [현실] 월드를 화면과 따로 고정 간격으로 돌리고(runner.py: SimulationRunner) 그 순간을 불변 데이터로 내놓는다(snapshot.py: Snapshot). panda3d 없이 돈다. kros와 무관
+├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). Snapshot을 그리기만 한다. panda3d 필요. kros와 무관
 ├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성
@@ -100,7 +101,7 @@ kros/test.sh -v -p test_kros.py       # 파일 하나
 
 두 층은 완전히 분리된다.
 
-- **현실 쪽 (`worlds/`, `simulation/`)**: 진짜 하드웨어와 세계를 시뮬레이션할 뿐이다. kros의 `Node`, `Context`, 토픽을 전혀 모르고, 바깥과는 **순수 데이터**(`Twist` 명령, `LaserScan` 센서 값)로만 주고받는다. (`tests/test_maze_world.py`가 이를 검사한다.)
+- **현실 쪽 (`worlds/`, `interactions/`, `simulation/`, `viewer/`)**: 진짜 하드웨어와 세계를 시뮬레이션할 뿐이다. kros의 `Node`, `Context`, 토픽을 전혀 모르고, 바깥과는 **순수 데이터**(`Twist` 명령, `LaserScan` 센서 값)로만 주고받는다. (`tests/test_maze_world.py`가 이를 검사한다.)
   - **`World`**는 `WorldObject`들(벽, 로봇, 퍽)이 놓이는 공간이고 시계를 쥔다. 객체가 무엇인지(벽, 로봇, 센서, 명령)는 모른다. `world.add(obj)`로 놓고(기본 `start_pose`), `world.step(dt)`가 시계를 진행시켜 모든 객체에 `Clock`(시각, dt) 신호를 주고 충돌을 푼다. 두 가지 질문에 답한다: `ray_distance(x, y, angle, height)`(그 방향으로 쏜 선이 처음 닿는 객체까지 거리), `push_out(x, y, radius)`(원이 벽을 파고들었으면 밀어낸 위치). `MazeWorld`는 isaac `rl_maze` 트랙의 벽 데이터(`track.py`)로 `Wall` 객체 20개를 만든다.
   - **`WorldObject`**는 월드 안에 놓이는 모든 것의 최상위다: `pose`, `tick(clock, world)`(시계 신호를 받으면 스스로 움직인다), `collider`(충돌 도형: `Circle` 또는 `Box`), 그리고 물리 속성 `radius`, `height`(m), `mass`(kg), `friction`(이 객체 재질의 마찰 계수), `static`(월드 지형: 절대 안 움직임), `movable`(월드 물리가 움직이는가), `velocity`(미끄러지는 속도). `Wall`은 `static`(질량 무한)이고 상자, `Puck`은 `movable`이고 원, `Robot`은 둘 다 아니다(모터가 스스로 움직임).
   - **월드의 성질**: `gravity`(중력가속도, 기본 9.81, 달이면 1.62), `ground_friction`(바닥 재질의 마찰 계수, 기본 0.3, 얼음이면 0.05). `world.weight(obj)` = 질량 x 중력(같은 질량도 월드가 다르면 무게가 다르다). 객체와 바닥 사이의 실제 마찰은 두 계수를 기하평균으로 합친다: `world.friction_with_ground(obj)` = sqrt(객체 계수 x 바닥 계수). 중력만으로는 멈추지 않는다: 중력은 누르는 힘(무게)을 정하고 감속은 마찰 계수 x 중력이다.
@@ -158,7 +159,7 @@ kros/examples/turtlebot3/run.sh
 
 **월드**: isaac `rl_maze` 트랙(바깥 4.48x6.37m, 벽 두께 5cm)이다. 벽 선분은 `worlds/maze/track.py`의 `WALLS`에 내장했고(`MazeWorld`가 `Wall` 상자로 바꾼다) 원본 격자는 `worlds/maze/track_source/grid.npz`에 복사해 뒀다(출처: 그 폴더의 `README.md`). 라이다 레이는 벽을 두께 있는 상자로 보고 앞면까지 거리를 구하고(`ray_distance`), 로봇은 반지름 원으로 벽에 밀려난다(`push_out`, 로봇의 이동은 5cm 단위로 쪼개 벽을 건너뛰지 않음). 벽은 축에 평행하다고 가정한다.
 
-**화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `simulation/urdf_model.py`가 읽어 만들고(STL은 `simulation/stl.py`), 바닥/벽은 `simulation/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
+**화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `viewer/urdf_model.py`가 읽어 만들고(STL은 `viewer/stl.py`), 바닥/벽은 `viewer/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
 
 **테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_simulation.py`(러너 스레드, 스냅샷), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`는 자동 테스트가 없다(스크린샷으로 수동 확인).
 

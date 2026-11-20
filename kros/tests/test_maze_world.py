@@ -206,9 +206,16 @@ class TestMazeWorld(unittest.TestCase):
     def test_reality_side_does_not_depend_on_kros_nodes(self) -> None:
         root = pathlib.Path(__file__).parent.parent
         banned = re.compile(r"^\s*(from|import)\s+kros\.(node|context|topic|service|action)\b|^\s*from\s+kros\s+import|\bimport Node\b", re.M)
-        for pkg in ("worlds", "interactions", "simulation"):  # worlds에는 robots도 들어 있다
+        for pkg in ("worlds", "interactions", "simulation", "viewer"):  # worlds에는 robots도 들어 있다
             for f in (root / pkg).rglob("*.py"):
                 self.assertIsNone(banned.search(f.read_text()), f"{f}는 kros의 Node/Context 쪽을 import한다")
+
+    def test_only_the_viewer_depends_on_panda3d(self) -> None:
+        root = pathlib.Path(__file__).parent.parent
+        banned = re.compile(r"^\s*(from|import)\s+(panda3d|direct)\b", re.M)
+        for pkg in ("worlds", "interactions", "simulation", "node", "topic", "service", "action", "msgs"):
+            for f in (root / pkg).rglob("*.py"):
+                self.assertIsNone(banned.search(f.read_text()), f"{f}는 panda3d를 import한다 (화면은 viewer/ 에만)")
 
     def test_world_knows_nothing_about_robot_or_sensors(self) -> None:
         root = pathlib.Path(__file__).parent.parent / "worlds"
@@ -216,7 +223,7 @@ class TestMazeWorld(unittest.TestCase):
             if {"robots", "hardwares"} & set(f.relative_to(root).parts):  # 로봇과 하드웨어 부품은 월드 안에 놓이는 것들: 월드 쪽 파일만 검사
                 continue
             body = f.read_text()
-            for banned in ("LaserScan", "Twist", "kros.worlds.robots", "kros.simulation"):
+            for banned in ("LaserScan", "Twist", "kros.worlds.robots", "kros.simulation", "kros.viewer"):
                 self.assertNotIn(banned, body, f"{f}: {banned}")
 
 
