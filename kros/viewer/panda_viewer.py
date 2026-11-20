@@ -22,8 +22,8 @@ from panda3d.core import (
 )
 
 from kros.worlds.robots.turtlebot3 import TurtleBot3
-from kros.worlds.objects import Puck, Wall
-from kros.worlds.maze.track import CENTER, SIZE
+from kros.worlds.objects import Puck
+from kros.worlds.maze.track import CENTER, SIZE, Track
 
 from kros.viewer.snapshot import Snapshot
 from kros.viewer.snapshot_recorder import SnapshotRecorder
@@ -139,9 +139,10 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
                 grid.moveTo(cx - SIZE[0] / 2, cy + m, 0.001)
                 grid.drawTo(cx + SIZE[0] / 2, cy + m, 0.001)
         world.attachNewNode(grid.create())
-        for obj in self.world.objects:  # 벽도 월드 객체
-            if isinstance(obj, Wall):
-                self._part(world, box(obj.size_x, obj.size_y, obj.height), (0.8, 0.82, 0.86), (obj.pose.x, obj.pose.y, obj.height / 2))
+        for obj in self.world.objects:  # 트랙(벽 전체)도 월드 객체
+            if isinstance(obj, Track):
+                for ox, oy, part in obj.boxes:
+                    self._part(world, box(part.half_x * 2, part.half_y * 2, obj.height), (0.8, 0.82, 0.86), (obj.pose.x + ox, obj.pose.y + oy, obj.height / 2))
         for index, obj in enumerate(self.world.objects):  # 월드에 놓인 퍽들
             if isinstance(obj, Puck):
                 p = obj.pose

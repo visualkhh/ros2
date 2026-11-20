@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from kros.msgs.geometry_msgs import Pose2D
 from kros.worlds.clock import Clock
-from kros.worlds.collision import Box, Circle, circle_vs, ray_distances_batch, ray_hit
+from kros.worlds.collision import Box, Circle, Compound, circle_vs, ray_distances_batch, ray_hit
 from kros.worlds.compute import Compute, compute
 from kros.worlds.world_object import WorldObject
 
@@ -74,7 +74,9 @@ class World(ABC):
             shape = obj.collider
             if shape is None or obj.height <= height:
                 continue
-            if isinstance(shape, Box):
+            if isinstance(shape, Compound):
+                boxes.extend((obj.pose.x + ox, obj.pose.y + oy, box.half_x, box.half_y) for ox, oy, box in shape.parts)
+            elif isinstance(shape, Box):
                 boxes.append((obj.pose.x, obj.pose.y, shape.half_x, shape.half_y))
             elif isinstance(shape, Circle):
                 circles.append((obj.pose.x, obj.pose.y, shape.radius))

@@ -16,11 +16,20 @@ class Box:
     half_y: float
 
 
-Shape = Circle | Box
+@dataclass(frozen=True)
+class Compound:
+    """여러 상자를 한 도형으로 묶은 것 (미로 전체 같은 한 덩어리). 각 부품은 (dx, dy, 상자): 객체 위치에서 dx, dy 떨어진 곳의 상자."""
+
+    parts: tuple[tuple[float, float, Box], ...]
+
+
+Shape = Circle | Box | Compound
 
 
 def ray_hit(shape: Shape, cx: float, cy: float, x: float, y: float, angle: float) -> float:
     """중심 (cx, cy)의 도형에 (x, y)에서 angle 방향 선이 처음 닿는 거리. 안 닿거나 출발점이 도형 안이면 inf."""
+    if isinstance(shape, Compound):
+        return min((ray_hit(box, cx + ox, cy + oy, x, y, angle) for ox, oy, box in shape.parts), default=math.inf)
     dx, dy = math.cos(angle), math.sin(angle)
     if isinstance(shape, Circle):
         fx, fy = cx - x, cy - y
@@ -44,6 +53,9 @@ def ray_hit(shape: Shape, cx: float, cy: float, x: float, y: float, angle: float
 
 def circle_vs(shape: Shape, cx: float, cy: float, x: float, y: float, radius: float) -> tuple[float, float, float] | None:
     """중심 (x, y) 반지름 radius 원이 (cx, cy)의 도형을 파고들었는가. 파고들었으면 (도형에서 원 쪽 단위 법선 nx, ny, 깊이)."""
+    if isinstance(shape, Compound):  # 가장 깊이 파고든 부품 하나 (나머지는 호출하는 쪽이 반복하며 처리한다)
+        hits = [h for ox, oy, box in shape.parts if (h := circle_vs(box, cx + ox, cy + oy, x, y, radius)) is not None]
+        return max(hits, key=lambda h: h[2], default=None)
     if isinstance(shape, Circle):
         dx, dy = x - cx, y - cy
         d = math.hypot(dx, dy)

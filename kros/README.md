@@ -24,8 +24,8 @@ kros/
 ├── worlds/            [현실] 외부 환경 + 그 안의 객체들. kros와 무관. world.py: World(환경, 시계), world_object.py: WorldObject, clock.py: Clock,
 │   │                  simulation_runner.py: SimulationRunner(월드를 화면과 따로 고정 간격으로 돌린다. 월드만 알고 로봇은 모른다)
 │   ├── collision.py   충돌/레이 도형 Circle, Box와 계산 (ray_hit, circle_vs)
-│   ├── maze/          MazeWorld(World): isaac rl_maze 트랙(track.py의 벽 데이터) -> Wall 20개 + 시작할 때 퍽 10개를 흩뿌림
-│   ├── objects/       로봇이 아닌 WorldObject들. wall.py: Wall(static 상자), puck.py: Puck(모양 PuckShape, 색)
+│   ├── maze/          MazeWorld(World): isaac rl_maze 트랙(track.py: Track 하나가 벽 전체를 가진 WorldObject) + 시작할 때 퍽 10개를 흩뿌림
+│   ├── objects/       로봇이 아닌 WorldObject들. puck.py: Puck(모양 PuckShape, 색)
 │   ├── hardwares/     부품 하드웨어. hardware.py: Hardware/Sensor/Actuator(모든 장치의 최상위). 종류별 패키지에 인터페이스와 모델 번호별 구현이 함께 있다:
 │   │   ├── lidars/    lidar.py(Lidar 인터페이스), lds_01.py(LDS-01: 시뮬레이션/더미, 진짜도 여기에)
 │   │   └── motors/    motor.py(Motor 인터페이스: 회전 모터 한 개), xl430_w250.py(XL430-W250)
@@ -304,7 +304,7 @@ kros/examples/turtlebot3/run.sh
 
 **데이터 흐름**: 3D 창이 받은 키 -> `Keyboard.set_keys` -> (입력이 바뀌면) `TurtleBot3.on_interaction`(키 해석) -> `robot.command`(`Twist`) -> `DiffDrive`가 바퀴 모터 속도로 바꿈. 다른 프로그램이 `cmd_vel` 토픽에 `Twist`를 publish하면 `RobotBridge`가 같은 `robot.command`에 넣는다(마지막 명령이 이긴다). 월드는 `SimulationRunner` 스레드에서 따로 돈다: `world.step`이 시계 신호를 `TurtleBot3.tick`으로 내려 `DiffDrive`(바퀴 모터가 돌고 몸체가 움직임)와 라이다가 일하고, 라이다 측정(시뮬 시간 5Hz, 1도 간격 360개 레이, 범위 0.12~3.5m, 밖은 `inf`)은 `lidar.subscribe` -> `RobotBridge` -> `scan`(`LaserScan`). 화면은 `runner.latest`(`Snapshot`)만 읽는다.
 
-**월드**: isaac `rl_maze` 트랙(바깥 4.48x6.37m, 벽 두께 5cm)이다. 벽 선분은 `worlds/maze/track.py`의 `WALLS`에 내장했고(`MazeWorld`가 `Wall` 상자로 바꾼다) 원본 격자는 `worlds/maze/track_source/grid.npz`에 복사해 뒀다(출처: 그 폴더의 `README.md`). 라이다 레이는 벽을 두께 있는 상자로 보고 앞면까지 거리를 구하고(`ray_distance`), 로봇은 반지름 원으로 벽에 밀려난다(`push_out`, 로봇의 이동은 5cm 단위로 쪼개 벽을 건너뛰지 않음). 벽은 축에 평행하다고 가정한다.
+**월드**: isaac `rl_maze` 트랙(바깥 4.48x6.37m, 벽 두께 5cm)이다. 벽 선분은 `worlds/maze/track.py`의 `WALLS`에 내장했고(`Track`이 이걸 상자 묶음으로 바꾼 하나의 `WorldObject`다) 원본 격자는 `worlds/maze/track_source/grid.npz`에 복사해 뒀다(출처: 그 폴더의 `README.md`). 라이다 레이는 벽을 두께 있는 상자로 보고 앞면까지 거리를 구하고(`ray_distance`), 로봇은 반지름 원으로 벽에 밀려난다(`push_out`, 로봇의 이동은 5cm 단위로 쪼개 벽을 건너뛰지 않음). 벽은 축에 평행하다고 가정한다.
 
 **화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `viewer/urdf_model.py`가 읽어 만들고(STL은 `viewer/stl.py`), 바닥/벽은 `viewer/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
 
