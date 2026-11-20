@@ -24,7 +24,7 @@ kros/
 │   │                  lds_01.py(LDS-01 라이다), xl430_w250.py(XL430-W250 모터 한 개): 모델 번호별 구현 (시뮬레이션/더미, 진짜도 여기에)
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
 │       └── turtlebot3/  TurtleBot3(Robot): diff_drive.py(DiffDrive: XL430-W250 바퀴 모터 둘을 묶은 구동부) + LDS-01 라이다를 달고, 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
-├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 월드를 화면과 따로 고정 간격으로 돌리는 runner.py(SimulationRunner)와 그 순간의 불변 데이터 snapshot.py(Snapshot)도 여기에 있다(이 둘은 panda3d 없이 돈다). kros와 무관
+├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 월드를 화면과 따로 고정 간격으로 돌리는 simulation_runner.py(SimulationRunner)와 그 순간의 불변 데이터 snapshot.py(Snapshot)도 여기에 있다(이 둘은 panda3d 없이 돈다). kros와 무관
 ├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성
@@ -196,7 +196,7 @@ kros/examples/turtlebot3/run.sh
 
 **화면**: Panda3D(GPU, 조명/그림자 셰이더). 로봇은 ROBOTIS TurtleBot3 waffle pi URDF/메시(`worlds/robots/turtlebot3/description/`, 출처는 그 안의 `README.md`)를 `viewer/urdf_model.py`가 읽어 만들고(STL은 `viewer/stl.py`), 바닥/벽은 `viewer/shapes.py`가 코드로 만든다. 바퀴가 속도에 맞춰 돈다. 라이다 점은 빨간 점(그림자 없음)이고 HUD에 위치, 속도, 가장 가까운 거리(`nearest`)가 나온다.
 
-**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_viewer_runner.py`(러너 스레드, 스냅샷), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`는 자동 테스트가 없다(스크린샷으로 수동 확인).
+**테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_simulation_runner.py`(러너 스레드, 스냅샷), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`는 자동 테스트가 없다(스크린샷으로 수동 확인).
 
 ## TODO
 

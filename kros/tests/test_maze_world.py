@@ -216,7 +216,7 @@ class TestMazeWorld(unittest.TestCase):
         for pkg in ("worlds", "interactions", "node", "topic", "service", "action", "msgs"):
             for f in (root / pkg).rglob("*.py"):
                 self.assertIsNone(banned.search(f.read_text()), f"{f}는 panda3d를 import한다 (화면은 viewer/ 에만)")
-        for name in ("runner.py", "snapshot.py"):  # viewer/ 안이어도 러너와 스냅샷은 panda3d 없이 돈다
+        for name in ("simulation_runner.py", "snapshot.py"):  # viewer/ 안이어도 러너와 스냅샷은 panda3d 없이 돈다
             self.assertIsNone(banned.search((root / "viewer" / name).read_text()), f"viewer/{name}는 panda3d를 import하면 안 된다")
 
     def test_world_knows_nothing_about_robot_or_sensors(self) -> None:

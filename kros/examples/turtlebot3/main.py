@@ -11,7 +11,7 @@ from kros.interactions import Keyboard
 from kros.node import Node
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
-from kros.viewer.runner import SimulationRunner
+from kros.viewer.simulation_runner import SimulationRunner
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 

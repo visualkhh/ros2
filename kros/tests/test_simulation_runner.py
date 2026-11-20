@@ -3,7 +3,7 @@ import math
 import time
 import unittest
 
-from kros.viewer.runner import SimulationRunner
+from kros.viewer.simulation_runner import SimulationRunner
 from kros.viewer.snapshot import Snapshot
 from kros.msgs.geometry_msgs import Twist, Vector3
 from kros.worlds.maze.maze_world import MazeWorld
