@@ -72,6 +72,8 @@ kros.set_parameter("Driver", "speed", 0.1)    # 실행 중에 바꾼다 (노드 
 - **타입은 기본값으로 고정**된다(`bool`, `int`, `float`, `str`, 그 튜플). 다른 타입으로 set하면 `TypeError`(int는 float이 아니고 bool은 int가 아니다). 시작 값이 타입이나 검증에 안 맞으면 선언이 실패한다.
 - **검증과 반응**: `validator(새 값) -> bool`이 False면 `ParameterRejectedError`(값은 그대로), 바뀐 뒤에는 `on_change(새 값)`이 불린다. 선언하지 않은 이름은 `ParameterNotDeclaredError`, 두 번 선언하면 `ParameterAlreadyDeclaredError`.
 - **동적 반영**: `Parameter.value`는 호출할 때마다 현재 값을 읽는다(락으로 스레드 안전). 다른 스레드에서 바꾼 값을 구독 콜백이 바로 읽는다. 단 `x = param.value`로 변수에 복사해 두면 따라 바뀌지 않는다. 값에서 파생된 상태를 다시 만들어야 하면 `on_change`를 쓴다.
+- **변화 알림 (`parameter_events` 토픽)**: 선언하거나 값이 바뀌면 `ParameterEvent(node, name, kind, old, new)`가 `parameter_events` 토픽(`PARAMETER_EVENTS_TOPIC_NAME`) 하나로 나온다(ROS2의 `/parameter_events`와 같은 구조, 단 이전 값 `old`도 담는다). 다른 노드가 구독해서 그 노드의 변화를 알 수 있고, `Kros.set_parameter`처럼 노드를 거치지 않는 변경도 알린다. 거절됐거나 타입이 틀린 변경, 같은 값으로의 set은 알리지 않는다.
+- **교통정리는 `Context`가 한다**: 매니저(`topic`, `service`, `parameter`)끼리는 서로를 import하지 않는다(테스트가 검사). `ParameterManager`는 변화를 콜백으로 알리기만 하고, 그 콜백을 토픽 발행에 연결하는 건 `Context`다. 새 기능이 매니저끼리 엮여야 하면 매니저 안이 아니라 `Context`에서 연결한다.
 - **오타 점검**: 누가 값을 줬는데 선언된 파라미터가 없으면(`Kros(parameters={"Driver": {"spede": 1}})`) 경고 로그를 남긴다.
 - 파라미터는 kros 노드의 개념이다. 현실 쪽(`worlds/` 등)의 `Robot`, `World`, 하드웨어는 생성자 인자로 값을 받는다.
 

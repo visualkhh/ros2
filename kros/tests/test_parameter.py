@@ -5,7 +5,11 @@ from kros import Kros
 from kros.context import Context
 from kros.node import Node
 from kros.parameter import (
+    PARAMETER_EVENTS_TOPIC_NAME,
     ParameterAlreadyDeclaredError,
+    ParameterEvent,
+    ParameterEventKind,
+    ParameterManager,
     ParameterNotDeclaredError,
     ParameterRejectedError,
 )
@@ -230,6 +234,126 @@ class TestDynamicChange(unittest.TestCase):
         node.publish("in", 2)
         kros.context.topic_manager.join()
         self.assertEqual(node.out, [2, 20])
+
+
+class Watcher(Node):
+    """다른 노드의 파라미터 변화를 parameter_events 토픽으로 지켜본다."""
+
+    def __init__(self, context: Context) -> None:
+        super().__init__(context)
+        self.events: list[ParameterEvent] = []
+        self.subscribe(PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, self.events.append)
+
+
+class TestParameterEvents(unittest.TestCase):
+    def make(self, parameters: dict[str, dict[str, bool | int | float | str]] | None = None) -> tuple[Kros, Watcher, Speedy]:
+        kros = Kros(lambda ctx: [Watcher(ctx), Speedy(ctx)], parameters=parameters)
+        self.addCleanup(kros.shutdown)
+        watcher, speedy = kros.nodes
+        assert isinstance(watcher, Watcher) and isinstance(speedy, Speedy)
+        return kros, watcher, speedy
+
+    def settle(self, kros: Kros) -> None:
+        kros.context.topic_manager.join()
+
+    def test_declaring_publishes_declared_events_with_the_starting_value(self) -> None:
+        kros, watcher, _ = self.make({"Speedy": {"speed": 0.4}})
+        self.settle(kros)
+        declared = {e.name: e for e in watcher.events if e.node == "Speedy"}
+        self.assertEqual(set(declared), {"speed", "topic", "count"})
+        self.assertEqual((declared["speed"].kind, declared["speed"].old, declared["speed"].new), (ParameterEventKind.DECLARED, None, 0.4))  # 덮어쓴 시작 값
+        self.assertEqual(declared["topic"].new, "cmd_vel")  # 덮어쓰지 않은 건 기본값
+
+    def test_change_publishes_old_and_new(self) -> None:
+        kros, watcher, speedy = self.make()
+        self.settle(kros)
+        watcher.events.clear()
+        kros.set_parameter(speedy, "speed", 0.9)
+        self.settle(kros)
+        self.assertEqual(watcher.events, [ParameterEvent("Speedy", "speed", ParameterEventKind.CHANGED, 0.26, 0.9)])
+
+    def test_every_way_of_changing_is_announced_to_other_nodes(self) -> None:
+        kros, watcher, speedy = self.make()
+        self.settle(kros)
+        watcher.events.clear()
+        speedy.speed.set(0.1)  # 손잡이로
+        speedy.set_parameter("count", 5)  # 노드 이름으로
+        kros.context.parameter_manager.set("Speedy", "topic", "scan")  # 매니저로 직접
+        self.settle(kros)
+        self.assertEqual({(e.name, e.new) for e in watcher.events}, {("speed", 0.1), ("count", 5), ("topic", "scan")})
+
+    def test_rejected_or_wrongly_typed_changes_publish_nothing(self) -> None:
+        kros = Kros(lambda ctx: [Watcher(ctx), Checked(ctx)])
+        self.addCleanup(kros.shutdown)
+        watcher = kros.nodes[0]
+        assert isinstance(watcher, Watcher)
+        self.settle(kros)
+        watcher.events.clear()
+        with self.assertRaises(ParameterRejectedError):
+            kros.set_parameter("Checked", "limit", -1)
+        with self.assertRaises(TypeError):
+            kros.set_parameter("Checked", "limit", "x")
+        self.settle(kros)
+        self.assertEqual(watcher.events, [])
+
+    def test_setting_the_same_value_publishes_nothing(self) -> None:
+        kros, watcher, speedy = self.make()
+        self.settle(kros)
+        watcher.events.clear()
+        speedy.speed.set(0.26)  # 이미 이 값
+        self.settle(kros)
+        self.assertEqual(watcher.events, [])
+
+    def test_declared_comes_before_changed(self) -> None:
+        kros, watcher, speedy = self.make()
+        speedy.speed.set(2.0)
+        self.settle(kros)
+        kinds = [e.kind for e in watcher.events if e.node == "Speedy" and e.name == "speed"]
+        self.assertEqual(kinds, [ParameterEventKind.DECLARED, ParameterEventKind.CHANGED])
+
+    def test_parameter_manager_works_without_any_topic(self) -> None:
+        manager = ParameterManager()  # 이벤트 콜백이 없어도 동작한다
+        manager.declare("n", "x", 1)
+        manager.set("n", "x", 2)
+        self.assertEqual(manager.get("n", "x"), 2)
+
+    def test_manager_calls_the_event_callback_directly(self) -> None:
+        seen: list[ParameterEvent] = []
+        manager = ParameterManager(on_event=seen.append)
+        manager.declare("n", "x", 1)
+        manager.set("n", "x", 2)
+        self.assertEqual([(e.kind, e.old, e.new) for e in seen], [(ParameterEventKind.DECLARED, None, 1), (ParameterEventKind.CHANGED, 1, 2)])
+
+
+class Checked(Node):
+    def __init__(self, context: Context) -> None:
+        super().__init__(context)
+        self.limit = self.declare_parameter("limit", 10, validator=lambda v: v >= 0)
+
+
+class TestManagersAreNotTiedTogether(unittest.TestCase):
+    """매니저끼리는 서로를 모른다. 연결은 Context가 가운데서 한다 (교통정리)."""
+
+    def test_managers_do_not_import_each_other(self) -> None:
+        import pathlib
+        import re
+
+        root = pathlib.Path(__file__).parent.parent
+        managers = ("topic", "service", "parameter")
+        for manager in managers:
+            others = [m for m in managers if m != manager]
+            banned = re.compile(rf"^\s*(from|import)\s+kros\.({'|'.join(others)})\b", re.M)
+            for f in (root / manager).rglob("*.py"):
+                self.assertIsNone(banned.search(f.read_text()), f"{f}: {manager} 매니저가 다른 매니저를 import한다 (연결은 Context에서)")
+
+    def test_context_is_the_one_that_wires_parameter_events_to_the_topic(self) -> None:
+        ctx = Context()
+        self.addCleanup(ctx.shutdown)
+        seen: list[ParameterEvent] = []
+        Node(ctx, "w").subscribe(PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, seen.append)
+        Node(ctx, "n").declare_parameter("x", 1)
+        ctx.topic_manager.join()
+        self.assertEqual([(e.node, e.name) for e in seen], [("n", "x")])
 
 
 class TestKrosIntegration(unittest.TestCase):

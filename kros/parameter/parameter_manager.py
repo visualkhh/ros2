@@ -1,6 +1,9 @@
 import threading
 from collections.abc import Callable, Mapping
-from typing import Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Generic, TypeVar, cast
+
+if TYPE_CHECKING:
+    from .parameter_event import ParameterEvent
 
 Scalar = bool | int | float | str
 ParameterValue = Scalar | tuple[Scalar, ...]
@@ -71,7 +74,10 @@ class ParameterManager:
     선언한 기본값 < Node(parameters=...) < Kros(parameters=...) < 실행 중 set.
     타입은 기본값의 타입으로 고정된다 (다른 타입으로 set하면 TypeError)."""
 
-    def __init__(self, overrides: Mapping[str, Mapping[str, ParameterValue]] | None = None) -> None:
+    def __init__(
+        self, overrides: Mapping[str, Mapping[str, ParameterValue]] | None = None, on_event: "Callable[[ParameterEvent], None] | None" = None
+    ) -> None:
+        self._on_event = on_event  # 선언/변경이 일어나면 불린다 (Context가 parameter_events 토픽에 연결한다). 토픽을 몰라도 동작한다
         self._overrides = {node: dict(values) for node, values in (overrides or {}).items()}  # Kros가 준 값
         self._node_overrides: dict[str, dict[str, ParameterValue]] = {}  # Node 생성자가 준 값
         self._entries: dict[tuple[str, str], _Entry] = {}
@@ -100,6 +106,7 @@ class ParameterManager:
             if value is not default and entry.validator is not None and not entry.validator(default):
                 del self._entries[(node, name)]
                 raise ParameterRejectedError(f"{node}.{name}의 기본값 {default!r}가 검증을 통과하지 못한다")
+        self._emit(node, name, None, value)
         return Parameter(self, node, name)
 
     def get(self, node: str, name: str) -> ParameterValue:
@@ -111,10 +118,21 @@ class ParameterManager:
         with self._lock:
             entry = self._entry(node, name)
             self._check(node, name, entry.value, value, entry.validator)
+            old = entry.value
             entry.value = value
             on_change = entry.on_change
         if on_change is not None:
             on_change(value)
+        if value != old:  # 같은 값으로 set하면 알리지 않는다
+            self._emit(node, name, old, value)
+
+    def _emit(self, node: str, name: str, old: ParameterValue | None, new: ParameterValue) -> None:
+        if self._on_event is None:
+            return
+        from .parameter_event import ParameterEvent, ParameterEventKind  # 순환 import를 피한다
+
+        kind = ParameterEventKind.DECLARED if old is None else ParameterEventKind.CHANGED
+        self._on_event(ParameterEvent(node, name, kind, old, new))
 
     def declared(self, node: str) -> dict[str, ParameterValue]:
         """노드가 선언한 파라미터와 현재 값."""

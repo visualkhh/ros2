@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from kros.parameter import ParameterManager, ParameterValue
+from kros.parameter import PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, ParameterManager, ParameterValue
 from kros.service import ServiceManager
 from kros.topic import TopicManager
 
@@ -11,8 +11,12 @@ class Context:
     def __init__(self, parameters: Mapping[str, Mapping[str, ParameterValue]] | None = None) -> None:
         self.topic_manager: TopicManager = TopicManager()
         self.service_manager: ServiceManager = ServiceManager()
-        self.parameter_manager: ParameterManager = ParameterManager(parameters)  # parameters: {노드이름: {파라미터: 값}} 시작 값
+        # parameters: {노드이름: {파라미터: 값}} 시작 값. 선언/변경은 parameter_events 토픽으로 알린다 (파라미터 매니저는 토픽을 모르고 콜백만 부른다)
+        self.parameter_manager: ParameterManager = ParameterManager(parameters, on_event=self._publish_parameter_event)
         self._node_names: set[str] = set()
+
+    def _publish_parameter_event(self, event: ParameterEvent) -> None:
+        self.topic_manager.publish(PARAMETER_EVENTS_TOPIC_NAME, event)
 
     def register_node(self, name: str) -> None:
         """노드 이름을 등록한다. 같은 Context에서 이름이 겹치면 ValueError."""
