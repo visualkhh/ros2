@@ -5,7 +5,8 @@
 """
 from .node import Node
 from .diagnostic_aggregator import DiagnosticAggregator
+from .diff_drive_odometry import DiffDriveOdometry
 from .robot_state_publisher import RobotStatePublisher
 from .tf_echo import TfEcho
 
-__all__ = ["DiagnosticAggregator", "Node", "RobotStatePublisher", "TfEcho"]
+__all__ = ["DiagnosticAggregator", "DiffDriveOdometry", "Node", "RobotStatePublisher", "TfEcho"]

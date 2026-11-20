@@ -14,7 +14,7 @@ kros/
 ├── urdf/              URDF 파서 (표준 라이브러리만, 링크/관절 트리 검증)
 ├── log/               NodeLogger(node.get_logger(): 파이썬 logging + rosout 토픽), enable_console
 ├── diagnostics/       진단 도구: DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticStatusWrapper
-├── nodes/             node.py: Node 기반 클래스(Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터, 로거) + **kros가 제공하는 표준 노드들**: RobotStatePublisher(URDF -> TF), DiagnosticAggregator(진단 모으기, STALE 판단). 쓸지는 사용자가 node_create에서 정한다
+├── nodes/             node.py: Node 기반 클래스(Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터, 로거) + **kros가 제공하는 표준 노드들**: RobotStatePublisher(URDF -> TF), DiffDriveOdometry(바퀴 각 적분 -> odom 토픽, odom -> base_footprint TF), DiagnosticAggregator(진단 모으기, STALE 판단). 쓸지는 사용자가 node_create에서 정한다
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionManager(서버 레지스트리, 서버/클라이언트 수명), ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
@@ -89,6 +89,8 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
 - **`RobotStatePublisher`(노드, `kros.nodes`)**: 파라미터 `robot_description`(URDF 본문 문자열, 실행 중 바꾸면 다시 읽는다)으로 TF를 만든다. 고정 관절은 `tf_static`으로, 움직이는 관절(continuous/revolute/prismatic)은 `joint_states`(`JointState`)를 받을 때마다 `tf`로 낸다(그 관절의 값이 아직 안 왔으면 안 낸다). URDF 본문은 `robot_description` 토픽(latch)으로도 낸다. 잘못된 URDF(뿌리가 둘, 순환, 없는 링크 ...)는 파라미터가 거절하고 이전 로봇이 그대로 남는다. **kros가 제공하는 노드이고 쓸지는 사용자가 `node_create`에서 정한다**(안 만들면 아무 일도 안 한다).
 - **URDF 파서(`kros/urdf`)**: 표준 라이브러리만 쓴다. 링크/관절 트리를 검증하고(이름 중복, 없는 링크, 부모가 둘, 뿌리가 둘 이상, 순환), xacro는 **인자 치환(`${namespace}` 기본 빈 값)만** 지원한다. 그 밖의 `${...}`가 이름에 남으면 조용히 틀린 이름을 쓰지 않고 `UrdfError`다.
 - **하드웨어와의 연결(예제)**: `Robot.joint_positions()`(URDF 관절 이름 -> 위치, 바퀴 모터 엔코더 값)가 하드웨어가 남긴 사실이고, `RobotBridge`가 이걸 `joint_states` 토픽으로 낸다(`joint_states_period` 파라미터, 기본 0.05초). 그러면 `RobotStatePublisher`가 바퀴 TF를 만든다. URDF의 라이다 위치(`base_footprint` -> `base_scan` = (-0.064, 0, 0.132))가 `TurtleBot3`가 코드에 적은 `LIDAR_MOUNT_X/HEIGHT`와 같다는 걸 테스트가 확인한다.
+**오도메트리**: `DiffDriveOdometry`는 `joint_states`의 바퀴 각을 적분해 `odom` 토픽(`nav_msgs.Odometry`)과 TF(`odom -> base_footprint`)를 낸다. 파라미터: `wheel_radius`, `wheel_separation`, `left_joint`/`right_joint`, `odom_frame`/`base_frame`, `publish_tf`, `jump_threshold`(바퀴 각이 한 번에 이만큼(rad) 넘게 뛰면 보드 재부팅으로 보고 그 변화는 버린다). 한 조각은 시작 방향이 아니라 중간 방향으로 간 것으로 적분한다. 바퀴만 보므로 **바퀴가 헛돌면 오차가 쌓인다**(시뮬레이션에서 벽에 막혀도 바퀴 모터는 도는 것으로 세어져 벽을 뚫고 간 것으로 추정한다: 테스트가 이 한계를 확인한다). 정답 위치(월드의 로봇 pose)와 따로 계산하므로 둘의 차이가 곧 오도메트리 오차다.
+
 ### TF 사용법 (노드에서)
 
 실행 가능한 전체 예제는 `examples/turtlebot3/tf_usage.py`이고(`python3 -m kros.examples.turtlebot3.tf_usage`), 테스트(`tests/test_tf_usage.py`)가 이 예제를 실제로 돌려서 아래 설명이 낡지 않게 한다.

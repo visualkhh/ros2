@@ -10,12 +10,13 @@ from kros.context import Context
 from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.nodes import Node
-from kros.nodes import RobotStatePublisher
+from kros.nodes import DiffDriveOdometry, RobotStatePublisher
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
 from kros.viewer.snapshot_recorder import SnapshotRecorder
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
+from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARATION
 from kros.worlds.simulation_runner import SimulationRunner
 
 from .robot_bridge import RobotBridge
@@ -36,7 +37,8 @@ def main() -> None:
     def create_nodes(ctx: Context) -> list[Node]:
         # kros가 제공하는 노드를 쓸지는 여기서(launch 파일처럼) 정한다: URDF로 TF를 만드는 RobotStatePublisher
         description = RobotStatePublisher(ctx, parameters={"robot_description": robot.urdf_path.read_text()})
-        return [RobotBridge(ctx, robot), description]
+        odometry = DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION})  # 바퀴 -> odom -> base_footprint TF
+        return [RobotBridge(ctx, robot), description, odometry]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()

@@ -33,7 +33,7 @@
 
 ## 나중에 (설계가 필요)
 
-- [ ] **오도메트리**: `odom -> base_footprint` TF와 `Odometry` 메시지. 바퀴 엔코더(`joint_states`)를 적분하는 노드가 필요 (`map -> odom`은 SLAM/위치추정이 낸다). 정답 위치와 따로 계산해야 TF가 의미 있다 (바퀴 미끄러짐으로 오차가 쌓임)
+- [x] **오도메트리**: `DiffDriveOdometry`(바퀴 각 적분, `odom` 토픽 + `odom -> base_footprint` TF). 남은 것: IMU를 섞은 보정, 시뮬레이션에 바퀴 슬립 넣기 (`map -> odom`은 SLAM/위치추정이 낸다)
 - [ ] TF: 벡터/PointCloud 변환 편의 함수, `viewer`에서 TF 좌표축 그리기, URDF 파서와 `viewer/urdf_model.py`(panda3d용)의 중복 정리 (뷰어가 `kros/urdf` 파서를 쓰도록)
 - [ ] `RobotStatePublisher`: 움직이는 관절 값이 안 오면 아무것도 안 낸다 (ROS도 같음). mimic 관절, floating/planar 관절은 미지원
 - [ ] **bag(기록/재생)**: 보류. 방향은 ROS의 rosbag과 같다 (토픽 메시지를 시각과 함께 파일에 기록, 나중에 원래 간격으로 재생). `rosout`(로그)도 같이 기록된다. 필요한 것: 메시지 직렬화(JSON + 타입 이름 레지스트리: **네트워크와 같은 부품이라 같이 설계**), `TopicManager`의 토픽 목록 조회와 "전부 엿보기" 훅, 재생 시각은 `SimulatedTimeSource`로 원래 간격 맞추기, 재생이 만드는 `/clock`
