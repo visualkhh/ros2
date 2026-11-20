@@ -72,7 +72,7 @@ class TestBtNavigator(unittest.TestCase):
         self.assertLess(nav.error_to(0.0, 1.2), 0.3)
         self.assertTrue(feedback)
         self.assertGreater(max(f.distance_remaining for f in feedback), 1.0)  # 처음엔 멀었다
-        self.assertTrue(nav.local_plans and nav.local_plans[0].header.frame_id == "map")  # controller가 예상 자취를 냈다
+        self.assertTrue(nav.local_plans and nav.local_plans[0].header.frame_id == "odom")  # controller가 예상 자취를 냈다 (local costmap 좌표, nav2와 같다)
 
     def test_goal_pose_topic_starts_navigation_like_rviz(self) -> None:
         nav = Navigation(self)

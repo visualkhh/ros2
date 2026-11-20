@@ -5,11 +5,13 @@ import unittest
 from kros import Kros
 from kros.context import Context
 from kros.msgs.geometry_msgs import Point, Pose, Quaternion, Transform, TransformStamped, Vector3
+from kros.msgs.sensor_msgs import LaserScan
 from kros.msgs.nav_msgs import FREE, OCCUPIED, UNKNOWN, MapMetaData, OccupancyGrid
 from kros.msgs.std_msgs import Header
 from kros.nodes import Node
 from kros.nodes.nav2.costmap_2d import FREE_SPACE, INSCRIBED_INFLATED_OBSTACLE, LETHAL_OBSTACLE, NO_INFORMATION, Costmap, Costmap2DROS
 from kros.nodes.nav2.costmap_2d.costmap import translate
+from kros.parameter import ParameterValue
 from kros.tf import TransformBroadcaster
 from kros.timer import SimulatedTimeSource
 from kros.topic import QOS_LATCHED
@@ -110,6 +112,69 @@ class TestCostmap2DROS(unittest.TestCase):
         self.assertAlmostEqual(pose[0], 1.0)
         self.assertAlmostEqual(pose[1], 2.0)
         self.assertAlmostEqual(pose[2], yaw)
+
+
+
+class TestRollingObstacleCostmap(unittest.TestCase):
+    """nav2 local costmap처럼: 지도 없이 로봇을 따라다니는 창 + 라이다 장애물."""
+
+    def setUp(self) -> None:
+        made: dict[str, Node] = {}
+        parameters: dict[str, ParameterValue] = {"global_frame": "odom", "plugins": ("obstacle_layer", "inflation_layer"), "rolling_window": True, "width": 2.0, "height": 2.0, "robot_radius": 0.1, "inflation_radius": 0.3}
+
+        def create(ctx: Context) -> list[Node]:
+            made["user"], made["costmap"] = Node(ctx, "User"), Costmap2DROS(ctx, "local_costmap", parameters)
+            return list(made.values())
+
+        self.source = SimulatedTimeSource()
+        self.kros = Kros(create, time_source=self.source)
+        self.addCleanup(self.kros.shutdown)
+        costmap = made["costmap"]
+        assert isinstance(costmap, Costmap2DROS)
+        self.node, self.user = costmap, made["user"]
+        self.tf = TransformBroadcaster(self.user)
+        self.robot_at(0.0, 0.0)
+
+    def robot_at(self, x: float, t: float) -> None:
+        self.tf.send_transform(TransformStamped(Header(t, "odom"), "base_footprint", Transform(Vector3(x, 0.0, 0.0), Quaternion())))
+        self.tf.send_transform(TransformStamped(Header(t, "base_footprint"), "base_scan", Transform()))
+        self.kros.context.topic_manager.join()
+
+    def scan(self, front: float, t: float) -> None:
+        """앞쪽(0도 둘레 10도)만 front 거리에 무언가 (inf면 없음), 나머지 방향은 측정 없음."""
+        inc = math.radians(1)
+        ranges = tuple(front if (i <= 5 or i >= 355) else math.inf for i in range(360))
+        self.user.publish("scan", LaserScan(Header(t, "base_scan"), 0.0, 2 * math.pi - inc, inc, 0.12, 3.5, ranges))
+        self.kros.context.topic_manager.join()
+
+    def tick(self, t: float) -> None:
+        self.source.set(t)
+        self.kros.context.timer_manager.join()
+        self.kros.context.topic_manager.join()
+
+    def test_marks_obstacles_without_a_map_clears_them_and_follows_the_robot(self) -> None:
+        self.scan(0.63, 0.1)  # 칸 한가운데 (칸 경계 0.6에 두면 부동소수점으로 옆 칸에 들어간다)
+        self.tick(0.3)
+        costmap = self.node.costmap
+        assert costmap is not None  # 지도가 없어도 생긴다
+        self.assertEqual((costmap.width, costmap.height), (40, 40))
+        self.assertEqual(costmap.cost_at(0.63, 0.0), LETHAL_OBSTACLE)  # 라이다가 본 것
+        self.assertEqual(costmap.cost_at(0.0, -0.8), FREE_SPACE)
+        self.assertGreater(costmap.cost_at(0.45, 0.0), 0)  # 둘레 inflation
+        self.scan(math.inf, 0.4)  # 치웠다: 레이가 지나가며 비운다
+        self.tick(0.6)
+        cleared = self.node.costmap
+        assert cleared is not None
+        self.assertEqual(cleared.cost_at(0.63, 0.0), FREE_SPACE)
+        self.robot_at(1.0, 0.7)
+        self.tick(0.9)
+        moved = self.node.costmap
+        assert moved is not None
+        self.assertAlmostEqual(moved.origin_x, 0.0, places=6)  # 창이 로봇(1.0)을 가운데 두고 따라왔다
+        published: list[OccupancyGrid] = []
+        self.user.subscribe("local_costmap/costmap", OccupancyGrid, published.append, QOS_LATCHED)
+        self.kros.context.topic_manager.join()
+        self.assertEqual(published[-1].header.frame_id, "odom")
 
 
 if __name__ == "__main__":

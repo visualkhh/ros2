@@ -172,7 +172,7 @@ class TestControllerServer(unittest.TestCase):
 
         def create(ctx: Context) -> list[Node]:
             made["user"] = Node(ctx, "User")
-            made["server"] = ControllerServer(ctx, costmap_parameters={"robot_radius": 0.2})
+            made["server"] = ControllerServer(ctx, costmap_parameters={"robot_radius": 0.2, "global_frame": "map"})  # 이 시험의 TF는 map -> base뿐
             return list(made.values())
 
         self.source = SimulatedTimeSource()
@@ -222,7 +222,7 @@ class TestControllerServer(unittest.TestCase):
         with self.assertLogs("kros.node.controller_server", level="WARNING"):
             for goal, code in (
                 (FollowPathGoal(Path(Header(0.0, "map"))), FollowPathResult.INVALID_PATH),
-                (FollowPathGoal(self.path("odom")), FollowPathResult.INVALID_PATH),
+                (FollowPathGoal(self.path("odom")), FollowPathResult.TF_ERROR),  # odom 좌표의 경로를 map으로 바꿀 TF가 없다
                 (FollowPathGoal(self.path(), controller_id="Nope"), FollowPathResult.INVALID_CONTROLLER),
             ):
                 result = self.client.send_goal(goal, timeout=5).result(5).result
