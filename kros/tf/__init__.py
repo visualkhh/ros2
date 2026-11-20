@@ -7,7 +7,6 @@ from .topics import (
     TF_STATIC_TOPIC_NAME,
     TF_TOPIC_NAME,
 )
-from .robot_state_publisher import RobotStatePublisher
 from .transform_broadcaster import StaticTransformBroadcaster, TransformBroadcaster
 from .transform_buffer import TransformBuffer
 from .transform_listener import TransformListener
@@ -20,7 +19,6 @@ __all__ = [
     "QOS_TF",
     "QOS_TF_STATIC",
     "ROBOT_DESCRIPTION_TOPIC_NAME",
-    "RobotStatePublisher",
     "StaticTransformBroadcaster",
     "TF_STATIC_TOPIC_NAME",
     "TF_TOPIC_NAME",

@@ -8,13 +8,14 @@ ROS를 파이썬으로 직접 만들며 학습하는 프로젝트. 타입 힌트
 kros/
 ├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
 ├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, timer_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
-├── node/node.py       Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
+├── node/node.py       Node 기반 클래스(제공 노드는 nodes/): Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
 ├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan / std_msgs: Header, String / geometry_msgs: Quaternion, Transform, TransformStamped / tf2_msgs: TFMessage / sensor_msgs: JointState / diagnostic_msgs / rcl_interfaces: Log ... (ROS의 msg 흉내)
 ├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
-├── tf/                TF: TransformBuffer(좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, RobotStatePublisher(URDF -> TF), transform_math(순수 3D 계산)
+├── tf/                TF 도구: TransformBuffer(좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, transform_math(순수 3D 계산)
 ├── urdf/              URDF 파서 (표준 라이브러리만, 링크/관절 트리 검증)
 ├── log/               NodeLogger(node.get_logger(): 파이썬 logging + rosout 토픽), enable_console
-├── diagnostics/       DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticAggregator(모아서 STALE 판단), DiagnosticStatusWrapper
+├── diagnostics/       진단 도구: DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticStatusWrapper
+├── nodes/             **kros가 제공하는 표준 노드들**: RobotStatePublisher(URDF -> TF), DiagnosticAggregator(진단 모으기, STALE 판단). 쓸지는 사용자가 node_create에서 정한다
 ├── parameter/         ParameterManager(노드별 파라미터 저장소), Parameter[T](현재 값 손잡이)
 ├── action/            ActionManager(서버 레지스트리, 서버/클라이언트 수명), ActionServer/ActionClient/ActionType(.action 흉내). 서비스 2개 + 토픽 2개 위에 구현
 ├── service/           ServiceManager(이름->서버 레지스트리), ServiceServer, ServiceType(.srv 흉내)
@@ -82,7 +83,7 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
   - 자식의 부모가 바뀌면 이전 이력을 버리고(경고) 순환이 생기는 변은 거절한다.
 - **`TransformBroadcaster(node)` / `StaticTransformBroadcaster(node)`**: `send_transform(...)`으로 `tf` / `tf_static` 토픽에 `TFMessage`를 낸다. 정적은 **latch**(`TRANSIENT_LOCAL`, 깊이 100)로 내서 나중에 뜬 리스너도 받는다.
 - **`TransformListener(node)`**: 두 토픽을 구독해 `listener.buffer`를 채운다.
-- **`RobotStatePublisher`(노드)**: 파라미터 `robot_description`(URDF 본문 문자열, 실행 중 바꾸면 다시 읽는다)으로 TF를 만든다. 고정 관절은 `tf_static`으로, 움직이는 관절(continuous/revolute/prismatic)은 `joint_states`(`JointState`)를 받을 때마다 `tf`로 낸다(그 관절의 값이 아직 안 왔으면 안 낸다). URDF 본문은 `robot_description` 토픽(latch)으로도 낸다. 잘못된 URDF(뿌리가 둘, 순환, 없는 링크 ...)는 파라미터가 거절하고 이전 로봇이 그대로 남는다. **kros가 제공하는 노드이고 쓸지는 사용자가 `node_create`에서 정한다**(안 만들면 아무 일도 안 한다).
+- **`RobotStatePublisher`(노드, `kros.nodes`)**: 파라미터 `robot_description`(URDF 본문 문자열, 실행 중 바꾸면 다시 읽는다)으로 TF를 만든다. 고정 관절은 `tf_static`으로, 움직이는 관절(continuous/revolute/prismatic)은 `joint_states`(`JointState`)를 받을 때마다 `tf`로 낸다(그 관절의 값이 아직 안 왔으면 안 낸다). URDF 본문은 `robot_description` 토픽(latch)으로도 낸다. 잘못된 URDF(뿌리가 둘, 순환, 없는 링크 ...)는 파라미터가 거절하고 이전 로봇이 그대로 남는다. **kros가 제공하는 노드이고 쓸지는 사용자가 `node_create`에서 정한다**(안 만들면 아무 일도 안 한다).
 - **URDF 파서(`kros/urdf`)**: 표준 라이브러리만 쓴다. 링크/관절 트리를 검증하고(이름 중복, 없는 링크, 부모가 둘, 뿌리가 둘 이상, 순환), xacro는 **인자 치환(`${namespace}` 기본 빈 값)만** 지원한다. 그 밖의 `${...}`가 이름에 남으면 조용히 틀린 이름을 쓰지 않고 `UrdfError`다.
 - **하드웨어와의 연결(예제)**: `Robot.joint_positions()`(URDF 관절 이름 -> 위치, 바퀴 모터 엔코더 값)가 하드웨어가 남긴 사실이고, `RobotBridge`가 이걸 `joint_states` 토픽으로 낸다(`joint_states_period` 파라미터, 기본 0.05초). 그러면 `RobotStatePublisher`가 바퀴 TF를 만든다. URDF의 라이다 위치(`base_footprint` -> `base_scan` = (-0.064, 0, 0.132))가 `TurtleBot3`가 코드에 적은 `LIDAR_MOUNT_X/HEIGHT`와 같다는 걸 테스트가 확인한다.
 - 수학(`transform_math`)은 독립적으로 계산한 회전 행렬과 대조해서 검증한다 (rpy, 합성, 역변환, 구면 보간).
@@ -110,7 +111,7 @@ ROS의 `diagnostics`와 같은 구조다. 하드웨어 드라이버가 "나는 �
 
 - **메시지**: `DiagnosticStatus(level, name, message, hardware_id, values)`와 이를 묶은 `DiagnosticArray(header, status)`가 `diagnostics` 토픽으로 나온다. `level`은 `OK < WARN < ERROR < STALE`(숫자가 클수록 나쁨, STALE은 "소식이 없어 상태를 모른다").
 - **`DiagnosticUpdater(node, period, hardware_id)`**: `add(이름, task)`로 진단 작업을 등록하면 `period`마다 모든 작업을 돌려 한 `DiagnosticArray`로 발행한다. 작업은 `DiagnosticStatusWrapper`에 `summary(level, 메시지)`와 `add(키, 값)`을 적는다(안 적으면 OK). 진단 이름은 `"노드이름: 작업이름"`. 작업이 예외를 내면 그 진단만 ERROR가 되고 나머지는 그대로 나간다. `set_period`로 실행 중 주기를 바꿀 수 있다.
-- **`DiagnosticAggregator`(노드)**: `diagnostics`를 구독해 이름별 최신 진단을 모으고, `stale_timeout`(파라미터, 기본 5초, 실행 중 변경 가능) 넘게 소식이 없는 것은 `STALE`로 본다. `statuses()`, `worst_level()`(아직 아무 소식도 없으면 OK가 아니라 STALE: 모르는 것이지 정상이 아니다). 시각은 kros 시간(시뮬레이션이면 시뮬레이션 시간)이다.
+- **`DiagnosticAggregator`(노드, `kros.nodes`)**: `diagnostics`를 구독해 이름별 최신 진단을 모으고, `stale_timeout`(파라미터, 기본 5초, 실행 중 변경 가능) 넘게 소식이 없는 것은 `STALE`로 본다. `statuses()`, `worst_level()`(아직 아무 소식도 없으면 OK가 아니라 STALE: 모르는 것이지 정상이 아니다). 시각은 kros 시간(시뮬레이션이면 시뮬레이션 시간)이다.
 - **하드웨어와의 연결(예제)**: 하드웨어(`worlds/`)는 kros를 모르므로 진단도 모른다. `examples/turtlebot3`의 `RobotBridge`가 하드웨어 트리의 센서/구동기마다 진단 작업을 등록하고(`hardware_status.py`), **하드웨어가 남긴 사실을 수준으로 바꾸는 판단**을 여기서 한다: 전원이 꺼져 있으면 WARN, 센서가 한 번도 값을 못 냈으면 WARN, 최신 값이 `data_timeout`(파라미터, 기본 2초)보다 오래됐으면 ERROR, 지난 진단 이후 새 실패가 있으면 WARN, 그 밖에는 OK. 문제가 여럿이면 수준은 가장 나쁜 것을 따르고 설명에는 모두 적는다(가장 나쁜 것이 맨 앞). `values`에는 모델(`hardware_id`), 전원, 주기, 실패 횟수, 마지막 실패, 데이터 나이가 들어간다. 진단 이름은 로봇부터 이은 경로다(`turtlebot3_waffle_pi/drive/left_wheel`).
 - `diagnostics_period`(진단 발행 주기)도 `RobotBridge`의 파라미터라 실행 중에 바꿀 수 있다.
 

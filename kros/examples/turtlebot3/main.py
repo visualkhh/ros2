@@ -10,7 +10,7 @@ from kros.context import Context
 from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.node import Node
-from kros.tf import RobotStatePublisher
+from kros.nodes import RobotStatePublisher
 from kros.timer import SimulatedTimeSource
 from kros.viewer.panda_viewer import Viewer
 from kros.viewer.snapshot_recorder import SnapshotRecorder

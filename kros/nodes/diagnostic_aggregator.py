@@ -5,7 +5,7 @@ from kros.context import Context
 from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel, DiagnosticStatus
 from kros.node import Node
 
-from .topics import DIAGNOSTICS_TOPIC_NAME
+from kros.diagnostics import DIAGNOSTICS_TOPIC_NAME
 
 
 class DiagnosticAggregator(Node):

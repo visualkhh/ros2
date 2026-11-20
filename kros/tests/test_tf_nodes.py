@@ -8,12 +8,12 @@ from kros.msgs.geometry_msgs import Transform, TransformStamped, Vector3
 from kros.msgs.sensor_msgs import JointState
 from kros.msgs.std_msgs import Header, String
 from kros.node import Node
+from kros.nodes import RobotStatePublisher
 from kros.parameter import ParameterRejectedError
 from kros.tf import (
     JOINT_STATES_TOPIC_NAME,
     ROBOT_DESCRIPTION_TOPIC_NAME,
     ExtrapolationException,
-    RobotStatePublisher,
     StaticTransformBroadcaster,
     TransformBroadcaster,
     TransformListener,
@@ -182,7 +182,7 @@ class TestRobotStatePublisher(unittest.TestCase):
         self.assertEqual([m.data for m in got], [URDF])
 
     def test_invalid_urdf_is_rejected_and_the_old_robot_stays(self) -> None:
-        with self.assertLogs("kros.tf.robot_state_publisher", level="WARNING"):
+        with self.assertLogs("kros.nodes.robot_state_publisher", level="WARNING"):
             with self.assertRaises(ParameterRejectedError):
                 self.kros.set_parameter(self.state, "robot_description", "<robot><link name='a'/><link name='b'/></robot>")  # 뿌리가 둘
         self.assertEqual(self.state.robot.root if self.state.robot else None, "base_footprint")

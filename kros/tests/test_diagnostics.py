@@ -3,12 +3,13 @@ import unittest
 
 from kros import Kros
 from kros.context import Context
-from kros.diagnostics import DIAGNOSTICS_TOPIC_NAME, DiagnosticAggregator, DiagnosticStatusWrapper, DiagnosticUpdater
+from kros.diagnostics import DIAGNOSTICS_TOPIC_NAME, DiagnosticStatusWrapper, DiagnosticUpdater
 from kros.examples.turtlebot3.hardware_status import hardware_path, leaves, make_task
 from kros.examples.turtlebot3.robot_bridge import RobotBridge
 from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel, DiagnosticStatus, KeyValue
 from kros.msgs.std_msgs import Header
 from kros.node import Node
+from kros.nodes import DiagnosticAggregator
 from kros.timer import SimulatedTimeSource
 from kros.worlds.hardwares import Sensor
 from kros.worlds.maze.maze_world import MazeWorld
