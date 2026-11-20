@@ -3,7 +3,7 @@ X11(XQueryKeymap)의 물리 키 번호는 배열과 무관하다. X11을 못 쓰
 import ctypes
 import ctypes.util
 
-KEYCODES = {"q": 24, "w": 25, "a": 38, "s": 39, "d": 40, "z": 52, "up": 111, "left": 113, "right": 114, "down": 116}  # X11(evdev) 키 번호
+KEYCODES = {"q": 24, "w": 25, "a": 38, "s": 39, "d": 40, "f": 41, "l": 46, "z": 52, "c": 54, "up": 111, "left": 113, "right": 114, "down": 116}  # X11(evdev) 키 번호
 
 
 class PhysicalKeys:
@@ -28,7 +28,7 @@ class PhysicalKeys:
         return self._x11 is not None
 
     def pressed(self) -> set[str] | None:
-        """지금 눌려 있는 조종 키 이름들 (배열과 무관). 읽을 수 없으면 None."""
+        """지금 눌려 있는 키 이름들 (조종 키 + 토글 키 f/c/l, 배열과 무관). 읽을 수 없으면 None."""
         if self._x11 is None:
             return None
         buffer = (ctypes.c_char * 32)()

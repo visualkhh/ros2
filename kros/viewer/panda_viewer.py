@@ -82,9 +82,10 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
         for panda_key, name in ARROWS.items():
             self.accept(panda_key, self.keys.add, [name])
             self.accept(f"{panda_key}-up", self.keys.discard, [name])
-        self.accept("f", self._toggle_follow)
-        self.accept("c", self._overview)
-        self.accept("l", self._toggle_scan)
+        self.toggles = {"f": self._toggle_follow, "c": self._overview, "l": self._toggle_scan}
+        self._held: set[str] = set()  # 지난 프레임에 눌려 있던 물리 키 (토글은 눌리는 순간 한 번)
+        for key in self.toggles:
+            self.accept(key, self._toggle_event, [key])
         self.accept("mouse1", self._drag, [True])
         self.accept("mouse1-up", self._drag, [False])
         self.accept("mouse3", self._pan, [True])
@@ -178,6 +179,16 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
         self.camera_target = Vec3(CENTER[0], CENTER[1], 0)
         self.pan = Vec3(0, 0, 0)
 
+    def _apply_physical(self, pressed: set[str]) -> None:
+        """물리 키 한 프레임: 토글 키(f/c/l)는 눌리는 순간 한 번, 나머지는 조종 키."""
+        for key in pressed & self.toggles.keys() - self._held:
+            self.toggles[key]()
+        self._held, self.keys = pressed, pressed - self.toggles.keys()
+
+    def _toggle_event(self, key: str) -> None:
+        if not self.physical.available:  # 물리 키를 읽으면 토글은 _update가 한다 (영문 배열에서 두 번 토글되지 않게)
+            self.toggles[key]()
+
     def _toggle_scan(self) -> None:
         self.show_scan = not self.show_scan
         if self._scan_np is not None:
@@ -198,7 +209,7 @@ class Viewer(ShowBase):  # type: ignore[misc]  # panda3d는 타입 정보가 없
         dt = min(ClockObject.getGlobalClock().getDt(), 0.1)
         physical = self.physical.pressed() if isinstance(self.win, GraphicsWindow) and self.win.getProperties().getForeground() else None
         if physical is not None:  # 물리 키를 읽을 수 있으면 그것이 기준이다 (키 이벤트는 배열에 따라 글자가 달라진다)
-            self.keys = physical
+            self._apply_physical(physical)
         self.on_keys(frozenset(self.keys))
         self.snap = snap = self.snapshots.latest  # 월드는 따로 돌고 있다. 화면은 가장 최근 스냅샷을 그리기만 한다
         p, cmd = snap.poses[snap.robot_index], snap.command
