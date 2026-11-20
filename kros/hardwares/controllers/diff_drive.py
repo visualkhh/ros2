@@ -10,9 +10,9 @@ MAX_SUBSTEP = 0.05  # m, 한 번에 크게 움직이면 벽을 통째로 건너�
 
 
 class DiffDrive(Actuator[Twist]):
-    """TurtleBot3의 구동부: 바퀴 모터 둘(left, right)로 차동구동한다. write(Twist)로 몸체 속도 명령을 내리면
+    """차동구동 구동부 (TurtleBot3의 OpenCR가 쓴다): 바퀴 모터 둘(left, right)로 차동구동한다. write(Twist)로 몸체 속도 명령을 내리면
     바퀴 속도로 바꿔 모터에 주고(역기구학), 모터가 실제로 돈 속도로 몸체를 움직인다(정기구학). 환경(벽)에 닿으면 world가 밀어낸다.
-    다른 객체와의 충돌은 world가 step에서 푼다. 바퀴와 몸체 크기는 이 로봇의 것이고, 모터는 부품(hardwares)이다."""
+    다른 객체와의 충돌은 world가 step에서 푼다. 바퀴와 몸체 크기는 로봇의 것이고, 모터는 부품(hardwares)이다."""
 
     def __init__(self, left: Motor, right: Motor, wheel_radius: float, wheel_separation: float, body_radius: float) -> None:
         super().__init__(Twist())
@@ -31,8 +31,8 @@ class DiffDrive(Actuator[Twist]):
 
     def tick(self, clock: Clock, world: World) -> None:
         super().tick(clock, world)  # 목표를 바퀴에 주고(apply), 바퀴 모터들이 돈다
-        body = self.owner
-        assert isinstance(body, WorldObject), "DiffDrive는 WorldObject(로봇)에 달아야 한다"
+        body = self.find_owner(WorldObject)  # type: ignore[type-abstract]  # 추상 클래스도 찾는 종류로 쓴다
+        assert body is not None, "DiffDrive는 WorldObject(로봇) 아래에 달아야 한다"
         if self.is_on:
             body.pose = self.move(body.pose, clock.dt, world)
 

@@ -33,8 +33,8 @@ class SimulatedMpu9250(Mpu9250):
         self._previous_velocity: tuple[float, float] | None = None
 
     def sample(self, clock: Clock, world: World) -> ImuMessage:
-        body = self.owner
-        assert isinstance(body, WorldObject), "SimulatedMpu9250은 WorldObject(로봇)에 달아야 한다"
+        body = self.find_owner(WorldObject)  # type: ignore[type-abstract]  # 추상 클래스도 찾는 종류로 쓴다
+        assert body is not None, "SimulatedMpu9250은 WorldObject(로봇) 아래에 달아야 한다"
         pose = body.pose
         yaw, c, s = pose.theta, math.cos(pose.theta), math.sin(pose.theta)
         angular_z, ax, ay = 0.0, 0.0, 0.0

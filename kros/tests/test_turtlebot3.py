@@ -176,14 +176,19 @@ class TestHardware(unittest.TestCase):
     def test_motor_lidar_and_robot_are_all_hardware(self) -> None:
         robot = TurtleBot3()
         self.assertIsInstance(robot, Hardware)
+        self.assertIsInstance(robot.opencr, Hardware)
         self.assertIsInstance(robot.drive, Hardware)
         self.assertIsInstance(robot.drive.left, Hardware)
         self.assertIsInstance(robot.lidar, Hardware)
         self.assertIsInstance(robot.imu, Hardware)
         self.assertIsInstance(robot, WorldObject)  # 로봇은 월드에 놓이는 객체이기도 하다
-        self.assertEqual(robot.parts, [robot.drive, robot.lidar, robot.imu])
+        self.assertEqual(robot.parts, [robot.opencr, robot.lidar])
+        self.assertEqual(robot.opencr.parts, [robot.drive, robot.imu])  # 보드에 구동부와 IMU가 달려 있다 (라이다는 보드가 아니라 로봇에)
         self.assertEqual(robot.drive.parts, [robot.drive.left, robot.drive.right])  # 구동부의 부품은 바퀴 모터 둘
-        self.assertIs(robot.drive.owner, robot)
+        self.assertIs(robot.opencr.owner, robot)
+        self.assertIs(robot.drive.owner, robot.opencr)
+        self.assertIs(robot.imu.owner, robot.opencr)
+        self.assertEqual(robot.opencr.model, "OpenCR1.0")
         self.assertIs(robot.drive.left.owner, robot.drive)
         self.assertIs(robot.lidar.owner, robot)
 
@@ -273,7 +278,7 @@ class TestHardwareInterface(unittest.TestCase):
         self.assertEqual(actuator.applied, [("go", 0.01), ("go", 0.09), ("go", 0.1), ("go", 0.1)])  # dt는 지난 호출 이후 지난 시간: 0.01, 0.1, 0.2, 0.3에 불림
 
     def test_motor_with_its_own_period_still_moves_the_right_distance(self) -> None:
-        world, robot = MazeWorld(puck_count=0), TurtleBot3(left_motor=SimulatedXl430W250(period=0.1), right_motor=SimulatedXl430W250(period=0.1))
+        world, robot = MazeWorld(puck_count=0), TurtleBot3(opencr=TurtleBot3.make_opencr(left_motor=SimulatedXl430W250(period=0.1), right_motor=SimulatedXl430W250(period=0.1)))
         world.add(robot)
         drive(robot, v=0.2)
         for _ in range(100):
@@ -478,7 +483,7 @@ class TestDiffDrive(unittest.TestCase):
         self.assertAlmostEqual(robot.drive.left.position * 0.033, 0.2, places=3)
 
     def test_slower_wheel_motors_limit_the_robot(self) -> None:
-        world, robot = MazeWorld(puck_count=0), TurtleBot3(left_motor=SimulatedXl430W250(max_velocity=3.0), right_motor=SimulatedXl430W250(max_velocity=3.0))
+        world, robot = MazeWorld(puck_count=0), TurtleBot3(opencr=TurtleBot3.make_opencr(left_motor=SimulatedXl430W250(max_velocity=3.0), right_motor=SimulatedXl430W250(max_velocity=3.0)))
         world.add(robot)
         drive(robot, v=0.26)  # 명령은 0.26 m/s지만 바퀴가 3 rad/s까지만 돈다
         for _ in range(100):

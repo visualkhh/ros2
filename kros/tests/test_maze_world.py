@@ -262,10 +262,10 @@ class TestHardwareLayout(unittest.TestCase):
     def test_top_level_holds_only_the_base_and_kind_packages(self) -> None:
         files = {p.name for p in self.root.glob("*.py")}
         self.assertEqual(files, {"__init__.py", "hardware.py"})  # 인터페이스나 모델 파일이 바깥에 평평하게 섞이면 안 된다
-        self.assertEqual({p.name for p in self.root.iterdir() if p.is_dir() and p.name != "__pycache__"}, {"imus", "lidars", "motors"})
+        self.assertEqual({p.name for p in self.root.iterdir() if p.is_dir() and p.name != "__pycache__"}, {"controllers", "imus", "lidars", "motors"})
 
     def test_every_kind_package_has_its_interface_and_models_inside(self) -> None:
-        for kind, interface in (("lidars", "lidar.py"), ("imus", "imu.py"), ("motors", "motor.py")):
+        for kind, interface in (("controllers", "controller.py"), ("lidars", "lidar.py"), ("imus", "imu.py"), ("motors", "motor.py")):
             names = {p.name for p in (self.root / kind).glob("*.py")}
             self.assertIn(interface, names, kind)
             self.assertGreater(len(names - {"__init__.py", interface}), 0, f"{kind}에 모델 구현 파일이 없다")
@@ -279,8 +279,8 @@ class TestHardwareLayout(unittest.TestCase):
         self.assertIs(Motor, KindMotor)
 
     def test_models_know_only_their_own_kind_and_the_base(self) -> None:
-        kinds = ("lidars", "imus", "motors")
+        kinds = ("lidars", "imus", "motors")  # 제어 보드(controllers)만 다른 종류를 부품으로 가질 수 있어서 제외한다. 반대로 부품 종류가 보드를 import하면 안 된다
         for kind in kinds:
-            for other in set(kinds) - {kind}:
+            for other in (set(kinds) | {"controllers"}) - {kind}:
                 for f in (self.root / kind).glob("*.py"):
                     self.assertNotIn(f"hardwares.{other}", f.read_text(), f"{f}: 한 종류가 다른 종류를 import한다")

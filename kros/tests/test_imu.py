@@ -110,7 +110,7 @@ class TestSimulatedImu(unittest.TestCase):
 
 class TestDummyAndBridge(unittest.TestCase):
     def test_dummy_imu_reports_a_still_sensor_without_a_world_object(self) -> None:
-        robot = TurtleBot3(imu=DummyMpu9250())
+        robot = TurtleBot3(opencr=TurtleBot3.make_opencr(imu=DummyMpu9250()))
         world = MazeWorld(puck_count=0)
         world.add(robot)
         run(robot, world, 0.1)

@@ -252,11 +252,11 @@ class TestHardwareDiagnostics(unittest.TestCase):
         self.assertEqual(
             names,
             {
-                "turtlebot3_waffle_pi/drive",
-                "turtlebot3_waffle_pi/drive/left_wheel",
-                "turtlebot3_waffle_pi/drive/right_wheel",
+                "turtlebot3_waffle_pi/opencr/drive",
+                "turtlebot3_waffle_pi/opencr/drive/left_wheel",
+                "turtlebot3_waffle_pi/opencr/drive/right_wheel",
+                "turtlebot3_waffle_pi/opencr/imu",
                 "turtlebot3_waffle_pi/lidar",
-                "turtlebot3_waffle_pi/imu",
             },
         )
 
@@ -290,10 +290,10 @@ class TestHardwareDiagnostics(unittest.TestCase):
 
     def test_powered_off_hardware_warns_and_parents_power_applies_to_parts(self) -> None:
         self.run_world(2.0)
-        self.robot.drive.power_off()  # 구동부를 끄면 바퀴 모터도 꺼진다
+        self.robot.opencr.power_off()  # 보드를 끄면 구동부, 바퀴 모터, IMU가 모두 꺼진다
         self.run_world(1.5)
         statuses = self.latest()
-        for name in ("drive", "drive/left_wheel", "drive/right_wheel"):
+        for name in ("opencr/drive", "opencr/drive/left_wheel", "opencr/drive/right_wheel", "opencr/imu"):
             self.assertEqual(statuses[f"turtlebot3_waffle_pi/{name}"].level, DiagnosticLevel.WARN, name)
         self.assertEqual(statuses["turtlebot3_waffle_pi/lidar"].level, DiagnosticLevel.OK)
 

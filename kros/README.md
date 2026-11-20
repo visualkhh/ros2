@@ -21,6 +21,7 @@ kros/
 ├── topic/             TopicManager(토픽별 구독자 목록, 메시지 전달), Subscription(구독 하나: 전용 스레드+큐), QoS(depth, durability) (한 프로세스 안)
 ├── interactions/      [현실] 사람(조종자)이 넣는 입력 장치. interaction.py: Interaction 베이스, keyboards/keyboard.py: Keyboard(KeyState). 월드 바깥의 것이고 로봇이 receive()로 받는다. kros와 무관
 ├── hardwares/         [현실] 부품 하드웨어(로봇의 부품, 월드 밖). hardware.py: Hardware/Sensor/Actuator(모든 장치의 최상위). 종류별 패키지에 인터페이스와 모델 번호별 구현이 함께 있다:
+│   ├── controllers/ controller.py(Controller 인터페이스: 센서/구동기를 부품으로 묶는 제어 보드), opencr.py(OpenCR 1.0: 구동부 + IMU), diff_drive.py(DiffDrive: 보드가 하는 차동 구동 계산, XL430-W250 바퀴 모터 둘)
 │   ├── imus/      imu.py(Imu 인터페이스), mpu9250.py(MPU-9250: 시뮬레이션/더미. 방향/각속도/가속도, TurtleBot3의 IMU)
 │   ├── lidars/    lidar.py(Lidar 인터페이스), lds_01.py(LDS-01: 시뮬레이션/더미, 진짜도 여기에)
 │   └── motors/    motor.py(Motor 인터페이스: 회전 모터 한 개), xl430_w250.py(XL430-W250)
@@ -30,9 +31,9 @@ kros/
 │   ├── maze/          MazeWorld(World): isaac rl_maze 트랙(track.py: Track 하나가 벽 전체를 가진 WorldObject) + 시작할 때 퍽 10개를 흩뿌림
 │   ├── objects/       world_object.py: WorldObject(월드에 놓이는 모든 것의 베이스, 로봇도 상속)와 로봇이 아닌 객체들. puck.py: Puck(모양 PuckShape, 색)
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
-│       └── turtlebot3/  TurtleBot3(Robot): diff_drive.py(DiffDrive: XL430-W250 바퀴 모터 둘을 묶은 구동부)+ LDS-01, MPU-9250 라이다를 달고, 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
+│       └── turtlebot3/  TurtleBot3(Robot): OpenCR 보드(구동부 + IMU)와 LDS-01 라이다를 단다. 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
 ├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 스텝마다 그 순간을 불변 데이터 Snapshot(snapshot.py)으로 만드는 SnapshotRecorder(snapshot_recorder.py: 월드와 로봇을 아는 곳)가 러너의 리스너로 달리고, Viewer는 그 최신 스냅샷만 그린다. snapshot/recorder는 panda3d 없이 돈다. kros와 무관
-├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan)을 잇는다 (main.py, run.sh)
+├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan, imu)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성
 └── test.sh            테스트 실행 (.venv 없으면 자동 생성)

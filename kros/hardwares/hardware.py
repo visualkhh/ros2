@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from kros.worlds.world import World
 
 T = TypeVar("T")
+O = TypeVar("O")
 
 
 class HardwareError(Exception):
@@ -50,6 +51,13 @@ class Hardware(ABC):
         part.owner = self
         self.parts.append(part)
         return part
+
+    def find_owner(self, kind: type[O]) -> O | None:
+        """이 장치가 달려 있는 장치들을 위로 올라가며 처음 만나는 kind (예: 부품이 보드에 달리고 보드가 로봇에 달려 있어도 로봇을 찾는다). 없으면 None."""
+        node: Hardware | None = self.owner
+        while node is not None and not isinstance(node, kind):
+            node = node.owner
+        return node
 
     def power_on(self) -> None:
         self.powered = True
