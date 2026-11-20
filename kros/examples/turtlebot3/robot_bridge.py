@@ -38,7 +38,8 @@ class RobotBridge(Node):
             self._diagnostics.add(hardware_path(hardware), make_task(hardware, self.now, lambda: self.data_timeout.value))
         self.get_logger().info("로봇 %s 연결: 진단 %d개, 주기 %.1f초", robot.name, len(leaves(robot)), self.diagnostics_period.value)
         self.subscribe(CMD_VEL_TOPIC_NAME, Twist, self._on_cmd_vel)
-        robot.lidar.subscribe(self.publish_scan)  # 라이다가 새로 측정할 때마다 scan 토픽으로
+        if robot.has_lidar:  # 진짜 로봇은 아직 라이다 구현이 없다
+            robot.lidar.subscribe(self.publish_scan)  # 라이다가 새로 측정할 때마다 scan 토픽으로
         robot.imu.subscribe(self.publish_imu)  # IMU도 측정할 때마다 imu 토픽으로
 
     def _on_cmd_vel(self, twist: Twist) -> None:

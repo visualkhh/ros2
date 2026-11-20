@@ -6,7 +6,7 @@ import time
 import unittest
 from collections.abc import Callable
 
-from kros.examples.turtlebot3.opencr_serial import OpenCrSerial, protocol
+from kros.worlds.robots.turtlebot3.opencr_serial import OpenCrSerial, protocol
 from kros.hardwares.controllers.diff_drive import wheel_speeds
 from kros.msgs.geometry_msgs import Twist, Vector3
 from kros.worlds.clock import Clock

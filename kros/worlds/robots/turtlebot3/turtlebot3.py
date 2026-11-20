@@ -2,7 +2,8 @@ from pathlib import Path
 from typing import Any
 
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
-from kros.hardwares import Imu, Lidar, Motor
+from kros.hardwares import Imu, Lidar
+from kros.hardwares.controllers.diff_drive_board import DiffDriveBoard
 from kros.hardwares.controllers.diff_drive import DiffDrive
 from kros.hardwares.controllers.opencr import OpenCr
 from kros.hardwares.imus.mpu9250 import SimulatedMpu9250
@@ -10,6 +11,8 @@ from kros.hardwares.lidars.lds_01 import SimulatedLds01
 from kros.hardwares.motors.xl430_w250 import SimulatedXl430W250
 from kros.interactions import Interaction, KeyState
 from kros.worlds.robots.robot import Robot
+
+from .opencr_serial import OpenCrSerial
 
 
 DESCRIPTION_DIR = Path(__file__).parent / "description"  # package://turtlebot3_description/ 에 해당
@@ -33,25 +36,45 @@ class TurtleBot3(Robot):
     height = 0.141  # m, waffle pi 높이 (라이다 높이 0.132보다 높아서 다른 로봇의 라이다에 보인다)
     radius = 0.2  # waffle pi를 바퀴축 중심 원으로 근사 (뒤쪽 끝 0.197). 회전 중 뒤 모서리(0.25)는 벽을 살짝 파고들 수 있음
 
-    def __init__(self, pose: Pose2D = Pose2D(0.0, 0.0, 0.0), opencr: OpenCr | None = None, lidar: Lidar | None = None) -> None:
-        """부품을 안 주면 시뮬레이션 구현을 단다: OpenCR 보드(XL430-W250 바퀴 모터 둘, MPU-9250)와 LDS-01. 더미나 진짜 하드웨어 구현을 끼울 수 있다
-        (모터/IMU를 바꾸려면 make_opencr로 보드를 만들어 넘긴다). 라이다는 라즈베리파이에 꽂히므로 보드가 아니라 로봇에 직접 달고, URDF 위치에 둔다."""
+    def __init__(self, pose: Pose2D = Pose2D(0.0, 0.0, 0.0), serial_port: str | None = None) -> None:
+        """부품은 로봇이 정한다. 시뮬레이션이 기본이다: OpenCR 보드(XL430-W250 바퀴 모터 둘, MPU-9250)와 LDS-01 라이다.
+        serial_port(예: "/dev/opencr")를 주면 진짜 OpenCR 보드를 시리얼로 쓴다 (진짜 라이다 구현은 아직 없어 라이다 없이 시작한다).
+        부품을 바꾸려면(더미 등) make_opencr / make_lidar를 하위 클래스에서 덮어쓴다. 라이다는 라즈베리파이에 꽂히므로 보드가 아니라 로봇에 직접 달린다."""
         super().__init__()
         self.pose = pose
-        self.opencr = opencr or self.make_opencr()
-        self.lidar: Lidar = lidar or SimulatedLds01(LIDAR_MOUNT_X, LIDAR_MOUNT_HEIGHT)
+        self.opencr: DiffDriveBoard = self.make_opencr(serial_port)
+        self._lidar: Lidar | None = self.make_lidar(serial_port)
         self.speed_scale = 1.0  # q/z로 바꾸는 키보드 조종 속도 배율
         self._keys: frozenset[str] = frozenset()  # 직전에 눌려 있던 키
-        self.add(self.opencr, "opencr")  # 부품을 단다: 월드의 시계 신호가 Robot.tick -> OpenCr.tick(-> 구동부와 바퀴 모터들, IMU), Lidar.tick 순으로 내려간다
-        self.add(self.lidar, "lidar")
+        self.add(self.opencr, "opencr")  # 부품을 단다: 시계 신호가 Robot.tick -> OpenCR 보드(-> 구동부와 바퀴 모터들, IMU), 라이다 순으로 내려간다
+        if self._lidar is not None:
+            self.add(self._lidar, "lidar")
 
-    @classmethod
-    def make_opencr(cls, left_motor: Motor | None = None, right_motor: Motor | None = None, imu: Imu | None = None) -> OpenCr:
-        """이 로봇의 바퀴/몸체 치수로 OpenCR 보드를 만든다. 안 주는 부품은 시뮬레이션 구현(XL430-W250, MPU-9250)이다."""
-        return OpenCr(left_motor or SimulatedXl430W250(), right_motor or SimulatedXl430W250(), imu or SimulatedMpu9250(), WHEEL_RADIUS, WHEEL_SEPARATION, cls.radius)
+    def make_opencr(self, serial_port: str | None) -> DiffDriveBoard:
+        """OpenCR 보드를 만든다: 시리얼 포트가 있으면 진짜, 없으면 시뮬레이션 (이 로봇의 바퀴/몸체 치수로)."""
+        if serial_port is not None:
+            return OpenCrSerial(WHEEL_RADIUS, WHEEL_SEPARATION, serial_port)
+        return OpenCr(SimulatedXl430W250(), SimulatedXl430W250(), SimulatedMpu9250(), WHEEL_RADIUS, WHEEL_SEPARATION, self.radius)
+
+    def make_lidar(self, serial_port: str | None) -> Lidar | None:
+        """라이다를 만든다: 시뮬레이션은 LDS-01. 진짜는 아직 없다(None)."""
+        return None if serial_port is not None else SimulatedLds01(LIDAR_MOUNT_X, LIDAR_MOUNT_HEIGHT)
+
+    @property
+    def has_lidar(self) -> bool:
+        return self._lidar is not None
+
+    @property
+    def lidar(self) -> Lidar:
+        if self._lidar is None:
+            raise LookupError("이 로봇에는 라이다가 없다 (has_lidar로 먼저 확인한다)")
+        return self._lidar
 
     @property
     def drive(self) -> DiffDrive:
+        """시뮬레이션 보드의 구동부. 진짜 보드에는 없다."""
+        if not isinstance(self.opencr, OpenCr):
+            raise LookupError("구동부는 시뮬레이션 보드에만 있다")
         return self.opencr.drive
 
     @property
@@ -60,7 +83,7 @@ class TurtleBot3(Robot):
 
     def joint_positions(self) -> dict[str, float]:
         """URDF의 관절 이름으로 바퀴 모터의 누적 회전각 (엔코더)."""
-        return {"wheel_left_joint": self.drive.left.position, "wheel_right_joint": self.drive.right.position}
+        return {"wheel_left_joint": self.opencr.left.position, "wheel_right_joint": self.opencr.right.position}
 
     def on_interaction(self, interaction: Interaction[Any], state: Any) -> None:
         """키보드 입력이 오면 키를 속도 명령으로 해석해 구동부에 내린다. w/s(up/down) 전후진, a/d(left/right) 좌/우회전,
@@ -84,8 +107,8 @@ class TurtleBot3(Robot):
 
     @property
     def command(self) -> Twist:
-        return self.drive.command
+        return self.opencr.command
 
     @command.setter
     def command(self, twist: Twist) -> None:
-        self.drive.write(twist)  # 객체째 교체라 다른 스레드에서 넣어도 안전
+        self.opencr.write(twist)  # 객체째 교체라 다른 스레드에서 넣어도 안전

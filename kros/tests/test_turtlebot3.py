@@ -5,6 +5,9 @@ from unittest import mock
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
 from kros.msgs.sensor_msgs import LaserScan
 from kros.worlds.clock import Clock
+from kros.hardwares.controllers.diff_drive_board import DiffDriveBoard
+from kros.hardwares.controllers.opencr import OpenCr
+from kros.hardwares.imus.mpu9250 import SimulatedMpu9250
 from kros.hardwares import Actuator, Hardware, HardwareError, Lidar, Motor, Sensor
 from kros.hardwares.lidars.lds_01 import RANGE_MAX, SAMPLES, DummyLds01, SimulatedLds01, make_scan
 from kros.hardwares.motors.xl430_w250 import SimulatedXl430W250
@@ -162,6 +165,25 @@ class TestPushingPuckIntoWalls(unittest.TestCase):
             self.assertTrue(inside_map(puck), puck.pose)
 
 
+class SlowBus(TurtleBot3):
+    """바퀴 모터가 자기 주기(0.1초)로 도는 로봇 (부품은 로봇이 정하니 하위 클래스에서 바꾼다)."""
+
+    def make_opencr(self, serial_port: str | None) -> DiffDriveBoard:
+        return OpenCr(SimulatedXl430W250(period=0.1), SimulatedXl430W250(period=0.1), SimulatedMpu9250(), 0.033, 0.288, self.radius)
+
+
+class SlowMotors(TurtleBot3):
+    """바퀴가 3 rad/s까지만 도는 로봇."""
+
+    def make_opencr(self, serial_port: str | None) -> DiffDriveBoard:
+        return OpenCr(SimulatedXl430W250(max_velocity=3.0), SimulatedXl430W250(max_velocity=3.0), SimulatedMpu9250(), 0.033, 0.288, self.radius)
+
+
+class DummyLidarBot(TurtleBot3):
+    def make_lidar(self, serial_port: str | None) -> Lidar | None:
+        return DummyLds01(distance=2.0)
+
+
 class RecordingHardware(Hardware):
     def __init__(self, name: str, log: list[str]) -> None:
         super().__init__()
@@ -278,7 +300,7 @@ class TestHardwareInterface(unittest.TestCase):
         self.assertEqual(actuator.applied, [("go", 0.01), ("go", 0.09), ("go", 0.1), ("go", 0.1)])  # dt는 지난 호출 이후 지난 시간: 0.01, 0.1, 0.2, 0.3에 불림
 
     def test_motor_with_its_own_period_still_moves_the_right_distance(self) -> None:
-        world, robot = MazeWorld(puck_count=0), TurtleBot3(opencr=TurtleBot3.make_opencr(left_motor=SimulatedXl430W250(period=0.1), right_motor=SimulatedXl430W250(period=0.1)))
+        world, robot = MazeWorld(puck_count=0), SlowBus()
         world.add(robot)
         drive(robot, v=0.2)
         for _ in range(100):
@@ -286,7 +308,7 @@ class TestHardwareInterface(unittest.TestCase):
         self.assertAlmostEqual(robot.pose.x, 0.2 * 1.0, delta=0.025)  # 주기 사이의 시간만큼 이동 (마지막 주기 끝 오차 이내)
 
     def test_dummy_lidar_replaces_simulation_without_touching_the_world(self) -> None:
-        robot = TurtleBot3(lidar=DummyLds01(distance=2.0))
+        robot = DummyLidarBot()
         world = MazeWorld(puck_count=0)
         world.add(robot)
         scans: list[LaserScan] = []
@@ -483,7 +505,7 @@ class TestDiffDrive(unittest.TestCase):
         self.assertAlmostEqual(robot.drive.left.position * 0.033, 0.2, places=3)
 
     def test_slower_wheel_motors_limit_the_robot(self) -> None:
-        world, robot = MazeWorld(puck_count=0), TurtleBot3(opencr=TurtleBot3.make_opencr(left_motor=SimulatedXl430W250(max_velocity=3.0), right_motor=SimulatedXl430W250(max_velocity=3.0)))
+        world, robot = MazeWorld(puck_count=0), SlowMotors()
         world.add(robot)
         drive(robot, v=0.26)  # 명령은 0.26 m/s지만 바퀴가 3 rad/s까지만 돈다
         for _ in range(100):

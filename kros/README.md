@@ -33,7 +33,7 @@ kros/
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
 │       └── turtlebot3/  TurtleBot3(Robot): OpenCR 보드(구동부 + IMU)와 LDS-01 라이다를 단다. 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
 ├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 스텝마다 그 순간을 불변 데이터 Snapshot(snapshot.py)으로 만드는 SnapshotRecorder(snapshot_recorder.py: 월드와 로봇을 아는 곳)가 러너의 리스너로 달리고, Viewer는 그 최신 스냅샷만 그린다. snapshot/recorder는 panda3d 없이 돈다. kros와 무관
-├── examples/turtlebot3/  [kros 쪽] opencr_serial/: 진짜 OpenCR 보드를 USB 시리얼로 쓰는 OpenCrSerial(OpenCr 시뮬레이션과 같은 자리, 펌웨어 firmware/opencr/tb3_wheels의 프로토콜). 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan, imu)을 잇는다 (main.py, run.sh)
+├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan, imu)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성
 └── test.sh            테스트 실행 (.venv 없으면 자동 생성)
@@ -317,7 +317,9 @@ kros/examples/turtlebot3/run.sh
 
 ## 진짜 OpenCR (시리얼)
 
-`examples/turtlebot3/opencr_serial/`의 `OpenCrSerial`은 진짜 OpenCR 1.0 보드를 USB 시리얼(`/dev/opencr`, 115200)로 쓰는 `Controller`다. 시뮬레이션의 `OpenCr`와 같은 자리에 쓰고, 월드를 모른다 (시계 신호 `tick(Clock)`만 받는다: 월드 없이 실시간 루프가 불러 준다). 프로토콜은 `firmware/opencr/README.md`와 같다.
+`worlds/robots/turtlebot3/opencr_serial/`의 `OpenCrSerial`은 진짜 OpenCR 1.0 보드를 USB 시리얼(`/dev/opencr`, 115200)로 쓰는 `DiffDriveBoard`다. 시뮬레이션의 `OpenCr`와 같은 인터페이스(`left`, `right`, `imu`, `command`, `write`)라 `TurtleBot3`가 어느 쪽이든 같게 쓰고, 월드를 모른다 (시계 신호 `tick(Clock)`만 받는다: 월드 없이 실시간 루프가 불러 준다). 프로토콜은 `firmware/opencr/README.md`와 같다.
+
+`TurtleBot3()`는 시뮬레이션 보드를, `TurtleBot3(serial_port="/dev/opencr")`는 이 진짜 보드를 스스로 조립한다 (어느 쪽인지는 로봇이 정하고, 부품을 바깥에서 넣지 않는다. 바꾸려면 `make_opencr`/`make_lidar`를 하위 클래스에서 덮어쓴다). 진짜 라이다는 아직 없어 `has_lidar`가 False다. 보드만 따로 쓰면:
 
 ```python
 board = OpenCrSerial(wheel_radius=0.033, wheel_separation=0.288, port="/dev/opencr")
@@ -331,4 +333,4 @@ board.stop()                         # C,0,0을 보내고 끈다
 - **보내기**: 한쪽 바퀴가 펌웨어 한계(8 rad/s)를 넘으면 두 바퀴를 같은 비율로 줄인다 (바퀴마다 따로 자르면 빠른 호가 제자리 회전이 된다). 연결이 끊겨 보내지 못하는 사실은 한 번만 기록한다.
 - **팔(OpenMANIPULATOR)**: 아직 다루지 않는다. 팔이 없으면 펌웨어가 `M` 줄의 값을 전부 `nan`으로 보내므로, 그걸 보고 `arm_connected`(False, 아직 모르면 None)만 안다.
 - 포트를 다른 프로그램(ROS 드라이버, 시리얼 모니터)이 잡고 있으면 줄이 섞인다. 하드웨어 없이는 가상 시리얼(pty)로 시험한다 (`tests/test_opencr_serial.py`).
-- **아직 없음**: 이 보드를 `tick`해 주는 실시간 루프(월드 없는 러너), 재부팅(`R`)/토크(`T`)/부저(`B`) 명령, 바퀴 방향 부호, 진짜 로봇 클래스에 끼우기.
+- **아직 없음**: 이 로봇을 `tick`해 주는 실시간 루프(월드 없는 러너), 재부팅(`R`)/토크(`T`)/부저(`B`) 명령, 바퀴 방향 부호, 진짜 라이다.

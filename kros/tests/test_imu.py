@@ -3,6 +3,9 @@ import unittest
 
 from kros import Kros
 from kros.hardwares import Imu
+from kros.hardwares.controllers.diff_drive_board import DiffDriveBoard
+from kros.hardwares.controllers.opencr import OpenCr
+from kros.hardwares.motors.xl430_w250 import SimulatedXl430W250
 from kros.hardwares.imus.mpu9250 import DummyMpu9250, SimulatedMpu9250
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
 from kros.msgs.sensor_msgs import Imu as ImuMessage
@@ -108,9 +111,14 @@ class TestSimulatedImu(unittest.TestCase):
         self.assertGreater(robot.imu.error_count, 0)
 
 
+class DummyImuBot(TurtleBot3):
+    def make_opencr(self, serial_port: str | None) -> DiffDriveBoard:
+        return OpenCr(SimulatedXl430W250(), SimulatedXl430W250(), DummyMpu9250(), 0.033, 0.288, self.radius)
+
+
 class TestDummyAndBridge(unittest.TestCase):
     def test_dummy_imu_reports_a_still_sensor_without_a_world_object(self) -> None:
-        robot = TurtleBot3(opencr=TurtleBot3.make_opencr(imu=DummyMpu9250()))
+        robot = DummyImuBot()
         world = MazeWorld(puck_count=0)
         world.add(robot)
         run(robot, world, 0.1)

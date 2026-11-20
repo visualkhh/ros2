@@ -5,7 +5,7 @@
 """
 import math
 
-from kros.examples.turtlebot3.opencr_serial.board_status import BoardStatus
+from kros.worlds.robots.turtlebot3.opencr_serial.board_status import BoardStatus
 from kros.msgs.geometry_msgs import Quaternion, Vector3
 from kros.msgs.sensor_msgs import Imu
 from kros.msgs.std_msgs import Header

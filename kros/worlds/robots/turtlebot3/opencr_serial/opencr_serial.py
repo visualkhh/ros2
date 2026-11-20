@@ -1,12 +1,12 @@
 import logging
 import math
 
-from kros.examples.turtlebot3.opencr_serial import protocol
-from kros.examples.turtlebot3.opencr_serial.board_status import BoardStatus
-from kros.examples.turtlebot3.opencr_serial.serial_link import SerialLink
-from kros.examples.turtlebot3.opencr_serial.serial_mpu9250 import SerialMpu9250
-from kros.examples.turtlebot3.opencr_serial.serial_wheel import SerialWheel
-from kros.hardwares.controllers.controller import Controller
+from kros.worlds.robots.turtlebot3.opencr_serial import protocol
+from kros.worlds.robots.turtlebot3.opencr_serial.board_status import BoardStatus
+from kros.worlds.robots.turtlebot3.opencr_serial.serial_link import SerialLink
+from kros.worlds.robots.turtlebot3.opencr_serial.serial_mpu9250 import SerialMpu9250
+from kros.worlds.robots.turtlebot3.opencr_serial.serial_wheel import SerialWheel
+from kros.hardwares.controllers.diff_drive_board import DiffDriveBoard
 from kros.hardwares.controllers.diff_drive import wheel_speeds
 from kros.hardwares.hardware import HardwareError
 from kros.msgs.geometry_msgs import Twist
@@ -17,7 +17,7 @@ COMMAND_PERIOD = 0.1  # 초. 펌웨어는 500ms 동안 C가 없으면 바퀴를 
 MAX_WHEEL = 8.0  # rad/s, 펌웨어가 한 바퀴씩 자르는 한계. 넘으면 두 바퀴를 같은 비율로 줄인다 (호의 모양을 지킨다)
 
 
-class OpenCrSerial(Controller):
+class OpenCrSerial(DiffDriveBoard):
     """진짜 OpenCR 보드를 USB 시리얼로 쓰는 구현 (펌웨어 firmware/opencr/tb3_wheels). OpenCr(시뮬레이션)와 같은 자리에 쓴다:
     부품은 left/right(SerialWheel)와 imu(SerialMpu9250)이고, 월드를 모른다 (시계 신호만 받는다).
 
@@ -28,6 +28,7 @@ class OpenCrSerial(Controller):
     """
 
     model = "OpenCR1.0"
+    imu: SerialMpu9250  # 인터페이스(Imu)보다 좁게: 읽기 스레드가 update()로 새 줄을 넣는다
 
     def __init__(
         self, wheel_radius: float, wheel_separation: float, port: str = "/dev/opencr", baud: int = 115200, period: float | None = COMMAND_PERIOD
@@ -42,7 +43,7 @@ class OpenCrSerial(Controller):
         self.status: BoardStatus | None = None  # 가장 최근 S 줄 (배터리, 온도, 전류, uptime)
         self.arm_connected: bool | None = None
         self.bad_lines = 0  # 못 읽은 줄 수 (펌웨어가 모르는 종류로 보낸 줄은 세지 않는다)
-        self.command = Twist()
+        self._command = Twist()
         self._link = SerialLink(port, baud, self._on_line)
         self._errors = (0, 0)
         self._send_failed = False
@@ -58,9 +59,13 @@ class OpenCrSerial(Controller):
         self._link.write_line(protocol.format_command(0.0, 0.0))  # 정지를 알리고 끈다
         self._link.stop()
 
+    @property
+    def command(self) -> Twist:
+        return self._command
+
     def write(self, command: Twist) -> None:
         """몸체 속도 명령을 내린다 (바퀴 목표로 바꿔 두면 다음 주기에 보낸다)."""
-        self.command = command
+        self._command = command
         left, right = wheel_speeds(command, self.wheel_radius, self.wheel_separation, MAX_WHEEL)
         self.left.write(left)
         self.right.write(right)
