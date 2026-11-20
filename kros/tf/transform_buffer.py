@@ -2,11 +2,11 @@ import bisect
 import logging
 import threading
 
-from kros.msgs.geometry_msgs import Transform, TransformStamped
+from kros.msgs.geometry_msgs import Transform, TransformStamped, Vector3
 from kros.msgs.std_msgs import Header
 
 from .errors import ConnectivityException, ExtrapolationException, LookupException
-from .transform_math import IDENTITY, compose, interpolate, inverse, quaternion_normalize
+from .transform_math import IDENTITY, apply, compose, interpolate, inverse, quaternion_normalize
 
 logger = logging.getLogger(__name__)
 EPSILON = 1e-9  # 시각 비교의 부동소수점 오차 허용
@@ -87,6 +87,10 @@ class TransformBuffer:
             to_common_from_target = self._fold(target_edges, when)
             result = compose(inverse(to_common_from_target), to_common_from_source)
             return TransformStamped(Header(when, target), source, result)
+
+    def transform_point(self, target: str, source: str, point: Vector3, time: float | None = None) -> Vector3:
+        """source 좌표계에서 본 점을 target 좌표계에서 본 점으로 바꾼다 (lookup_transform + 적용). 조회가 실패하면 lookup_transform과 같은 예외."""
+        return apply(self.lookup_transform(target, source, time).transform, point)
 
     def can_transform(self, target: str, source: str, time: float | None = None) -> bool:
         from .errors import TransformException

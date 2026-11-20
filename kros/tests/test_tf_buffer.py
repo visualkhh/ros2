@@ -236,3 +236,35 @@ class TestMisc(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTransformPoint(unittest.TestCase):
+    def test_a_lidar_point_becomes_a_point_in_the_robot_frame(self) -> None:
+        buffer = TransformBuffer()
+        buffer.set_transform("base_footprint", "base_scan", 0.0, shift(-0.064, 0, 0.132), is_static=True)
+        # 라이다 앞 1m의 점 (라이다 좌표 (1,0,0)) -> 로봇 좌표
+        point = buffer.transform_point("base_footprint", "base_scan", Vector3(1.0, 0.0, 0.0))
+        self.assertEqual((round(point.x, 9), point.y, round(point.z, 9)), (0.936, 0.0, 0.132))
+
+    def test_rotation_is_applied_to_the_point(self) -> None:
+        buffer = TransformBuffer()
+        buffer.set_transform("map", "robot", 0.0, turn(math.pi / 2, x=2.0), is_static=True)  # 로봇이 (2,0)에서 +y를 본다
+        point = buffer.transform_point("map", "robot", Vector3(1.0, 0.0, 0.0))  # 로봇 앞 1m
+        self.assertEqual((round(point.x, 9), round(point.y, 9), point.z), (2.0, 1.0, 0.0))
+
+    def test_inverse_direction_and_roundtrip(self) -> None:
+        buffer = TransformBuffer()
+        buffer.set_transform("map", "robot", 0.0, turn(0.7, x=2.0, y=-1.0), is_static=True)
+        there = buffer.transform_point("map", "robot", Vector3(0.3, 0.4, 0.5))
+        back = buffer.transform_point("robot", "map", there)
+        self.assertEqual((round(back.x, 9), round(back.y, 9), round(back.z, 9)), (0.3, 0.4, 0.5))
+
+    def test_time_is_used_for_moving_frames_and_errors_propagate(self) -> None:
+        buffer = TransformBuffer()
+        buffer.set_transform("odom", "base", 1.0, shift(0.0))
+        buffer.set_transform("odom", "base", 2.0, shift(4.0))
+        self.assertEqual(buffer.transform_point("odom", "base", Vector3(), 1.5).x, 2.0)  # 그 시각의 위치로 보간
+        with self.assertRaises(ExtrapolationException):
+            buffer.transform_point("odom", "base", Vector3(), 9.0)
+        with self.assertRaises(LookupException):
+            buffer.transform_point("odom", "nope", Vector3())
