@@ -53,10 +53,23 @@ class TestVizSmoke(unittest.TestCase):
         assert viz.model is not None
         self.assertFalse(viz.model.links["base_link"].isHidden())  # TF가 있는 링크는 보인다
         self.assertIn("odom x=", viz.hud.getText())
-        text = viz.topics.getText()
+        text = " ".join(row.getText() for row in viz.rows.values())
         for topic in ("tf", "tf_static", "robot_description", "scan", "imu", "odom"):
             self.assertIn(topic, text)  # 구독 중인 토픽이 패널에 나온다
         self.assertIn("● scan", text)
+        viz.enabled["scan"] = viz.enabled["odom"] = viz.enabled["robot_description"] = False  # 체크 해제
+        viz.base.taskMgr.step()
+        self.assertTrue(viz.model.links["base_link"].isHidden())
+        self.assertTrue(viz._scan_np is None or viz._scan_np.isHidden())
+        self.assertNotIn("odom x=", viz.hud.getText())
+        self.assertIn("[ ] ● scan", viz.rows["scan"].getText())
+        self.assertIn("[x] ● imu", viz.rows["imu"].getText())
+        for index, name in enumerate(viz.rows):  # 각 줄의 가운데를 누르면 그 줄이 바뀐다
+            before = dict(viz.enabled)
+            viz.toggle_row_at(0.84 - index * 0.13 - 0.03)
+            changed = [k for k in before if before[k] != viz.enabled[k]]
+            self.assertEqual(changed, [name] if name in before else [], name)
+        viz.toggle_row_at(-0.99)  # 빈 곳
         viz.close()
         viz.close()  # 두 번 닫아도 된다
 

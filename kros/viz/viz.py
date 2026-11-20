@@ -23,7 +23,9 @@ from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
 from kros.viewer.urdf_model import UrdfModel
 
 NAME = "Viz"
-HELP = "left drag: orbit    right drag: pan    wheel: zoom    esc: close"
+HELP = "left drag: orbit    right drag: pan    wheel: zoom    click panel row: show/hide    esc: close"
+PANEL_RIGHT, ROW_TOP, ROW_STEP = -0.7, 0.84, 0.13  # 2D 장면 좌표 (가로 +-1.333, 세로 +-1)
+TOGGLES = ("grid", "tf", ROBOT_DESCRIPTION_TOPIC_NAME, "scan", "imu", "odom")  # 체크박스가 있는 줄 (tf_static은 tf 화면에 같이 쓰여서 없다)
 
 
 class VizNode(Node):
@@ -54,16 +56,16 @@ class VizNode(Node):
             kind, count, first, _ = self._stats[key]
             self._stats[key] = (kind, count + 1, first or now, now)
 
-    def topic_rows(self) -> list[str]:
+    def topic_rows(self) -> dict[str, str]:
         """구독 중인 토픽 한 줄씩: 상태(● 최근에 받음, ○ 2초 넘게 조용함/아직 없음), 이름, 타입, 개수, 평균 Hz."""
         now = time.monotonic()
         with self._lock:
             stats = dict(self._stats)
-        rows = []
+        rows = {}
         for topic, (kind, count, first, last) in stats.items():
             live = count > 0 and now - last < 2.0
             hz = (count - 1) / (last - first) if count > 1 and last > first else 0.0
-            rows.append(f"{'●' if live else '○'} {topic}\n    {kind}  n={count}  {hz:.1f}Hz")
+            rows[topic] = f"{'●' if live else '○'} {topic}\n      {kind}  n={count}  {hz:.1f}Hz"
         return rows
 
     def latest(self, topic: str) -> object | None:
@@ -115,7 +117,11 @@ class Viz:
         panel.setColor(0.08, 0.09, 0.13, 0.85)
         panel.setTransparency(True)
         OnscreenText(text="Subscriptions", parent=self.aspect, pos=(-1.3, 0.92), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.05)
-        self.topics = OnscreenText(parent=self.aspect, pos=(-1.3, 0.84), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.04, mayChange=True)
+        self.enabled = {name: True for name in TOGGLES}
+        self.rows: dict[str, OnscreenText] = {}  # 패널의 한 줄 = 구독 토픽 하나 (grid는 토픽이 아니라 맨 위 줄)
+        for index, name in enumerate(("grid", *self.node.topic_rows())):
+            self.rows[name] = OnscreenText(parent=self.aspect, pos=(-1.3, ROW_TOP - index * ROW_STEP), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.04, mayChange=True)
+        self._was_down = False
         self.hud = OnscreenText(parent=self.aspect, pos=(-0.65, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
         OnscreenText(text=HELP, parent=self.aspect, pos=(-0.65, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
         self.base.taskMgr.add(self._update, "viz-update")
@@ -150,7 +156,8 @@ class Viz:
             grid.drawTo(i * 0.5, 5, 0)
             grid.moveTo(-5, i * 0.5, 0)
             grid.drawTo(5, i * 0.5, 0)
-        self.scene.attachNewNode(grid.create()).setLightOff()
+        self.grid_np = self.scene.attachNewNode(grid.create())
+        self.grid_np.setLightOff()
 
     def _make_2d(self) -> NodePath:
         root = NodePath("viz-render2d")
@@ -203,13 +210,37 @@ class Viz:
         self._update_tf()
         self._update_scan()
         self.hud.setText(self._hud_text())
-        self.topics.setText("\n".join(self.node.topic_rows()))
+        self._click()
+        texts = {"grid": "grid", **self.node.topic_rows()}
+        for name, row in self.rows.items():
+            box = "[x] " if self.enabled.get(name) else "[ ] " if name in self.enabled else "     "
+            row.setText(box + texts[name])
+        self.grid_np.show() if self.enabled["grid"] else self.grid_np.hide()
         return task.cont
+
+    def _click(self) -> None:
+        """패널 줄을 왼쪽 클릭하면 그 표시를 껐다 켠다 (누르는 순간 한 번)."""
+        mouse = self.mouse.node()
+        down = mouse.hasMouse() and mouse.isButtonDown(MouseButton.one())
+        if down and not self._was_down and mouse.hasMouse() and self._in_panel(mouse.getMouseX(), mouse.getMouseY()):
+            self.toggle_row_at(mouse.getMouseY())
+        self._was_down = down
+
+    def toggle_row_at(self, y: float) -> None:
+        """패널의 세로 위치 y(-1..1)에 있는 줄의 표시를 껐다 켠다. 체크박스가 없는 줄이나 빈 곳이면 아무 일도 없다."""
+        index = math.floor((ROW_TOP + 0.04 - y) / ROW_STEP)  # 줄 글자의 위쪽 기준
+        names = list(self.rows)
+        if 0 <= index < len(names) and names[index] in self.enabled:
+            self.enabled[names[index]] = not self.enabled[names[index]]
+
+    @staticmethod
+    def _in_panel(mouse_x: float, mouse_y: float) -> bool:
+        return mouse_x * 1.333 < PANEL_RIGHT
 
     def _camera(self) -> None:
         mouse = self.mouse.node()
         pos = (mouse.getMouseX(), mouse.getMouseY()) if mouse.hasMouse() else None
-        if pos and self._last_mouse:
+        if pos and self._last_mouse and not self._in_panel(*pos):  # 패널 위의 드래그는 카메라를 움직이지 않는다
             dx, dy = pos[0] - self._last_mouse[0], pos[1] - self._last_mouse[1]
             if mouse.isButtonDown(MouseButton.one()):
                 self.yaw -= dx * 3.0
@@ -234,7 +265,7 @@ class Viz:
                 link.hide()
         if self.model:
             for name, link in self.model.links.items():
-                stamped = self._lookup(name)
+                stamped = self._lookup(name) if self.enabled[ROBOT_DESCRIPTION_TOPIC_NAME] else None
                 if stamped is None:
                     link.hide()
                 else:
@@ -244,7 +275,7 @@ class Viz:
     def _update_tf(self) -> None:
         """모든 프레임에 축(x 빨강, y 초록, z 파랑)과 부모로 가는 노란 선."""
         lines = LineSegs()
-        for frame in self.node.buffer.all_frames():
+        for frame in self.node.buffer.all_frames() if self.enabled["tf"] else ():
             stamped = self._lookup(frame)
             if stamped is None:
                 continue
@@ -294,7 +325,7 @@ class Viz:
             self._scan_np.setRenderModeThickness(4)
             self._scan_np.hide()
         if self._scan_np is not None:
-            stamped = self._lookup(self.scan_frame)
+            stamped = self._lookup(self.scan_frame) if self.enabled["scan"] else None
             if stamped is None:
                 self._scan_np.hide()
             else:
@@ -304,10 +335,10 @@ class Viz:
     def _hud_text(self) -> str:
         odom, imu = self.node.latest("odom"), self.node.latest("imu")
         rows = [f"fixed frame: {self.fixed_frame}   frames: {len(self.node.buffer.all_frames())}"]
-        if isinstance(odom, Odometry):
+        if isinstance(odom, Odometry) and self.enabled["odom"]:
             p = odom.pose.position
             rows.append(f"odom x={p.x:.2f} y={p.y:.2f}   v={odom.twist.linear.x:.2f} w={odom.twist.angular.z:.2f}")
-        if isinstance(imu, Imu):
+        if isinstance(imu, Imu) and self.enabled["imu"]:
             a, w = imu.linear_acceleration, imu.angular_velocity
             rows.append(f"imu a=({a.x:.1f},{a.y:.1f},{a.z:.1f}) gyro_z={w.z:.2f}")
         return "\n".join(rows)
