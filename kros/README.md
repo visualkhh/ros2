@@ -96,6 +96,10 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
 
 **내비게이션 (nav2 흉내)**: `nodes/nav2/` 아래에 nav2와 같은 나눔으로 만든다.
 - `costmap_2d`: `Costmap`(칸마다 0~255 비용: 0 빈 곳, 1~252 벽 가까이일수록 비쌈, 253 로봇 몸이 닿음, 254 벽, 255 모름)과 `Costmap2DROS` 노드(기본 이름 `global_costmap`). `/map`(static layer)에 inflation layer(`robot_radius` 안은 253, 그 밖 `inflation_radius`까지 `252*exp(-cost_scaling_factor*(d - robot_radius))`)를 입혀 `<이름>/costmap`(latch)으로 낸다. 모르는 칸은 몸이 닿을 만큼 가까울 때만 덮는다(nav2 `inflate_unknown: false`). 반지름/inflation 파라미터를 바꾸면 바로 다시 만든다. `get_robot_pose()`로 global_frame의 로봇 위치를 준다. obstacle layer(라이다로 지도에 없는 장애물)는 아직 없다.
+- `planner`: `PlannerServer` 노드(`planner_server`)가 `compute_path_to_pose` 액션(`nav2_msgs/ComputePathToPose`)을 받아 경로를 계획하고 `plan` 토픽(`nav_msgs/Path`)으로도 낸다. nav2처럼 자기 안에 `global_costmap`(`Costmap2DROS`)을 만든다(파라미터는 `costmap_parameters`). 알고리즘은 플러그인: `planner_plugins: ("GridBased", ...)`, `"<이름>.plugin"`으로 고르고 `goal.planner_id`로 부른다.
+  - `nav2_navfn_planner::NavfnPlanner`: 8방향 격자 최단 경로. `use_astar` 거짓이면 Dijkstra, 참이면 A*(남은 거리 휴리스틱, 펼치는 칸이 적다). 칸 값은 navfn처럼 `50 + 0.8 * 비용`이라 벽 가까운 길을 꺼린다. `tolerance`(목표가 벽이면 이 안의 갈 수 있는 칸으로), `allow_unknown`.
+  - `nav2_theta_star_planner::ThetaStarPlanner`: Theta*(any-angle). 할아버지 칸에서 이웃이 직선으로 보이면 바로 이어 모서리에서만 꺾는다. `w_euc_cost`, `w_traversal_cost`, 결과는 칸 간격으로 촘촘히 채운다.
+  - 실패는 nav2처럼 결과의 `error_code`(INVALID_PLANNER, TF_ERROR, GOAL_OUTSIDE_MAP, GOAL_OCCUPIED, NO_VALID_PATH ...)로 돌려준다. 로봇이 벽에 붙어 서 있으면(시작 칸이 253) 둘레 0.3m는 벽만 아니면 지나가 빠져나온다.
 
 **SLAM / 위치 추정**: `nodes/cartographer/`의 `Cartographer`(노드 이름 `cartographer`)는 라이다 스캔을 격자 지도에 맞춰(스캔 매칭) 로봇 위치를 바로잡고 `map -> odom` TF를 낸다. odom 아래(`odom -> base_footprint`)는 EKF가 그대로 내고, 이 노드는 그 위에 하나만 얹는다(REP-105).
 - `mode` 파라미터(실행 중에 바꿀 수 있다): `idle`(아무것도 안 함), `mapping`(SLAM: 새 지도를 만들며 위치를 고치고 `map` 토픽에 latch로 낸다), `localization`(map_server가 띄운 저장 지도로 위치만 고친다, cartographer의 pure localization).
