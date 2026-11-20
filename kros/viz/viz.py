@@ -1,11 +1,12 @@
 import math
 import threading
+import time
 from pathlib import Path
 
 from direct.gui.OnscreenText import OnscreenText
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
-    AmbientLight, ButtonThrower, Camera, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
+    AmbientLight, ButtonThrower, Camera, CardMaker, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
     LineSegs, MouseAndKeyboard, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
     LVecBase4f, GraphicsWindow,
 )
@@ -16,7 +17,8 @@ from kros.msgs.nav_msgs import Odometry
 from kros.msgs.sensor_msgs import Imu, LaserScan
 from kros.msgs.std_msgs import String
 from kros.nodes import Node
-from kros.tf import ROBOT_DESCRIPTION_TOPIC_NAME, Buffer, TransformException, TransformListener
+from kros.msgs.tf2_msgs import TFMessage
+from kros.tf import QOS_TF, QOS_TF_STATIC, ROBOT_DESCRIPTION_TOPIC_NAME, TF_STATIC_TOPIC_NAME, TF_TOPIC_NAME, Buffer, TransformException, TransformListener
 from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
 from kros.viewer.urdf_model import UrdfModel
 
@@ -33,17 +35,36 @@ class VizNode(Node):
         self._listener = TransformListener(self.buffer, self)
         self._lock = threading.Lock()
         self._latest: dict[str, object] = {}
+        self._stats: dict[str, tuple[str, int, float, float]] = {}  # 토픽 -> (타입 이름, 받은 개수, 첫 수신 시각, 마지막 수신 시각)
         for topic, msg_type, qos in (
+            (TF_TOPIC_NAME, TFMessage, QOS_TF),  # 이 둘은 TransformListener도 따로 구독한다: 여기서는 패널의 통계용
+            (TF_STATIC_TOPIC_NAME, TFMessage, QOS_TF_STATIC),
             (ROBOT_DESCRIPTION_TOPIC_NAME, String, QOS_LATCHED),
             ("scan", LaserScan, QOS_SENSOR_DATA),
             ("imu", Imu, QOS_SENSOR_DATA),
             ("odom", Odometry, QOS_SENSOR_DATA),
         ):
+            self._stats[topic] = (msg_type.__name__, 0, 0.0, 0.0)  # 구독만 하고 아직 못 받은 토픽도 패널에 보인다
             self.subscribe(topic, msg_type, lambda message, key=topic: self._store(key, message), qos)  # type: ignore[misc]
 
     def _store(self, key: str, message: object) -> None:
+        now = time.monotonic()
         with self._lock:
             self._latest[key] = message
+            kind, count, first, _ = self._stats[key]
+            self._stats[key] = (kind, count + 1, first or now, now)
+
+    def topic_rows(self) -> list[str]:
+        """구독 중인 토픽 한 줄씩: 상태(● 최근에 받음, ○ 2초 넘게 조용함/아직 없음), 이름, 타입, 개수, 평균 Hz."""
+        now = time.monotonic()
+        with self._lock:
+            stats = dict(self._stats)
+        rows = []
+        for topic, (kind, count, first, last) in stats.items():
+            live = count > 0 and now - last < 2.0
+            hz = (count - 1) / (last - first) if count > 1 and last > first else 0.0
+            rows.append(f"{'●' if live else '○'} {topic}\n    {kind}  n={count}  {hz:.1f}Hz")
+        return rows
 
     def latest(self, topic: str) -> object | None:
         with self._lock:
@@ -88,8 +109,15 @@ class Viz:
         self._last_mouse: tuple[float, float] | None = None
         self._closed = False
         self._build_input()
-        self.hud = OnscreenText(parent=self.aspect, pos=(-1.3, 0.9), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
-        OnscreenText(text=HELP, parent=self.aspect, pos=(-1.3, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
+        card = CardMaker("panel")
+        card.setFrame(-1.333, -0.7, -1, 1)
+        panel = self.aspect.attachNewNode(card.generate())
+        panel.setColor(0.08, 0.09, 0.13, 0.85)
+        panel.setTransparency(True)
+        OnscreenText(text="Subscriptions", parent=self.aspect, pos=(-1.3, 0.92), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.05)
+        self.topics = OnscreenText(parent=self.aspect, pos=(-1.3, 0.84), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.04, mayChange=True)
+        self.hud = OnscreenText(parent=self.aspect, pos=(-0.65, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), scale=0.05, mayChange=True)
+        OnscreenText(text=HELP, parent=self.aspect, pos=(-0.65, -0.95), align=TextNode.ALeft, fg=(0.7, 0.7, 0.7, 1), scale=0.04)
         self.base.taskMgr.add(self._update, "viz-update")
 
     # ---- 만들기 ------------------------------------------------------------------------------
@@ -175,6 +203,7 @@ class Viz:
         self._update_tf()
         self._update_scan()
         self.hud.setText(self._hud_text())
+        self.topics.setText("\n".join(self.node.topic_rows()))
         return task.cont
 
     def _camera(self) -> None:

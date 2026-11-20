@@ -53,6 +53,10 @@ class TestVizSmoke(unittest.TestCase):
         assert viz.model is not None
         self.assertFalse(viz.model.links["base_link"].isHidden())  # TF가 있는 링크는 보인다
         self.assertIn("odom x=", viz.hud.getText())
+        text = viz.topics.getText()
+        for topic in ("tf", "tf_static", "robot_description", "scan", "imu", "odom"):
+            self.assertIn(topic, text)  # 구독 중인 토픽이 패널에 나온다
+        self.assertIn("● scan", text)
         viz.close()
         viz.close()  # 두 번 닫아도 된다
 

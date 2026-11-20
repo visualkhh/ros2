@@ -33,7 +33,7 @@ kros/
 │   └── robots/        로봇들. robot.py: Robot(Hardware, WorldObject) 베이스
 │       └── turtlebot3/  TurtleBot3(Robot): OpenCR 보드(구동부 + IMU)와 LDS-01 라이다를 단다. 바퀴 치수와 라이다 장착 위치는 이 로봇이 정한다. description/ (ROBOTIS URDF·STL 메시)
 ├── viewer/            [현실] 3D 화면: Panda3D(GPU) 창(panda_viewer.py: Viewer)과 URDF/STL 로더(urdf_model.py, stl.py, shapes.py). 스텝마다 그 순간을 불변 데이터 Snapshot(snapshot.py)으로 만드는 SnapshotRecorder(snapshot_recorder.py: 월드와 로봇을 아는 곳)가 러너의 리스너로 달리고, Viewer는 그 최신 스냅샷만 그린다. snapshot/recorder는 panda3d 없이 돈다. kros와 무관
-├── viz/               [kros 쪽] rviz 같은 화면: `Viz(kros, package_root, base=None)`가 Kros 인스턴스 하나만 받아 안에서 `VizNode`를 만들고 tf/tf_static, robot_description(latch), scan, imu, odom을 구독해 그린다 (격자, TF 축과 부모 선, URDF 모델을 TF로 배치, 라이다 점, IMU/odom 글자; 기준 프레임 `fixed_frame`=odom). `base`로 Viewer(ShowBase)를 주면 그 위에 두 번째 창을 열고, 없으면 자기 창. 월드/하드웨어는 모른다
+├── viz/               [kros 쪽] rviz 같은 화면: `Viz(kros, package_root, base=None)`가 Kros 인스턴스 하나만 받아 안에서 `VizNode`를 만들고 tf/tf_static, robot_description(latch), scan, imu, odom을 구독해 그린다 (왼쪽 구독 토픽 패널, 격자, TF 축과 부모 선, URDF 모델을 TF로 배치, 라이다 점, IMU/odom 글자; 기준 프레임 `fixed_frame`=odom). `base`로 Viewer(ShowBase)를 주면 그 위에 두 번째 창을 열고, 없으면 자기 창. 월드/하드웨어는 모른다
 ├── examples/turtlebot3/  [kros 쪽] 예제: kros 노드 RobotBridge로 위 현실 쪽과 토픽(cmd_vel, scan, imu)을 잇는다 (main.py, run.sh)
 ├── tests/             unittest
 ├── setting-venv.sh    .venv 생성
