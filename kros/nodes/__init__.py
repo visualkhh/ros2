@@ -5,5 +5,6 @@
 """
 from .diagnostic_aggregator import DiagnosticAggregator
 from .robot_state_publisher import RobotStatePublisher
+from .tf_echo import TfEcho
 
-__all__ = ["DiagnosticAggregator", "RobotStatePublisher"]
+__all__ = ["DiagnosticAggregator", "RobotStatePublisher", "TfEcho"]

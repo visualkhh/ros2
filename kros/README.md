@@ -11,7 +11,7 @@ kros/
 ├── node/node.py       Node 기반 클래스(제공 노드는 nodes/): Node(context, name=None, parameters=None): publish/subscribe, 서비스, 액션, 타이머, 파라미터 (모두 타입 지정). 이름 기본값은 클래스 이름
 ├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan / std_msgs: Header, String / geometry_msgs: Quaternion, Transform, TransformStamped / tf2_msgs: TFMessage / sensor_msgs: JointState / diagnostic_msgs / rcl_interfaces: Log ... (ROS의 msg 흉내)
 ├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
-├── tf/                TF 도구: TransformBuffer(좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, transform_math(순수 3D 계산)
+├── tf/                TF 도구: Buffer(tf2_ros.Buffer, 좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, transform_math(순수 3D 계산)
 ├── urdf/              URDF 파서 (표준 라이브러리만, 링크/관절 트리 검증)
 ├── log/               NodeLogger(node.get_logger(): 파이썬 logging + rosout 토픽), enable_console
 ├── diagnostics/       진단 도구: DiagnosticUpdater(노드가 주기적으로 상태를 diagnostics 토픽에 냄), DiagnosticStatusWrapper
@@ -78,11 +78,13 @@ node.subscribe("scan", LaserScan, callback, QOS_SENSOR_DATA)  # 느리면 오래
 
 ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하나)이고, `TransformStamped`의 `header.frame_id`가 부모, `child_frame_id`가 자식이다. `Transform`은 "자식 좌표계의 점을 부모 좌표계로 옮기는" 3D 변환(이동 + 쿼터니언 회전)이다.
 
-- **`TransformBuffer`**(순수 계산, kros의 다른 부분을 모른다): 변환 트리와 이력을 들고 있고, `lookup_transform(target, source, time)`이 "source 좌표계의 점을 target 좌표계로 옮기는" 변환을 돌려준다. 공통 조상까지 올라갔다 내려오며 이어 붙이고, 움직이는 변환은 시각별 이력(`cache_time` 기본 10초)에서 **앞뒤 두 값 사이를 보간**한다(이동은 선형, 회전은 구면 보간). 안 변하는(static) 변환은 시각과 상관없다. `time=None`이면 가장 최근 공통 시각이다.
+- **`Buffer`**(ROS의 `tf2_ros.Buffer`, 순수 계산, kros의 다른 부분을 모른다): 변환 트리와 이력을 들고 있고, `lookup_transform(target, source, time)`이 "source 좌표계의 점을 target 좌표계로 옮기는" 변환을 돌려준다. 공통 조상까지 올라갔다 내려오며 이어 붙이고, 움직이는 변환은 시각별 이력(`cache_time` 기본 10초)에서 **앞뒤 두 값 사이를 보간**한다(이동은 선형, 회전은 구면 보간). 안 변하는(static) 변환은 시각과 상관없다. `time=None`이면 가장 최근 공통 시각이다(ROS의 `Time(0)`). `timeout`(초)을 주면 변환이 도착할 때까지 기다린다.
+  - `buffer.transform(PointStamped | PoseStamped, target_frame)`으로 시각과 좌표계가 붙은 점/자세를 옮긴다(`header.stamp`가 0이면 가장 최근). `all_frames_as_string()`, `all_frames_as_yaml()`은 ROS와 같은 모양의 좌표계 목록이다.
   - 예외: `LookupException`(모르는 좌표계), `ConnectivityException`(트리에서 이어져 있지 않음 / 순환), `ExtrapolationException`(요청 시각이 이력 범위 밖: 미래이거나 너무 오래됨). 모두 `TransformException`의 자식이고 `can_transform`이 불리언으로 감싼다.
   - 자식의 부모가 바뀌면 이전 이력을 버리고(경고) 순환이 생기는 변은 거절한다.
 - **`TransformBroadcaster(node)` / `StaticTransformBroadcaster(node)`**: `send_transform(...)`으로 `tf` / `tf_static` 토픽에 `TFMessage`를 낸다. 정적은 **latch**(`TRANSIENT_LOCAL`, 깊이 100)로 내서 나중에 뜬 리스너도 받는다.
-- **`TransformListener(node)`**: 두 토픽을 구독해 `listener.buffer`를 채운다.
+- **`TransformListener(buffer, node)`**: ROS와 같이 버퍼를 직접 만들어 넘기면 `tf`/`tf_static` 두 토픽을 구독해 그 버퍼를 채운다.
+- **`TfEcho`(노드, `kros.nodes`, ROS의 `tf2_echo`)**: 파라미터 `target_frame`, `source_frame`, `rate`로 변환을 주기마다 로그(이동, 쿼터니언, RPY)로 찍는다. `view_frames(buffer)`는 좌표계 트리를 들여쓴 글로 그린다(ROS의 `view_frames`는 PDF).
 - **`RobotStatePublisher`(노드, `kros.nodes`)**: 파라미터 `robot_description`(URDF 본문 문자열, 실행 중 바꾸면 다시 읽는다)으로 TF를 만든다. 고정 관절은 `tf_static`으로, 움직이는 관절(continuous/revolute/prismatic)은 `joint_states`(`JointState`)를 받을 때마다 `tf`로 낸다(그 관절의 값이 아직 안 왔으면 안 낸다). URDF 본문은 `robot_description` 토픽(latch)으로도 낸다. 잘못된 URDF(뿌리가 둘, 순환, 없는 링크 ...)는 파라미터가 거절하고 이전 로봇이 그대로 남는다. **kros가 제공하는 노드이고 쓸지는 사용자가 `node_create`에서 정한다**(안 만들면 아무 일도 안 한다).
 - **URDF 파서(`kros/urdf`)**: 표준 라이브러리만 쓴다. 링크/관절 트리를 검증하고(이름 중복, 없는 링크, 부모가 둘, 뿌리가 둘 이상, 순환), xacro는 **인자 치환(`${namespace}` 기본 빈 값)만** 지원한다. 그 밖의 `${...}`가 이름에 남으면 조용히 틀린 이름을 쓰지 않고 `UrdfError`다.
 - **하드웨어와의 연결(예제)**: `Robot.joint_positions()`(URDF 관절 이름 -> 위치, 바퀴 모터 엔코더 값)가 하드웨어가 남긴 사실이고, `RobotBridge`가 이걸 `joint_states` 토픽으로 낸다(`joint_states_period` 파라미터, 기본 0.05초). 그러면 `RobotStatePublisher`가 바퀴 TF를 만든다. URDF의 라이다 위치(`base_footprint` -> `base_scan` = (-0.064, 0, 0.132))가 `TurtleBot3`가 코드에 적은 `LIDAR_MOUNT_X/HEIGHT`와 같다는 걸 테스트가 확인한다.
@@ -90,22 +92,24 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
 
 실행 가능한 전체 예제는 `examples/turtlebot3/tf_usage.py`이고(`python3 -m kros.examples.turtlebot3.tf_usage`), 테스트(`tests/test_tf_usage.py`)가 이 예제를 실제로 돌려서 아래 설명이 낡지 않게 한다.
 
-**1. TF 받아서 쓰기** (노드가 `TransformListener`를 만들면 버퍼가 채워진다)
+**1. TF 받아서 쓰기** (ROS처럼 `Buffer`를 만들고 `TransformListener(buffer, node)`를 만들면 버퍼가 채워진다)
 ```python
 class ScanToBase(Node):
     def __init__(self, context: Context) -> None:
         super().__init__(context)
-        self.tf = TransformListener(self)          # tf, tf_static을 구독해 self.tf.buffer를 채운다
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)  # tf, tf_static을 구독해 버퍼를 채운다
 
     def lidar_point_in_base(self, meters: float) -> Vector3 | None:
         try:
             # (목표 좌표계, 원래 좌표계, 점): base_scan에서 본 점을 base_footprint에서 본 점으로
-            return self.tf.buffer.transform_point("base_footprint", "base_scan", Vector3(meters, 0, 0))
+            return self.tf_buffer.transform_point("base_footprint", "base_scan", Vector3(meters, 0, 0))
         except LookupException:                    # 아직 그 좌표계의 TF가 없다 (RobotStatePublisher가 아직 안 떴다)
             return None
 ```
 - `buffer.lookup_transform(target, source, time=None)`은 `Transform`(이동 + 회전)을 돌려주고, `buffer.transform_point(target, source, point, time=None)`은 점 하나를 바로 옮긴다. `time`을 안 주면 가장 최근 값이고, 주면(`self.now()` 등) 그 시각으로 이력에서 **보간**한다.
-- 조회가 실패하면 예외다: `LookupException`(모르는 좌표계), `ConnectivityException`(트리에서 이어져 있지 않음), `ExtrapolationException`(요청 시각이 이력 밖: 미래이거나 너무 오래됨). 미리 `buffer.can_transform(target, source)`로 물어볼 수도 있다. 기다렸다가 받아 주는 조회(timeout)는 아직 없다(TODO): 아직 없으면 예외를 받아 다음 기회에 다시 시도한다.
+- 조회가 실패하면 예외다: `LookupException`(모르는 좌표계), `ConnectivityException`(트리에서 이어져 있지 않음), `ExtrapolationException`(요청 시각이 이력 밖: 미래이거나 너무 오래됨). 미리 `buffer.can_transform(target, source)`로 물어볼 수도 있다. `lookup_transform(..., timeout=초)`(`can_transform`도)은 변환이 도착할 때까지 그만큼 기다렸다가 끝내 안 되면 위 예외를 던진다. **구독 콜백 안에서는 쓰지 않는다**(그 변환을 채울 스레드를 막는다): 타이머나 다른 스레드에서 쓴다.
+- ROS와 다른 점: 시각은 `rclpy.time.Time`이 아니라 **초(float)**이고 `time=None`이 `Time(0)`(가장 최근)이다. `timeout`도 초다. 직접 `tf_static`을 구독하려면 `QOS_TF_STATIC`으로 해야 이미 나간 정적 변환을 받는다.
 - `tf_static`(센서가 달린 위치처럼 안 변하는 TF)은 latch라서 **늦게 뜬 노드도** 이미 나간 것을 받는다.
 
 **2. TF 내기 / 바꾸기** (`TransformBroadcaster`; 안 변하는 것은 `StaticTransformBroadcaster`)

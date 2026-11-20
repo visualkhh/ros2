@@ -8,10 +8,12 @@ from .topics import (
     TF_TOPIC_NAME,
 )
 from .transform_broadcaster import StaticTransformBroadcaster, TransformBroadcaster
-from .transform_buffer import TransformBuffer
+from .buffer import Buffer
 from .transform_listener import TransformListener
+from .view_frames import view_frames
 
 __all__ = [
+    "Buffer",
     "ConnectivityException",
     "ExtrapolationException",
     "JOINT_STATES_TOPIC_NAME",
@@ -23,7 +25,7 @@ __all__ = [
     "TF_STATIC_TOPIC_NAME",
     "TF_TOPIC_NAME",
     "TransformBroadcaster",
-    "TransformBuffer",
     "TransformException",
     "TransformListener",
+    "view_frames",
 ]

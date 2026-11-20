@@ -1,25 +1,28 @@
 import bisect
 import logging
 import threading
+import time as _time
 
-from kros.msgs.geometry_msgs import Transform, TransformStamped, Vector3
+from kros.msgs.geometry_msgs import Point, PointStamped, Pose, PoseStamped, Transform, TransformStamped, Vector3
 from kros.msgs.std_msgs import Header
 
-from .errors import ConnectivityException, ExtrapolationException, LookupException
-from .transform_math import IDENTITY, apply, compose, interpolate, inverse, quaternion_normalize
+from .errors import ConnectivityException, ExtrapolationException, LookupException, TransformException
+from .transform_math import IDENTITY, apply, compose, interpolate, inverse, quaternion_multiply, quaternion_normalize
 
 logger = logging.getLogger(__name__)
 EPSILON = 1e-9  # 시각 비교의 부동소수점 오차 허용
 
 
-class TransformBuffer:
-    """좌표계 트리와 변환 이력 보관소 (ROS의 tf2 Buffer). 순수 계산이고 kros의 다른 부분을 모른다.
+class Buffer:
+    """좌표계 트리와 변환 이력 보관소 (ROS의 tf2_ros.Buffer). 순수 계산이고 kros의 다른 부분을 모른다.
 
     - 좌표계는 트리다: 자식은 부모가 하나. set_transform(parent, child, ...)이 그 변이다.
     - 움직이는 변환은 시각별 이력을 cache_time(초) 동안 보관하고, 조회할 때 앞뒤 두 값 사이를 보간한다
       (이동은 선형, 회전은 구면 보간). 안 변하는(static) 변환은 하나만 들고 있고 시각과 상관없다.
     - lookup_transform(target, source, time): source 좌표계의 점을 target 좌표계로 옮기는 변환.
-      time이 None이면 모든 움직이는 변환이 가진 가장 최근 공통 시각이다.
+      time이 None이면 모든 움직이는 변환이 가진 가장 최근 공통 시각이다 (ROS의 Time(0)).
+    - timeout(초)을 주면 변환이 도착할 때까지 그만큼 기다린다. 기다리는 동안 set_transform이 깨워 준다.
+      주의: TF 콜백(구독 스레드) 안에서 기다리면 그 변환을 채울 스레드를 막으니 쓰지 않는다.
     """
 
     def __init__(self, cache_time: float = 10.0) -> None:
@@ -27,6 +30,7 @@ class TransformBuffer:
             raise ValueError(f"cache_time은 0보다 커야 한다: {cache_time}")
         self.cache_time = cache_time
         self._lock = threading.RLock()
+        self._arrived = threading.Condition(self._lock)  # 변환이 들어올 때마다 알린다
         self._parent: dict[str, str] = {}  # 자식 -> 부모
         self._static: dict[str, Transform] = {}  # 자식 -> 안 변하는 변환
         self._stamps: dict[str, list[float]] = {}  # 자식 -> 이력의 시각들 (정렬됨)
@@ -34,6 +38,11 @@ class TransformBuffer:
 
     def set_transform(self, parent: str, child: str, stamp: float, transform: Transform, is_static: bool = False) -> None:
         """parent 좌표계에서 본 child 좌표계의 변환을 넣는다. child의 부모가 바뀌면 이전 이력을 버리고(경고), 순환이 생기면 ConnectivityException."""
+        with self._arrived:
+            self._set(parent, child, stamp, transform, is_static)
+            self._arrived.notify_all()
+
+    def _set(self, parent: str, child: str, stamp: float, transform: Transform, is_static: bool = False) -> None:
         if parent == child:
             raise ValueError(f"좌표계가 자기 자신의 자식일 수 없다: {child!r}")
         transform = Transform(transform.translation, quaternion_normalize(transform.rotation))
@@ -67,11 +76,24 @@ class TransformBuffer:
             if drop:
                 del stamps[:drop], samples[:drop]
 
-    def lookup_transform(self, target: str, source: str, time: float | None = None) -> TransformStamped:
+    def lookup_transform(self, target: str, source: str, time: float | None = None, timeout: float = 0.0) -> TransformStamped:
         """source 좌표계의 점을 target 좌표계로 옮기는 변환. 결과의 header.frame_id는 target, child_frame_id는 source다.
 
         LookupException: 모르는 좌표계. ConnectivityException: 이어져 있지 않다. ExtrapolationException: time이 이력 범위 밖.
+        timeout 안에 조회가 되면 그 값을, 끝내 안 되면 마지막 예외를 던진다.
         """
+        deadline = _time.monotonic() + timeout
+        with self._arrived:
+            while True:
+                try:
+                    return self._lookup(target, source, time)
+                except TransformException:
+                    remaining = deadline - _time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    self._arrived.wait(remaining)
+
+    def _lookup(self, target: str, source: str, time: float | None) -> TransformStamped:
         with self._lock:
             for frame in (target, source):
                 if not self._known(frame):
@@ -88,18 +110,59 @@ class TransformBuffer:
             result = compose(inverse(to_common_from_target), to_common_from_source)
             return TransformStamped(Header(when, target), source, result)
 
-    def transform_point(self, target: str, source: str, point: Vector3, time: float | None = None) -> Vector3:
+    def transform_point(self, target: str, source: str, point: Vector3, time: float | None = None, timeout: float = 0.0) -> Vector3:
         """source 좌표계에서 본 점을 target 좌표계에서 본 점으로 바꾼다 (lookup_transform + 적용). 조회가 실패하면 lookup_transform과 같은 예외."""
-        return apply(self.lookup_transform(target, source, time).transform, point)
+        return apply(self.lookup_transform(target, source, time, timeout).transform, point)
 
-    def can_transform(self, target: str, source: str, time: float | None = None) -> bool:
-        from .errors import TransformException
+    def transform(self, stamped: PointStamped | PoseStamped, target_frame: str, timeout: float = 0.0) -> PointStamped | PoseStamped:
+        """시각과 좌표계가 붙은 점/자세를 target_frame으로 옮긴다 (ROS의 buffer.transform).
+        header.stamp 시각의 변환을 쓰고, ROS의 Time(0)처럼 stamp가 0이면 가장 최근 값을 쓴다."""
+        stamp = stamped.header.stamp
+        t = self.lookup_transform(target_frame, stamped.header.frame_id, stamp or None, timeout)
+        header = Header(t.header.stamp, target_frame)
+        if isinstance(stamped, PointStamped):
+            p = apply(t.transform, Vector3(stamped.point.x, stamped.point.y, stamped.point.z))
+            return PointStamped(header, Point(p.x, p.y, p.z))
+        pose = stamped.pose
+        p = apply(t.transform, Vector3(pose.position.x, pose.position.y, pose.position.z))
+        q = quaternion_normalize(quaternion_multiply(t.transform.rotation, pose.orientation))
+        return PoseStamped(header, Pose(Point(p.x, p.y, p.z), q))
 
+    def can_transform(self, target: str, source: str, time: float | None = None, timeout: float = 0.0) -> bool:
         try:
-            self.lookup_transform(target, source, time)
+            self.lookup_transform(target, source, time, timeout)
         except TransformException:
             return False
         return True
+
+    def all_frames_as_string(self) -> str:
+        """좌표계들의 부모를 한 줄씩 (ROS와 같은 모양: "Frame X exists with parent Y.")."""
+        with self._lock:
+            return "".join(f"Frame {frame} exists with parent {self._parent.get(frame, 'NO_PARENT')}.\n" for frame in self.all_frames())
+
+    def all_frames_as_yaml(self) -> str:
+        """좌표계별 부모와 이력 정보를 YAML 문자열로 (ROS의 all_frames_as_yaml). 방송 주기는 이력에서 구한다."""
+        with self._lock:
+            lines: list[str] = []
+            for child in sorted(self._parent):
+                stamps = self._stamps.get(child, [])
+                span = stamps[-1] - stamps[0] if len(stamps) > 1 else 0.0
+                rate = (len(stamps) - 1) / span if span > 0 else 0.0
+                lines += [
+                    f"{child}:",
+                    f"  parent: '{self._parent[child]}'",
+                    f"  broadcaster: '{'static' if child in self._static else 'tf'}'",
+                    f"  rate: {rate:.3f}",
+                    f"  most_recent_transform: {stamps[-1] if stamps else 0.0:.6f}",
+                    f"  oldest_transform: {stamps[0] if stamps else 0.0:.6f}",
+                    f"  buffer_length: {span:.3f}",
+                ]
+            return "\n".join(lines) + ("\n" if lines else "")
+
+    def parent_of(self, frame: str) -> str | None:
+        """frame의 부모 좌표계. 뿌리이거나 모르는 좌표계면 None."""
+        with self._lock:
+            return self._parent.get(frame)
 
     def all_frames(self) -> list[str]:
         with self._lock:

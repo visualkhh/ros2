@@ -95,3 +95,14 @@ def interpolate(a: Transform, b: Transform, ratio: float) -> Transform:
     """두 변환 사이 ratio(0~1) 지점: 이동은 선형, 회전은 구면 보간."""
     t = Vector3(*(a_i + ratio * (b_i - a_i) for a_i, b_i in zip((a.translation.x, a.translation.y, a.translation.z), (b.translation.x, b.translation.y, b.translation.z))))
     return Transform(t, slerp(a.rotation, b.rotation, ratio))
+
+
+def to_rpy(q: Quaternion) -> tuple[float, float, float]:
+    """from_rpy의 반대: 쿼터니언을 (roll, pitch, yaw)로. pitch가 ±90도면 roll/yaw를 따로 못 정하니 roll을 0으로 둔다."""
+    q = quaternion_normalize(q)
+    sin_pitch = 2 * (q.w * q.y - q.z * q.x)
+    if abs(sin_pitch) >= 1 - 1e-12:
+        return 0.0, math.copysign(math.pi / 2, sin_pitch), math.atan2(-2 * (q.x * q.y - q.w * q.z), 1 - 2 * (q.x * q.x + q.z * q.z))
+    roll = math.atan2(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y))
+    yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+    return roll, math.asin(sin_pitch), yaw

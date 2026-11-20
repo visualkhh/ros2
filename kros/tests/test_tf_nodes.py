@@ -13,6 +13,7 @@ from kros.parameter import ParameterRejectedError
 from kros.tf import (
     JOINT_STATES_TOPIC_NAME,
     ROBOT_DESCRIPTION_TOPIC_NAME,
+    Buffer,
     ExtrapolationException,
     StaticTransformBroadcaster,
     TransformBroadcaster,
@@ -49,7 +50,7 @@ class TestBroadcasterAndListener(unittest.TestCase):
         self.kros = Kros(create, time_source=self.source)
         self.addCleanup(self.kros.shutdown)
         self.pub, self.sub = made["pub"], made["sub"]
-        self.listener = TransformListener(self.sub)
+        self.listener = TransformListener(Buffer(), self.sub)
 
     def test_moving_transform_reaches_the_listener_buffer(self) -> None:
         TransformBroadcaster(self.pub).send_transform([stamped("odom", "base", 1.0, 1.0), stamped("odom", "base", 2.0, 3.0)])
@@ -64,7 +65,7 @@ class TestBroadcasterAndListener(unittest.TestCase):
     def test_static_transform_reaches_a_listener_that_started_later(self) -> None:
         StaticTransformBroadcaster(self.pub).send_transform(stamped("base_link", "base_scan", 0.0, 0.5))  # 리스너가 뜨기 전에 한 번만 낸다
         late = Node(self.kros.context, "Late")
-        late_listener = TransformListener(late)  # 나중에 뜬 노드
+        late_listener = TransformListener(Buffer(), late)  # 나중에 뜬 노드
         settle(self.kros)
         self.assertEqual(late_listener.buffer.lookup_transform("base_link", "base_scan").transform.translation.x, 0.5)
         self.assertEqual(self.listener.buffer.lookup_transform("base_link", "base_scan").transform.translation.x, 0.5)
@@ -102,7 +103,7 @@ class TestRobotStatePublisher(unittest.TestCase):
         state, user = made["state"], made["user"]
         assert isinstance(state, RobotStatePublisher)
         self.state, self.user = state, user
-        self.listener = TransformListener(self.user)
+        self.listener = TransformListener(Buffer(), self.user)
         settle(self.kros)
 
     def joint_states(self, stamp: float, left: float, right: float) -> None:
@@ -203,7 +204,7 @@ class TestRobotStatePublisher(unittest.TestCase):
         kros = Kros(lambda ctx: [RobotStatePublisher(ctx, "Arm", {"robot_description": urdf}), Node(ctx, "U")], time_source=SimulatedTimeSource())
         self.addCleanup(kros.shutdown)
         user = kros.nodes[1]
-        listener = TransformListener(user)
+        listener = TransformListener(Buffer(), user)
         user.publish(JOINT_STATES_TOPIC_NAME, JointState(Header(1.0), ("slide", "swing"), (0.4, math.pi / 2)))
         settle(kros)
         slider = listener.buffer.lookup_transform("base", "slider").transform.translation
@@ -216,7 +217,7 @@ class TestRobotStatePublisher(unittest.TestCase):
     def test_without_a_description_it_publishes_nothing(self) -> None:
         kros = Kros(lambda ctx: [RobotStatePublisher(ctx), Node(ctx, "U")], time_source=SimulatedTimeSource())
         self.addCleanup(kros.shutdown)
-        listener = TransformListener(kros.nodes[1])
+        listener = TransformListener(Buffer(), kros.nodes[1])
         settle(kros)
         self.assertEqual(listener.buffer.all_frames(), [])
 
@@ -238,7 +239,7 @@ class TestRobotIntegration(unittest.TestCase):
 
         kros = Kros(create, time_source=source)
         self.addCleanup(kros.shutdown)
-        listener = TransformListener(made["watcher"])
+        listener = TransformListener(Buffer(), made["watcher"])
         robot.command = Twist(Vector3(v, 0, 0), Vector3())
         for _ in range(round(seconds / 0.05)):
             world.step(0.05)

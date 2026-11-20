@@ -3,7 +3,7 @@ import threading
 import unittest
 
 from kros.msgs.geometry_msgs import Quaternion, Transform, Vector3
-from kros.tf import ConnectivityException, ExtrapolationException, LookupException, TransformBuffer, TransformException
+from kros.tf import ConnectivityException, ExtrapolationException, LookupException, Buffer, TransformException
 from kros.tf.transform_math import from_axis_angle, from_rpy
 
 
@@ -15,14 +15,14 @@ def turn(yaw: float, x: float = 0.0, y: float = 0.0) -> Transform:
     return Transform(Vector3(x, y, 0.0), from_axis_angle((0, 0, 1), yaw))
 
 
-def xyz(buffer: TransformBuffer, target: str, source: str, time: float | None = None) -> tuple[float, float, float]:
+def xyz(buffer: Buffer, target: str, source: str, time: float | None = None) -> tuple[float, float, float]:
     t = buffer.lookup_transform(target, source, time).transform.translation
     return round(t.x, 9), round(t.y, 9), round(t.z, 9)
 
 
 class TestStaticTree(unittest.TestCase):
     def setUp(self) -> None:
-        self.buffer = TransformBuffer()
+        self.buffer = Buffer()
         # base_footprint -> base_link -> base_scan, base_link -> imu
         self.buffer.set_transform("base_footprint", "base_link", 0.0, shift(z=0.010), is_static=True)
         self.buffer.set_transform("base_link", "base_scan", 0.0, shift(-0.064, 0, 0.122), is_static=True)
@@ -51,13 +51,13 @@ class TestStaticTree(unittest.TestCase):
         self.assertEqual(self.buffer.all_frames(), ["base_footprint", "base_link", "base_scan", "imu"])
 
     def test_rotation_in_the_chain_rotates_the_offsets_below_it(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("map", "robot", 0.0, turn(math.pi / 2, x=1.0), is_static=True)  # 로봇은 (1,0)에서 왼쪽(+y)을 본다
         buffer.set_transform("robot", "lidar", 0.0, shift(x=0.5), is_static=True)  # 라이다는 로봇 앞 0.5m
         self.assertEqual(xyz(buffer, "map", "lidar"), (1.0, 0.5, 0.0))  # 로봇이 +y를 보니 라이다는 (1, 0.5)
 
     def test_rpy_urdf_origin_is_respected(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("base", "wheel", 0.0, Transform(Vector3(0, 0.144, 0.023), from_rpy(-1.57, 0, 0)), is_static=True)
         axis_in_base = buffer.lookup_transform("base", "wheel").transform.rotation
         from kros.tf.transform_math import rotate
@@ -68,7 +68,7 @@ class TestStaticTree(unittest.TestCase):
 
 class TestErrors(unittest.TestCase):
     def setUp(self) -> None:
-        self.buffer = TransformBuffer()
+        self.buffer = Buffer()
         self.buffer.set_transform("a", "b", 0.0, shift(1), is_static=True)
         self.buffer.set_transform("x", "y", 0.0, shift(1), is_static=True)
 
@@ -100,12 +100,12 @@ class TestErrors(unittest.TestCase):
 
     def test_bad_cache_time(self) -> None:
         with self.assertRaises(ValueError):
-            TransformBuffer(cache_time=0)
+            Buffer(cache_time=0)
 
 
 class TestDynamic(unittest.TestCase):
     def setUp(self) -> None:
-        self.buffer = TransformBuffer(cache_time=10.0)
+        self.buffer = Buffer(cache_time=10.0)
         for t, x in ((1.0, 0.0), (2.0, 1.0), (3.0, 3.0)):
             self.buffer.set_transform("odom", "base", t, shift(x))
 
@@ -127,7 +127,7 @@ class TestDynamic(unittest.TestCase):
             self.buffer.lookup_transform("odom", "base", 0.5)  # 과거
 
     def test_rotation_is_interpolated_spherically(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("odom", "base", 0.0, turn(0.0))
         buffer.set_transform("odom", "base", 1.0, turn(math.pi / 2))
         mid = buffer.lookup_transform("odom", "base", 0.5).transform.rotation
@@ -136,7 +136,7 @@ class TestDynamic(unittest.TestCase):
         self.assertAlmostEqual(mid.w, expected.w)
 
     def test_samples_can_arrive_out_of_order(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         for t in (3.0, 1.0, 2.0):
             buffer.set_transform("odom", "base", t, shift(t))
         self.assertEqual(xyz(buffer, "odom", "base", 1.5), (1.5, 0.0, 0.0))
@@ -146,7 +146,7 @@ class TestDynamic(unittest.TestCase):
         self.assertEqual(xyz(self.buffer, "odom", "base", 2.0), (10.0, 0.0, 0.0))
 
     def test_old_samples_are_dropped_after_cache_time(self) -> None:
-        buffer = TransformBuffer(cache_time=2.0)
+        buffer = Buffer(cache_time=2.0)
         for t in range(0, 10):
             buffer.set_transform("odom", "base", float(t), shift(float(t)))
         with self.assertRaises(ExtrapolationException):
@@ -162,7 +162,7 @@ class TestDynamic(unittest.TestCase):
         self.assertEqual((stamped.transform.translation.x, stamped.transform.translation.z, stamped.header.stamp), (3.0, 0.2, 3.0))
 
     def test_two_moving_frames_use_the_oldest_of_their_latest_stamps(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         for t in (1.0, 2.0, 3.0):
             buffer.set_transform("map", "a", t, shift(t))
         for t in (1.0, 2.0):
@@ -174,10 +174,10 @@ class TestDynamic(unittest.TestCase):
 
 class TestReparenting(unittest.TestCase):
     def test_changing_a_frames_parent_drops_its_old_history(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("a", "child", 1.0, shift(1))
         buffer.set_transform("a", "sibling", 1.0, shift(2))  # a는 sibling의 부모로도 남아 있다
-        with self.assertLogs("kros.tf.transform_buffer", level="WARNING"):
+        with self.assertLogs("kros.tf.buffer", level="WARNING"):
             buffer.set_transform("b", "child", 2.0, shift(5))
         with self.assertRaises(ConnectivityException):
             buffer.lookup_transform("sibling", "child")  # child는 이제 b 아래라 a 아래의 sibling과 이어져 있지 않다
@@ -186,7 +186,7 @@ class TestReparenting(unittest.TestCase):
             buffer.lookup_transform("b", "child", 1.0)  # 옛 부모 아래에서 쌓은 시각 1.0의 이력은 버려졌다
 
     def test_static_replaces_dynamic_and_dynamic_replaces_static(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("a", "b", 1.0, shift(1))
         buffer.set_transform("a", "b", 0.0, shift(7), is_static=True)
         self.assertEqual(xyz(buffer, "a", "b", 99.0), (7.0, 0.0, 0.0))  # 정적이 대체했다 (시각과 상관없다)
@@ -196,19 +196,19 @@ class TestReparenting(unittest.TestCase):
 
 class TestMisc(unittest.TestCase):
     def test_non_unit_quaternions_are_normalized(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("a", "b", 0.0, Transform(Vector3(), Quaternion(0, 0, 3, 3)), is_static=True)
         q = buffer.lookup_transform("a", "b").transform.rotation
         self.assertAlmostEqual(q.z**2 + q.w**2, 1.0)
 
     def test_clear(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("a", "b", 0.0, shift(1), is_static=True)
         buffer.clear()
         self.assertEqual(buffer.all_frames(), [])
 
     def test_concurrent_writers_and_readers_do_not_corrupt_it(self) -> None:
-        buffer = TransformBuffer(cache_time=1000.0)
+        buffer = Buffer(cache_time=1000.0)
         buffer.set_transform("world", "robot", 0.0, shift(0.0))
         errors: list[Exception] = []
 
@@ -240,27 +240,27 @@ if __name__ == "__main__":
 
 class TestTransformPoint(unittest.TestCase):
     def test_a_lidar_point_becomes_a_point_in_the_robot_frame(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("base_footprint", "base_scan", 0.0, shift(-0.064, 0, 0.132), is_static=True)
         # 라이다 앞 1m의 점 (라이다 좌표 (1,0,0)) -> 로봇 좌표
         point = buffer.transform_point("base_footprint", "base_scan", Vector3(1.0, 0.0, 0.0))
         self.assertEqual((round(point.x, 9), point.y, round(point.z, 9)), (0.936, 0.0, 0.132))
 
     def test_rotation_is_applied_to_the_point(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("map", "robot", 0.0, turn(math.pi / 2, x=2.0), is_static=True)  # 로봇이 (2,0)에서 +y를 본다
         point = buffer.transform_point("map", "robot", Vector3(1.0, 0.0, 0.0))  # 로봇 앞 1m
         self.assertEqual((round(point.x, 9), round(point.y, 9), point.z), (2.0, 1.0, 0.0))
 
     def test_inverse_direction_and_roundtrip(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("map", "robot", 0.0, turn(0.7, x=2.0, y=-1.0), is_static=True)
         there = buffer.transform_point("map", "robot", Vector3(0.3, 0.4, 0.5))
         back = buffer.transform_point("robot", "map", there)
         self.assertEqual((round(back.x, 9), round(back.y, 9), round(back.z, 9)), (0.3, 0.4, 0.5))
 
     def test_time_is_used_for_moving_frames_and_errors_propagate(self) -> None:
-        buffer = TransformBuffer()
+        buffer = Buffer()
         buffer.set_transform("odom", "base", 1.0, shift(0.0))
         buffer.set_transform("odom", "base", 2.0, shift(4.0))
         self.assertEqual(buffer.transform_point("odom", "base", Vector3(), 1.5).x, 2.0)  # 그 시각의 위치로 보간

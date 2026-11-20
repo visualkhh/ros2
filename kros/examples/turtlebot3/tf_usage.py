@@ -13,7 +13,7 @@ from kros.msgs.geometry_msgs import Quaternion, Transform, TransformStamped, Twi
 from kros.msgs.std_msgs import Header
 from kros.node import Node
 from kros.nodes import RobotStatePublisher
-from kros.tf import LookupException, TransformBroadcaster, TransformListener
+from kros.tf import Buffer, LookupException, TransformBroadcaster, TransformListener
 from kros.timer import SimulatedTimeSource
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
@@ -26,12 +26,13 @@ class ScanToBase(Node):
 
     def __init__(self, context: Context) -> None:
         super().__init__(context)
-        self.tf = TransformListener(self)  # tf, tf_static을 구독해 self.tf.buffer를 채운다 (tf_static은 늦게 떠도 받는다)
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)  # tf, tf_static을 구독해 버퍼를 채운다 (tf_static은 늦게 떠도 받는다)
 
     def lidar_point_in_base(self, distance_ahead: float) -> Vector3 | None:
         try:
             # (목표 좌표계, 원래 좌표계, 점). 시각을 안 주면 가장 최근 값. 아직 TF가 없으면 LookupException이다
-            return self.tf.buffer.transform_point("base_footprint", "base_scan", Vector3(distance_ahead, 0.0, 0.0))
+            return self.tf_buffer.transform_point("base_footprint", "base_scan", Vector3(distance_ahead, 0.0, 0.0))
         except LookupException:
             return None  # RobotStatePublisher가 아직 안 떴다
 
@@ -76,7 +77,7 @@ def run(seconds: float = 2.0) -> dict[str, object]:
             odom.report(robot.pose.x, robot.pose.theta)
         kros.context.topic_manager.join()
         base = scan.lidar_point_in_base(1.0)
-        buffer = scan.tf.buffer
+        buffer = scan.tf_buffer
         return {
             "frames": buffer.all_frames(),
             "lidar_point_1m_in_base": base,

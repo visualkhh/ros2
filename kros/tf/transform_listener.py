@@ -3,17 +3,18 @@ from kros.node import Node
 
 from .errors import TransformException
 from .topics import QOS_TF, QOS_TF_STATIC, TF_STATIC_TOPIC_NAME, TF_TOPIC_NAME
-from .transform_buffer import TransformBuffer
+from .buffer import Buffer
 
 
 class TransformListener:
-    """tf와 tf_static 토픽을 구독해 버퍼를 채운다 (ROS의 tf2_ros.TransformListener). 조회는 listener.buffer.lookup_transform(...).
+    """tf와 tf_static 토픽을 구독해 버퍼를 채운다 (ROS의 tf2_ros.TransformListener). 버퍼는 사용자가 만들어 넘기고, 조회는 그 버퍼에 한다 (ROS와 같다):
+        buffer = Buffer(); TransformListener(buffer, node); buffer.lookup_transform(...)
 
     tf_static은 latch로 구독하므로 이 리스너가 나중에 떠도 이미 나간 정적 변환을 받는다.
     """
 
-    def __init__(self, node: Node, buffer: TransformBuffer | None = None) -> None:
-        self.buffer = buffer if buffer is not None else TransformBuffer()
+    def __init__(self, buffer: Buffer, node: Node) -> None:
+        self.buffer = buffer
         self._node = node
         node.subscribe(TF_TOPIC_NAME, TFMessage, lambda message: self._on_message(message, False), QOS_TF)
         node.subscribe(TF_STATIC_TOPIC_NAME, TFMessage, lambda message: self._on_message(message, True), QOS_TF_STATIC)

@@ -18,6 +18,8 @@ class TransformBroadcaster:
         if transforms:
             self._node.publish(TF_TOPIC_NAME, TFMessage(transforms))
 
+    sendTransform = send_transform  # ROS(rclpy)와 같은 이름
+
 
 class StaticTransformBroadcaster:
     """안 변하는 변환(센서가 달린 위치 등)을 tf_static 토픽으로 한 번 내보낸다. latch(TRANSIENT_LOCAL)로 내므로 나중에 뜬 리스너도 받는다."""
@@ -29,3 +31,5 @@ class StaticTransformBroadcaster:
         transforms = (transform,) if isinstance(transform, TransformStamped) else tuple(transform)
         if transforms:
             self._node.publish(TF_STATIC_TOPIC_NAME, TFMessage(transforms), QOS_TF_STATIC)
+
+    sendTransform = send_transform  # ROS(rclpy)와 같은 이름
