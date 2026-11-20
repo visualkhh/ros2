@@ -3,8 +3,8 @@ from typing import Any
 
 from kros.msgs.geometry_msgs import Pose2D, Twist, Vector3
 from kros.worlds.hardwares import Lidar, Motor
-from kros.worlds.hardwares.lds_01 import SimulatedLds01
-from kros.worlds.hardwares.xl430_w250 import SimulatedXl430W250
+from kros.worlds.hardwares.lidars.lds_01 import SimulatedLds01
+from kros.worlds.hardwares.motors.xl430_w250 import SimulatedXl430W250
 from kros.interactions import Interaction, KeyState
 from kros.worlds.robots.robot import Robot
 

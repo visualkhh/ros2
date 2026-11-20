@@ -252,3 +252,33 @@ class TestBatchRays(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHardwareLayout(unittest.TestCase):
+    """hardwares/는 종류별 패키지로 나눈다: 인터페이스와 모델 구현이 종류 안에 함께 있고, 최상위(hardware.py)만 바깥에 있다."""
+
+    root = pathlib.Path(__file__).parent.parent / "worlds" / "hardwares"
+
+    def test_top_level_holds_only_the_base_and_kind_packages(self) -> None:
+        files = {p.name for p in self.root.glob("*.py")}
+        self.assertEqual(files, {"__init__.py", "hardware.py"})  # 인터페이스나 모델 파일이 바깥에 평평하게 섞이면 안 된다
+        self.assertEqual({p.name for p in self.root.iterdir() if p.is_dir() and p.name != "__pycache__"}, {"lidars", "motors"})
+
+    def test_every_kind_package_has_its_interface_and_models_inside(self) -> None:
+        for kind, interface in (("lidars", "lidar.py"), ("motors", "motor.py")):
+            names = {p.name for p in (self.root / kind).glob("*.py")}
+            self.assertIn(interface, names, kind)
+            self.assertGreater(len(names - {"__init__.py", interface}), 0, f"{kind}에 모델 구현 파일이 없다")
+
+    def test_public_names_are_still_importable_from_the_top(self) -> None:
+        from kros.worlds.hardwares import Actuator, Hardware, HardwareError, Lidar, Motor, Sensor  # noqa: F401
+        from kros.worlds.hardwares.lidars import Lidar as KindLidar
+        from kros.worlds.hardwares.motors import Motor as KindMotor
+
+        self.assertIs(Lidar, KindLidar)
+        self.assertIs(Motor, KindMotor)
+
+    def test_models_know_only_their_own_kind_and_the_base(self) -> None:
+        for kind, other in (("lidars", "motors"), ("motors", "lidars")):
+            for f in (self.root / kind).glob("*.py"):
+                self.assertNotIn(f"hardwares.{other}", f.read_text(), f"{f}: 한 종류가 다른 종류를 import한다")

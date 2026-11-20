@@ -1,6 +1,6 @@
 """ROBOTIS Dynamixel XL430-W250 모터 한 개 (TurtleBot3 바퀴, 매니퓰레이터 관절 등)."""
 from kros.worlds.clock import Clock
-from kros.worlds.hardwares.motor import Motor
+from kros.worlds.hardwares.motors.motor import Motor
 from kros.worlds.world import World
 
 

@@ -4,7 +4,7 @@ import math
 from kros.msgs.geometry_msgs import Pose2D
 from kros.msgs.sensor_msgs import LaserScan
 from kros.worlds.clock import Clock
-from kros.worlds.hardwares.lidar import Lidar
+from kros.worlds.hardwares.lidars.lidar import Lidar
 from kros.worlds.world import World
 from kros.worlds.world_object import WorldObject
 
