@@ -25,8 +25,8 @@ from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.objects import Puck, Wall
 from kros.worlds.maze.track import CENTER, SIZE
 
-from kros.simulation.runner import SimulationRunner
-from kros.simulation.snapshot import Snapshot
+from kros.viewer.runner import SimulationRunner
+from kros.viewer.snapshot import Snapshot
 from .shapes import box, cylinder
 from .urdf_model import UrdfModel
 

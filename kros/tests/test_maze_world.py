@@ -206,16 +206,18 @@ class TestMazeWorld(unittest.TestCase):
     def test_reality_side_does_not_depend_on_kros_nodes(self) -> None:
         root = pathlib.Path(__file__).parent.parent
         banned = re.compile(r"^\s*(from|import)\s+kros\.(node|context|topic|service|action)\b|^\s*from\s+kros\s+import|\bimport Node\b", re.M)
-        for pkg in ("worlds", "interactions", "simulation", "viewer"):  # worlds에는 robots도 들어 있다
+        for pkg in ("worlds", "interactions", "viewer"):  # worlds에는 robots도 들어 있다
             for f in (root / pkg).rglob("*.py"):
                 self.assertIsNone(banned.search(f.read_text()), f"{f}는 kros의 Node/Context 쪽을 import한다")
 
     def test_only_the_viewer_depends_on_panda3d(self) -> None:
         root = pathlib.Path(__file__).parent.parent
         banned = re.compile(r"^\s*(from|import)\s+(panda3d|direct)\b", re.M)
-        for pkg in ("worlds", "interactions", "simulation", "node", "topic", "service", "action", "msgs"):
+        for pkg in ("worlds", "interactions", "node", "topic", "service", "action", "msgs"):
             for f in (root / pkg).rglob("*.py"):
                 self.assertIsNone(banned.search(f.read_text()), f"{f}는 panda3d를 import한다 (화면은 viewer/ 에만)")
+        for name in ("runner.py", "snapshot.py"):  # viewer/ 안이어도 러너와 스냅샷은 panda3d 없이 돈다
+            self.assertIsNone(banned.search((root / "viewer" / name).read_text()), f"viewer/{name}는 panda3d를 import하면 안 된다")
 
     def test_world_knows_nothing_about_robot_or_sensors(self) -> None:
         root = pathlib.Path(__file__).parent.parent / "worlds"
@@ -223,8 +225,29 @@ class TestMazeWorld(unittest.TestCase):
             if {"robots", "hardwares"} & set(f.relative_to(root).parts):  # 로봇과 하드웨어 부품은 월드 안에 놓이는 것들: 월드 쪽 파일만 검사
                 continue
             body = f.read_text()
-            for banned in ("LaserScan", "Twist", "kros.worlds.robots", "kros.simulation", "kros.viewer"):
+            for banned in ("LaserScan", "Twist", "kros.worlds.robots", "kros.viewer"):
                 self.assertNotIn(banned, body, f"{f}: {banned}")
+
+
+class TestBatchRays(unittest.TestCase):
+    def test_ray_distances_equals_individual_rays(self) -> None:
+        world = MazeWorld(seed=2)
+        angles = [i * math.pi / 36 for i in range(72)]
+        batch = world.ray_distances(0.3, 0.2, angles, 0.05)
+        single = [world.ray_distance(0.3, 0.2, a, 0.05) for a in angles]
+        self.assertEqual(len(batch), len(single))
+        for b, s in zip(batch, single):
+            self.assertAlmostEqual(b, s) if math.isfinite(s) else self.assertEqual(b, s)
+
+    def test_batch_matches_single_for_many_poses_and_heights(self) -> None:
+        world = MazeWorld(seed=3)
+        angles = [i * 2 * math.pi / 90 for i in range(90)]
+        for x, y in ((0.0, 0.0), (-1.5, -2.7), (1.6, 0.5), (0.3, 2.2), (-2.0, 3.0)):
+            for height in (0.0, 0.132, 0.2, 0.3):
+                batch = world.ray_distances(x, y, angles, height)
+                for a, b in zip(angles, batch):
+                    s = world.ray_distance(x, y, a, height)
+                    self.assertAlmostEqual(b, s, msg=f"{(x, y, a, height)}") if math.isfinite(s) else self.assertEqual(b, s, f"{(x, y, a, height)}")
 
 
 if __name__ == "__main__":

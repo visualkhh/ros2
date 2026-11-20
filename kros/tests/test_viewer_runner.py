@@ -3,8 +3,8 @@ import math
 import time
 import unittest
 
-from kros.simulation.runner import SimulationRunner
-from kros.simulation.snapshot import Snapshot
+from kros.viewer.runner import SimulationRunner
+from kros.viewer.snapshot import Snapshot
 from kros.msgs.geometry_msgs import Twist, Vector3
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
@@ -85,27 +85,6 @@ class TestRunnerThread(unittest.TestCase):
             b.step_once()
             time.sleep(0.0001)  # 실행 속도가 달라도
         self.assertEqual(a.latest.poses, b.latest.poses)  # 결과는 똑같다
-
-
-class TestBatchRays(unittest.TestCase):
-    def test_ray_distances_equals_individual_rays(self) -> None:
-        world = MazeWorld(seed=2)
-        angles = [i * math.pi / 36 for i in range(72)]
-        batch = world.ray_distances(0.3, 0.2, angles, 0.05)
-        single = [world.ray_distance(0.3, 0.2, a, 0.05) for a in angles]
-        self.assertEqual(len(batch), len(single))
-        for b, s in zip(batch, single):
-            self.assertAlmostEqual(b, s) if math.isfinite(s) else self.assertEqual(b, s)
-
-    def test_batch_matches_single_for_many_poses_and_heights(self) -> None:
-        world = MazeWorld(seed=3)
-        angles = [i * 2 * math.pi / 90 for i in range(90)]
-        for x, y in ((0.0, 0.0), (-1.5, -2.7), (1.6, 0.5), (0.3, 2.2), (-2.0, 3.0)):
-            for height in (0.0, 0.132, 0.2, 0.3):
-                batch = world.ray_distances(x, y, angles, height)
-                for a, b in zip(angles, batch):
-                    s = world.ray_distance(x, y, a, height)
-                    self.assertAlmostEqual(b, s, msg=f"{(x, y, a, height)}") if math.isfinite(s) else self.assertEqual(b, s, f"{(x, y, a, height)}")
 
 
 if __name__ == "__main__":
