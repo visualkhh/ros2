@@ -100,6 +100,11 @@ ROS의 tf2와 같은 구조다. 좌표계는 **트리**(자식은 부모가 하�
   - `nav2_navfn_planner::NavfnPlanner`: 8방향 격자 최단 경로. `use_astar` 거짓이면 Dijkstra, 참이면 A*(남은 거리 휴리스틱, 펼치는 칸이 적다). 칸 값은 navfn처럼 `50 + 0.8 * 비용`이라 벽 가까운 길을 꺼린다. `tolerance`(목표가 벽이면 이 안의 갈 수 있는 칸으로), `allow_unknown`.
   - `nav2_theta_star_planner::ThetaStarPlanner`: Theta*(any-angle). 할아버지 칸에서 이웃이 직선으로 보이면 바로 이어 모서리에서만 꺾는다. `w_euc_cost`, `w_traversal_cost`, 결과는 칸 간격으로 촘촘히 채운다.
   - 실패는 nav2처럼 결과의 `error_code`(INVALID_PLANNER, TF_ERROR, GOAL_OUTSIDE_MAP, GOAL_OCCUPIED, NO_VALID_PATH ...)로 돌려준다. 로봇이 벽에 붙어 서 있으면(시작 칸이 253) 둘레 0.3m는 벽만 아니면 지나가 빠져나온다.
+- `controller`: `ControllerServer` 노드(`controller_server`)가 `follow_path` 액션(`nav2_msgs/FollowPath`)으로 경로를 받아 `controller_frequency`(20Hz)마다 `cmd_vel`을 낸다. 자기 안에 `local_costmap`을 만든다(지금은 지도 기반: rolling window/obstacle layer 없음). 도착은 `general_goal_checker.xy_goal_tolerance`/`yaw_goal_tolerance`, 막힘은 `progress_checker.required_movement_radius`/`movement_time_allowance`(넘으면 FAILED_TO_MAKE_PROGRESS). 새 goal이 오면 지금 goal은 물러난다: kros 액션 서버는 goal을 하나씩 차례로 돌리므로 `goal_callback`(대기열에 들어가기 전)에서 신호를 켠다. 알고리즘은 플러그인(`controller_plugins`, `"<이름>.plugin"`).
+  - `nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController`: lookahead 거리의 경로 점(carrot)으로 가는 원호의 곡률 = 회전. carrot이 옆/뒤면 제자리 회전(`use_rotate_to_heading`), 급커브(`regulated_linear_scaling_min_radius`)와 목표 가까이(`approach_velocity_scaling_dist`)는 감속, 앞 원호가 벽에 닿으면 NO_VALID_CONTROL.
+  - `dwb_core::DWBLocalPlanner`: 가속 한계 안의 (v, w)를 `vx_samples` x `vtheta_samples`개 뽑아 `sim_time` 동안 굴려 보고 critic(BaseObstacle, PathDist, GoalDist, PathAlign, GoalAlign, RotateToGoal) 점수가 가장 낮은 것. 벽에 닿는 자취는 버린다. 샘플 수 기본값은 nav2(20x20)보다 적다(순수 파이썬 20Hz).
+  - 테스트: 노이즈 TurtleBot3 + EKF + Cartographer + planner + controller로 둘 다 실제로 목표까지 간다.
+  - 주의(테스트): goal 실행은 액션 서버의 구독 스레드에서 돌아서, goal이 도는 동안 `topic_manager.join()`을 부르면 끝나지 않는다.
 
 **SLAM / 위치 추정**: `nodes/cartographer/`의 `Cartographer`(노드 이름 `cartographer`)는 라이다 스캔을 격자 지도에 맞춰(스캔 매칭) 로봇 위치를 바로잡고 `map -> odom` TF를 낸다. odom 아래(`odom -> base_footprint`)는 EKF가 그대로 내고, 이 노드는 그 위에 하나만 얹는다(REP-105).
 - `mode` 파라미터(실행 중에 바꿀 수 있다): `idle`(아무것도 안 함), `mapping`(SLAM: 새 지도를 만들며 위치를 고치고 `map` 토픽에 latch로 낸다), `localization`(map_server가 띄운 저장 지도로 위치만 고친다, cartographer의 pure localization).
