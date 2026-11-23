@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from kros.context import Context
 from kros.msgs.geometry_msgs import Twist, Vector3
 from kros.msgs.sensor_msgs import LaserScan
+from kros.msgs.std_srvs import SetBool, SetBoolRequest, SetBoolResponse
 from kros.nodes.node import Node
 from kros.parameter import ParameterValue
 from kros.tf import Buffer, TransformException, TransformListener
@@ -110,6 +111,7 @@ class CollisionMonitor(Node):
         self.polygon_names = self.declare_parameter("polygons", tuple(DEFAULT_POLYGONS))
         self.observation_sources = self.declare_parameter("observation_sources", ("scan",))
         # 수동 텔레옵 중에는 충돌 검사를 끈다 (사람이 직접 조종; 자율주행 때만 감시).
+        self.enabled = self.declare_parameter("enabled", True)  # Viz 버튼/서비스로 전체 충돌 감시 on/off
         self.ignore_collision_during_teleop = self.declare_parameter("ignore_collision_during_teleop", False)
         self.teleop_topic = self.declare_parameter("teleop_topic", "cmd_vel_teleop")
         self.teleop_timeout = self.declare_parameter("teleop_timeout", 0.5, validator=lambda value: value > 0)
@@ -130,6 +132,7 @@ class CollisionMonitor(Node):
             self.subscribe(topic.value, LaserScan, lambda scan, key=str(source): self._on_scan(key, scan))  # type: ignore[misc]
         self.subscribe(self.cmd_vel_in_topic.value, Twist, self._on_cmd_vel, QOS_COMMAND)
         self.subscribe(self.teleop_topic.value, Twist, self._on_teleop, QOS_COMMAND)
+        self.create_service(f"{self.name}/set_enabled", SetBool, self._on_set_enabled)
 
     def _on_scan(self, source: str, scan: LaserScan) -> None:
         try:  # 센서 -> base (라이다는 로봇에 고정이라 최신 TF면 된다)
@@ -176,10 +179,19 @@ class CollisionMonitor(Node):
                 best, self.state = result, f"{polygon.name}: {polygon.action_type.value}"
         return best
 
+    def _on_set_enabled(self, request: SetBoolRequest) -> SetBoolResponse:
+        self.enabled.set(request.data)
+        self.get_logger().info("collision monitor: %s", "enabled" if request.data else "disabled")
+        return SetBoolResponse(True, "collision monitor enabled" if request.data else "collision monitor disabled")
+
     def _on_teleop(self, twist: Twist) -> None:
         self._last_teleop = self.now()
 
     def _on_cmd_vel(self, twist: Twist) -> None:
+        if not self.enabled.value:
+            self.state = "collision monitor disabled"
+            self.publish(self.cmd_vel_out_topic.value, twist)
+            return
         if self.ignore_collision_during_teleop.value and self.now() - self._last_teleop <= self.teleop_timeout.value:
             self.state = "teleop: collision check off"  # 수동 조종 중: 그대로 보낸다
             self.publish(self.cmd_vel_out_topic.value, twist)

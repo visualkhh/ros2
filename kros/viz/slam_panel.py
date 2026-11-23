@@ -23,7 +23,7 @@ from kros.msgs.geometry_msgs import Point, Pose, PoseStamped, PoseWithCovariance
 from kros.msgs.nav2_msgs import SaveMap, SaveMapRequest, SaveMapResponse
 from kros.msgs.nav_msgs import Path as NavPath
 from kros.msgs.std_msgs import Bool, Header, String
-from kros.msgs.std_srvs import Trigger, TriggerRequest, TriggerResponse
+from kros.msgs.std_srvs import SetBool, SetBoolRequest, SetBoolResponse, Trigger, TriggerRequest, TriggerResponse
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
 from kros.nodes.map_server.map_catalog import MAP_CHANGE_TOPIC, MAP_LIST_TOPIC, MAP_STATUS_TOPIC
 from kros.nodes.nav2.bt_navigator import CANCEL_GOAL_TOPIC_NAME, GOAL_POSE_TOPIC_NAME, GOAL_POSES_TOPIC_NAME, PREVIEW_GOAL_TOPIC_NAME, PREVIEW_GOALS_TOPIC_NAME
@@ -69,9 +69,10 @@ def _arrow(color: tuple[float, float, float, float]) -> NodePath:
 
 
 class SlamPanel:
-    def __init__(self, viz: "Viz", cartographer: str = "cartographer", map_server: str = "map_server", map_saver: str = "map_saver") -> None:
+    def __init__(self, viz: "Viz", cartographer: str = "cartographer", map_server: str = "map_server", map_saver: str = "map_saver", collision_monitor: str = "collision_monitor") -> None:
         self.viz, self.node = viz, viz.node
         self.cartographer, self.map_server, self.map_saver = cartographer, map_server, map_saver
+        self.collision_monitor = collision_monitor
         self.tool: str | None = None  # "initialpose"(2D Pose Estimate) 또는 "goal"(2D Goal Pose): 켜지면 3D 화면의 왼쪽 드래그가 카메라 대신 위치/방향을 찍는다
         self.multi_goals: list[tuple[float, float, float]] = []  # Multi Goal로 찍은 목표들 (map 좌표). Send로 한 번에 보낸다.
         self.preview_mode: bool = False  # 켜면 목표를 보내지 않고 경로만 미리 본다 (Preview). Go로 실행.
@@ -88,8 +89,9 @@ class SlamPanel:
         left = viz.left
         OnscreenText(text="SLAM", parent=left, pos=(0.04, TOP), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
         self.mode_text = OnscreenText(parent=left, pos=(0.2, TOP), align=TextNode.ALeft, fg=(1, 0.75, 0.3, 1), scale=0.04, mayChange=True)
-        self.slam_button = _button(left, "start SLAM", 0.06, 0.32, TOP - 0.09, self.toggle_slam)
-        self.save_button = _button(left, "save map", 0.36, 0.62, TOP - 0.09, self.save_map)
+        self.slam_button = _button(left, "start SLAM", 0.06, 0.28, TOP - 0.09, self.toggle_slam)
+        self.save_button = _button(left, "save", 0.29, 0.49, TOP - 0.09, self.save_map, scale=0.034)
+        self.collision_button = _button(left, "coll ON", 0.50, 0.70, TOP - 0.09, self.toggle_collision, scale=0.028)
         self.map_menu = DirectOptionMenu(
             parent=left, items=[NO_SELECTION, *self.map_names()], initialitem=0, pos=(0.075, 0, TOP - 0.19), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
             **{**GUI, "frameColor": (0.12, 0.14, 0.2, 1), "relief": DGG.SUNKEN},  # 고르는 칸은 들어간 모양 (버튼과 구별)
@@ -148,6 +150,26 @@ class SlamPanel:
     def toggle_slam(self) -> None:
         """start SLAM = mapping (새 지도), stop SLAM = idle (만든 지도는 map 토픽에 남아 save map으로 저장할 수 있다)."""
         self.set_mode("idle" if self._get_mode() == "mapping" else "mapping")
+
+    def _collision_enabled(self) -> bool | None:
+        try:
+            return bool(self.node.context.parameter_manager.get(self.collision_monitor, "enabled"))
+        except ParameterNotDeclaredError:
+            return None
+
+    def toggle_collision(self) -> None:
+        """충돌 감시 on/off (collision_monitor/set_enabled, std_srvs/SetBool)."""
+        state = self._collision_enabled()
+        if state is None:
+            self.status.setText(f"no node '{self.collision_monitor}'")
+            return
+        self._call(f"{self.collision_monitor}/set_enabled", SetBool, SetBoolRequest(not state), self._collision_done)
+
+    def _collision_done(self, response: object) -> None:
+        if isinstance(response, SetBoolResponse) and response.success:
+            self.status.setText(response.message)
+        else:
+            self.status.setText("collision toggle failed")
 
     @property
     def maps_directory(self) -> Path:
@@ -269,6 +291,12 @@ class SlamPanel:
         if self._pending_status is not None:
             self.status.setText(self._pending_status)
             self._pending_status = None
+        collision = self._collision_enabled()
+        if collision is not None:
+            text = "coll ON" if collision else "coll OFF"
+            if self.collision_button["text"] != text:
+                self.collision_button["text"] = text
+            self.collision_button["frameColor"] = (0.15, 0.45, 0.25, 1) if collision else (0.6, 0.2, 0.2, 1)
         self.mode = mode = self._get_mode()  # 다른 곳(ros2 param set 같은)에서 바꿔도 따라간다
         self.mode_text.setText(mode or "(no cartographer)")
         mapping = mode == "mapping"
@@ -439,5 +467,5 @@ class SlamPanel:
     def destroy(self) -> None:
         for arrow in self._preview.values():
             arrow.removeNode()
-        for widget in (self.map_name, self.teleop_slider, self.unload_button, self.delete_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button, self.multi_button, self.send_button, self.clear_button, self.cancel_button, self.preview_button, self.go_button):
+        for widget in (self.collision_button, self.map_name, self.teleop_slider, self.unload_button, self.delete_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button, self.multi_button, self.send_button, self.clear_button, self.cancel_button, self.preview_button, self.go_button):
             widget.destroy()

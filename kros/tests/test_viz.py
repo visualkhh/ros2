@@ -35,6 +35,7 @@ if HAS_PANDA:
     from panda3d.core import Vec3
     from kros.msgs.geometry_msgs import PoseStamped, PoseWithCovarianceStamped
     from kros.nodes import Cartographer, MapCatalog, MapSaver, MapServer
+    from kros.nodes.nav2.collision_monitor import CollisionMonitor
     from panda3d.core import MouseButton, VirtualMouse
     from kros.worlds.maze.maze_world import MazeWorld
     from kros.worlds.robots.turtlebot3 import TurtleBot3
@@ -165,7 +166,7 @@ class TestVizSlamPanel(unittest.TestCase):
         def create(ctx: Context) -> list[Node]:
             folder = {"maps_directory": str(self.maps)}
             made["watcher"], made["slam"] = Node(ctx, "Watcher"), Cartographer(ctx, parameters={"mode": "idle"})
-            return [made["watcher"], made["slam"], MapServer(ctx, parameters=folder), MapSaver(ctx, parameters=folder), MapCatalog(ctx, parameters={**folder, "list_period": 0.1})]
+            return [made["watcher"], made["slam"], MapServer(ctx, parameters=folder), MapSaver(ctx, parameters=folder), MapCatalog(ctx, parameters={**folder, "list_period": 0.1}), CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})]
 
         self.source = SimulatedTimeSource()
         self.kros = Kros(create, time_source=self.source)
@@ -328,6 +329,14 @@ class TestVizSlamPanel(unittest.TestCase):
         self.assertTrue((self.maps / "custom_map" / "map.yaml").exists())
         self.wait_map_names(1)
         self.assertIn("custom_map", self.panel.map_menu["items"])
+
+    def test_collision_toggle_button_uses_the_set_enabled_service(self) -> None:
+        self.panel.collision_button["command"]()
+        self.wait_status("collision monitor disabled")
+        self.assertFalse(self.kros.context.parameter_manager.get("collision_monitor", "enabled"))
+        self.panel.collision_button["command"]()
+        self.wait_status("collision monitor enabled")
+        self.assertTrue(self.kros.context.parameter_manager.get("collision_monitor", "enabled"))
 
     def test_teleop_speed_slider_scales_the_command(self) -> None:
         self.panel.teleop_slider["value"] = 1.5

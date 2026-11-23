@@ -6,6 +6,7 @@ from kros.context import Context
 from kros.msgs.geometry_msgs import Transform, TransformStamped, Twist, Vector3
 from kros.msgs.sensor_msgs import LaserScan
 from kros.msgs.std_msgs import Bool, Header
+from kros.msgs.std_srvs import SetBool, SetBoolRequest
 from kros.nodes import Node
 from kros.nodes.nav2.collision_monitor import CollisionMonitor
 from kros.nodes.twist_mux import TwistMux
@@ -111,6 +112,17 @@ class TestCollisionMonitor(Setup):
         self.send("cmd_vel_mux", twist(-0.2))
         self.assertAlmostEqual(self.out[-1].linear.x, -0.2 * 0.3)
         self.assertGreater(self.out[-1].linear.x, -0.2)
+
+    def test_set_enabled_service_turns_the_monitor_off_and_on(self) -> None:
+        self.obstacle(0.2)
+        response = self.user.call_service("collision_monitor/set_enabled", SetBool, SetBoolRequest(False), timeout=2.0)
+        self.assertTrue(response.success)
+        self.assertFalse(self.node.enabled.value)  # type: ignore[attr-defined]
+        self.send("cmd_vel_mux", twist(0.2))
+        self.assertEqual(self.out[-1], twist(0.2))  # 꺼짐: 그대로 통과
+        self.user.call_service("collision_monitor/set_enabled", SetBool, SetBoolRequest(True), timeout=2.0)
+        self.send("cmd_vel_mux", twist(0.2))
+        self.assertEqual(self.out[-1], twist(0.0))  # 다시 켜짐: 정지
 
     def test_manual_teleop_bypasses_collision_check(self) -> None:
         """수동 텔레옵 중에는 사람이 직접 조종하므로 정지/감속을 적용하지 않는다. 텔레옵이 끊기면 다시 감시."""
