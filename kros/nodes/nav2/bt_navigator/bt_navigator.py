@@ -8,8 +8,8 @@ from kros.action.server_goal_handle import ServerGoalHandle
 from kros.context import Context
 from kros.msgs.geometry_msgs import Point, Pose, PoseStamped
 from kros.msgs.nav2_msgs import (
-    ComputePathToPose, ComputePathToPoseGoal, ComputePathToPoseResult, FollowPath, FollowPathGoal, FollowPathResult,
-    NavigateToPose, NavigateToPoseFeedback, NavigateToPoseGoal, NavigateToPoseResult,
+    BackUp, BackUpGoal, BackUpResult, ComputePathToPose, ComputePathToPoseGoal, ComputePathToPoseResult, FollowPath, FollowPathGoal, FollowPathResult,
+    NavigateToPose, NavigateToPoseFeedback, NavigateToPoseGoal, NavigateToPoseResult, Spin, SpinGoal, SpinResult, Wait, WaitGoal, WaitResult,
 )
 from kros.msgs.nav_msgs import Path
 from kros.msgs.std_msgs import Bool, Header
@@ -52,6 +52,9 @@ class BtNavigator(Node):
         self._planner = self.create_action_client("compute_path_to_pose", ComputePathToPose)
         self._controller = self.create_action_client("follow_path", FollowPath)
         self._self_client = self.create_action_client("navigate_to_pose", NavigateToPose)
+        self._spin = self.create_action_client("spin", Spin)
+        self._backup = self.create_action_client("backup", BackUp)
+        self._wait = self.create_action_client("wait", Wait)
         self._preempt = threading.Event()  # 새 goal이 왔다 (액션 서버는 goal을 차례로 돌린다: 지금 것이 물러나야 새 것이 시작된다)
         self._cancel_requested = False
         self._follow_handle: ClientGoalHandle | None = None
@@ -216,6 +219,9 @@ class BtNavigator(Node):
                 if recoveries >= self.number_of_recoveries.value:
                     return self._fail(code, message)
                 recoveries += 1
+                self._recover()  # 회복 동작 (spin -> backup -> wait) 시도
+                if self._cancel_requested:
+                    return R(R.NONE, "취소")
                 self.get_logger().warn("따라가기 실패 (%d: %s): 다시 계획한다 (%d/%d)", code, message, recoveries, self.number_of_recoveries.value)
                 planned_at = -math.inf  # 바로 다시 계획
             if self.now() - planned_at >= self.replanning_period.value:
@@ -236,6 +242,30 @@ class BtNavigator(Node):
         here = PoseStamped(Header(self.now(), self.global_frame.value), Pose(Point(t.translation.x, t.translation.y, 0.0), t.rotation))
         remaining = math.hypot(goal.pose.position.x - t.translation.x, goal.pose.position.y - t.translation.y)
         return NavigateToPoseFeedback(here, self.now() - began, remaining, recoveries)
+
+    def _recover(self) -> None:
+        """회복 동작: spin -> backup -> wait (Nav2 behavior_server와 같은 순서)."""
+        if self._cancel_requested:
+            return
+        try:
+            handle = self._spin.send_goal(SpinGoal(target_yaw=math.pi, time_allowance=5.0), timeout=5.0)
+            handle.result(10.0)
+        except Exception as error:  # noqa: BLE001
+            self.get_logger().warn("recovery spin failed: %s", error)
+        if self._cancel_requested:
+            return
+        try:
+            handle = self._backup.send_goal(BackUpGoal(backup_dist=0.3, backup_speed=0.1, time_allowance=5.0), timeout=5.0)
+            handle.result(10.0)
+        except Exception as error:  # noqa: BLE001
+            self.get_logger().warn("recovery backup failed: %s", error)
+        if self._cancel_requested:
+            return
+        try:
+            handle = self._wait.send_goal(WaitGoal(wait_duration=1.0), timeout=5.0)
+            handle.result(5.0)
+        except Exception as error:  # noqa: BLE001
+            self.get_logger().warn("recovery wait failed: %s", error)
 
     def _fail(self, code: int, message: str) -> NavigateToPoseResult:
         self.get_logger().warn("내비게이션 실패 (%d): %s", code, message)

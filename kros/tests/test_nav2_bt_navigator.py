@@ -11,6 +11,7 @@ from kros.msgs.nav2_msgs import ComputePathToPoseResult, NavigateToPose, Navigat
 from kros.msgs.nav_msgs import Path
 from kros.msgs.std_msgs import Header
 from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, Node, RobotStatePublisher
+from kros.nodes.nav2.behavior_server import BehaviorServer
 from kros.nodes.nav2.bt_navigator import BtNavigator
 from kros.nodes.nav2.controller import ControllerServer
 from kros.nodes.nav2.planner import PlannerServer
@@ -40,7 +41,7 @@ class Navigation:
             planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
             controller = ControllerServer(ctx, parameters={"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController"}, costmap_parameters=footprint)
             odometry = DiffDriveOdometry(ctx, parameters={"publish_tf": False})
-            return [made["user"], RobotBridge(ctx, self.robot), description, odometry, ekf, Cartographer(ctx), planner, controller, BtNavigator(ctx)]
+            return [made["user"], RobotBridge(ctx, self.robot), description, odometry, ekf, Cartographer(ctx), planner, controller, BehaviorServer(ctx), BtNavigator(ctx)]
 
         self.kros = Kros(create, time_source=self.source)
         test.addCleanup(self.kros.shutdown)

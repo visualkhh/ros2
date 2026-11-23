@@ -26,6 +26,7 @@ from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.nodes import Node
 from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapSaver, MapServer, RobotStatePublisher
+from kros.nodes.nav2.behavior_server import BehaviorServer
 from kros.nodes.nav2.bt_navigator import BtNavigator
 from kros.nodes.nav2.collision_monitor import CollisionMonitor
 from kros.nodes.nav2.controller import ControllerServer
@@ -76,7 +77,7 @@ def main() -> None:
         slam = Cartographer(ctx, parameters={"mode": "idle"})
         maps = {"maps_directory": str(MAPS_DIRECTORY)}
         # 내비게이션 (nav2처럼): 경로 계획은 Smac(Hybrid-A*), 따라가기는 MPPI. 둘 다 안에 costmap을 만든다 (로봇 몸 반지름으로 inflation)
-        footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
+        footprint = {"robot_radius": robot.radius, "inflation_radius": 0.1}
         planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
         # controller_parameters: dict[str, ParameterValue] = {"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController", "cmd_vel_topic": "cmd_vel_nav"}
         # 따라가기는 isaac/training/rl_maze에서 학습한 정책 (rl_nav_controller: 실기와 같은 관측/행동). 모델이 없거나 못 읽으면 안에 품은 MPPI로 돈다
@@ -90,12 +91,13 @@ def main() -> None:
             "FollowPath.fallback_controller": "mppi",
         }
         controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
+        behavior = BehaviorServer(ctx)  # 회복 동작 (spin · backup · wait) — bt_navigator가 실패 시 부른다
         # 속도 명령의 길: controller -> cmd_vel_nav -+-> twist_mux -> cmd_vel_mux -> collision_monitor -> cmd_vel -> RobotBridge
         #                 (다른 프로그램의) teleop -> cmd_vel_teleop -+   (사람이 이긴다)       (라이다로 앞이 막히면 멈추거나 늦춘다)
         mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
         monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})
         navigator = BtNavigator(ctx)  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 1초마다 재계획
-        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller, navigator, mux, monitor]
+        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller, behavior, navigator, mux, monitor]
 
     kros = Kros(create_nodes, time_source=time_source)
     runner.start()
