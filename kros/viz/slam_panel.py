@@ -23,7 +23,7 @@ from kros.msgs.nav_msgs import Path as NavPath
 from kros.msgs.std_msgs import Bool, Header
 from kros.msgs.std_srvs import Trigger, TriggerRequest, TriggerResponse
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
-from kros.nodes.nav2.bt_navigator import CANCEL_GOAL_TOPIC_NAME, GOAL_POSE_TOPIC_NAME, GOAL_POSES_TOPIC_NAME
+from kros.nodes.nav2.bt_navigator import CANCEL_GOAL_TOPIC_NAME, GOAL_POSE_TOPIC_NAME, GOAL_POSES_TOPIC_NAME, PREVIEW_GOAL_TOPIC_NAME, PREVIEW_GOALS_TOPIC_NAME
 from kros.parameter import ParameterNotDeclaredError, ParameterRejectedError
 from kros.service.service_type import Req, Res, ServiceType
 from kros.tf import TransformException
@@ -70,6 +70,8 @@ class SlamPanel:
         self.cartographer, self.map_server, self.map_saver = cartographer, map_server, map_saver
         self.tool: str | None = None  # "initialpose"(2D Pose Estimate) 또는 "goal"(2D Goal Pose): 켜지면 3D 화면의 왼쪽 드래그가 카메라 대신 위치/방향을 찍는다
         self.multi_goals: list[tuple[float, float, float]] = []  # Multi Goal로 찍은 목표들 (map 좌표). Send로 한 번에 보낸다.
+        self.preview_mode: bool = False  # 켜면 목표를 보내지 않고 경로만 미리 본다 (Preview). Go로 실행.
+        self.last_single_goal: tuple[float, float, float] | None = None
         self.mode = ""  # Cartographer의 지금 모드 (매 프레임 갱신)
         self._drag_start: tuple[float, float] | None = None
         self._preview = {tool: _arrow(color) for tool, color in TOOL_COLORS.items()}
@@ -96,6 +98,10 @@ class SlamPanel:
         self.clear_button = _button(left, "Clear Goals", 0.35, 0.46, TOP - 0.36, self.clear_multi_goals, scale=0.028)
         self.cancel_button = _button(left, "Cancel Goal", 0.47, 0.58, TOP - 0.36, self.cancel_goal, scale=0.028)
         self.multi_status = OnscreenText(parent=left, pos=(0.06, TOP - 0.43), align=TextNode.ALeft, fg=(0.9, 0.85, 0.4, 1), scale=0.028, mayChange=True)
+        # 미리보기 모드: 목표를 보내지 않고 경로만 그린다. Go로 실행.
+        self.preview_button = _button(left, "Preview Mode", 0.06, 0.22, TOP - 0.50, self.toggle_preview_mode, scale=0.028)
+        self.go_button = _button(left, "Go", 0.23, 0.30, TOP - 0.50, self.go_pending, scale=0.028)
+        self.preview_status = OnscreenText(parent=left, pos=(0.06, TOP - 0.57), align=TextNode.ALeft, fg=(0.7, 0.9, 1.0, 1), scale=0.028, mayChange=True)
         self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.38), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.033, mayChange=True)
 
     # ---- 버튼 -----------------------------------------------------------------------------------
@@ -268,13 +274,21 @@ class SlamPanel:
         return compose((t.translation.x, t.translation.y, yaw_of(t.rotation)), pose)
 
     def publish_goal(self, pose: tuple[float, float, float]) -> None:
-        """2D Goal Pose: /goal_pose (PoseStamped, map). bt_navigator가 받아 계획하고 따라간다."""
+        """2D Goal Pose: /goal_pose (PoseStamped, map). bt_navigator가 받아 계획하고 따라간다.
+        Preview Mode면 /preview_goal로 경로만 그린다 (로봇은 안 움직인다)."""
         in_map = self._in_map(pose)
         if in_map is None:
             return
         x, y, yaw = in_map
-        self.node.publish(GOAL_POSE_TOPIC_NAME, PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))))
-        self.status.setText(f"goal ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
+        self.last_single_goal = in_map
+        orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
+        stamped = PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), orientation))
+        if self.preview_mode:
+            self.node.publish(PREVIEW_GOAL_TOPIC_NAME, stamped)
+            self.status.setText(f"preview goal ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
+        else:
+            self.node.publish(GOAL_POSE_TOPIC_NAME, stamped)
+            self.status.setText(f"goal ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
 
     def publish_initial_pose(self, pose: tuple[float, float, float]) -> None:
         """2D Pose Estimate: /initialpose (PoseWithCovarianceStamped, map)."""
@@ -296,7 +310,8 @@ class SlamPanel:
         self._update_multi_status()
 
     def send_multi_goals(self) -> None:
-        """Multi Goal 목록을 /goal_poses (Path, map)로 한 번에 보낸다. bt_navigator가 구간별 경로를 이어 붙인다."""
+        """Multi Goal 목록을 /goal_poses (Path, map)로 한 번에 보낸다. bt_navigator가 구간별 경로를 이어 붙인다.
+        Preview Mode면 /preview_goals로 경로만 그린다 (로봇은 안 움직인다)."""
         if not self.multi_goals:
             self.status.setText("multi goals: none")
             return
@@ -304,16 +319,45 @@ class SlamPanel:
         for x, y, yaw in self.multi_goals:
             orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
             poses.append(PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), orientation)))
-        self.node.publish(GOAL_POSES_TOPIC_NAME, NavPath(Header(self.node.now(), "map"), tuple(poses)))
-        count = len(self.multi_goals)
-        self.status.setText(f"sent {count} goals")
-        self.multi_goals.clear()
-        self._update_multi_status()
+        path = NavPath(Header(self.node.now(), "map"), tuple(poses))
+        if self.preview_mode:
+            self.node.publish(PREVIEW_GOALS_TOPIC_NAME, path)
+            self.status.setText(f"preview {len(poses)} goals")
+        else:
+            self.node.publish(GOAL_POSES_TOPIC_NAME, path)
+            self.status.setText(f"sent {len(poses)} goals")
+            self.multi_goals.clear()
+            self._update_multi_status()
 
     def clear_multi_goals(self) -> None:
         self.multi_goals.clear()
         self.status.setText("multi goals cleared")
         self._update_multi_status()
+
+    def toggle_preview_mode(self) -> None:
+        self.preview_mode = not self.preview_mode
+        self.preview_button["frameColor"] = TOOL_ACTIVE if self.preview_mode else BUTTON_COLOR
+        self.preview_status.setText("Preview: ON (plan only)" if self.preview_mode else "Preview: OFF (auto go)")
+
+    def go_pending(self) -> None:
+        """Preview로 그린 경로(또는 찍어둔 목표)를 실제로 실행한다."""
+        if self.multi_goals:
+            poses = []
+            for x, y, yaw in self.multi_goals:
+                orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
+                poses.append(PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), orientation)))
+            self.node.publish(GOAL_POSES_TOPIC_NAME, NavPath(Header(self.node.now(), "map"), tuple(poses)))
+            count = len(self.multi_goals)
+            self.multi_goals.clear()
+            self._update_multi_status()
+            self.status.setText(f"sent {count} goals")
+        elif self.last_single_goal is not None:
+            x, y, yaw = self.last_single_goal
+            orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
+            self.node.publish(GOAL_POSE_TOPIC_NAME, PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), orientation)))
+            self.status.setText(f"goal ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
+        else:
+            self.status.setText("nothing to go")
 
     def cancel_goal(self) -> None:
         """진행 중인 경로를 취소한다 (/cancel_goal). 찍어둔 multi goal도 지운다."""
@@ -328,5 +372,5 @@ class SlamPanel:
     def destroy(self) -> None:
         for arrow in self._preview.values():
             arrow.removeNode()
-        for widget in (self.unload_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button):
+        for widget in (self.unload_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button, self.multi_button, self.send_button, self.clear_button, self.cancel_button, self.preview_button, self.go_button):
             widget.destroy()

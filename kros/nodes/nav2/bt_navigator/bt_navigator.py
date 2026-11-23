@@ -21,6 +21,8 @@ from kros.topic import QOS_LATCHED
 R = NavigateToPoseResult
 GOAL_POSE_TOPIC_NAME = "goal_pose"
 GOAL_POSES_TOPIC_NAME = "goal_poses"
+PREVIEW_GOAL_TOPIC_NAME = "preview_goal"
+PREVIEW_GOALS_TOPIC_NAME = "preview_goals"
 CANCEL_GOAL_TOPIC_NAME = "cancel_goal"
 REPLACED = "새 경로로 바뀌었다"  # controller_server가 갈아탄 옛 경로에 돌려주는 메시지
 
@@ -42,6 +44,8 @@ class BtNavigator(Node):
         self.robot_base_frame = self.declare_parameter("robot_base_frame", "base_footprint")
         self.goal_topic = self.declare_parameter("goal_topic", GOAL_POSE_TOPIC_NAME)
         self.goal_poses_topic = self.declare_parameter("goal_poses_topic", GOAL_POSES_TOPIC_NAME)
+        self.preview_goal_topic = self.declare_parameter("preview_goal_topic", PREVIEW_GOAL_TOPIC_NAME)
+        self.preview_goals_topic = self.declare_parameter("preview_goals_topic", PREVIEW_GOALS_TOPIC_NAME)
         self.cancel_topic = self.declare_parameter("cancel_topic", CANCEL_GOAL_TOPIC_NAME)
         self.buffer = Buffer()
         self._listener = TransformListener(self.buffer, self)
@@ -55,6 +59,8 @@ class BtNavigator(Node):
         self.create_action_server("navigate_to_pose", NavigateToPose, self._execute, goal_callback=self._on_new_goal)
         self.subscribe(self.goal_topic.value, PoseStamped, self._on_goal_pose)
         self.subscribe(self.goal_poses_topic.value, Path, self._on_goal_poses)
+        self.subscribe(self.preview_goal_topic.value, PoseStamped, self._on_preview_goal)
+        self.subscribe(self.preview_goals_topic.value, Path, self._on_preview_goals)
         self.subscribe(self.cancel_topic.value, Bool, self._on_cancel)
 
     def _on_goal_pose(self, pose: PoseStamped) -> None:
@@ -67,6 +73,24 @@ class BtNavigator(Node):
                 pass
         self._cancel_requested = False
         self._self_client.send_goal(NavigateToPoseGoal(pose), timeout=5.0)
+
+    def _on_preview_goal(self, pose: PoseStamped) -> None:
+        """경로 미리보기: 계획만 하고 controller로 보내지 않는다 (로봇은 안 움직인다)."""
+        self.get_logger().info("preview_goal: (%.2f, %.2f)", pose.pose.position.x, pose.pose.position.y)
+        plan = self._plan(pose)
+        if plan.error_code:
+            self.get_logger().warn("preview: 계획 실패 (%d): %s", plan.error_code, plan.error_msg)
+            return
+        self.publish("plan", plan.path, QOS_LATCHED)
+
+    def _on_preview_goals(self, path: Path) -> None:
+        if not path.poses:
+            return
+        self.get_logger().info("preview_goals: %d goals", len(path.poses))
+        combined = self._plan_through(list(path.poses))
+        if combined is None:
+            return
+        self.publish("plan", combined, QOS_LATCHED)
 
     def _on_goal_poses(self, path: Path) -> None:
         if not path.poses:
@@ -97,22 +121,22 @@ class BtNavigator(Node):
             return ComputePathToPoseResult(error_code=ComputePathToPoseResult.UNKNOWN, error_msg=f"planner_server 결과가 없다 ({message.status.name})")
         return result
 
-    def _run_through(self, goals: list[PoseStamped]) -> None:
-        # 각 구간을 계획해 하나의 경로로 이어 붙인 뒤 controller에 보낸다 (ROS의 navigate_through_poses와 비슷).
+    def _plan_through(self, goals: list[PoseStamped]) -> Path | None:
+        """여러 목표를 구간별로 계획해 하나의 Path로 이어 붙인다. 실패/취소 시 None."""
         try:
             t = self.buffer.lookup_transform(self.global_frame.value, self.robot_base_frame.value).transform
         except TransformException:
             self.get_logger().warn("goal_poses: 로봇 위치를 모른다")
-            return
+            return None
         current = PoseStamped(Header(self.now(), self.global_frame.value), Pose(Point(t.translation.x, t.translation.y, 0.0), t.rotation))
         combined: list[PoseStamped] = []
         for goal in goals:
             if self._cancel_requested:
-                return
+                return None
             plan = self._plan_segment(current, goal)
             if plan.error_code:
                 self.get_logger().warn("goal_poses: 계획 실패 (%d): %s", plan.error_code, plan.error_msg)
-                return
+                return None
             poses = list(plan.path.poses)
             if combined and poses:
                 last = combined[-1].pose.position
@@ -122,11 +146,18 @@ class BtNavigator(Node):
             combined.extend(poses)
             current = goal
         if not combined or self._cancel_requested:
+            return None
+        return Path(Header(self.now(), self.global_frame.value), tuple(combined))
+
+    def _run_through(self, goals: list[PoseStamped]) -> None:
+        # 각 구간을 계획해 하나의 경로로 이어 붙인 뒤 controller에 보낸다 (ROS의 navigate_through_poses와 비슷).
+        self._cancel_requested = False
+        combined_path = self._plan_through(goals)
+        if combined_path is None or self._cancel_requested:
             return
-        path = Path(Header(self.now(), self.global_frame.value), tuple(combined))
-        self.get_logger().info("goal_poses: combined path %d poses", len(combined))
-        self.publish("plan", path, QOS_LATCHED)  # viz가 전체 경로를 그리게 (마지막 구간만 그리던 문제 해결)
-        follow = self._controller.send_goal(FollowPathGoal(path), timeout=5.0)
+        self.get_logger().info("goal_poses: combined path %d poses", len(combined_path.poses))
+        self.publish("plan", combined_path, QOS_LATCHED)  # viz가 전체 경로를 그리게 (마지막 구간만 그리던 문제 해결)
+        follow = self._controller.send_goal(FollowPathGoal(combined_path), timeout=5.0)
         self._follow_handle = follow
         while follow.status == GoalStatus.ACCEPTED and not self._cancel_requested:
             time.sleep(0.1)
