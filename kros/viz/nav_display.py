@@ -2,7 +2,11 @@
 viz.py가 매 프레임 update()를 부른다. 그리는 것은 모두 토픽(또는 TF)에서 온 것이다."""
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+
+def _yaw(q: Any) -> float:
+    return math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
 
 from panda3d.core import CardMaker, LineSegs, LQuaternionf, NodePath, SamplerState, Texture
 
@@ -69,26 +73,38 @@ def grid_card(grid: OccupancyGrid, colors: dict[int, bytes], z: float) -> NodePa
     return origin
 
 
-def _line(points: list[tuple[float, float]], color: Color, thickness: float, z: float, dots_every: int = 0) -> NodePath:
+def _line(points: list[tuple[float, ...]], color: Color, thickness: float, z: float, dots_every: int = 0) -> NodePath:
     segs = LineSegs()
     segs.setColor(*color)
     segs.setThickness(thickness)
     if points:
         segs.moveTo(points[0][0], points[0][1], z)
-        for x, y in points[1:]:
-            segs.drawTo(x, y, z)
+        for p in points[1:]:
+            segs.drawTo(p[0], p[1], z)
     node = NodePath(segs.create())
-    if dots_every:  # 웨이포인트: 경로 점 몇 개마다 작은 십자 표시 (점은 Panda3D에서 너무 작게 보여 십자로 그린다)
+    if dots_every:  # 웨이포인트: 경로 점 몇 개마다 작은 화살표 (로봇이 그 점에서 바라볼 방향)
         dots = LineSegs()
         dots.setColor(1, 1, 1, 1)
         dots.setThickness(3)
-        half = 0.06
-        for x, y in points[::dots_every] + points[-1:]:
-            dots.moveTo(x - half, y, z)
-            dots.drawTo(x + half, y, z)
-            dots.moveTo(x, y - half, z)
-            dots.drawTo(x, y + half, z)
-        saved_bounds = node.node().get_bounds()  # 십자가 경로의 경계상자를 넓히지 않게 (viz 테스트의 bounds 검사)
+        saved_bounds = node.node().get_bounds()  # 화살표가 경로의 경계상자를 넓히지 않게 (viz 테스트의 bounds 검사)
+        for p in points[::dots_every] + [points[-1]]:
+            x, y = p[0], p[1]
+            yaw = p[2] if len(p) > 2 else None
+            if yaw is None:
+                half = 0.06
+                dots.moveTo(x - half, y, z)
+                dots.drawTo(x + half, y, z)
+                dots.moveTo(x, y - half, z)
+                dots.drawTo(x, y + half, z)
+            else:
+                ex = x + 0.12 * math.cos(yaw)
+                ey = y + 0.12 * math.sin(yaw)
+                dots.moveTo(x, y, z)
+                dots.drawTo(ex, ey, z)
+                dots.moveTo(ex, ey, z)
+                dots.drawTo(ex - 0.04 * math.cos(yaw - 0.5), ey - 0.04 * math.sin(yaw - 0.5), z)
+                dots.moveTo(ex, ey, z)
+                dots.drawTo(ex - 0.04 * math.cos(yaw + 0.5), ey - 0.04 * math.sin(yaw + 0.5), z)
         node.attachNewNode(dots.create())
         node.node().set_bounds(saved_bounds)
         node.node().set_final(True)
@@ -134,7 +150,10 @@ class NavDisplay:
                 self._path_drawn[topic] = path
                 root.getChildren().detach()
                 z = 0.05 if topic == "local_plan" else 0.03  # local_plan이 plan 위에
-                _line([(p.pose.position.x, p.pose.position.y) for p in path.poses], color, thickness, z, dots).reparentTo(root)
+                poses: list[tuple[float, ...]] = [(p.pose.position.x, p.pose.position.y) for p in path.poses]
+                if topic == "plan":
+                    poses = [(p.pose.position.x, p.pose.position.y, _yaw(p.pose.orientation)) for p in path.poses]
+                _line(poses, color, thickness, z, dots).reparentTo(root)
             self._place(root, path.header.frame_id if isinstance(path, Path) and path.poses and viz.enabled[topic] else None, lookup)
         self._update_trail(lookup)
 
@@ -162,7 +181,7 @@ class NavDisplay:
                 del self.trail[:-TRAIL_LIMIT]
                 if self._trail_np is not None:
                     self._trail_np.removeNode()
-                self._trail_np = _line(self.trail, TRAIL_COLOR, 2.0, 0.02)
+                self._trail_np = _line(list(self.trail), TRAIL_COLOR, 2.0, 0.02)
                 self._trail_np.reparentTo(viz.scene)
         if self._trail_np is not None:
             self._trail_np.show() if viz.enabled["trail"] else self._trail_np.hide()

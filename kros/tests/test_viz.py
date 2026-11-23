@@ -338,7 +338,7 @@ class TestVizNavigationDisplays(unittest.TestCase):
             self.assertAlmostEqual(high.x, 2.0, places=3)
         for name in ("plan", "local_plan"):
             self.assertFalse(viz.nav.paths[name].isHidden(), name)
-        self.assertAlmostEqual(viz.nav.paths["plan"].getTightBounds()[1].x, 0.96, places=2)
+        self.assertAlmostEqual(viz.nav.paths["plan"].getTightBounds()[1].x, 1.02, places=2)
         viz.toggle("global_costmap/costmap")
         viz.toggle("plan")
         viz.base.taskMgr.step()
