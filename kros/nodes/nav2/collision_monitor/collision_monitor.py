@@ -14,8 +14,8 @@ Point = tuple[float, float]
 ACTIONS = ("stop", "slowdown", "limit", "approach")
 # TurtleBot3(반지름 0.2m)에 맞춘 기본 영역: 앞 0.3m 상자 안이면 정지, 0.5m 상자 안이면 감속 (base_footprint 좌표, x 앞, y 왼쪽)
 DEFAULT_POLYGONS: dict[str, dict[str, ParameterValue]] = {
-    "PolygonStop": {"type": "polygon", "points": (0.3, 0.22, 0.3, -0.22, 0.0, -0.22, 0.0, 0.22), "action_type": "stop"},
-    "PolygonSlow": {"type": "polygon", "points": (0.5, 0.3, 0.5, -0.3, 0.0, -0.3, 0.0, 0.3), "action_type": "slowdown"},
+    "PolygonStop": {"type": "polygon", "points": (0.3, 0.15, 0.3, -0.15, 0.0, -0.15, 0.0, 0.15), "action_type": "stop"},
+    "PolygonSlow": {"type": "polygon", "points": (0.5, 0.2, 0.5, -0.2, 0.0, -0.2, 0.0, 0.2), "action_type": "slowdown"},
 }
 
 
