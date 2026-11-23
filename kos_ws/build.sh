@@ -22,4 +22,4 @@ else
 fi
 
 cd "$WS"
-colcon build --symlink-install "$@"
+colcon build --symlink-install --merge-install "$@"
