@@ -91,6 +91,23 @@ class TestDeclareAndGet(unittest.TestCase):
         self.assertEqual(b.speed.value, 0.26)
 
 
+class TestRemoteAdoption(unittest.TestCase):
+    def test_remote_snapshot_does_not_overwrite_local_or_rebroadcast(self) -> None:
+        ctx = Context()
+        pm = ctx.parameter_manager
+        node = Node(ctx, "controller")
+        speed = node.declare_parameter("speed", 0.5)
+        pm.adopt("controller", "speed", 0.1)  # 재접속한 Viz가 보낸 옛 값
+        self.assertEqual(speed.value, 0.5)  # 서버의 로컬 값은 그대로
+        pm.adopt("viz", "zoom", 2.0)  # 원격 노드 값은 받아 둔다
+        self.assertEqual(pm.get("viz", "zoom"), 2.0)
+        declared = pm.all_declared()
+        self.assertEqual(declared["controller"]["speed"], 0.5)
+        self.assertNotIn("viz", declared)  # 받은 원격 값을 다시 방송하지 않는다 (핑퐁/되돌림 방지)
+        pm.adopt("viz", "zoom", 3.0)  # 원격 값 갱신은 된다
+        self.assertEqual(pm.get("viz", "zoom"), 3.0)
+
+
 class TestValidationAndCallbacks(unittest.TestCase):
     def test_validator_can_reject_a_change(self) -> None:
         node = Node(Context())

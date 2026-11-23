@@ -46,10 +46,11 @@ def _same_type(declared: ParameterValue, value: ParameterValue) -> bool:
 
 
 class _Entry:
-    def __init__(self, value: ParameterValue, validator: Validator[ParameterValue] | None, on_change: OnChange[ParameterValue] | None) -> None:
+    def __init__(self, value: ParameterValue, validator: Validator[ParameterValue] | None, on_change: OnChange[ParameterValue] | None, remote: bool = False) -> None:
         self.value = value
         self.validator = validator
         self.on_change = on_change
+        self.remote = remote  # 다른 kros가 선언한 값(연결 시 받은 스냅샷): 내 스냅샷으로 되돌려 보내지 않는다
 
 
 class Parameter(Generic[P]):
@@ -114,11 +115,15 @@ class ParameterManager:
             return self._entry(node, name).value
 
     def all_declared(self) -> dict[str, dict[str, ParameterValue]]:
-        """모든 노드가 선언한 파라미터의 현재 값 {노드: {이름: 값}} (네트워크 동기화용)."""
+        """내가 선언한 파라미터의 현재 값 {노드: {이름: 값}} (네트워크 동기화용).
+
+        원격에서 받아 둔 값(remote)은 빼야 한다: Viz가 재접속할 때 옛 값을 서버에 다시 덮어쓰는 것을 막는다.
+        """
         with self._lock:
             result: dict[str, dict[str, ParameterValue]] = {}
             for (node, name), entry in self._entries.items():
-                result.setdefault(node, {})[name] = entry.value
+                if not entry.remote:
+                    result.setdefault(node, {})[name] = entry.value
             return result
 
     def adopt(self, node: str, name: str, value: ParameterValue) -> None:
@@ -130,9 +135,10 @@ class ParameterManager:
         with self._lock:
             entry = self._entries.get((node, name))
             if entry is None:
-                self._entries[(node, name)] = _Entry(value, None, None)
-            else:
-                entry.value = value
+                self._entries[(node, name)] = _Entry(value, None, None, remote=True)
+            elif entry.remote:
+                entry.value = value  # 원격 값 갱신은 받는다
+            # 내가 선언한 값(local)은 원격 스냅샷으로 덮지 않는다 (재접속한 Viz의 옛 값이 서버 튜닝을 되돌리던 버그)
 
     def set(self, node: str, name: str, value: ParameterValue) -> None:
         """값을 바꾼다. 타입이 다르면 TypeError, 검증이 거절하면 ParameterRejectedError(값은 그대로)."""
