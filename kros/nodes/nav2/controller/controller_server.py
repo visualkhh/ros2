@@ -104,7 +104,6 @@ class ControllerServer(Node):
         original = [(p.pose.position.x, p.pose.position.y, _yaw(p.pose.orientation)) for p in goal.path.poses]
         started = self.now()
         self._preempt.clear()
-        self.progress_checker.reset()
         period = 1.0 / self.controller_frequency.value
         while True:
             self._tick.clear()

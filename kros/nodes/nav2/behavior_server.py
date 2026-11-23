@@ -24,7 +24,7 @@ class BehaviorServer(Node):
 
     def __init__(self, context: Context, name: str | None = None, parameters: Mapping[str, ParameterValue] | None = None) -> None:
         super().__init__(context, name or "behavior_server", parameters)
-        self.cmd_vel_topic = self.declare_parameter("cmd_vel_topic", CMD_VEL_TOPIC_NAME)
+        self.cmd_vel_topic = self.declare_parameter("cmd_vel_topic", "cmd_vel_nav")
         self.odom_topic = self.declare_parameter("odom_topic", "odom")
         self.max_ang = self.declare_parameter("max_ang", 1.0, validator=lambda v: v > 0)
         self.max_lin = self.declare_parameter("max_lin", 0.1, validator=lambda v: v > 0)
