@@ -73,6 +73,8 @@ class Cartographer(Node):
         self.motion_filter_max_angle = self.declare_parameter("motion_filter_max_angle", math.radians(3), validator=positive)
         self.num_matching_points = self.declare_parameter("num_matching_points", 60, validator=positive)
         self.match_every = self.declare_parameter("match_every", 1, validator=lambda value: isinstance(value, int) and value >= 1)  # N번째 스캔마다 매칭 (실기 Pi는 2: 5Hz)
+        # 스캔 매칭 보정은 한 번에 수 cm 튄다: TF로 낼 때 이 비율만큼만 따라가면 경로/로봇이 20Hz에서 부드럽게 움직인다 (0=끔)
+        self.tf_smoothing = self.declare_parameter("tf_smoothing", 0.0, validator=lambda value: 0 <= value < 1)
         self.map_to_odom: Pose2 = (0.0, 0.0, 0.0)
         self.grid = ProbabilityGrid(self.resolution.value)
         self.scans = self.rejected = 0  # 처리한 스캔 수, 점수가 낮아 매칭을 버린 수
@@ -82,6 +84,7 @@ class Cartographer(Node):
         self._last_inserted: Pose2 | None = None
         self._last_match_odom: Pose2 | None = None  # 마지막 매칭 때 센서의 odom 자세 (제자리면 매칭 생략)
         self._localized = False  # map -> odom을 알게 됐다 (스캔을 처리했거나 /initialpose를 받았다): 그때부터 TF를 낸다
+        self._tf_published: Pose2 | None = None  # TF로 마지막에 낸 (스무딩된) map -> odom
         self._relocalize = False  # 다음 매칭은 넓게 (/initialpose 직후)
         self._dirty = False
         self._published: OccupancyGrid | None = None  # 내가 낸 지도 (map 토픽으로 되돌아와도 저장한 지도로 착각하지 않게)
@@ -184,6 +187,7 @@ class Cartographer(Node):
         with self._lock:
             self.map_to_odom = compose(base_in_map, inverse(base_in_odom))  # 로봇이 base_in_map에 있게 하는 map -> odom
             self._relocalize, self._localized, self._last_inserted = True, True, None
+            self._tf_published = None  # 사람이 찍은 위치는 그대로 즉시 (스무딩하면 엉뚱한 곳에서 출발한다)
         self.get_logger().info("initialpose: (%.2f, %.2f, %.0fdeg)", base_in_map[0], base_in_map[1], math.degrees(base_in_map[2]))
 
     def _moved(self, pose: Pose2) -> bool:
@@ -207,6 +211,14 @@ class Cartographer(Node):
     def _publish_tf(self) -> None:
         if self._mode == "idle" or not self._localized:
             return
-        x, y, yaw = self.map_to_odom
+        target = self.map_to_odom
+        current, blend = self._tf_published, self.tf_smoothing.value
+        if current is None or blend <= 0.0:
+            pose = target
+        else:
+            delta = math.atan2(math.sin(target[2] - current[2]), math.cos(target[2] - current[2]))
+            pose = (current[0] + blend * (target[0] - current[0]), current[1] + blend * (target[1] - current[1]), current[2] + blend * delta)
+        self._tf_published = pose
+        x, y, yaw = pose
         transform = Transform(Vector3(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))
         self._broadcaster.send_transform(TransformStamped(Header(self.now(), self.map_frame.value), self.odom_frame.value, transform))

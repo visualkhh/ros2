@@ -1,4 +1,5 @@
 import math
+from collections.abc import Mapping
 
 from kros.context import Context
 from kros.msgs.geometry_msgs import Point, Pose, PoseWithCovariance, Quaternion, Transform, TransformStamped, Twist, TwistWithCovariance, Vector3
@@ -6,6 +7,7 @@ from kros.msgs.nav_msgs import Odometry
 from kros.msgs.sensor_msgs import JointState
 from kros.msgs.std_msgs import Header
 from kros.nodes.node import Node
+from kros.parameter import ParameterValue
 from kros.tf import JOINT_STATES_TOPIC_NAME, TransformBroadcaster
 
 ODOM_TOPIC_NAME = "odom"
@@ -28,7 +30,7 @@ class DiffDriveOdometry(Node):
     첫 joint_states를 받으면 원점(0, 0, 0)의 odom을 낸다.
     """
 
-    def __init__(self, context: Context, name: str | None = None, parameters: dict[str, bool | int | float | str] | None = None) -> None:
+    def __init__(self, context: Context, name: str | None = None, parameters: Mapping[str, ParameterValue] | None = None) -> None:
         super().__init__(context, name, parameters)
         positive = lambda value: value > 0  # noqa: E731
         self.wheel_radius = self.declare_parameter("wheel_radius", 0.033, validator=positive)
@@ -45,6 +47,8 @@ class DiffDriveOdometry(Node):
         self.x = self.y = self.yaw = 0.0
         self.jumps = 0  # 버린 바퀴 각 점프 횟수
         self._previous: tuple[float, float, float] | None = None  # 지난 (시각, 왼쪽 각, 오른쪽 각)
+        self._last_change: float | None = None  # 바퀴 위치가 마지막으로 바뀐 시각 (속도는 이 간격으로 계산)
+        self._last_velocity: tuple[float, float] = (0.0, 0.0)  # 위치가 아직 안 바뀐 20Hz 메시지에 재사용
         self._broadcaster = TransformBroadcaster(self)
         self.subscribe(JOINT_STATES_TOPIC_NAME, JointState, self._on_joint_states)
 
@@ -56,18 +60,29 @@ class DiffDriveOdometry(Node):
         stamp, previous = message.header.stamp, self._previous
         self._previous = (stamp, left, right)
         v = w = 0.0
-        if previous is not None:
+        if previous is None:
+            self._last_change = stamp
+        else:
             dl, dr, dt = left - previous[1], right - previous[2], stamp - previous[0]
             if abs(dl) > self.jump_threshold.value or abs(dr) > self.jump_threshold.value:
                 self.jumps += 1
                 self.get_logger().warn("바퀴 각이 한 번에 (%+.2f, %+.2f) rad 뛰었다: 그 변화는 버린다 (보드 재부팅?)", dl, dr)
-            elif dt > 0:
+                self._last_change, self._last_velocity = stamp, (0.0, 0.0)
+            elif abs(dl) > 1e-9 or abs(dr) > 1e-9:  # 이번에 바퀴 위치가 실제로 바뀌었다
+                # joint_states는 20Hz인데 OpenCR 바퀴 위치는 ~10Hz라, 메시지 간격(50ms)으로 나누면
+                # 속도가 0과 2배를 번갈아 낸다: 위치가 바뀐 시각부터의 간격으로 계산한다.
+                interval = stamp - (self._last_change if self._last_change is not None else previous[0])
+                if interval <= 0:
+                    interval = dt
                 r, separation = self.wheel_radius.value, self.wheel_separation.value
                 distance, turn = r * (dl + dr) / 2, r * (dr - dl) / separation
                 self.x += distance * math.cos(self.yaw + turn / 2)  # 중간 각도로 적분하면 호를 따라 움직인 것과 같다
                 self.y += distance * math.sin(self.yaw + turn / 2)
                 self.yaw += turn
-                v, w = distance / dt, turn / dt
+                v, w = distance / interval, turn / interval
+                self._last_change, self._last_velocity = stamp, (v, w)
+            elif self._last_change is not None and stamp - self._last_change <= 0.3:
+                v, w = self._last_velocity  # 센서가 아직 새 값을 안 줬다: 지난 속도를 유지 (0/2배 톱니 제거)
         self._publish(stamp, v, w)
 
     def _publish(self, stamp: float, v: float, w: float) -> None:

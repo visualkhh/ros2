@@ -74,6 +74,16 @@ class TestIntegration(Setup):
         self.assertEqual(self.pose(), (0.0, 0.0, 0.0))
         self.assertEqual((self.messages[0].header.frame_id, self.messages[0].child_frame_id), ("odom", "base_footprint"))
 
+    def test_repeated_wheel_positions_keep_the_velocity(self) -> None:
+        self.wheels(1.0, 0.0, 0.0)
+        self.move(1.0, 10.0, 10.0)  # 1초에 10rad: v = 0.033 * 10 = 0.33 m/s
+        v = self.messages[-1].twist.twist.linear.x
+        self.assertGreater(v, 0.3)
+        self.wheels(2.05, 10.0, 10.0)  # OpenCR 위치는 아직 그대로인 20Hz 메시지
+        self.assertAlmostEqual(self.messages[-1].twist.twist.linear.x, v, places=6)  # 0이 아니라 지난 속도
+        self.wheels(2.5, 10.0, 10.0)  # 0.5초 동안 안 움직임: 정지
+        self.assertAlmostEqual(self.messages[-1].twist.twist.linear.x, 0.0, places=6)
+
     def test_both_wheels_forward_moves_straight(self) -> None:
         self.wheels(1.0, 0.0, 0.0)
         self.move(1.0, 10.0, 10.0)

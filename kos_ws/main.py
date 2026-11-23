@@ -52,13 +52,17 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     """시뮬레이터 예제와 같은 구성. RL 정책은 쓰지 않는다 (FollowPath = MPPI)."""
     description = RobotStatePublisher(ctx, parameters={"robot_description": robot.urdf_path.read_text()})
     odometry = DiffDriveOdometry(
-        ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False}
+        ctx, parameters={
+            "wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False,
+            "twist_covariance_diagonal": (0.005, 0.005, 1e6, 1e6, 1e6, 0.02),  # 바퀴 속도는 펌웨어 노이즈가 있어 EKF가 조금 덜 믿게
+        }
     )
     ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG, "frequency": 20.0})
     # Pi 4는 pure Python 스캔매칭이 무거워서 두 번째 스캔마다(5Hz)만 맞춘다 (TF는 계속 20Hz)
     slam = Cartographer(ctx, parameters={
         "mode": "idle", "match_every": 4, "num_matching_points": 20, "map_publish_period_sec": 2.0,
         "linear_search_window": 0.05, "angular_search_window": math.radians(3),
+        "tf_smoothing": 0.35,  # 스캔매칭 보정(5cm/2.9도)을 20Hz TF에서 35%씩 따라가게 (로봇/경로가 툭 튀지 않게)
     })
     print(f"[kos] cartographer: match_every={slam.match_every.value} points={slam.num_matching_points.value} linear={slam.linear_search_window.value} angular={slam.angular_search_window.value}", flush=True)
     maps = {"maps_directory": str(MAPS_DIRECTORY)}
