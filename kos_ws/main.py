@@ -57,7 +57,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
     # Pi 4는 pure Python 스캔매칭이 무거워서 두 번째 스캔마다(5Hz)만 맞춘다 (TF는 계속 20Hz)
     slam = Cartographer(ctx, parameters={
-        "mode": "idle", "match_every": 4, "num_matching_points": 20, "map_publish_period_sec": 2.0,
+        "mode": "idle", "match_every": 6, "num_matching_points": 20, "map_publish_period_sec": 2.0,
         "linear_search_window": 0.05, "angular_search_window": math.radians(3),
     })
     print(f"[kos] cartographer: match_every={slam.match_every.value} points={slam.num_matching_points.value} linear={slam.linear_search_window.value} angular={slam.angular_search_window.value}", flush=True)
@@ -68,6 +68,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
         "odom_topic": "odometry/filtered",
         "cmd_vel_topic": "cmd_vel_nav",
         "FollowPath.plugin": "nav2_mppi_controller::MPPIController",
+        "FollowPath.batch_size": 64,  # Pi(GIL): 80이면 제어 스레드가 코어 45%를 먹어 다른 스레드가 밀린다
         "FollowPath.vx_min": -0.1,  # 좁은 곳에서 몇 cm 후진은 허용 (0.5m 복구 후진은 아래에서 끔)
         "general_goal_checker.xy_goal_tolerance": 0.4,
         "general_goal_checker.yaw_goal_tolerance": 0.4,
@@ -75,7 +76,9 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
         "progress_checker.required_angle": 0.3,
         "progress_checker.required_movement_radius": 0.2,
     }
-    controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters={**footprint, "update_frequency": 3.0, "scan_period": 1.0 / 3.0})
+    controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters={
+        **footprint, "update_frequency": 3.0, "scan_period": 0.5, "raytrace_max_range": 2.2, "obstacle_max_range": 2.2  # 3x3m 창의 대각(2.12m)이면 충분
+    })
     behavior = BehaviorServer(ctx)
     mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
     # 0.5m 안이면 감속: 0.3은 너무 느려서 0.6 (정지 상자 0.3m는 그대로)

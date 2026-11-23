@@ -135,6 +135,8 @@ class CollisionMonitor(Node):
         self.create_service(f"{self.name}/set_enabled", SetBool, self._on_set_enabled)
 
     def _on_scan(self, source: str, scan: LaserScan) -> None:
+        if not self.enabled.value:  # 꺼져 있으면 점을 만들 필요가 없다 (Pi CPU: 스캔마다 360점 변환)
+            return
         try:  # 센서 -> base (라이다는 로봇에 고정이라 최신 TF면 된다)
             t = self.buffer.lookup_transform(self.base_frame_id.value, scan.header.frame_id).transform
         except TransformException:
