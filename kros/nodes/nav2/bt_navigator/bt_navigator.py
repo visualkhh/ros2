@@ -175,6 +175,8 @@ class BtNavigator(Node):
             except LookupError:
                 pass
             self.publish("plan", Path(Header(self.now(), self.global_frame.value)), QOS_LATCHED)  # 취소 시 경로 지우기
+        else:
+            self.publish("plan", Path(Header(self.now(), self.global_frame.value)), QOS_LATCHED)  # 도착 시 경로 지우기
 
     def _on_new_goal(self, goal: NavigateToPoseGoal) -> bool:
         self._preempt.set()
@@ -213,10 +215,12 @@ class BtNavigator(Node):
                 result = follow.result(5.0).result
                 code, message = (result.error_code, result.error_msg) if isinstance(result, FollowPathResult) else (R.UNKNOWN, f"controller_server 결과가 없다 ({follow.status.name})")
                 if code == FollowPathResult.NONE and message != REPLACED:
+                    self.publish("plan", Path(Header(self.now(), self.global_frame.value)), QOS_LATCHED)  # 도착: 경로 지우기
                     return R(R.NONE)
                 if code == FollowPathResult.NONE:
                     continue  # 내가 보낸 새 경로로 갈아탄 옛 goal: 새 follow를 이미 지켜보고 있다
                 if recoveries >= self.number_of_recoveries.value:
+                    self.publish("plan", Path(Header(self.now(), self.global_frame.value)), QOS_LATCHED)  # 실패: 경로 지우기
                     return self._fail(code, message)
                 recoveries += 1
                 self._recover()  # 회복 동작 (spin -> backup -> wait) 시도
