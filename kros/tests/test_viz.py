@@ -57,7 +57,7 @@ class TestVizSmoke(unittest.TestCase):
             time_source=source,
         )
         self.addCleanup(kros.shutdown)
-        viz = Viz(kros, robot.description_dir)
+        viz = Viz(context=kros.context, package_root=robot.description_dir)
         self.addCleanup(viz.close)
         viz.base.taskMgr.step()
         self.assertIsNone(viz.node.latest("odom"))  # 오도메트리는 아직 안 받았다
@@ -128,7 +128,7 @@ class TestVizMap(unittest.TestCase):
         grid = OccupancyGrid(Header(0.0, "odom"), MapMetaData(0.0, 0.5, 4, 3, Pose(Point(1.0, 2.0, 0.0))), cells)
         made["mapper"].publish("map", grid, QOS_LATCHED)
         kros.context.topic_executor.join()
-        viz = Viz(kros, TurtleBot3.description_dir)  # 지도를 낸 뒤에 켜도 latch라 받는다
+        viz = Viz(context=kros.context, package_root=TurtleBot3.description_dir)  # 지도를 낸 뒤에 켜도 latch라 받는다
         self.addCleanup(viz.close)
         TransformBroadcaster(made["mapper"]).send_transform(TransformStamped(Header(0.0, "odom"), "base_footprint", Transform()))  # odom 프레임이 있게 (tf는 latch가 아니라 viz가 켜진 뒤에)
         kros.context.topic_executor.join()
@@ -172,7 +172,7 @@ class TestVizSlamPanel(unittest.TestCase):
         slam = made["slam"]
         assert isinstance(slam, Cartographer)
         self.cartographer, self.watcher = slam, made["watcher"]
-        self.viz = Viz(self.kros, TurtleBot3.description_dir)
+        self.viz = Viz(context=self.kros.context, package_root=TurtleBot3.description_dir)
         self.addCleanup(self.viz.close)
         self.panel = self.viz.slam
 
@@ -318,7 +318,7 @@ class TestVizNavigationDisplays(unittest.TestCase):
         kros = Kros(lambda ctx: [made.setdefault("n", Node(ctx, "Nav"))], time_source=SimulatedTimeSource())
         self.addCleanup(kros.shutdown)
         node = made["n"]
-        viz = Viz(kros, TurtleBot3.description_dir)
+        viz = Viz(context=kros.context, package_root=TurtleBot3.description_dir)
         self.addCleanup(viz.close)
         broadcaster = TransformBroadcaster(node)
         broadcaster.send_transform(TransformStamped(Header(0.0, "odom"), "base_footprint", Transform()))

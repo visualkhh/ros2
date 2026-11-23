@@ -17,6 +17,7 @@ from panda3d.core import (
 )
 
 from kros import Kros
+from kros.context import Context
 from kros.diagnostics import DIAGNOSTICS_TOPIC_NAME
 from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel
 from kros.msgs.geometry_msgs import TransformStamped
@@ -113,12 +114,16 @@ class Viz:
     odom과 odometry/filtered의 위치 화살표 (둘 다 fixed_frame 기준일 때만: TF는 둘 중 하나만 내므로 나머지는 화살표로 비교한다).
     """
 
-    def __init__(self, kros: Kros | None = None, package_root: Path | None = None, base: ShowBase | None = None, fixed_frame: str = "odom", imu_frame: str = "imu_link", servers: list[Mapping[str, object]] | None = None) -> None:
-        if kros is None:
-            kros = Kros(servers=servers)
-        self.kros, self.package_root = kros, package_root if package_root is not None else Path(".")
+    def __init__(self, package_root: Path | None = None, base: ShowBase | None = None, fixed_frame: str = "odom", imu_frame: str = "imu_link", servers: list[Mapping[str, object]] | None = None, host: Mapping[str, object] | None = None, context: Context | None = None) -> None:
+        if context is None:
+            self.kros: Kros | None = Kros(servers=servers, host=host)
+            context = self.kros.context if self.kros is not None else None
+        else:
+            self.kros = None
+        assert context is not None
+        self.package_root = package_root if package_root is not None else Path(".")
         self.fixed_frame = fixed_frame
-        self.node = VizNode(kros.context)
+        self.node = VizNode(context)
         self.own_base = base is None
         self.base = base or ShowBase()
         if base is None:
@@ -573,3 +578,5 @@ class Viz:
             self.base.destroy()
         else:
             self.base.closeWindow(self.win)
+        if self.kros is not None:
+            self.kros.shutdown()
