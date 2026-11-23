@@ -91,8 +91,8 @@ def main() -> None:
             "FollowPath.fallback_controller": "mppi",
             "general_goal_checker.xy_goal_tolerance": 0.4,
             "general_goal_checker.yaw_goal_tolerance": 0.4,
-            "progress_checker.movement_time_allowance": 3.0,
-            "progress_checker.required_movement_radius": 0.3,
+            "progress_checker.movement_time_allowance": 2.0,
+            "progress_checker.required_movement_radius": 0.2,
         }
         controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
         behavior = BehaviorServer(ctx)  # 회복 동작 (spin · backup · wait) — bt_navigator가 실패 시 부른다
