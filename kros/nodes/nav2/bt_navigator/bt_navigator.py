@@ -16,6 +16,7 @@ from kros.msgs.std_msgs import Bool, Header
 from kros.nodes.node import Node
 from kros.parameter import ParameterValue
 from kros.tf import Buffer, TransformException, TransformListener
+from kros.topic import QOS_LATCHED
 
 R = NavigateToPoseResult
 GOAL_POSE_TOPIC_NAME = "goal_pose"
@@ -87,6 +88,7 @@ class BtNavigator(Node):
                 self._follow_handle.cancel(5.0)
             except LookupError:
                 pass
+        self.publish("plan", Path(Header(self.now(), self.global_frame.value)), QOS_LATCHED)  # viz 경로 지우기
 
     def _plan_segment(self, start: PoseStamped, goal: PoseStamped) -> ComputePathToPoseResult:
         message = self._planner.send_goal(ComputePathToPoseGoal(goal=goal, start=start, use_start=True), timeout=5.0)
@@ -123,6 +125,7 @@ class BtNavigator(Node):
             return
         path = Path(Header(self.now(), self.global_frame.value), tuple(combined))
         self.get_logger().info("goal_poses: combined path %d poses", len(combined))
+        self.publish("plan", path, QOS_LATCHED)  # viz가 전체 경로를 그리게 (마지막 구간만 그리던 문제 해결)
         follow = self._controller.send_goal(FollowPathGoal(path), timeout=5.0)
         self._follow_handle = follow
         while follow.status == GoalStatus.ACCEPTED and not self._cancel_requested:
@@ -132,6 +135,7 @@ class BtNavigator(Node):
                 follow.cancel(5.0)
             except LookupError:
                 pass
+            self.publish("plan", Path(Header(self.now(), self.global_frame.value)), QOS_LATCHED)  # 취소 시 경로 지우기
 
     def _on_new_goal(self, goal: NavigateToPoseGoal) -> bool:
         self._preempt.set()
