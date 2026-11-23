@@ -8,6 +8,8 @@
 import math
 from pathlib import Path
 
+from kros.diagnostics import DiagnosticStatusWrapper
+from kros.msgs.diagnostic_msgs import DiagnosticLevel
 from kros.msgs.sensor_msgs import Imu, LaserScan
 from kros.nodes.nav2.controller.controller import Controller, Pose2, Velocity, closest_index, simulate
 from kros.nodes.nav2.controller.dwb import DWBLocalPlanner
@@ -73,6 +75,26 @@ class RlNavController(Controller):
 
     def _on_imu(self, imu: Imu) -> None:
         self.gyro = imu.angular_velocity.z
+
+    def diagnostic_status(self, status: DiagnosticStatusWrapper) -> None:
+        """diagnostics: 어느 플러그인이고, 정책이 읽혔는지, 지난 주기에 정책이 냈는지 (viz 왼쪽 위 한 줄)."""
+        status.add("plugin", "rl_nav_controller::RlNavController")
+        status.add("enable", self.enable.value)
+        status.add("policy", "loaded" if self.policy is not None else "missing")
+        status.add("active", "policy" if self.active else "fallback")
+        status.add("policy_steps", self.policy_steps)
+        status.add("fallback", self.fallback_controller.value)
+        status.add("model", self.model_path.value or "-")
+        if not self.enable.value:
+            status.summary(DiagnosticLevel.OK, f"disabled (fallback {self.fallback_controller.value})")
+        elif self.policy is None:
+            status.summary(DiagnosticLevel.ERROR, f"policy not loaded (fallback {self.fallback_controller.value})")
+        elif self.active:
+            status.summary(DiagnosticLevel.OK, "RL policy driving")
+        elif self.policy_steps == 0:
+            status.summary(DiagnosticLevel.OK, "ready (no command yet)")
+        else:
+            status.summary(DiagnosticLevel.WARN, f"last command from fallback {self.fallback_controller.value}")
 
     def compute_velocity_commands(self, pose: Pose2, velocity: Velocity, path: list[Pose2], costmap: Costmap, dt: float) -> Velocity:
         scan = self.scan

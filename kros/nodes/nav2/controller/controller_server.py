@@ -1,9 +1,11 @@
 import math
 import threading
 from collections.abc import Mapping
+from functools import partial
 
 from kros.action.server_goal_handle import ServerGoalHandle
 from kros.context import Context
+from kros.diagnostics import DiagnosticUpdater
 from kros.msgs.geometry_msgs import Point, Pose, PoseStamped, Quaternion, Twist, Vector3
 from kros.msgs.nav2_msgs import FollowPath, FollowPathFeedback, FollowPathGoal, FollowPathResult
 from kros.msgs.nav_msgs import Odometry, Path
@@ -64,6 +66,10 @@ class ControllerServer(Node):
             controller = PLUGINS[kind.value]()
             controller.configure(self, str(plugin_id))
             self.controllers[str(plugin_id)] = controller
+            self.get_logger().info("controller %s: %s", plugin_id, kind.value)
+        self._diagnostics = DiagnosticUpdater(self, 1.0)  # diagnostics 토픽에 플러그인 이름·상태 (viz가 읽는다)
+        for plugin_id, controller in self.controllers.items():
+            self._diagnostics.add(plugin_id, partial(controller.diagnostic_status))
         self.goal_checker = SimpleGoalChecker(self)
         self.progress_checker = SimpleProgressChecker(self)
         self.velocity: Velocity = (0.0, 0.0)

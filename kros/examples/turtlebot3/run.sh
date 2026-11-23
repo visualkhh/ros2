@@ -5,7 +5,7 @@ set -e
 here="$(cd "$(dirname "$0")" && pwd)"
 kros="$here/../.."
 cd "$kros/.."  # ros2/ 에서 돌려야 kros를 패키지로 import한다
-if [ ! -x "$kros/.venv/bin/python" ] || ! "$kros/.venv/bin/python" -c "import panda3d, numpy" 2>/dev/null; then
+if [ ! -x "$kros/.venv/bin/python" ] || ! "$kros/.venv/bin/python" -c "import panda3d, numpy, onnxruntime" 2>/dev/null; then
   profile="$("$kros/setting-venv.sh" --detect)"
   "$kros/setting-venv.sh" "${profile/core/sim}"  # 시뮬레이터는 최소 sim 프로필이 필요하다
 fi

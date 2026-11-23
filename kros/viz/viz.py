@@ -16,6 +16,8 @@ from panda3d.core import (
 )
 
 from kros import Kros
+from kros.diagnostics import DIAGNOSTICS_TOPIC_NAME
+from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel
 from kros.msgs.geometry_msgs import TransformStamped
 from kros.msgs.nav_msgs import OccupancyGrid, Odometry
 from kros.msgs.nav_msgs import Path as NavPath  # pathlib.Path와 겹치지 않게
@@ -24,7 +26,7 @@ from kros.msgs.std_msgs import String
 from kros.nodes import Node
 from kros.msgs.tf2_msgs import TFMessage
 from kros.tf import QOS_TF, QOS_TF_STATIC, ROBOT_DESCRIPTION_TOPIC_NAME, TF_STATIC_TOPIC_NAME, TF_TOPIC_NAME, Buffer, TransformException, TransformListener
-from kros.topic import QOS_LATCHED, QOS_SENSOR_DATA
+from kros.topic import QOS_DEFAULT, QOS_LATCHED, QOS_SENSOR_DATA
 from kros.viewer.urdf_model import UrdfModel
 
 from .nav_display import NavDisplay
@@ -67,6 +69,7 @@ class VizNode(Node):
             ("imu", Imu, QOS_SENSOR_DATA),
             ("odom", Odometry, QOS_SENSOR_DATA),
             ("odometry/filtered", Odometry, QOS_SENSOR_DATA),
+            (DIAGNOSTICS_TOPIC_NAME, DiagnosticArray, QOS_DEFAULT),  # 노드 진단 (controller_server: FollowPath 등)
         ):
             self._stats[topic] = (msg_type.__name__, 0, 0.0, 0.0)  # 구독만 하고 아직 못 받은 토픽도 패널에 보인다
             self.subscribe(topic, msg_type, lambda message, key=topic: self._store(key, message), qos)  # type: ignore[misc]
@@ -158,6 +161,7 @@ class Viz:
             self.rows[name] = OnscreenText(parent=self.left, pos=(0.42, y), align=TextNode.ALeft, fg=(0.7, 0.75, 0.85, 1), scale=0.026, mayChange=True)
         self.mode_banner = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.68), align=TextNode.ALeft, scale=0.065, bg=(0.05, 0.05, 0.08, 0.8), mayChange=True)
         shade = (0.05, 0.05, 0.08, 0.75)  # 밝은 지도 위에서도 읽히게
+        self.controller_line = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.58), align=TextNode.ALeft, scale=0.042, bg=shade, mayChange=True)
         self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), bg=shade, scale=0.05, mayChange=True)
         OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.8, 0.8, 0.8, 1), bg=shade, scale=0.04)
         OnscreenText(text="Fixed Frame", parent=self.left, pos=(0.04, -0.82), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
@@ -306,6 +310,9 @@ class Viz:
         self._update_scan()
         self._update_odometry()
         self.hud.setText(self._hud_text())
+        text, color = self._controller_status()
+        self.controller_line.setText(text)
+        self.controller_line["fg"] = color
         self._resize()
         stats = self.node.topic_rows()
         for name, row in self.rows.items():
@@ -459,6 +466,33 @@ class Viz:
                 arrow.show()
             else:
                 arrow.hide()
+
+    def _controller_status(self) -> tuple[str, tuple[float, float, float, float]]:
+        """diagnostics의 controller_server 진단 -> 화면 한 줄 (플러그인 이름 · 정책/폴백 상태)."""
+        array = self.node.latest(DIAGNOSTICS_TOPIC_NAME)
+        if not isinstance(array, DiagnosticArray):
+            return "Controller: (no diagnostics yet)", (0.7, 0.7, 0.7, 1)
+        for status in array.status:
+            if not status.name.startswith("controller_server:"):
+                continue
+            values = {value.key: value.value for value in status.values}
+            name = status.name.split(": ", 1)[-1]
+            plugin = values.get("plugin", "?")
+            detail = status.message or values.get("active", "")
+            steps = values.get("policy_steps")
+            text = f"Controller: {name} -> {plugin}"
+            if detail:
+                text += f" · {detail}"
+            if steps:
+                text += f" ({steps} steps)"
+            color = {
+                DiagnosticLevel.OK: (0.4, 1.0, 0.5, 1.0),
+                DiagnosticLevel.WARN: (1.0, 0.85, 0.3, 1.0),
+                DiagnosticLevel.ERROR: (1.0, 0.4, 0.4, 1.0),
+                DiagnosticLevel.STALE: (0.7, 0.7, 0.7, 1.0),
+            }.get(status.level, (0.8, 0.8, 0.8, 1.0))
+            return text, color
+        return "Controller: (no controller diagnostics)", (0.7, 0.7, 0.7, 1)
 
     def _hud_text(self) -> str:
         imu = self.node.latest("imu")

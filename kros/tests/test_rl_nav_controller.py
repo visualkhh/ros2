@@ -3,6 +3,7 @@ import math
 import unittest
 
 from kros import Kros
+from kros.diagnostics import DiagnosticStatusWrapper
 from kros.msgs.sensor_msgs import LaserScan
 from kros.msgs.std_msgs import Header
 from kros.nodes import Node
@@ -62,6 +63,15 @@ class TestObservation(unittest.TestCase):
         self.assertAlmostEqual(rl.scan_rays(scan(ranges), 0.0, 0.2)[18], (3.5 - 0.2) / 3.5)  # 셋 다 없으면 lidar_max
         shifted = rl.scan_rays(scan(ranges), math.pi / 2, 0.2)  # 라이다가 90도 돌아 달렸다
         self.assertAlmostEqual(shifted[18], (1.0 - 0.2) / 3.5)  # 로봇 기준 180도 = 라이다 기준 90도
+
+    def test_diagnostic_reports_the_plugin_and_missing_policy(self) -> None:
+        rl = make(self)
+        status = DiagnosticStatusWrapper()
+        rl.diagnostic_status(status)
+        values = {value.key: value.value for value in status.values}
+        self.assertEqual(values["plugin"], "rl_nav_controller::RlNavController")
+        self.assertEqual(values["policy"], "missing")
+        self.assertEqual(values["fallback"], "mppi")
 
     def test_without_a_model_or_disabled_it_drives_with_the_fallback(self) -> None:
         costmap = Costmap(0.05, 60, 60, -1.5, -1.5)

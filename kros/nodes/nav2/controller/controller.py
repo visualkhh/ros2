@@ -1,6 +1,7 @@
 """nav2_core::Controller 흉내: controller_server에 끼우는 경로 따라가기 알고리즘의 공통 모양과 도우미."""
 import math
 
+from kros.diagnostics import DiagnosticStatusWrapper
 from kros.nodes.nav2.costmap_2d import INSCRIBED_INFLATED_OBSTACLE, Costmap
 from kros.nodes.node import Node
 
@@ -26,6 +27,10 @@ class Controller:
 
     def compute_velocity_commands(self, pose: Pose2, velocity: Velocity, path: list[Pose2], costmap: Costmap, dt: float) -> Velocity:
         raise NotImplementedError
+
+    def diagnostic_status(self, status: DiagnosticStatusWrapper) -> None:
+        """diagnostics 토픽에 이 플러그인의 상태를 적는다 (controller_server가 1초마다 부른다). 플러그인은 더 자세히 덮어쓸 수 있다."""
+        status.add("plugin", f"{type(self).__module__}::{type(self).__name__}")
 
 
 def wrap(angle: float) -> float:
