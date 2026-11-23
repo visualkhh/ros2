@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -90,6 +91,8 @@ class Hardware(ABC):
     def _due(self, clock: Clock) -> Clock | None:
         if self.period is None:
             return clock  # 매 신호마다
+        if self._last_run is None:  # 첫 신호: 주기 격자에 맞춘다 (시각이 epoch처럼 커도 while이 폭주하지 않게)
+            self._next_due = math.floor(clock.time / self.period) * self.period
         if clock.time + 1e-9 < self._next_due:
             return None
         while self._next_due <= clock.time + 1e-9:  # dt가 커서 여러 주기를 건너뛰어도 한 번만
