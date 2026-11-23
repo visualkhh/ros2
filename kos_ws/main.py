@@ -54,10 +54,11 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
         ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False}
     )
     ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
-    slam = Cartographer(ctx, parameters={"mode": "idle"})
+    # Pi 4는 pure Python 스캔매칭이 무거워서 두 번째 스캔마다(5Hz)만 맞춘다 (TF는 계속 20Hz)
+    slam = Cartographer(ctx, parameters={"mode": "idle", "match_every": 2, "num_matching_points": 40, "map_publish_period_sec": 2.0})
     maps = {"maps_directory": str(MAPS_DIRECTORY)}
     footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
-    planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
+    planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters={**footprint, "update_frequency": 1.0})
     controller_parameters: dict[str, ParameterValue] = {
         "odom_topic": "odometry/filtered",
         "cmd_vel_topic": "cmd_vel_nav",
@@ -67,10 +68,11 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
         "progress_checker.movement_time_allowance": 2.0,
         "progress_checker.required_movement_radius": 0.2,
     }
-    controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
+    controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters={**footprint, "update_frequency": 3.0})
     behavior = BehaviorServer(ctx)
     mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
-    monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})
+    # 0.5m 안이면 감속: 0.3은 너무 느려서 0.6 (정지 상자 0.3m는 그대로)
+    monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel", "PolygonSlow.slowdown_ratio": 0.6})
     navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})
     return [
         RobotBridge(ctx, robot),

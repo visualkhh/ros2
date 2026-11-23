@@ -8,6 +8,7 @@ from kros.msgs.sensor_msgs import LaserScan
 from kros.nodes.node import Node
 from kros.parameter import ParameterValue
 from kros.tf import Buffer, TransformException, TransformListener
+from kros.topic import QOS_COMMAND
 
 Point = tuple[float, float]
 ACTIONS = ("stop", "slowdown", "limit", "approach")
@@ -122,7 +123,7 @@ class CollisionMonitor(Node):
         for source in self.observation_sources.value:
             topic = self.declare_parameter(f"{source}.topic", str(source))
             self.subscribe(topic.value, LaserScan, lambda scan, key=str(source): self._on_scan(key, scan))  # type: ignore[misc]
-        self.subscribe(self.cmd_vel_in_topic.value, Twist, self._on_cmd_vel)
+        self.subscribe(self.cmd_vel_in_topic.value, Twist, self._on_cmd_vel, QOS_COMMAND)
 
     def _on_scan(self, source: str, scan: LaserScan) -> None:
         try:  # 센서 -> base (라이다는 로봇에 고정이라 최신 TF면 된다)

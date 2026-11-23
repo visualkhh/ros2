@@ -70,10 +70,12 @@ class Cartographer(Node):
         self.motion_filter_max_distance = self.declare_parameter("motion_filter_max_distance", 0.05, validator=positive)
         self.motion_filter_max_angle = self.declare_parameter("motion_filter_max_angle", math.radians(3), validator=positive)
         self.num_matching_points = self.declare_parameter("num_matching_points", 60, validator=positive)
+        self.match_every = self.declare_parameter("match_every", 1, validator=lambda value: isinstance(value, int) and value >= 1)  # N번째 스캔마다 매칭 (실기 Pi는 2: 5Hz)
         self.map_to_odom: Pose2 = (0.0, 0.0, 0.0)
         self.grid = ProbabilityGrid(self.resolution.value)
         self.scans = self.rejected = 0  # 처리한 스캔 수, 점수가 낮아 매칭을 버린 수
         self._mode = "idle"
+        self._scan_index = 0
         self._lock = threading.Lock()
         self._last_inserted: Pose2 | None = None
         self._localized = False  # map -> odom을 알게 됐다 (스캔을 처리했거나 /initialpose를 받았다): 그때부터 TF를 낸다
@@ -119,6 +121,9 @@ class Cartographer(Node):
     def _on_scan(self, scan: LaserScan) -> None:
         if self._mode == "idle":
             return
+        self._scan_index += 1
+        if self._scan_index % self.match_every.value != 0:
+            return  # 스캔매칭은 무거우니 N번째만 (TF는 마지막 보정값으로 계속 낸다)
         try:  # 스캔을 잰 순간의 센서 위치 (odom 기준)
             t = self.buffer.lookup_transform(self.odom_frame.value, scan.header.frame_id, scan.header.stamp).transform
         except TransformException:

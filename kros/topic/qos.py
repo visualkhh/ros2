@@ -34,3 +34,4 @@ class QoS:
 QOS_DEFAULT = QoS()  # 무제한 큐, 휘발성: 지금까지의 동작
 QOS_LATCHED = QoS(depth=1, durability=Durability.TRANSIENT_LOCAL)  # 마지막 하나를 기억 (tf_static, robot_description 같은 한 번만 내는 정보)
 QOS_SENSOR_DATA = QoS(depth=5)  # 센서 값: 느린 구독자는 오래된 것을 건너뛰고 최신을 본다
+QOS_COMMAND = QoS(depth=1)  # 명령(cmd_vel ...): 밀린 옛 명령은 버리고 최신만 (Pi가 바쁠 때 텔레옵 지연 방지)

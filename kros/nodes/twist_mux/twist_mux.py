@@ -6,6 +6,7 @@ from kros.msgs.geometry_msgs import Twist
 from kros.msgs.std_msgs import Bool
 from kros.nodes.node import Node
 from kros.parameter import Parameter, ParameterValue
+from kros.topic import QOS_COMMAND
 
 
 class TwistMux(Node):
@@ -36,7 +37,7 @@ class TwistMux(Node):
             timeout_p = self.declare_parameter(f"{name}.timeout", timeout, validator=positive)
             level_p = self.declare_parameter(f"{name}.priority", level, validator=priority)
             self._inputs[str(name)] = (timeout_p.value, level_p.value)
-            self.subscribe(topic_p.value, Twist, lambda twist, key=str(name): self._on_twist(key, twist))  # type: ignore[misc]
+            self.subscribe(topic_p.value, Twist, lambda twist, key=str(name): self._on_twist(key, twist), QOS_COMMAND)  # type: ignore[misc]
         self._locks: dict[str, tuple[float, int]] = {}
         self._lock_state: dict[str, bool] = {}
         for name in self.locks.value:
@@ -44,7 +45,7 @@ class TwistMux(Node):
             timeout_p = self.declare_parameter(f"{name}.timeout", 0.0, validator=lambda value: value >= 0)
             level_p = self.declare_parameter(f"{name}.priority", 255, validator=priority)
             self._locks[str(name)] = (timeout_p.value, level_p.value)
-            self.subscribe(topic_p.value, Bool, lambda flag, key=str(name): self._on_lock(key, flag))  # type: ignore[misc]
+            self.subscribe(topic_p.value, Bool, lambda flag, key=str(name): self._on_lock(key, flag), QOS_COMMAND)  # type: ignore[misc]
         self._started = self.now()
 
     def _on_lock(self, name: str, flag: Bool) -> None:

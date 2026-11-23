@@ -70,6 +70,10 @@ COALESCE = frozenset(
         "local_plan",
         "global_costmap/costmap",
         "local_costmap/costmap",
+        "cmd_vel",
+        "cmd_vel_mux",
+        "cmd_vel_nav",
+        "cmd_vel_teleop",
     }
 )
 
