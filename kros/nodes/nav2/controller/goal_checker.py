@@ -25,6 +25,8 @@ class SimpleProgressChecker:
         positive = lambda value: value > 0  # noqa: E731
         self.required_movement_radius = node.declare_parameter(f"{name}.required_movement_radius", 0.5, validator=positive)
         self.movement_time_allowance = node.declare_parameter(f"{name}.movement_time_allowance", 10.0, validator=positive)
+        # 제자리 회전도 진행으로 친다 (목표 방향/경로 회전에서 false 105가 나지 않게)
+        self.required_angle = node.declare_parameter(f"{name}.required_angle", 0.5, validator=positive)
         self._baseline: tuple[Pose2, float] | None = None
 
     def reset(self) -> None:
@@ -32,7 +34,13 @@ class SimpleProgressChecker:
 
     def check(self, pose: Pose2, now: float) -> bool:
         """아직 괜찮으면 True."""
-        if self._baseline is None or math.hypot(pose[0] - self._baseline[0][0], pose[1] - self._baseline[0][1]) > self.required_movement_radius.value:
+        baseline = self._baseline
+        if baseline is None:
             self._baseline = (pose, now)
             return True
-        return now - self._baseline[1] <= self.movement_time_allowance.value
+        moved = math.hypot(pose[0] - baseline[0][0], pose[1] - baseline[0][1]) > self.required_movement_radius.value
+        turned = abs(wrap(pose[2] - baseline[0][2])) > self.required_angle.value
+        if moved or turned:
+            self._baseline = (pose, now)
+            return True
+        return now - baseline[1] <= self.movement_time_allowance.value

@@ -63,14 +63,16 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     print(f"[kos] cartographer: match_every={slam.match_every.value} points={slam.num_matching_points.value} linear={slam.linear_search_window.value} angular={slam.angular_search_window.value}", flush=True)
     maps = {"maps_directory": str(MAPS_DIRECTORY)}
     footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
-    planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters={**footprint, "update_frequency": 1.0})
+    planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlanner2D"}, costmap_parameters={**footprint, "update_frequency": 1.0})
     controller_parameters: dict[str, ParameterValue] = {
         "odom_topic": "odometry/filtered",
         "cmd_vel_topic": "cmd_vel_nav",
         "FollowPath.plugin": "nav2_mppi_controller::MPPIController",
+        "FollowPath.vx_min": 0.0,  # 자율주행에서 MPPI 후진 금지 (복구 후진도 아래에서 끔)
         "general_goal_checker.xy_goal_tolerance": 0.4,
         "general_goal_checker.yaw_goal_tolerance": 0.4,
-        "progress_checker.movement_time_allowance": 2.0,
+        "progress_checker.movement_time_allowance": 5.0,
+        "progress_checker.required_angle": 0.3,
         "progress_checker.required_movement_radius": 0.2,
     }
     controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters={**footprint, "update_frequency": 3.0, "scan_period": 1.0 / 3.0})
@@ -78,7 +80,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
     # 0.5m 안이면 감속: 0.3은 너무 느려서 0.6 (정지 상자 0.3m는 그대로)
     monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel", "PolygonSlow.slowdown_ratio": 0.6, "ignore_collision_during_teleop": True})
-    navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})
+    navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0, "recovery_backup": False})
     return [
         RobotBridge(ctx, robot),
         description,

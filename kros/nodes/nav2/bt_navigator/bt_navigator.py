@@ -40,6 +40,7 @@ class BtNavigator(Node):
         super().__init__(context, name or "bt_navigator", parameters)
         self.replanning_period = self.declare_parameter("replanning_period", 1.0, validator=lambda value: value > 0)
         self.number_of_recoveries = self.declare_parameter("number_of_recoveries", 3, validator=lambda value: value >= 0)
+        self.recovery_backup = self.declare_parameter("recovery_backup", True)  # False면 spin -> wait -> replan (후진 안 함)
         self.global_frame = self.declare_parameter("global_frame", "map")
         self.robot_base_frame = self.declare_parameter("robot_base_frame", "base_footprint")
         self.goal_topic = self.declare_parameter("goal_topic", GOAL_POSE_TOPIC_NAME)
@@ -261,12 +262,15 @@ class BtNavigator(Node):
             self.get_logger().warn("recovery spin failed: %s", error)
         if self._cancel_requested:
             return
-        self.get_logger().info("recovery: backup")
-        try:
-            handle = self._backup.send_goal(BackUpGoal(backup_dist=0.5, backup_speed=0.1, time_allowance=5.0), timeout=5.0)
-            handle.result(10.0)
-        except Exception as error:  # noqa: BLE001
-            self.get_logger().warn("recovery backup failed: %s", error)
+        if not self.recovery_backup.value:
+            self.get_logger().info("recovery: backup (disabled)")
+        else:
+            self.get_logger().info("recovery: backup")
+            try:
+                handle = self._backup.send_goal(BackUpGoal(backup_dist=0.5, backup_speed=0.1, time_allowance=5.0), timeout=5.0)
+                handle.result(10.0)
+            except Exception as error:  # noqa: BLE001
+                self.get_logger().warn("recovery backup failed: %s", error)
         if self._cancel_requested:
             return
         self.get_logger().info("recovery: wait")

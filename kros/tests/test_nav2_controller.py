@@ -164,7 +164,8 @@ class TestCheckers(unittest.TestCase):
         self.assertTrue(progress.check((0.0, 0.0, 0.0), 0.0))
         self.assertTrue(progress.check((0.1, 0.0, 0.0), 9.0))
         self.assertFalse(progress.check((0.2, 0.0, 0.0), 10.5))  # 10초 넘게 0.5m를 못 갔다
-        self.assertTrue(progress.check((0.7, 0.0, 0.0), 11.0))  # 움직이면 다시 센다
+        self.assertTrue(progress.check((0.2, 0.0, 0.6), 10.6))  # 제자리 회전도 진행으로 친다
+        self.assertTrue(progress.check((0.7, 0.0, 0.6), 11.0))  # 움직이면 다시 센다
 
 
 class TestControllerServer(unittest.TestCase):
