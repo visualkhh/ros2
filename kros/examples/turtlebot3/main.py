@@ -76,7 +76,7 @@ def main() -> None:
         slam = Cartographer(ctx, parameters={"mode": "idle"})
         maps = {"maps_directory": str(MAPS_DIRECTORY)}
         # 내비게이션 (nav2처럼): 경로 계획은 Smac(Hybrid-A*), 따라가기는 MPPI. 둘 다 안에 costmap을 만든다 (로봇 몸 반지름으로 inflation)
-        footprint = {"robot_radius": robot.radius}
+        footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
         planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
         # controller_parameters: dict[str, ParameterValue] = {"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController", "cmd_vel_topic": "cmd_vel_nav"}
         # 따라가기는 isaac/training/rl_maze에서 학습한 정책 (rl_nav_controller: 실기와 같은 관측/행동). 모델이 없거나 못 읽으면 안에 품은 MPPI로 돈다
