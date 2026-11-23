@@ -308,6 +308,18 @@ class SlamPanel:
             return
         self.multi_goals.append(in_map)
         self._update_multi_status()
+        if self.preview_mode:  # 미리보기 모드면 점을 찍는 즉시 경로를 갱신한다
+            self._preview_multi_goals()
+
+    def _preview_multi_goals(self) -> None:
+        if not self.multi_goals:
+            self.node.publish(PREVIEW_GOALS_TOPIC_NAME, NavPath(Header(self.node.now(), "map"), ()))
+            return
+        poses = []
+        for x, y, yaw in self.multi_goals:
+            orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
+            poses.append(PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), orientation)))
+        self.node.publish(PREVIEW_GOALS_TOPIC_NAME, NavPath(Header(self.node.now(), "map"), tuple(poses)))
 
     def send_multi_goals(self) -> None:
         """Multi Goal 목록을 /goal_poses (Path, map)로 한 번에 보낸다. bt_navigator가 구간별 경로를 이어 붙인다.
@@ -331,8 +343,10 @@ class SlamPanel:
 
     def clear_multi_goals(self) -> None:
         self.multi_goals.clear()
-        self.status.setText("multi goals cleared")
         self._update_multi_status()
+        if self.preview_mode:
+            self.node.publish(PREVIEW_GOALS_TOPIC_NAME, NavPath(Header(self.node.now(), "map"), ()))
+        self.status.setText("multi goals cleared")
 
     def toggle_preview_mode(self) -> None:
         self.preview_mode = not self.preview_mode
