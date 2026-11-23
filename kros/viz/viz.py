@@ -171,6 +171,8 @@ class Viz:
             text_fg=(1, 1, 1, 1), frameColor=BUTTON_COLOR, relief=DGG.RAISED, borderWidth=(0.12, 0.12), highlightColor=(0.3, 0.4, 0.6, 1), item_text_fg=(1, 1, 1, 1), item_frameColor=(0.2, 0.24, 0.34, 1),
         )
         self.slam = SlamPanel(self)
+        self._multi_goals_np: NodePath | None = None
+        self._multi_goals_version: int | None = None
         self.nav = NavDisplay(self)
         self.base.taskMgr.add(self._update, "viz-update")
 
@@ -322,6 +324,7 @@ class Viz:
         mode = self.slam.mode
         self.mode_banner.setText({"mapping": " SLAM (mapping) ", "localization": " LOCALIZATION ", "idle": " IDLE (no SLAM) "}.get(mode, ""))
         self.mode_banner["fg"] = MODE_COLORS.get(mode, (1, 1, 1, 1))
+        self._update_multi_goals()
         self.grid_np.show() if self.enabled["grid"] else self.grid_np.hide()
         return task.cont
 
@@ -493,6 +496,42 @@ class Viz:
             }.get(status.level, (0.8, 0.8, 0.8, 1.0))
             return text, color
         return "Controller: (no controller diagnostics)", (0.7, 0.7, 0.7, 1)
+
+    def _update_multi_goals(self) -> None:
+        """Multi Goal로 찍은 점들을 map 좌표계에서 십자로 그린다 (fixed frame이 map이 아니면 TF로 놓는다)."""
+        goals = self.slam.multi_goals
+        version = len(goals)
+        if version == self._multi_goals_version and self._multi_goals_np is not None:
+            return
+        if self._multi_goals_np is not None:
+            self._multi_goals_np.removeNode()
+            self._multi_goals_np = None
+        self._multi_goals_version = version
+        if not goals:
+            return
+        try:
+            stamped = self.node.buffer.lookup_transform(self.fixed_frame, "map")
+        except TransformException:
+            return
+        t, q = stamped.transform.translation, stamped.transform.rotation
+        root = NodePath("multi-goals")
+        root.setPos(t.x, t.y, t.z)
+        root.setQuat(LQuaternionf(q.w, q.x, q.y, q.z))
+        segs = LineSegs()
+        segs.setColor(1.0, 0.8, 0.2, 1.0)
+        segs.setThickness(3)
+        half = 0.08
+        for x, y, _ in goals:
+            segs.moveTo(x - half, y, 0.05)
+            segs.drawTo(x + half, y, 0.05)
+            segs.moveTo(x, y - half, 0.05)
+            segs.drawTo(x, y + half, 0.05)
+        node = root.attachNewNode(segs.create())
+        node.setLightOff()
+        node.setBin("fixed", 2)
+        node.setDepthTest(False)
+        self._multi_goals_np = root
+        root.reparentTo(self.scene)
 
     def _hud_text(self) -> str:
         imu = self.node.latest("imu")

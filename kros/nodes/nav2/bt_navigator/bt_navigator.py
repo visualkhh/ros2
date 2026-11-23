@@ -3,7 +3,7 @@ import threading
 import time
 from collections.abc import Mapping
 
-from kros.action import GoalStatus
+from kros.action import ClientGoalHandle, GoalStatus
 from kros.action.server_goal_handle import ServerGoalHandle
 from kros.context import Context
 from kros.msgs.geometry_msgs import Point, Pose, PoseStamped
@@ -11,13 +11,16 @@ from kros.msgs.nav2_msgs import (
     ComputePathToPose, ComputePathToPoseGoal, ComputePathToPoseResult, FollowPath, FollowPathGoal, FollowPathResult,
     NavigateToPose, NavigateToPoseFeedback, NavigateToPoseGoal, NavigateToPoseResult,
 )
-from kros.msgs.std_msgs import Header
+from kros.msgs.nav_msgs import Path
+from kros.msgs.std_msgs import Bool, Header
 from kros.nodes.node import Node
 from kros.parameter import ParameterValue
 from kros.tf import Buffer, TransformException, TransformListener
 
 R = NavigateToPoseResult
 GOAL_POSE_TOPIC_NAME = "goal_pose"
+GOAL_POSES_TOPIC_NAME = "goal_poses"
+CANCEL_GOAL_TOPIC_NAME = "cancel_goal"
 REPLACED = "새 경로로 바뀌었다"  # controller_server가 갈아탄 옛 경로에 돌려주는 메시지
 
 
@@ -37,18 +40,98 @@ class BtNavigator(Node):
         self.global_frame = self.declare_parameter("global_frame", "map")
         self.robot_base_frame = self.declare_parameter("robot_base_frame", "base_footprint")
         self.goal_topic = self.declare_parameter("goal_topic", GOAL_POSE_TOPIC_NAME)
+        self.goal_poses_topic = self.declare_parameter("goal_poses_topic", GOAL_POSES_TOPIC_NAME)
+        self.cancel_topic = self.declare_parameter("cancel_topic", CANCEL_GOAL_TOPIC_NAME)
         self.buffer = Buffer()
         self._listener = TransformListener(self.buffer, self)
         self._planner = self.create_action_client("compute_path_to_pose", ComputePathToPose)
         self._controller = self.create_action_client("follow_path", FollowPath)
         self._self_client = self.create_action_client("navigate_to_pose", NavigateToPose)
         self._preempt = threading.Event()  # 새 goal이 왔다 (액션 서버는 goal을 차례로 돌린다: 지금 것이 물러나야 새 것이 시작된다)
+        self._cancel_requested = False
+        self._follow_handle: ClientGoalHandle | None = None
+        self._through_thread: threading.Thread | None = None
         self.create_action_server("navigate_to_pose", NavigateToPose, self._execute, goal_callback=self._on_new_goal)
         self.subscribe(self.goal_topic.value, PoseStamped, self._on_goal_pose)
+        self.subscribe(self.goal_poses_topic.value, Path, self._on_goal_poses)
+        self.subscribe(self.cancel_topic.value, Bool, self._on_cancel)
 
     def _on_goal_pose(self, pose: PoseStamped) -> None:
         self.get_logger().info("goal_pose: (%.2f, %.2f)", pose.pose.position.x, pose.pose.position.y)
+        self._cancel_requested = True  # 진행 중인 through-poses가 있으면 멈춘다
+        if self._follow_handle is not None:
+            try:
+                self._follow_handle.cancel(5.0)
+            except LookupError:
+                pass
+        self._cancel_requested = False
         self._self_client.send_goal(NavigateToPoseGoal(pose), timeout=5.0)
+
+    def _on_goal_poses(self, path: Path) -> None:
+        if not path.poses:
+            return
+        self.get_logger().info("goal_poses: %d goals", len(path.poses))
+        if self._through_thread is not None and self._through_thread.is_alive():
+            self._cancel_requested = True
+            self._through_thread.join(timeout=1.0)
+        self._cancel_requested = False
+        self._through_thread = threading.Thread(target=self._run_through, args=(list(path.poses),), daemon=True)
+        self._through_thread.start()
+
+    def _on_cancel(self, _msg: Bool) -> None:
+        self.get_logger().info("cancel requested")
+        self._cancel_requested = True
+        self._preempt.set()
+        if self._follow_handle is not None:
+            try:
+                self._follow_handle.cancel(5.0)
+            except LookupError:
+                pass
+
+    def _plan_segment(self, start: PoseStamped, goal: PoseStamped) -> ComputePathToPoseResult:
+        message = self._planner.send_goal(ComputePathToPoseGoal(goal=goal, start=start, use_start=True), timeout=5.0)
+        result = message.result(30.0).result
+        if not isinstance(result, ComputePathToPoseResult):
+            return ComputePathToPoseResult(error_code=ComputePathToPoseResult.UNKNOWN, error_msg=f"planner_server 결과가 없다 ({message.status.name})")
+        return result
+
+    def _run_through(self, goals: list[PoseStamped]) -> None:
+        # 각 구간을 계획해 하나의 경로로 이어 붙인 뒤 controller에 보낸다 (ROS의 navigate_through_poses와 비슷).
+        try:
+            t = self.buffer.lookup_transform(self.global_frame.value, self.robot_base_frame.value).transform
+        except TransformException:
+            self.get_logger().warn("goal_poses: 로봇 위치를 모른다")
+            return
+        current = PoseStamped(Header(self.now(), self.global_frame.value), Pose(Point(t.translation.x, t.translation.y, 0.0), t.rotation))
+        combined: list[PoseStamped] = []
+        for goal in goals:
+            if self._cancel_requested:
+                return
+            plan = self._plan_segment(current, goal)
+            if plan.error_code:
+                self.get_logger().warn("goal_poses: 계획 실패 (%d): %s", plan.error_code, plan.error_msg)
+                return
+            poses = list(plan.path.poses)
+            if combined and poses:
+                last = combined[-1].pose.position
+                first = poses[0].pose.position
+                if last.x == first.x and last.y == first.y:
+                    poses = poses[1:]
+            combined.extend(poses)
+            current = goal
+        if not combined or self._cancel_requested:
+            return
+        path = Path(Header(self.now(), self.global_frame.value), tuple(combined))
+        self.get_logger().info("goal_poses: combined path %d poses", len(combined))
+        follow = self._controller.send_goal(FollowPathGoal(path), timeout=5.0)
+        self._follow_handle = follow
+        while follow.status == GoalStatus.ACCEPTED and not self._cancel_requested:
+            time.sleep(0.1)
+        if self._cancel_requested:
+            try:
+                follow.cancel(5.0)
+            except LookupError:
+                pass
 
     def _on_new_goal(self, goal: NavigateToPoseGoal) -> bool:
         self._preempt.set()

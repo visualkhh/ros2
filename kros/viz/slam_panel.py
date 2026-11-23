@@ -19,10 +19,11 @@ from panda3d.core import LineSegs, NodePath, TextNode
 
 from kros.msgs.geometry_msgs import Point, Pose, PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Quaternion
 from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse, SaveMap, SaveMapRequest, SaveMapResponse
-from kros.msgs.std_msgs import Header
+from kros.msgs.nav_msgs import Path as NavPath
+from kros.msgs.std_msgs import Bool, Header
 from kros.msgs.std_srvs import Trigger, TriggerRequest, TriggerResponse
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
-from kros.nodes.nav2.bt_navigator import GOAL_POSE_TOPIC_NAME
+from kros.nodes.nav2.bt_navigator import CANCEL_GOAL_TOPIC_NAME, GOAL_POSE_TOPIC_NAME, GOAL_POSES_TOPIC_NAME
 from kros.parameter import ParameterNotDeclaredError, ParameterRejectedError
 from kros.service.service_type import Req, Res, ServiceType
 from kros.tf import TransformException
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 TOP = -0.17  # 패널에서 SLAM 칸이 시작하는 높이
 NO_SELECTION = "(select map)"  # 지도 목록의 처음 상태: 아무것도 고르지 않았다 (사람이 고른다)
 MAP_FILE = "map"  # 지도 폴더 안의 파일 이름: maps/<지도 이름>/map.yaml + map.pgm
-TOOL_COLORS = {"initialpose": (0.3, 1.0, 0.4, 1.0), "goal": (1.0, 0.35, 0.8, 1.0)}  # 드래그 중 미리 보는 화살표 색 (rviz처럼 도구마다)
+TOOL_COLORS = {"initialpose": (0.3, 1.0, 0.4, 1.0), "goal": (1.0, 0.35, 0.8, 1.0), "multi": (1.0, 0.8, 0.2, 1.0)}  # 드래그 중 미리 보는 화살표 색 (rviz처럼 도구마다)
 TOOL_ACTIVE = (0.6, 0.35, 0.1, 1)  # 켜진 도구 버튼 색
 INITIAL_POSE_COVARIANCE = tuple(0.25 if i in (0, 7) else 0.0685 if i == 35 else 0.0 for i in range(36))  # rviz 2D Pose Estimate의 기본 공분산
 BUTTON_COLOR = (0.26, 0.31, 0.44, 1)
@@ -68,6 +69,7 @@ class SlamPanel:
         self.viz, self.node = viz, viz.node
         self.cartographer, self.map_server, self.map_saver = cartographer, map_server, map_saver
         self.tool: str | None = None  # "initialpose"(2D Pose Estimate) 또는 "goal"(2D Goal Pose): 켜지면 3D 화면의 왼쪽 드래그가 카메라 대신 위치/방향을 찍는다
+        self.multi_goals: list[tuple[float, float, float]] = []  # Multi Goal로 찍은 목표들 (map 좌표). Send로 한 번에 보낸다.
         self.mode = ""  # Cartographer의 지금 모드 (매 프레임 갱신)
         self._drag_start: tuple[float, float] | None = None
         self._preview = {tool: _arrow(color) for tool, color in TOOL_COLORS.items()}
@@ -88,6 +90,12 @@ class SlamPanel:
         self.unload_button = _button(left, "unload", 0.52, 0.64, TOP - 0.19, self.unload_map, scale=0.032)
         self.pose_button = _button(left, "2D Pose Estimate", 0.06, 0.33, TOP - 0.29, lambda: self.toggle_tool("initialpose"), scale=0.032)
         self.goal_button = _button(left, "2D Goal Pose", 0.36, 0.62, TOP - 0.29, lambda: self.toggle_tool("goal"), scale=0.032)
+        # 여러 목표: Multi Goal을 켜고 여러 점을 찍은 뒤 Send로 한 번에 보낸다 (bt_navigator가 구간별 경로를 이어 붙인다)
+        self.multi_button = _button(left, "Multi Goal", 0.06, 0.22, TOP - 0.36, lambda: self.toggle_tool("multi"), scale=0.028)
+        self.send_button = _button(left, "Send Goals", 0.23, 0.34, TOP - 0.36, self.send_multi_goals, scale=0.028)
+        self.clear_button = _button(left, "Clear Goals", 0.35, 0.46, TOP - 0.36, self.clear_multi_goals, scale=0.028)
+        self.cancel_button = _button(left, "Cancel Goal", 0.47, 0.58, TOP - 0.36, self.cancel_goal, scale=0.028)
+        self.multi_status = OnscreenText(parent=left, pos=(0.06, TOP - 0.43), align=TextNode.ALeft, fg=(0.9, 0.85, 0.4, 1), scale=0.028, mayChange=True)
         self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.38), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.033, mayChange=True)
 
     # ---- 버튼 -----------------------------------------------------------------------------------
@@ -179,15 +187,17 @@ class SlamPanel:
         self._pending.append((future, done))
 
     def toggle_tool(self, tool: str) -> None:
-        """2D Pose Estimate / 2D Goal Pose 버튼 (rviz처럼: 누른 곳이 위치, 끄는 방향이 yaw). 같은 버튼을 다시 누르면 끈다."""
-        if self.tool != tool and tool == "goal" and self._get_mode() != "localization":
-            self.status.setText("2D Goal Pose: load a map first (localization)")  # 목표는 저장한 지도에서 위치를 잡은 뒤에 찍는다
+        """2D Pose Estimate / 2D Goal Pose / Multi Goal 버튼 (rviz처럼: 누른 곳이 위치, 끄는 방향이 yaw). 같은 버튼을 다시 누르면 끈다."""
+        if self.tool != tool and tool in ("goal", "multi") and self._get_mode() != "localization":
+            self.status.setText("Goal: load a map first (localization)")  # 목표는 저장한 지도에서 위치를 잡은 뒤에 찍는다
             return
         self.tool = None if self.tool == tool else tool
         self._drag_start = None
         self.pose_button["frameColor"] = TOOL_ACTIVE if self.tool == "initialpose" else BUTTON_COLOR
         self.goal_button["frameColor"] = TOOL_ACTIVE if self.tool == "goal" else BUTTON_COLOR
+        self.multi_button["frameColor"] = TOOL_ACTIVE if self.tool == "multi" else BUTTON_COLOR
         self.status.setText("press = position, drag = heading" if self.tool else "")
+        self._update_multi_status()
 
     def toggle_pose_tool(self) -> None:
         self.toggle_tool("initialpose")
@@ -237,9 +247,13 @@ class SlamPanel:
         self._preview[tool].hide()
         if tool == "initialpose":
             self.publish_initial_pose((start[0], start[1], yaw))
-        else:
+        elif tool == "goal":
             self.publish_goal((start[0], start[1], yaw))
-        self.toggle_tool(tool)  # 한 번 찍으면 끈다 (rviz와 같다)
+        elif tool == "multi":
+            self.append_multi_goal((start[0], start[1], yaw))
+        if tool != "multi":
+            self.toggle_tool(tool)  # 한 번 찍으면 끈다 (rviz와 같다). Multi는 계속 찍는다.
+        self._update_multi_status()
 
     def _in_map(self, pose: tuple[float, float, float]) -> tuple[float, float, float] | None:
         """fixed frame에서 찍은 위치를 map 좌표로 (Cartographer/nav2는 map 좌표로 받는다). map TF가 없으면 None."""
@@ -272,6 +286,42 @@ class SlamPanel:
         orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
         self.node.publish(INITIAL_POSE_TOPIC_NAME, PoseWithCovarianceStamped(Header(self.node.now(), "map"), PoseWithCovariance(Pose(Point(x, y, 0.0), orientation), INITIAL_POSE_COVARIANCE)))
         self.status.setText(f"initialpose ({x:.2f}, {y:.2f}, {math.degrees(yaw):.0f}deg)")
+
+    def append_multi_goal(self, pose: tuple[float, float, float]) -> None:
+        """Multi Goal: 찍은 점을 목록에 추가한다 (map 좌표). Send로 한 번에 보낸다."""
+        in_map = self._in_map(pose)
+        if in_map is None:
+            return
+        self.multi_goals.append(in_map)
+        self._update_multi_status()
+
+    def send_multi_goals(self) -> None:
+        """Multi Goal 목록을 /goal_poses (Path, map)로 한 번에 보낸다. bt_navigator가 구간별 경로를 이어 붙인다."""
+        if not self.multi_goals:
+            self.status.setText("multi goals: none")
+            return
+        poses = []
+        for x, y, yaw in self.multi_goals:
+            orientation = Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
+            poses.append(PoseStamped(Header(self.node.now(), "map"), Pose(Point(x, y, 0.0), orientation)))
+        self.node.publish(GOAL_POSES_TOPIC_NAME, NavPath(Header(self.node.now(), "map"), tuple(poses)))
+        count = len(self.multi_goals)
+        self.status.setText(f"sent {count} goals")
+        self.multi_goals.clear()
+        self._update_multi_status()
+
+    def clear_multi_goals(self) -> None:
+        self.multi_goals.clear()
+        self.status.setText("multi goals cleared")
+        self._update_multi_status()
+
+    def cancel_goal(self) -> None:
+        """진행 중인 경로를 취소한다 (/cancel_goal)."""
+        self.node.publish(CANCEL_GOAL_TOPIC_NAME, Bool(True))
+        self.status.setText("cancel requested")
+
+    def _update_multi_status(self) -> None:
+        self.multi_status.setText(f"multi goals: {len(self.multi_goals)}")
 
     def destroy(self) -> None:
         for arrow in self._preview.values():
