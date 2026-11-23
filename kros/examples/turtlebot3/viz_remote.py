@@ -28,10 +28,7 @@ server_ip = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
 server_port = int(sys.argv[2]) if len(sys.argv) > 2 else 9000
 
 kros = None
-base = ShowBase()
-viz = Viz(base=base, servers=[{"ip": server_ip, "port": server_port}])
-kros = viz.kros if viz.kros is not None else None
+base = None
+viz = Viz(servers=[{"ip": server_ip, "port": server_port}])
 print(f"[viz_remote] connected to {server_ip}:{server_port}", flush=True)
-base.run()
-if kros is not None:
-    kros.shutdown()
+viz.base.run()

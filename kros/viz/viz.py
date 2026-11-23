@@ -20,7 +20,7 @@ from kros import Kros
 from kros.context import Context
 from kros.diagnostics import DIAGNOSTICS_TOPIC_NAME
 from kros.msgs.diagnostic_msgs import DiagnosticArray, DiagnosticLevel
-from kros.msgs.geometry_msgs import TransformStamped
+from kros.msgs.geometry_msgs import TransformStamped, Twist, Vector3
 from kros.msgs.nav_msgs import OccupancyGrid, Odometry
 from kros.msgs.nav_msgs import Path as NavPath  # pathlib.Path와 겹치지 않게
 from kros.msgs.sensor_msgs import Imu, LaserScan
@@ -185,6 +185,8 @@ class Viz:
         self.slam = SlamPanel(self)
         self._multi_goals_np: NodePath | None = None
         self._multi_goals_version: int | None = None
+        self._last_rows = 0.0
+        self._cached_rows: dict[str, tuple[bool, str]] = {}
         self.nav = NavDisplay(self)
         self._tf_skip = 0
         self.base.taskMgr.add(self._update, "viz-update")
@@ -296,11 +298,40 @@ class Viz:
         self._events.accept("viz-wheel_down", self._zoom, [1 / 0.88])
         self._events.accept("viz-escape", self.close)
         self._events.accept("window-event", self._window_event)
+        # 키보드 조종 (W/A/S/D 또는 화살표) — cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)
+        self._pressed: set[str] = set()
+        for key in ("w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right"):
+            self._events.accept(f"viz-{key}", self._on_key, [key, True])
+            self._events.accept(f"viz-{key}-up", self._on_key, [key, False])
+        self._teleop_speed = 0.2  # m/s
+        self._teleop_turn = 1.0  # rad/s
 
     # ---- 매 프레임 ---------------------------------------------------------------------------
 
     def _zoom(self, factor: float) -> None:
         self.dist = min(20.0, max(0.3, self.dist * factor))
+
+    def _on_key(self, key: str, pressed: bool) -> None:
+        """키보드 조종: W/A/S/D 또는 화살표. cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)."""
+        if pressed:
+            self._pressed.add(key)
+        else:
+            self._pressed.discard(key)
+
+    def _teleop_cmd(self) -> tuple[float, float]:
+        """현재 눌린 키에서 (v, w)를 계산한다."""
+        v = 0.0
+        w = 0.0
+        keys = self._pressed
+        if "w" in keys or "arrow_up" in keys:
+            v += self._teleop_speed
+        if "s" in keys or "arrow_down" in keys:
+            v -= self._teleop_speed
+        if "a" in keys or "arrow_left" in keys:
+            w += self._teleop_turn
+        if "d" in keys or "arrow_right" in keys:
+            w -= self._teleop_turn
+        return v, w
 
     def _window_event(self, win: GraphicsWindow) -> None:
         if win is self.win and not win.isValid() and not self.own_base:
@@ -316,6 +347,7 @@ class Viz:
         if self._closed:
             return task.done
         now = time.monotonic()
+        self._frame_count = getattr(self, "_frame_count", 0) + 1
         if now - getattr(self, "_last_update", 0.0) < 1.0 / 3.0:
             return task.cont
         self._last_update = now
@@ -330,12 +362,19 @@ class Viz:
         self.nav.update(self._lookup)
         self._update_scan()
         self._update_odometry()
+        # 키보드 조종: 눌린 키가 있으면 cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)
+        v, w = self._teleop_cmd()
+        if v != 0.0 or w != 0.0:
+            self.node.publish("cmd_vel_teleop", Twist(linear=Vector3(x=v), angular=Vector3(z=w)))
         self.hud.setText(self._hud_text())
         text, color = self._controller_status()
         self.controller_line.setText(text)
         self.controller_line["fg"] = color
         self._resize()
-        stats = self.node.topic_rows()
+        if now - getattr(self, "_last_rows", 0.0) > 1.0:
+            self._cached_rows = self.node.topic_rows()
+            self._last_rows = now
+        stats = getattr(self, "_cached_rows", {})
         for name, row in self.rows.items():
             live, text = stats.get(name, (False, ""))
             row.setText(text.split(" ", 1)[1] if text else "")  # "n=..  ..Hz" (타입은 길어서 뺀다)
@@ -373,7 +412,8 @@ class Viz:
 
     def _update_model(self) -> None:
         text = self.node.latest(ROBOT_DESCRIPTION_TOPIC_NAME)
-        if text is not self.model_text and isinstance(text, String):
+        if isinstance(text, String) and (self.model_text is None or getattr(self.model_text, "data", None) != text.data):
+            self.model_text = text
             self.model_text = text
             if self.model:
                 self.model.root.removeNode()
