@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING, Any
 
 from direct.gui import DirectGuiGlobals as DGG
 from direct.gui.DirectButton import DirectButton
+from direct.gui.DirectEntry import DirectEntry
 from direct.gui.DirectOptionMenu import DirectOptionMenu
+from direct.gui.DirectSlider import DirectSlider
 from direct.gui.OnscreenText import OnscreenText
 from panda3d.core import LineSegs, NodePath, TextNode
 
@@ -109,6 +111,20 @@ class SlamPanel:
         self.go_button = _button(left, "Go", 0.23, 0.30, TOP - 0.50, self.go_pending, scale=0.028)
         self.preview_status = OnscreenText(parent=left, pos=(0.06, TOP - 0.57), align=TextNode.ALeft, fg=(0.7, 0.9, 1.0, 1), scale=0.028, mayChange=True)
         self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.38), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.033, mayChange=True)
+        # 텔레옵 속도: 0.25~1.5배 (기본 0.20 m/s / 1.0 rad/s)
+        self.teleop_status = OnscreenText(text="teleop 0.20 m/s", parent=left, pos=(0.06, TOP - 0.63), align=TextNode.ALeft, fg=(0.55, 0.9, 0.65, 1), scale=0.03, mayChange=True)
+        self.teleop_slider = DirectSlider(
+            parent=left, range=(0.25, 1.5), value=1.0, pageSize=0.25, scale=0.28, pos=(0.38, 0, TOP - 0.69),
+            frameColor=(0.12, 0.14, 0.2, 1), thumb_frameColor=BUTTON_COLOR, thumb_relief=DGG.RAISED, command=self._teleop_scale_changed,
+        )
+        self.teleop_slider["frameSize"] = (-1.0, 1.0, -0.08, 0.08)
+        # 저장할 지도 폴더 이름 (비우면 날짜/시각으로 자동). Enter를 누르면 저장.
+        OnscreenText(text="map name", parent=left, pos=(0.06, TOP - 0.74), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.03)
+        self.map_name = DirectEntry(
+            parent=left, width=15, scale=0.03, pos=(0.47, 0, TOP - 0.74), initialText="",
+            frameColor=(0.12, 0.14, 0.2, 1), text_fg=(1, 1, 1, 1), relief=DGG.SUNKEN, borderWidth=(0.08, 0.08),
+            command=self.save_map,
+        )
         # 원격 로봇의 지도 목록/결과 (서버 map_catalog가 latch로 낸다). 받은 값은 _update에서 화면에 반영한다.
         self.node.subscribe(MAP_LIST_TOPIC, String, self._on_map_list, QOS_LATCHED)
         self.node.subscribe(MAP_STATUS_TOPIC, String, self._on_map_status, QOS_LATCHED)
@@ -148,7 +164,10 @@ class SlamPanel:
         return sorted(path.parent.name for path in self.maps_directory.glob(f"*/{MAP_FILE}.yaml"))
 
     def save_map(self) -> None:
-        name = time.strftime("map_%Y%m%d_%H%M%S")
+        name = self.map_name.get().strip() or time.strftime("map_%Y%m%d_%H%M%S")  # 비우면 자동 이름
+        if "/" in name or "\\" in name or name in (".", ".."):
+            self.status.setText(f"invalid map name: {name}")
+            return
         self.status.setText(f"saving {name} ...")
         url = str(self.maps_directory / name / MAP_FILE)  # map_saver가 폴더를 만들고 map.yaml + map.pgm을 쓴다
         self._call(f"{self.map_saver}/save_map", SaveMap, SaveMapRequest(map_url=url), lambda response: self._saved(name, response))
@@ -184,6 +203,16 @@ class SlamPanel:
 
     def _on_map_status(self, message: String) -> None:
         self._pending_status = message.data
+
+    @property
+    def typing(self) -> bool:
+        """지도 이름 입력 중이면 텔레옵 키를 로봇에 보내지 않는다 (글자 입력과 충돌 방지)."""
+        return bool(self.map_name.guiItem.getFocus())
+
+    def _teleop_scale_changed(self) -> None:
+        scale = float(self.teleop_slider["value"])
+        self.viz.set_teleop_scale(scale)
+        self.teleop_status.setText(f"teleop {0.2 * scale:.2f} m/s")
 
     def unload_map(self) -> None:
         """띄운 지도를 내린다 (map_server/unload_map) + 위치 추정을 끈다 (Cartographer idle). 목록은 다시 '고르지 않음'으로."""
@@ -410,5 +439,5 @@ class SlamPanel:
     def destroy(self) -> None:
         for arrow in self._preview.values():
             arrow.removeNode()
-        for widget in (self.unload_button, self.delete_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button, self.multi_button, self.send_button, self.clear_button, self.cancel_button, self.preview_button, self.go_button):
+        for widget in (self.map_name, self.teleop_slider, self.unload_button, self.delete_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button, self.multi_button, self.send_button, self.clear_button, self.cancel_button, self.preview_button, self.go_button):
             widget.destroy()

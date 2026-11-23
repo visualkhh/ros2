@@ -318,6 +318,28 @@ class TestVizSlamPanel(unittest.TestCase):
         self.click(self.panel.pose_button, mouse)
         self.assertTrue(self.panel.pose_tool)
 
+    def test_save_map_uses_the_name_from_the_entry(self) -> None:
+        grid = OccupancyGrid(Header(0.0, "map"), MapMetaData(0.0, 0.05, 2, 1), (OCCUPIED, FREE))
+        self.watcher.publish("map", grid, QOS_LATCHED)
+        self.kros.context.topic_executor.join()
+        self.panel.map_name.set("custom_map")
+        self.panel.save_button["command"]()
+        self.wait_status("saved")
+        self.assertTrue((self.maps / "custom_map" / "map.yaml").exists())
+        self.wait_map_names(1)
+        self.assertIn("custom_map", self.panel.map_menu["items"])
+
+    def test_teleop_speed_slider_scales_the_command(self) -> None:
+        self.panel.teleop_slider["value"] = 1.5
+        self.panel._teleop_scale_changed()
+        self.assertAlmostEqual(self.viz._teleop_speed, 0.3)
+        self.assertAlmostEqual(self.viz._teleop_turn, 1.5)
+        self.assertIn("0.30", self.panel.teleop_status.getText())
+        self.panel.teleop_slider["value"] = 0.25
+        self.panel._teleop_scale_changed()
+        self.assertAlmostEqual(self.viz._teleop_speed, 0.05)
+        self.assertAlmostEqual(self.viz._teleop_turn, 0.25)
+
     def test_missing_nodes_are_reported_not_crashed(self) -> None:
         self.panel.map_saver = "nobody"
         self.panel.save_map()

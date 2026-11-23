@@ -184,7 +184,7 @@ class Viz:
         self.controller_line = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.58), align=TextNode.ALeft, scale=0.042, bg=shade, mayChange=True)
         self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), bg=shade, scale=0.05, mayChange=True)
         self.teleop_line = OnscreenText(parent=self.hud_anchor, pos=(0.04, -0.86), align=TextNode.ALeft, fg=(0.5, 1.0, 0.6, 1), bg=shade, scale=0.04, mayChange=True)
-        OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.8, 0.8, 0.8, 1), bg=shade, scale=0.04)
+        OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.99), align=TextNode.ALeft, fg=(0.8, 0.8, 0.8, 1), bg=shade, scale=0.03)
         OnscreenText(text="Fixed Frame", parent=self.left, pos=(0.04, -0.82), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
         frames = list(FIXED_FRAMES) if fixed_frame in FIXED_FRAMES else [fixed_frame, *FIXED_FRAMES]
         self.fixed_menu = DirectOptionMenu(
@@ -357,6 +357,12 @@ class Viz:
     def _zoom(self, factor: float) -> None:
         self.dist = min(20.0, max(0.3, self.dist * factor))
 
+    def set_teleop_scale(self, scale: float) -> None:
+        """텔레옵 속도 배율 (0.25~1.5): 기본 0.20 m/s / 1.0 rad/s에 곱한다."""
+        scale = min(1.5, max(0.25, scale))
+        self._teleop_speed = 0.2 * scale
+        self._teleop_turn = 1.0 * scale
+
     def _on_key(self, key: str, pressed: bool) -> None:
         """키보드 조종: W/A/S/D 또는 화살표. cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)."""
         if self._debug_keys:
@@ -413,6 +419,9 @@ class Viz:
         self._update_odometry()
         # 키보드 조종: 눌린 키가 있으면 cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)
         v, w = self._teleop_cmd()
+        if self.slam.typing:  # 지도 이름 입력 중: 글자 키가 로봇을 움직이지 않게
+            self._pressed.clear()
+            v = w = 0.0
         if v != 0.0 or w != 0.0:
             self.node.publish("cmd_vel_teleop", Twist(linear=Vector3(x=v), angular=Vector3(z=w)))
             self._was_pressed = True
