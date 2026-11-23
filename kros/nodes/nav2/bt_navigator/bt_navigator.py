@@ -96,8 +96,13 @@ class BtNavigator(Node):
         if not path.poses:
             return
         self.get_logger().info("goal_poses: %d goals", len(path.poses))
+        self._cancel_requested = True
+        if self._follow_handle is not None:
+            try:
+                self._follow_handle.cancel(5.0)
+            except LookupError:
+                pass
         if self._through_thread is not None and self._through_thread.is_alive():
-            self._cancel_requested = True
             self._through_thread.join(timeout=1.0)
         self._cancel_requested = False
         self._through_thread = threading.Thread(target=self._run_through, args=(list(path.poses),), daemon=True)
@@ -181,21 +186,26 @@ class BtNavigator(Node):
 
     def _execute(self, handle: ServerGoalHandle[NavigateToPoseGoal, NavigateToPoseFeedback]) -> NavigateToPoseResult:
         self._preempt.clear()
+        self._cancel_requested = False
         goal, began, recoveries = handle.goal.pose, self.now(), 0
         plan = self._plan(goal)
         if plan.error_code:
             return self._fail(plan.error_code, plan.error_msg)
         follow = self._controller.send_goal(FollowPathGoal(plan.path), timeout=5.0)
+        self._follow_handle = follow
         planned_at = self.now()
         while True:
             time.sleep(0.01)  # 실제 시간으로 조금씩 (따라가기는 controller_server가 한다; 여기서는 지켜보고 다시 계획만)
-            if handle.is_cancel_requested or self._preempt.is_set():
-                if handle.is_cancel_requested:
-                    try:
-                        follow.cancel(5.0)
-                    except LookupError:
-                        pass  # controller_server가 이미 내려갔다 (종료 중)
-                return R(R.NONE, "취소" if handle.is_cancel_requested else "새 goal로 바뀌었다")
+            if self._cancel_requested or handle.is_cancel_requested:
+                try:
+                    follow.cancel(5.0)
+                except LookupError:
+                    pass  # controller_server가 이미 내려갔다 (종료 중)
+                self._follow_handle = None
+                return R(R.NONE, "취소")
+            if self._preempt.is_set():
+                self._follow_handle = None
+                return R(R.NONE, REPLACED)
             if follow.status != GoalStatus.ACCEPTED:  # 따라가기가 끝났다
                 result = follow.result(5.0).result
                 code, message = (result.error_code, result.error_msg) if isinstance(result, FollowPathResult) else (R.UNKNOWN, f"controller_server 결과가 없다 ({follow.status.name})")

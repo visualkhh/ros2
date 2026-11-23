@@ -360,10 +360,11 @@ class SlamPanel:
             self.status.setText("nothing to go")
 
     def cancel_goal(self) -> None:
-        """진행 중인 경로를 취소한다 (/cancel_goal). 찍어둔 multi goal도 지운다."""
+        """진행 중인 경로를 취소한다 (/cancel_goal). 찍어둔 multi goal도 지우고, 지나온 흔적도 지운다."""
         self.node.publish(CANCEL_GOAL_TOPIC_NAME, Bool(True))
         self.multi_goals.clear()
         self._update_multi_status()
+        self.viz.nav.clear_trail()
         self.status.setText("cancel requested")
 
     def _update_multi_status(self) -> None:
