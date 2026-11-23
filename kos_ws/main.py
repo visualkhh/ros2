@@ -57,7 +57,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
     # Pi 4는 pure Python 스캔매칭이 무거워서 두 번째 스캔마다(5Hz)만 맞춘다 (TF는 계속 20Hz)
     slam = Cartographer(ctx, parameters={
-        "mode": "idle", "match_every": 3, "num_matching_points": 30, "map_publish_period_sec": 2.0,
+        "mode": "idle", "match_every": 4, "num_matching_points": 20, "map_publish_period_sec": 2.0,
         "linear_search_window": 0.05, "angular_search_window": math.radians(3),
     })
     print(f"[kos] cartographer: match_every={slam.match_every.value} points={slam.num_matching_points.value} linear={slam.linear_search_window.value} angular={slam.angular_search_window.value}", flush=True)
