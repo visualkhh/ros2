@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from typing import Callable, Iterable
 
 from kros.context import Context
+from kros.message_manager import MessageManager
 from kros.nodes import Node
 from kros.parameter import ParameterValue
 from kros.timer import TimeSource
@@ -25,11 +26,17 @@ class Kros:
         node_create: NodeCreate,
         parameters: Mapping[str, Mapping[str, ParameterValue]] | None = None,
         time_source: TimeSource | None = None,
+        server: Mapping[str, object] | None = None,
+        clients: list[Mapping[str, object]] | None = None,
     ) -> None:
-        self.context: Context = Context(parameters, time_source)
+        self.context: Context = Context(parameters, time_source, server=server, clients=clients)
         self.nodes: list[Node] = list(node_create(self.context))
         for unused in self.context.parameter_manager.unused_overrides():
             logger.warning("값을 줬는데 선언된 파라미터가 없다 (오타?): %s", unused)
+
+    @property
+    def message_manager(self) -> "MessageManager":
+        return self.context.message_manager
 
     def get_parameter(self, node: Node | str, name: str) -> ParameterValue:
         """실행 중인 노드의 파라미터 현재 값 (node는 노드 객체 또는 이름)."""

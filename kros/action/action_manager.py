@@ -14,7 +14,7 @@ Feedback = TypeVar("Feedback")
 Result = TypeVar("Result")
 
 
-class ActionManager:
+class ActionExecutor:
     """액션 이름 -> 서버 레지스트리와 서버/클라이언트의 수명 관리 (한 프로세스 안). TopicManager/ServiceManager와 같은 결이다.
 
     액션은 토픽과 서비스 위에 올라가는 기능이라 두 매니저를 받아 쓴다 (둘의 연결은 Context가 한다).
@@ -77,3 +77,4 @@ class ActionManager:
             client.destroy()
         for server in servers:
             server.destroy()
+ActionManager = ActionExecutor

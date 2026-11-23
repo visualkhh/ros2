@@ -9,7 +9,7 @@ Req = TypeVar("Req")
 Res = TypeVar("Res")
 
 
-class ServiceManager:
+class ServiceExecutor:
     """서비스 이름 -> 서버 레지스트리 (한 프로세스 안).
 
     - 서비스 이름당 서버는 하나. 중복 등록은 ValueError.
@@ -63,3 +63,4 @@ class ServiceManager:
             self._servers.clear()
         for server in servers:
             server.close(wait=True)
+ServiceManager = ServiceExecutor

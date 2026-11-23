@@ -10,7 +10,7 @@ T = TypeVar("T")
 log = logging.getLogger(__name__)
 
 
-class TopicManager:
+class TopicExecutor:
     """토픽별 구독자 목록을 들고 메시지를 전달하는 중앙 매니저 (한 프로세스 안).
 
     - 토픽은 처음 쓰일 때 메시지 타입이 고정된다. 다른 타입이면 TypeError.
@@ -90,3 +90,4 @@ class TopicManager:
             self._history.clear()
         for sub in subs:
             sub.close(wait=True)
+TopicManager = TopicExecutor

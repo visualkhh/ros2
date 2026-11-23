@@ -6,8 +6,8 @@ ROS를 파이썬으로 직접 만들며 학습하는 프로젝트. 타입 힌트
 
 ```
 kros/
-├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter
-├── context.py         Context: 노드들이 공유하는 묶음 (topic_manager, service_manager, action_manager, timer_manager, parameter_manager) + 노드 이름 중복 검사. 매니저끼리의 연결은 여기서
+├── kros.py            Kros: 부트스트랩. Context를 만들고 node_create 콜백에 넘겨 노드들을 받아 보관. 파라미터 시작 값 주입, 실행 중 get/set_parameter, server/clients로 네트워크 모드 선택
+├── context.py         Context: 노드들이 공유하는 묶음 (message_manager: 토픽/서비스/액션 실행기 + (선택) TCP 서버/클라이언트, parameter_manager) + 노드 이름 중복 검사. message_manager.topic_executor 등으로 접근 (topic_manager 등은 하위 호환 별칭)
 ├── msgs/              메시지 타입(순수 데이터). geometry_msgs: Vector3, Twist, Pose2D / sensor_msgs: LaserScan(header: 측정 시각, base_scan) / std_msgs: Header, String / geometry_msgs: Quaternion, Transform, TransformStamped, PoseWithCovariance, TwistWithCovariance / nav_msgs: Odometry(공분산 포함), OccupancyGrid/MapMetaData(격자 지도) / sensor_msgs: Imu(공분산 포함) / tf2_msgs: TFMessage / sensor_msgs: JointState / diagnostic_msgs / rcl_interfaces: Log ... (ROS의 msg 흉내)
 ├── timer/             TimerManager(타이머 스케줄), Timer(손잡이), TimeSource(SystemTimeSource 실제 시간 / SimulatedTimeSource 시뮬레이션 시간)
 ├── tf/                TF 도구: Buffer(tf2_ros.Buffer, 좌표계 트리와 이력, 보간), TransformBroadcaster/StaticTransformBroadcaster, TransformListener, transform_math(순수 3D 계산)
