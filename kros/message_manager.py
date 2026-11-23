@@ -34,6 +34,7 @@ import threading
 import time
 import zlib
 from collections import deque
+from concurrent.futures import Future
 from typing import Any, Callable, Mapping
 
 from kros.action import ActionExecutor, ActionType
@@ -83,6 +84,7 @@ class _Peer:
         self.conn = conn
         self.addr = addr
         self.subscriptions: set[str] | None = None  # None = 아직 모름 (모두 전송)
+        self.services: set[str] = set()  # 상대가 제공하는 서비스 (discover로 받는다)
         self.alive = True
         self._cond = threading.Condition()
         self._events: deque[dict[str, Any]] = deque(maxlen=MAX_EVENTS)
@@ -174,6 +176,7 @@ class MessageManager:
         self._tcp_server: socket.socket | None = None
         self._peers: list[_Peer] = []
         self._peers_lock = threading.Lock()
+        self._lock = threading.Lock()  # 서비스 요청 id/대기 future 보호
         self._local = threading.local()  # 수신 스레드가 다시 브로드캐스트하지 않게 (스레드별 플래그)
         self._running = True
         self._heartbeat_interval = 5.0
@@ -216,6 +219,33 @@ class MessageManager:
             return sub
 
         self.topic_executor.subscribe = subscribe  # type: ignore[method-assign]
+
+        # 로컬에 없는 서비스는 네트워크 너머의 서버로 보낸다 (원격 Viz의 지도 저장/불러오기 등)
+        orig_call_async = self.service_executor.call_async
+
+        def call_async(name: str, srv_type: Any, request: Any) -> Future[Any]:
+            try:
+                return orig_call_async(name, srv_type, request)
+            except LookupError:
+                if not self.network_mode:
+                    raise
+                return self._remote_call(name, request)
+
+        self.service_executor.call_async = call_async  # type: ignore[method-assign]
+
+    def _remote_call(self, name: str, request: Any) -> Future[Any]:
+        with self._peers_lock:
+            peer = next((p for p in self._peers if p.alive and name in p.services), None)
+        if peer is None:
+            raise LookupError(f"no server for service {name!r}")
+        future: Future[Any] = Future()
+        with self._lock:
+            self._service_counter += 1
+            request_id = self._service_counter
+            self._pending_services[request_id] = future
+        future.add_done_callback(lambda unused: self._pending_services.pop(request_id, None))
+        peer.push({"type": "service_req", "id": request_id, "name": name, "req": request})
+        return future
 
     def _broadcast_topic(self, topic: str, msg: Any, qos: QoS) -> None:
         now = time.monotonic()
@@ -358,10 +388,15 @@ class MessageManager:
                 self._remote_topics.add(t)
             for s in msg.get("services") or []:
                 self._remote_services.add(s)
+                peer.services.add(str(s))
             for a in msg.get("actions") or []:
                 self._remote_actions.add(a)
             if "subscriptions" in msg:
                 self._update_subscriptions(peer, {str(t) for t in msg.get("subscriptions") or []})
+        elif mtype == "service_req":
+            self._handle_service_req(peer, msg)
+        elif mtype == "service_res":
+            self._handle_service_res(msg)
         elif mtype == "subscribe":
             self._update_subscriptions(peer, {str(t) for t in msg.get("topics") or []})
         elif mtype == "parameters":
@@ -384,7 +419,48 @@ class MessageManager:
                     self.topic_executor.publish(name, msg.get("msg"), qos)
                 finally:
                     self._local.receiving = False
-        # TODO: service_req, service_res, action_goal, etc.
+        # TODO: action_goal, action_feedback, action_result
+
+    def _handle_service_req(self, peer: _Peer, msg: dict[str, Any]) -> None:
+        """상대가 이쪽의 서비스를 부른다: 실행하고 같은 연결로 응답한다."""
+        request_id = msg.get("id")
+        name = msg.get("name")
+        if not isinstance(request_id, int) or not isinstance(name, str):
+            return
+        with self.service_executor._lock:
+            server = self.service_executor._servers.get(name)
+        if server is None:
+            peer.push({"type": "service_res", "id": request_id, "res": None, "error": f"no server for service {name!r}"})
+            return
+        try:
+            future = server.submit(msg.get("req"))
+        except RuntimeError as error:  # 서비스가 막 닫혔다
+            peer.push({"type": "service_res", "id": request_id, "res": None, "error": str(error)})
+            return
+
+        def done(finished: Future[Any]) -> None:
+            try:
+                response = finished.result()
+            except Exception as error:  # 핸들러 예외는 문자열로 돌려준다
+                peer.push({"type": "service_res", "id": request_id, "res": None, "error": str(error)})
+            else:
+                peer.push({"type": "service_res", "id": request_id, "res": response, "error": None})
+
+        future.add_done_callback(done)
+
+    def _handle_service_res(self, msg: dict[str, Any]) -> None:
+        request_id = msg.get("id")
+        if not isinstance(request_id, int):
+            return
+        with self._lock:
+            future = self._pending_services.pop(request_id, None)
+        if future is None or future.done():
+            return
+        error = msg.get("error")
+        if error:
+            future.set_exception(RuntimeError(str(error)))
+        else:
+            future.set_result(msg.get("res"))
 
     def _update_subscriptions(self, peer: _Peer, topics: set[str]) -> None:
         new = topics - (peer.subscriptions or set())
