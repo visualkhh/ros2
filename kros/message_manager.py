@@ -121,6 +121,14 @@ class MessageManager:
             self._connections.append(conn)
         # Send discovery info
         self._send(conn, {"type": "discover", "topics": self._local_topics(), "services": self._local_services(), "actions": self._local_actions()})
+        # Send latched messages (TRANSIENT_LOCAL history) so late-joining clients get them
+        try:
+            history = getattr(self.topic_executor, "_history", {})
+            for topic, msgs in history.items():
+                for msg in msgs:
+                    self._send(conn, {"type": "topic", "name": topic, "msg": msg})
+        except Exception:
+            pass
 
     def _recv_loop(self, conn: socket.socket) -> None:
         buf = b""
