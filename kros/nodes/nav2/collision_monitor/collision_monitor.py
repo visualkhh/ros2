@@ -109,6 +109,10 @@ class CollisionMonitor(Node):
         self.source_timeout = self.declare_parameter("source_timeout", 2.0, validator=lambda value: value > 0)
         self.polygon_names = self.declare_parameter("polygons", tuple(DEFAULT_POLYGONS))
         self.observation_sources = self.declare_parameter("observation_sources", ("scan",))
+        # 수동 텔레옵 중에는 충돌 검사를 끈다 (사람이 직접 조종; 자율주행 때만 감시).
+        self.ignore_collision_during_teleop = self.declare_parameter("ignore_collision_during_teleop", False)
+        self.teleop_topic = self.declare_parameter("teleop_topic", "cmd_vel_teleop")
+        self.teleop_timeout = self.declare_parameter("teleop_timeout", 0.5, validator=lambda value: value > 0)
         # 앞 장애물에 막혔을 때 후진으로 빠져나오는 것은 허용한다 (0이면 막는다). 후진은 비율만큼만.
         self.reverse_escape_ratio = self.declare_parameter("reverse_escape_ratio", 0.3, validator=lambda value: 0 <= value <= 1)
         # 제자리 회전: 가장 가까운 점이 로봇 반지름(0.22m) 밖이면 돌 수 있다 (벽 앞에서도 방향을 돌릴 수 있게).
@@ -120,10 +124,12 @@ class CollisionMonitor(Node):
         self._lock = threading.Lock()
         self._points: dict[str, tuple[float, list[Point]]] = {}  # 소스 -> (측정 시각, base 좌표의 점들)
         self.state = ""  # 지난 명령에 걸린 영역과 동작 (시험/화면용)
+        self._last_teleop = float("-inf")  # 아직 텔레옵 없음 (시각 0인 시뮬에서도 바로 켜지지 않게)
         for source in self.observation_sources.value:
             topic = self.declare_parameter(f"{source}.topic", str(source))
             self.subscribe(topic.value, LaserScan, lambda scan, key=str(source): self._on_scan(key, scan))  # type: ignore[misc]
         self.subscribe(self.cmd_vel_in_topic.value, Twist, self._on_cmd_vel, QOS_COMMAND)
+        self.subscribe(self.teleop_topic.value, Twist, self._on_teleop, QOS_COMMAND)
 
     def _on_scan(self, source: str, scan: LaserScan) -> None:
         try:  # 센서 -> base (라이다는 로봇에 고정이라 최신 TF면 된다)
@@ -170,6 +176,13 @@ class CollisionMonitor(Node):
                 best, self.state = result, f"{polygon.name}: {polygon.action_type.value}"
         return best
 
+    def _on_teleop(self, twist: Twist) -> None:
+        self._last_teleop = self.now()
+
     def _on_cmd_vel(self, twist: Twist) -> None:
+        if self.ignore_collision_during_teleop.value and self.now() - self._last_teleop <= self.teleop_timeout.value:
+            self.state = "teleop: collision check off"  # 수동 조종 중: 그대로 보낸다
+            self.publish(self.cmd_vel_out_topic.value, twist)
+            return
         v, w = self.check(twist.linear.x, twist.angular.z)
         self.publish(self.cmd_vel_out_topic.value, Twist(Vector3(x=v), Vector3(z=w)))

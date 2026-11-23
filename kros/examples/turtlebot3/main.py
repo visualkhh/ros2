@@ -99,7 +99,7 @@ def main() -> None:
         # 속도 명령의 길: controller -> cmd_vel_nav -+-> twist_mux -> cmd_vel_mux -> collision_monitor -> cmd_vel -> RobotBridge
         #                 (다른 프로그램의) teleop -> cmd_vel_teleop -+   (사람이 이긴다)       (라이다로 앞이 막히면 멈추거나 늦춘다)
         mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
-        monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})
+        monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel", "ignore_collision_during_teleop": True})
         navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 3초마다 재계획
         return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), MapCatalog(ctx, parameters=maps), planner, controller, behavior, navigator, mux, monitor]
 

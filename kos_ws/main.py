@@ -77,7 +77,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     behavior = BehaviorServer(ctx)
     mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
     # 0.5m 안이면 감속: 0.3은 너무 느려서 0.6 (정지 상자 0.3m는 그대로)
-    monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel", "PolygonSlow.slowdown_ratio": 0.6})
+    monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel", "PolygonSlow.slowdown_ratio": 0.6, "ignore_collision_during_teleop": True})
     navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})
     return [
         RobotBridge(ctx, robot),

@@ -78,7 +78,7 @@ def scan_with_obstacle_at(distance: float, width: float = 0.2) -> LaserScan:
 
 class TestCollisionMonitor(Setup):
     def setUp(self) -> None:
-        self.make(CollisionMonitor, {"cmd_vel_in_topic": "cmd_vel_mux", "polygons": ("PolygonStop", "PolygonSlow", "Approach"), "Approach.action_type": "approach", "Approach.type": "circle", "Approach.radius": 0.25, "Approach.enabled": False}, "cmd_vel")
+        self.make(CollisionMonitor, {"cmd_vel_in_topic": "cmd_vel_mux", "polygons": ("PolygonStop", "PolygonSlow", "Approach"), "Approach.action_type": "approach", "Approach.type": "circle", "Approach.radius": 0.25, "Approach.enabled": False, "ignore_collision_during_teleop": True}, "cmd_vel")
         StaticTransformBroadcaster(self.user).send_transform(TransformStamped(Header(0.0, "base_footprint"), "base_scan", Transform(Vector3(-0.05, 0.0, 0.0))))
         self.kros.context.topic_executor.join()
 
@@ -111,6 +111,15 @@ class TestCollisionMonitor(Setup):
         self.send("cmd_vel_mux", twist(-0.2))
         self.assertAlmostEqual(self.out[-1].linear.x, -0.2 * 0.3)
         self.assertGreater(self.out[-1].linear.x, -0.2)
+
+    def test_manual_teleop_bypasses_collision_check(self) -> None:
+        """수동 텔레옵 중에는 사람이 직접 조종하므로 정지/감속을 적용하지 않는다. 텔레옵이 끊기면 다시 감시."""
+        self.obstacle(0.2)
+        self.send("cmd_vel_teleop", twist(0.0, 0.5), at=1.0)
+        self.send("cmd_vel_mux", twist(0.0, 0.5), at=1.1)
+        self.assertEqual(self.out[-1], twist(0.0, 0.5))  # 그대로 통과
+        self.send("cmd_vel_mux", twist(0.2), at=1.7)  # teleop_timeout(0.5초) 지남
+        self.assertEqual(self.out[-1], twist(0.0))  # 다시 충돌 검사
 
     def test_rotation_escape_only_when_outside_the_robot_radius(self) -> None:
         """앞이 막혀도 로봇 반지름(0.22m) 밖이면 제자리 회전은 허용한다 (벽 앞에서 방향 돌리기)."""
