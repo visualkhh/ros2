@@ -36,7 +36,7 @@ from .nav_display import NavDisplay
 from .slam_panel import BUTTON_COLOR, SlamPanel
 
 NAME = "Viz"
-HELP = "left drag: orbit (pose/goal tool: press = position, drag = heading)    right drag: pan    wheel: zoom    W/A/S/D: teleop    esc: close"
+HELP = "left drag: orbit (pose/goal tool: press = position, drag = heading)    right drag: pan    wheel: zoom    W/A/S/D: teleop    q/z: speed    esc: close"
 PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.86, 0.072  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
 ODOMETRY_ARROWS = {"odom": (1.0, 0.35, 0.85, 1.0), "odometry/filtered": (0.3, 0.9, 1.0, 1.0)}  # 바퀴 오도메트리(분홍, TF 부모 선이 노랑이라)와 EKF 결과(하늘색)를 화살표로 겹쳐 본다
 # 패널 줄 순서. tf_static은 tf 화면에 같이 쓰여서 토글이 없다. grid, trail은 토픽이 아니다 (trail: 로봇이 fixed frame에서 지나온 궤적)
@@ -336,6 +336,11 @@ class Viz:
             for source in (prefix, self._key_prefix):  # watcher 쪽(일반)과 M&K 쪽(GUI 위에서도) 둘 다
                 self._events.accept(f"{source}{key}", self._on_key, [key, True])
                 self._events.accept(f"{source}{key}-up", self._on_key, [key, False])
+        # 텔레옵 속도: q 올리기 / z 내리기 (누를 때 한 번, 1.25배/0.8배)
+        for speed_key, speed_factor in (("q", 1.25), ("z", 0.8)):
+            for source in (prefix, self._key_prefix):
+                self._events.accept(f"{source}{speed_key}", self._speed_key, [speed_key, speed_factor])
+                self._events.accept(f"{source}{speed_key}-up", self._speed_key, [speed_key, 0.0])
         if self._debug_keys:  # 어느 이벤트가 오는지 터미널에 찍는다 (KOS_VIZ_DEBUG_KEYS=1)
             # DirectObject.accept은 같은 이벤트의 기존 바인딩을 덮어쓴다: 텔레옵 키/ESC는 _on_key가 이미 찍으므로 건드리지 않는다.
             teleop_keys = {"w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right", "escape"}
@@ -351,6 +356,7 @@ class Viz:
             print(f"[viz-key] debug on (own_base={self.own_base}, watcher={self.mouse.node().getName()}, active={self.win.isActive()})", flush=True)
         self._teleop_speed = 0.2  # m/s
         self._teleop_turn = 1.0  # rad/s
+        self._teleop_scale = 1.0  # q/z로 바꾸는 배율
 
     # ---- 매 프레임 ---------------------------------------------------------------------------
 
@@ -360,8 +366,23 @@ class Viz:
     def set_teleop_scale(self, scale: float) -> None:
         """텔레옵 속도 배율 (0.25~1.5): 기본 0.20 m/s / 1.0 rad/s에 곱한다."""
         scale = min(1.5, max(0.25, scale))
+        self._teleop_scale = scale
         self._teleop_speed = 0.2 * scale
         self._teleop_turn = 1.0 * scale
+
+    def _speed_key(self, key: str, factor: float) -> None:
+        """q/z: 텔레옵 속도 배율. 키 반복으로 연속 변경되지 않게 새로 눌렀을 때만."""
+        if factor <= 0.0:
+            self._pressed.discard(key)
+            return
+        if key in self._pressed:
+            return
+        self._pressed.add(key)
+        scale = min(1.5, max(0.25, self._teleop_scale * factor))
+        self.set_teleop_scale(scale)
+        panel = getattr(self, "slam", None)
+        if panel is not None:
+            panel.sync_teleop_scale(scale)
 
     def _on_key(self, key: str, pressed: bool) -> None:
         """키보드 조종: W/A/S/D 또는 화살표. cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)."""

@@ -330,6 +330,21 @@ class TestVizSlamPanel(unittest.TestCase):
         self.wait_map_names(1)
         self.assertIn("custom_map", self.panel.map_menu["items"])
 
+    def test_teleop_speed_keys_q_and_z(self) -> None:
+        self.viz._pressed.clear()
+        self.viz.set_teleop_scale(1.0)
+        self.viz._speed_key("q", 1.25)
+        self.assertAlmostEqual(self.viz._teleop_scale, 1.25)
+        self.assertAlmostEqual(float(self.panel.teleop_slider["value"]), 1.25)
+        self.viz._speed_key("q", 1.25)  # 키를 누르고 있는 동안 반복되지 않는다
+        self.assertAlmostEqual(self.viz._teleop_scale, 1.25)
+        self.viz._speed_key("q", 0.0)  # 뗀 뒤 다시
+        self.viz._speed_key("q", 1.25)
+        self.assertAlmostEqual(self.viz._teleop_scale, 1.5)  # 최대
+        self.viz._speed_key("z", 0.0)
+        self.viz._speed_key("z", 0.8)
+        self.assertAlmostEqual(self.viz._teleop_scale, 1.2)
+
     def test_collision_toggle_button_uses_the_set_enabled_service(self) -> None:
         self.panel.collision_button["command"]()
         self.wait_status("collision monitor disabled")

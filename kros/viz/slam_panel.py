@@ -236,6 +236,11 @@ class SlamPanel:
         self.viz.set_teleop_scale(scale)
         self.teleop_status.setText(f"teleop {0.2 * scale:.2f} m/s")
 
+    def sync_teleop_scale(self, scale: float) -> None:
+        """q/z 키로 바꾼 배율을 슬라이더/표시에 반영한다."""
+        self.teleop_slider["value"] = scale
+        self.teleop_status.setText(f"teleop {0.2 * scale:.2f} m/s")
+
     def unload_map(self) -> None:
         """띄운 지도를 내린다 (map_server/unload_map) + 위치 추정을 끈다 (Cartographer idle). 목록은 다시 '고르지 않음'으로."""
         self.status.setText("unloading ...")
