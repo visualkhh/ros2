@@ -485,7 +485,7 @@ class Viz:
             steps = values.get("policy_steps")
             text = f"Controller: {name} -> {plugin}"
             if detail:
-                text += f" · {detail}"
+                text += f" - {detail}"
             if steps:
                 text += f" ({steps} steps)"
             color = {
