@@ -112,8 +112,8 @@ def main() -> None:
     runner.start()
     try:
         viewer = Viewer(recorder, lambda keys: keyboard.set_keys(keys))  # 창이 받은 키를 키보드 입력으로
-        if os.environ.get("KROS_VIZ", "1") != "0":
-            Viz(package_root=robot.description_dir, base=viewer, context=kros.context)  # rviz 같은 두 번째 창: 토픽만 구독해서 그린다. KROS_VIZ=0이면 안 띄움
+        if os.environ.get("KROS_VIZ", "0") != "0":
+            Viz(package_root=robot.description_dir, base=viewer, context=kros.context)  # rviz 같은 두 번째 창: 토픽만 구독해서 그린다. KROS_VIZ=1이면 띄움
         viewer.run()
     finally:
         runner.stop()
