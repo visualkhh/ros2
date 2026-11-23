@@ -216,6 +216,7 @@ class BtNavigator(Node):
                 code, message = (result.error_code, result.error_msg) if isinstance(result, FollowPathResult) else (R.UNKNOWN, f"controller_server 결과가 없다 ({follow.status.name})")
                 if code == FollowPathResult.NONE and message != REPLACED:
                     self.publish("plan", Path(Header(self.now(), self.global_frame.value)), QOS_LATCHED)  # 도착: 경로 지우기
+                    self.get_logger().info("goal reached: (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y)
                     return R(R.NONE)
                 if code == FollowPathResult.NONE:
                     continue  # 내가 보낸 새 경로로 갈아탄 옛 goal: 새 follow를 이미 지켜보고 있다
@@ -229,6 +230,7 @@ class BtNavigator(Node):
                 self.get_logger().warn("따라가기 실패 (%d: %s): 다시 계획한다 (%d/%d)", code, message, recoveries, self.number_of_recoveries.value)
                 planned_at = -math.inf  # 바로 다시 계획
             if self.now() - planned_at >= self.replanning_period.value:
+                self.get_logger().info("replanning (period %.1fs)", self.replanning_period.value)
                 plan = self._plan(goal)
                 planned_at = self.now()
                 if plan.error_code:
