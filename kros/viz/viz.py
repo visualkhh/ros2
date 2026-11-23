@@ -126,13 +126,17 @@ class Viz:
         self.node = VizNode(context)
         self.own_base = base is None
         self.base = base or ShowBase()
+        self.win = self.base.win
         if base is None:
-            props, self.win = None, self.base.win
+            props = WindowProperties()
+            props.setTitle("kros viz")
+            props.setSize(900, 700)
+            self.win.requestProperties(props)
         else:
             props = WindowProperties()
             props.setTitle("kros viz")
             props.setSize(900, 700)
-            self.win = base.openWindow(props=props, makeCamera=False)
+            self.win.requestProperties(props)
         self.scene = NodePath("viz")
         self._build_scene()
         self.yaw, self.pitch, self.dist, self.target = 0.8, 0.8, 2.5, Vec3(0, 0, 0.1)
@@ -182,6 +186,7 @@ class Viz:
         self._multi_goals_np: NodePath | None = None
         self._multi_goals_version: int | None = None
         self.nav = NavDisplay(self)
+        self._tf_skip = 0
         self.base.taskMgr.add(self._update, "viz-update")
 
     # ---- 만들기 ------------------------------------------------------------------------------
@@ -310,9 +315,15 @@ class Viz:
     def _update(self, task):  # type: ignore[no-untyped-def]
         if self._closed:
             return task.done
+        now = time.monotonic()
+        if now - getattr(self, "_last_update", 0.0) < 1.0 / 30.0:
+            return task.cont
+        self._last_update = now
         self._camera()
         self._update_model()
-        self._update_tf()
+        self._tf_skip = (self._tf_skip + 1) % 2
+        if self._tf_skip == 0:
+            self._update_tf()
         mouse = self.mouse.node()
         pressed = mouse.hasMouse() and mouse.isButtonDown(MouseButton.one()) and not self._over_gui()
         self.slam.update(self.ground_point(mouse.getMouseX(), mouse.getMouseY()) if mouse.hasMouse() else None, pressed)
