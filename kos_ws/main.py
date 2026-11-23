@@ -93,16 +93,19 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
 
 
 def run_hardware(robot: RealTurtleBot3, stop: threading.Event) -> None:
-    """실시간 루프: OpenCR/LDS-03에 Clock을 내려준다. OpenCR 명령(10Hz), 라이다(10Hz), IMU(20Hz)는 부품이 주기를 지킨다."""
-    start = last = time.monotonic()
+    """실시간 루프: OpenCR/LDS-03에 Clock을 내려준다. OpenCR 명령(10Hz), 라이다(10Hz), IMU(20Hz)는 부품이 주기를 지킨다.
+
+    시각은 kros의 SystemTimeSource.now()와 같은 time.time()을 쓴다 (센서 stamp와 진단의 data_age가 맞도록).
+    """
+    last = time.time()
     while not stop.is_set():
-        now = time.monotonic()
+        now = time.time()
         dt = now - last
         if dt < LOOP_PERIOD:
             time.sleep(min(LOOP_PERIOD - dt, 0.005))
             continue
         last = now
-        robot.tick(Clock(now - start, dt))
+        robot.tick(Clock(now, dt))
 
 
 def _local_addresses() -> list[str]:
