@@ -12,6 +12,7 @@ Viz 창을 클릭해 포커스를 준 뒤:
   W/A/S/D (또는 화살표) = 텔레옵 (누르는 동안, 떼면 정지)
   마우스 왼쪽 드래그 = 화면 회전, 오른쪽 드래그 = 팬, 휠 = 줌
   start SLAM / save map / load / delete = SLAM·지도 (Pi에서 실행)
+  기준 프레임은 map: 2D Pose Estimate를 찍으면 로봇이 그 자리로 움직인다 (odom 기준이면 지도만 움직인다).
 """
 import os
 import sys
@@ -54,7 +55,7 @@ package_root = Path(sys.argv[3]).expanduser() if len(sys.argv) > 3 else ROOT / "
 
 print(f"[kos viz] {host}:{port} 에 연결 (서버가 켜져 있어야 한다)", flush=True)
 print("[kos viz] 창을 클릭해 포커스를 준 뒤 W/A/S/D 로 텔레옵, 떼면 정지 / ESC 또는 Ctrl+C 로 종료", flush=True)
-viz = Viz(servers=[{"ip": host, "port": port}], package_root=package_root)
+viz = Viz(servers=[{"ip": host, "port": port}], package_root=package_root, fixed_frame="map")
 props = WindowProperties()
 props.setTitle(f"kros viz - {host}:{port}")
 props.setSize(1000, 750)

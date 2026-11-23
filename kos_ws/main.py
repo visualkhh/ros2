@@ -152,7 +152,7 @@ def start_profiler(kros: Kros, stop: threading.Event) -> None:
         last_time = time.monotonic()
         last_total = ticks("/proc/self/stat")
         last_threads: dict[int, int] = {}
-        last_timers = {name: (calls, missed) for name, _period, calls, missed in kros.context.timer_manager.stats()}
+        last_timers = {(name, index): (calls, missed) for index, (name, _period, calls, missed) in enumerate(kros.context.timer_manager.stats())}
         while not stop.wait(2.0):
             now = time.monotonic()
             dt = max(now - last_time, 1e-6)
@@ -172,9 +172,10 @@ def start_profiler(kros: Kros, stop: threading.Event) -> None:
             rows.sort(reverse=True)
             busiest = " ".join(f"{name}={value:.0f}%" for value, name in rows[:6])
             rates: list[str] = []
-            for name, _period, calls, missed in kros.context.timer_manager.stats():
-                old_calls, old_missed = last_timers.get(name, (calls, missed))
-                last_timers[name] = (calls, missed)
+            for index, (name, _period, calls, missed) in enumerate(kros.context.timer_manager.stats()):
+                key = (name, index)
+                old_calls, old_missed = last_timers.get(key, (calls, missed))
+                last_timers[key] = (calls, missed)
                 drops = missed - old_missed
                 if drops or name in ("controller_server", "local_costmap", "global_costmap", "cartographer", "planner_server", "collision_monitor"):
                     rates.append(f"{name}={((calls - old_calls) / dt):.1f}Hz" + (f"(miss {drops})" if drops else ""))
