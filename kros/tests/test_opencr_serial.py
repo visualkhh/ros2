@@ -174,6 +174,23 @@ class TestOpenCrSerial(unittest.TestCase):
         self.assertGreaterEqual(self.board.bad_lines, 1)  # 못 읽은 줄은 센다 (모르는 종류는 안 센다)
 
 
+class TestOpenCrSerialDirection(unittest.TestCase):
+    def test_inverted_motors_flip_commands_and_encoder_signs_together(self) -> None:
+        """이 로봇은 두 모터 모두 +속도 = 뒤로 (robot.yaml left_dir/right_dir = -1). 명령과 엔코더에 같은 부호를 준다."""
+        firmware = Firmware()
+        board = OpenCrSerial(0.033, 0.288, port=firmware.port, left_dir=-1.0, right_dir=-1.0)
+        self.addCleanup(firmware.close)
+        board.start()
+        self.addCleanup(board.stop)
+        self.assertTrue(eventually(lambda: board.connected))
+        board.write(Twist(Vector3(x=0.2)))
+        board.tick(Clock(1.0, 0.1))
+        self.assertTrue(eventually(lambda: "C,-6.0606,-6.0606" in firmware.lines()))
+        firmware.send(S_LINE)
+        self.assertTrue(eventually(lambda: board.status is not None))
+        self.assertEqual((board.left.position, board.right.position), (-1.5, -2.5))
+
+
 class TestNoPort(unittest.TestCase):
     def test_it_starts_without_the_port_and_records_the_send_failure_once(self) -> None:
         board = OpenCrSerial(0.033, 0.288, port="/dev/does-not-exist")

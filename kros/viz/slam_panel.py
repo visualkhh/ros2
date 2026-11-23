@@ -18,15 +18,17 @@ from direct.gui.OnscreenText import OnscreenText
 from panda3d.core import LineSegs, NodePath, TextNode
 
 from kros.msgs.geometry_msgs import Point, Pose, PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Quaternion
-from kros.msgs.nav2_msgs import LoadMap, LoadMapRequest, LoadMapResponse, SaveMap, SaveMapRequest, SaveMapResponse
+from kros.msgs.nav2_msgs import SaveMap, SaveMapRequest, SaveMapResponse
 from kros.msgs.nav_msgs import Path as NavPath
-from kros.msgs.std_msgs import Bool, Header
+from kros.msgs.std_msgs import Bool, Header, String
 from kros.msgs.std_srvs import Trigger, TriggerRequest, TriggerResponse
 from kros.nodes.cartographer.cartographer import INITIAL_POSE_TOPIC_NAME, compose, yaw_of
+from kros.nodes.map_server.map_catalog import MAP_CHANGE_TOPIC, MAP_LIST_TOPIC, MAP_STATUS_TOPIC
 from kros.nodes.nav2.bt_navigator import CANCEL_GOAL_TOPIC_NAME, GOAL_POSE_TOPIC_NAME, GOAL_POSES_TOPIC_NAME, PREVIEW_GOAL_TOPIC_NAME, PREVIEW_GOALS_TOPIC_NAME
 from kros.parameter import ParameterNotDeclaredError, ParameterRejectedError
 from kros.service.service_type import Req, Res, ServiceType
 from kros.tf import TransformException
+from kros.topic import QOS_LATCHED
 
 if TYPE_CHECKING:
     from .viz import Viz
@@ -73,6 +75,9 @@ class SlamPanel:
         self.preview_mode: bool = False  # 켜면 목표를 보내지 않고 경로만 미리 본다 (Preview). Go로 실행.
         self.last_single_goal: tuple[float, float, float] | None = None
         self.mode = ""  # Cartographer의 지금 모드 (매 프레임 갱신)
+        self.remote_maps: list[str] | None = None  # 서버(map_list)에서 받은 지도 목록. None이면 아직 못 받아서 로컬 폴더를 본다
+        self._pending_map_list: list[str] | None = None  # 구독 스레드가 받은 목록 (화면 갱신은 _update에서)
+        self._pending_status: str | None = None
         self._drag_start: tuple[float, float] | None = None
         self._preview = {tool: _arrow(color) for tool, color in TOOL_COLORS.items()}
         for arrow in self._preview.values():
@@ -88,8 +93,9 @@ class SlamPanel:
             **{**GUI, "frameColor": (0.12, 0.14, 0.2, 1), "relief": DGG.SUNKEN},  # 고르는 칸은 들어간 모양 (버튼과 구별)
         )
         self.map_menu["frameSize"] = (-0.4, (0.37 - 0.075) / GUI["scale"] - 0.4, -0.5, 1.0)  # 지도 이름이 길다
-        self.load_button = _button(left, "load", 0.39, 0.5, TOP - 0.19, self.load_map, scale=0.032)
-        self.unload_button = _button(left, "unload", 0.52, 0.64, TOP - 0.19, self.unload_map, scale=0.032)
+        self.load_button = _button(left, "load", 0.39, 0.48, TOP - 0.19, self.load_map, scale=0.032)
+        self.unload_button = _button(left, "unload", 0.49, 0.59, TOP - 0.19, self.unload_map, scale=0.032)
+        self.delete_button = _button(left, "delete", 0.60, 0.7, TOP - 0.19, self.delete_map, scale=0.028)
         self.pose_button = _button(left, "2D Pose Estimate", 0.06, 0.33, TOP - 0.29, lambda: self.toggle_tool("initialpose"), scale=0.032)
         self.goal_button = _button(left, "2D Goal Pose", 0.36, 0.62, TOP - 0.29, lambda: self.toggle_tool("goal"), scale=0.032)
         # 여러 목표: Multi Goal을 켜고 여러 점을 찍은 뒤 Send로 한 번에 보낸다 (bt_navigator가 구간별 경로를 이어 붙인다)
@@ -103,6 +109,9 @@ class SlamPanel:
         self.go_button = _button(left, "Go", 0.23, 0.30, TOP - 0.50, self.go_pending, scale=0.028)
         self.preview_status = OnscreenText(parent=left, pos=(0.06, TOP - 0.57), align=TextNode.ALeft, fg=(0.7, 0.9, 1.0, 1), scale=0.028, mayChange=True)
         self.status = OnscreenText(parent=left, pos=(0.07, TOP - 0.38), align=TextNode.ALeft, fg=(0.75, 0.8, 0.9, 1), scale=0.033, mayChange=True)
+        # 원격 로봇의 지도 목록/결과 (서버 map_catalog가 latch로 낸다). 받은 값은 _update에서 화면에 반영한다.
+        self.node.subscribe(MAP_LIST_TOPIC, String, self._on_map_list, QOS_LATCHED)
+        self.node.subscribe(MAP_STATUS_TOPIC, String, self._on_map_status, QOS_LATCHED)
 
     # ---- 버튼 -----------------------------------------------------------------------------------
 
@@ -133,7 +142,9 @@ class SlamPanel:
             return Path()
 
     def map_names(self) -> list[str]:
-        """지도 폴더들 (maps/<이름>/map.yaml이 있는 것)."""
+        """지도 이름들: 서버 map_list를 받았으면 그것, 아니면 로컬 maps/<이름>/map.yaml."""
+        if self.remote_maps is not None:
+            return list(self.remote_maps)
         return sorted(path.parent.name for path in self.maps_directory.glob(f"*/{MAP_FILE}.yaml"))
 
     def save_map(self) -> None:
@@ -155,13 +166,24 @@ class SlamPanel:
         self.map_menu.set(items.index(chosen) if chosen in items else 0, fCommand=False)
 
     def load_map(self) -> None:
+        """고른 지도로 바꾼다 (map_change 토픽 -> 서버 map_catalog가 map_server/load_map + localization)."""
         name = self.map_menu.get()
         if name == NO_SELECTION or name not in self.map_names():
             self.status.setText("select a map first")
             return
-        self.status.setText(f"loading {name} ...")
-        request = LoadMapRequest(str(self.maps_directory / name / f"{MAP_FILE}.yaml"))
-        self._call(f"{self.map_server}/load_map", LoadMap, request, lambda response: self._loaded(name, response))
+        self.status.setText(f"changing to {name} ...")
+        self.node.publish(MAP_CHANGE_TOPIC, String(name))
+
+    def delete_map(self) -> None:
+        """지금 띄운 지도를 지운다 (빈 map_change -> 서버 map_catalog가 unload 후 폴더 삭제)."""
+        self.status.setText("deleting loaded map ...")
+        self.node.publish(MAP_CHANGE_TOPIC, String(""))
+
+    def _on_map_list(self, message: String) -> None:
+        self._pending_map_list = [line for line in message.data.splitlines() if line.strip()]
+
+    def _on_map_status(self, message: String) -> None:
+        self._pending_status = message.data
 
     def unload_map(self) -> None:
         """띄운 지도를 내린다 (map_server/unload_map) + 위치 추정을 끈다 (Cartographer idle). 목록은 다시 '고르지 않음'으로."""
@@ -176,13 +198,6 @@ class SlamPanel:
             self.set_mode("idle")  # 지도 없이 위치 추정은 못 한다 (SLAM 중이면 그대로 둔다)
         self.map_menu.set(0, fCommand=False)
         self.status.setText("map unloaded")
-
-    def _loaded(self, name: str, response: object) -> None:
-        if not (isinstance(response, LoadMapResponse) and response.result == LoadMapResponse.RESULT_SUCCESS):
-            self.status.setText(f"load failed: {name}")
-            return
-        self.set_mode("localization")  # 저장한 지도로 위치만 잡는다
-        self.status.setText(f"loaded {name}: set the robot with 2D Pose Estimate")
 
     def _call(self, service: str, srv_type: ServiceType[Req, Res], request: Req, done: Callable[[object], None]) -> None:
         try:
@@ -217,6 +232,14 @@ class SlamPanel:
 
     def update(self, ground: tuple[float, float] | None, pressed: bool) -> None:
         """Viz가 매 프레임 부른다: 모드 표시, 끝난 서비스 응답, 2D Pose Estimate 드래그 (ground: 마우스 아래 바닥점, fixed frame)."""
+        if self._pending_map_list is not None:  # 구독 스레드가 받은 목록은 여기(화면 스레드)서 반영한다
+            if self._pending_map_list != self.remote_maps:
+                self.remote_maps = self._pending_map_list
+                self.refresh_maps()
+            self._pending_map_list = None
+        if self._pending_status is not None:
+            self.status.setText(self._pending_status)
+            self._pending_status = None
         self.mode = mode = self._get_mode()  # 다른 곳(ros2 param set 같은)에서 바꿔도 따라간다
         self.mode_text.setText(mode or "(no cartographer)")
         mapping = mode == "mapping"
@@ -387,5 +410,5 @@ class SlamPanel:
     def destroy(self) -> None:
         for arrow in self._preview.values():
             arrow.removeNode()
-        for widget in (self.unload_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button, self.multi_button, self.send_button, self.clear_button, self.cancel_button, self.preview_button, self.go_button):
+        for widget in (self.unload_button, self.delete_button, self.goal_button, self.slam_button, self.save_button, self.map_menu, self.load_button, self.pose_button, self.multi_button, self.send_button, self.clear_button, self.cancel_button, self.preview_button, self.go_button):
             widget.destroy()

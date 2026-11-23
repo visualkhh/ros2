@@ -35,7 +35,7 @@ class TestProvidedNodesLayout(unittest.TestCase):
     def test_provided_nodes_live_in_nodes(self) -> None:
         import kros.nodes as provided
 
-        self.assertEqual(sorted(provided.__all__), ["Cartographer", "DiagnosticAggregator", "DiffDriveOdometry", "Ekf", "MapSaver", "MapServer", "Node", "RobotStatePublisher", "TfEcho"])
+        self.assertEqual(sorted(provided.__all__), ["Cartographer", "DiagnosticAggregator", "DiffDriveOdometry", "Ekf", "MapCatalog", "MapSaver", "MapServer", "Node", "RobotStatePublisher", "TfEcho"])
         for name in provided.__all__:
             self.assertTrue(issubclass(getattr(provided, name), Node), name)
 

@@ -26,9 +26,8 @@ from direct.showbase.ShowBase import ShowBase
 
 server_ip = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
 server_port = int(sys.argv[2]) if len(sys.argv) > 2 else 9000
+package_root = Path(sys.argv[3]).expanduser() if len(sys.argv) > 3 else None
 
-kros = None
-base = None
-viz = Viz(servers=[{"ip": server_ip, "port": server_port}])
+viz = Viz(servers=[{"ip": server_ip, "port": server_port}], package_root=package_root)
 print(f"[viz_remote] connected to {server_ip}:{server_port}", flush=True)
 viz.base.run()

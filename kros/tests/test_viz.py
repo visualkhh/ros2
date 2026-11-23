@@ -34,7 +34,7 @@ if HAS_PANDA:
     from kros.viz.viz import TOGGLE_OFF, TOGGLE_ON
     from panda3d.core import Vec3
     from kros.msgs.geometry_msgs import PoseStamped, PoseWithCovarianceStamped
-    from kros.nodes import Cartographer, MapSaver, MapServer
+    from kros.nodes import Cartographer, MapCatalog, MapSaver, MapServer
     from panda3d.core import MouseButton, VirtualMouse
     from kros.worlds.maze.maze_world import MazeWorld
     from kros.worlds.robots.turtlebot3 import TurtleBot3
@@ -165,9 +165,10 @@ class TestVizSlamPanel(unittest.TestCase):
         def create(ctx: Context) -> list[Node]:
             folder = {"maps_directory": str(self.maps)}
             made["watcher"], made["slam"] = Node(ctx, "Watcher"), Cartographer(ctx, parameters={"mode": "idle"})
-            return [made["watcher"], made["slam"], MapServer(ctx, parameters=folder), MapSaver(ctx, parameters=folder)]
+            return [made["watcher"], made["slam"], MapServer(ctx, parameters=folder), MapSaver(ctx, parameters=folder), MapCatalog(ctx, parameters={**folder, "list_period": 0.1})]
 
-        self.kros = Kros(create, time_source=SimulatedTimeSource())
+        self.source = SimulatedTimeSource()
+        self.kros = Kros(create, time_source=self.source)
         self.addCleanup(self.kros.shutdown)
         slam = made["slam"]
         assert isinstance(slam, Cartographer)
@@ -176,13 +177,27 @@ class TestVizSlamPanel(unittest.TestCase):
         self.addCleanup(self.viz.close)
         self.panel = self.viz.slam
 
+    def pump(self) -> None:
+        self.source.set(self.source.now() + 0.02)
+        self.kros.context.timer_manager.join()
+        self.kros.context.topic_executor.join()
+        self.viz.base.taskMgr.step()
+
     def wait_status(self, prefix: str) -> None:
         for _ in range(200):
-            self.viz.base.taskMgr.step()
+            self.pump()
             if self.panel.status.getText().startswith(prefix):
                 return
-            time.sleep(0.01)
+            time.sleep(0.005)
         self.fail(f"status: {self.panel.status.getText()!r}")
+
+    def wait_map_names(self, count: int) -> None:
+        for _ in range(300):
+            self.pump()
+            if len(self.panel.map_names()) == count:
+                return
+            time.sleep(0.005)
+        self.fail(f"map names: {self.panel.map_names()!r}")
 
     def test_mode_save_and_load_go_through_parameter_and_services(self) -> None:
         self.panel.slam_button["command"]()  # start SLAM = ros2 param set /cartographer mode mapping
@@ -193,6 +208,7 @@ class TestVizSlamPanel(unittest.TestCase):
         self.watcher.publish("map", grid, QOS_LATCHED)  # 저장할 지도 (SLAM 자리)
         self.panel.save_button["command"]()
         self.wait_status("saved")
+        self.wait_map_names(1)
         names = self.panel.map_names()
         self.assertEqual(len(names), 1)
         self.assertTrue((self.maps / names[0] / "map.pgm").exists())  # maps/<이름>/map.yaml + map.pgm

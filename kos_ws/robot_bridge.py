@@ -8,8 +8,12 @@ from kros.tf import JOINT_STATES_TOPIC_NAME
 from kros.timer import Timer
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 
-from hardware_status import hardware_path, leaves, make_task
-from topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
+try:  # 패키지(kos_ws)로 실행할 때와 main.py를 직접 실행할 때 둘 다
+    from .hardware_status import hardware_path, leaves, make_task
+    from .topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
+except ImportError:  # python kos_ws/main.py
+    from hardware_status import hardware_path, leaves, make_task
+    from topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
 
 
 class RobotBridge(Node):

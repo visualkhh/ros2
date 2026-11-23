@@ -25,7 +25,7 @@ from kros.context import Context
 from kros.interactions import Keyboard
 from kros.log import enable_console
 from kros.nodes import Node
-from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapSaver, MapServer, RobotStatePublisher
+from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapCatalog, MapSaver, MapServer, RobotStatePublisher
 from kros.nodes.nav2.behavior_server import BehaviorServer
 from kros.nodes.nav2.bt_navigator import BtNavigator
 from kros.nodes.nav2.collision_monitor import CollisionMonitor
@@ -101,7 +101,7 @@ def main() -> None:
         mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
         monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})
         navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 3초마다 재계획
-        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller, behavior, navigator, mux, monitor]
+        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), MapCatalog(ctx, parameters=maps), planner, controller, behavior, navigator, mux, monitor]
 
     import os
     server_port = int(os.environ.get("KROS_SERVER_PORT", "9000"))

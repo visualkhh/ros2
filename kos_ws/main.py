@@ -1,31 +1,32 @@
-"""TurtleBot3 3D 시뮬레이터. 실행: (ros2/ 에서) python3 -m kros.examples  (또는 run.sh)
+"""실기 TurtleBot3 실행 (kros, no simulator/no viz). 라즈베리파이에서 돌린다.
 
-- 현실 쪽(kros와 무관한 순수 시뮬레이션): MazeWorld 안에 TurtleBot3를 놓고, SimulationRunner가 화면과 따로 월드를 고정 간격으로 돌리고,
-  SnapshotRecorder가 스텝마다 스냅샷을 만들어 Viewer(3D 창)가 그린다. 사람의 입력은 Keyboard(Interaction)가 받아 로봇이 receive()한다 (창의 키 -> Keyboard -> 로봇이 해석).
-- Viz(kros): rviz 같은 두 번째 창. kros 인스턴스 하나만 받아 tf/robot_description/scan/imu/odom/odometry/filtered 토픽을 구독해 그린다 (Viewer는 시뮬레이션의 진실, Viz는 로봇이 내보낸 값).
-  바퀴 odom(분홍 화살표)과 EKF 결과(하늘색 화살표, 모델 위치)를 겹쳐 본다. 왼쪽 패널 SLAM 칸에서 Cartographer를 켜고(mapping),
-  지도를 저장/불러오고(localization), 2D Pose Estimate로 위치를 찍는다. 지도를 볼 때는 Fixed Frame을 map으로.
-- kros 쪽(Node): RobotBridge, cmd_vel -> robot.command (다른 프로그램이 로봇을 움직일 때), 라이다 측정 -> scan.
-  kros의 시간(타이머, node.now())은 시뮬레이션 시간이다: 러너가 매 스텝 SimulatedTimeSource를 밀어 준다
+- 화면(Panda3D)도 월드도 없다. 실시간 루프가 OpenCR/LDS-03에 Clock을 내려준다.
+- kros 노드는 시뮬레이터 예제와 같다: RobotBridge, TF, EKF, Cartographer(SLAM/위치추정), map_server/saver/catalog,
+  Smac planner + MPPI controller, behavior_server, bt_navigator, twist_mux, collision_monitor.
+- 네트워크: 0.0.0.0:9000을 연다. PC의 `kros/examples/turtlebot3/viz_remote.py <pi-ip> 9000`이 붙어서 화면을 본다.
+  Viz의 W/A/S/D는 cmd_vel_teleop으로 들어와 twist_mux를 거쳐 바퀴로 간다 (SLAM할 때 수동 조종).
+
+실행 (라즈베리파이):
+  cd ~/ros2
+  ./kos_ws/run.sh                    # 포트 9000
+  KROS_SERVER_PORT=0 ./kos_ws/run.sh # 네트워크 없이
 """
+import os
+import signal
+import socket
+import sys
+import threading
+import time
 from pathlib import Path
 
-# 파일을 직접 실행할 때(python main.py / IDE Run 버튼) 저장소 루트(ros2/)를 경로에 넣는다.
-# 모듈로 임포트할 때(__package__가 있음)는 건드리지 않는다.
-import os
-import sys
-if __package__ is None:
+if not __package__:  # 파일로 직접 실행 (python kos_ws/main.py)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-if Path("/proc/driver/nvidia/version").exists():
-    os.environ.setdefault("__NV_PRIME_RENDER_OFFLOAD", "1")
-    os.environ.setdefault("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
 
 from kros import Kros
 from kros.context import Context
-from kros.interactions import Keyboard
 from kros.log import enable_console
-from kros.nodes import Node
-from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapSaver, MapServer, RobotStatePublisher
+from kros.msgs.geometry_msgs import Twist
+from kros.nodes import Cartographer, DiffDriveOdometry, Ekf, MapCatalog, MapSaver, MapServer, Node, RobotStatePublisher
 from kros.nodes.nav2.behavior_server import BehaviorServer
 from kros.nodes.nav2.bt_navigator import BtNavigator
 from kros.nodes.nav2.collision_monitor import CollisionMonitor
@@ -33,78 +34,130 @@ from kros.nodes.nav2.controller import ControllerServer
 from kros.nodes.nav2.planner import PlannerServer
 from kros.nodes.twist_mux import TwistMux
 from kros.parameter import ParameterValue
-from kros.timer import SimulatedTimeSource
-from kros.viewer.panda_viewer import Viewer
-from kros.viewer.snapshot_recorder import SnapshotRecorder
-from kros.viz import Viz
-from kros.worlds.maze.maze_world import MazeWorld
-from kros.worlds.robots.turtlebot3 import TurtleBot3
-from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARATION
-from kros.worlds.simulation_runner import SimulationRunner
+from kros.worlds.clock import Clock
+from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS
 
-from kros.examples.turtlebot3.robot_bridge import RobotBridge
+from kos_ws.robot import OPENCR_PORT, RealTurtleBot3
+from kos_ws.robot_bridge import RobotBridge
 
 MAPS_DIRECTORY = Path(__file__).resolve().parent / "artifacts" / "maps"
+WHEEL_SEPARATION = 0.287  # m, 실측 (Waffle Pi 개조형)
+LOOP_PERIOD = 0.02  # 50Hz: 하드웨어 tick (OpenCR 명령은 10Hz, 라이다는 10Hz, IMU는 20Hz)
 
 # robot_localization의 *_config 15칸 (x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az) 중 켤 칸
-ODOM_CONFIG = tuple(i in (6, 11) for i in range(15))  # 바퀴: vx, vyaw (위치는 바퀴가 적분한 것이라 다시 넣지 않는다)
+ODOM_CONFIG = tuple(i in (6, 11) for i in range(15))  # 바퀴: vx, vyaw
 IMU_CONFIG = tuple(i == 11 for i in range(15))  # 자이로: vyaw (방향은 편향이 쌓여 쓰지 않는다)
 
 
-def main() -> None:
-    enable_console()  # 노드 로그를 콘솔에 보인다 (수준은 노드의 log_level 파라미터)
-    world, robot, keyboard = MazeWorld(), TurtleBot3(noisy=True), Keyboard()  # noisy: 바퀴 슬립/엔코더 해상도, IMU 편향, 라이다 잡음 (진실은 Viewer, 측정값은 Viz에서 비교)
-    print(f"compute: {world.compute.name}")  # gpu(cupy) / cpu(numpy) / python
-    world.add(robot)
-    robot.receive(keyboard)  # 로봇이 키보드 입력을 받는다
-    runner = SimulationRunner(world)  # 월드는 화면과 따로 고정 간격(60Hz)으로 돈다
-    recorder = SnapshotRecorder(world, robot)  # 스텝마다 화면에 줄 스냅샷을 만든다
-    runner.add_listener(recorder.record)
-    time_source = SimulatedTimeSource()  # kros의 시간은 시뮬레이션 시간 (시뮬레이션이 매 스텝 밀어 준다)
-    runner.add_listener(lambda w: time_source.set(w.time))
+def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
+    """시뮬레이터 예제와 같은 구성. RL 정책은 쓰지 않는다 (FollowPath = MPPI)."""
+    description = RobotStatePublisher(ctx, parameters={"robot_description": robot.urdf_path.read_text()})
+    odometry = DiffDriveOdometry(
+        ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False}
+    )
+    ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
+    slam = Cartographer(ctx, parameters={"mode": "idle"})
+    maps = {"maps_directory": str(MAPS_DIRECTORY)}
+    footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
+    planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
+    controller_parameters: dict[str, ParameterValue] = {
+        "odom_topic": "odometry/filtered",
+        "cmd_vel_topic": "cmd_vel_nav",
+        "FollowPath.plugin": "nav2_mppi_controller::MPPIController",
+        "general_goal_checker.xy_goal_tolerance": 0.4,
+        "general_goal_checker.yaw_goal_tolerance": 0.4,
+        "progress_checker.movement_time_allowance": 2.0,
+        "progress_checker.required_movement_radius": 0.2,
+    }
+    controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
+    behavior = BehaviorServer(ctx)
+    mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
+    monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})
+    navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})
+    return [
+        RobotBridge(ctx, robot),
+        description,
+        odometry,
+        ekf,
+        slam,
+        MapServer(ctx, parameters=maps),
+        MapSaver(ctx, parameters=maps),
+        MapCatalog(ctx, parameters=maps),
+        planner,
+        controller,
+        behavior,
+        navigator,
+        mux,
+        monitor,
+    ]
 
-    def create_nodes(ctx: Context) -> list[Node]:
-        # kros가 제공하는 노드를 쓸지는 여기서(launch 파일처럼) 정한다: URDF로 TF를 만드는 RobotStatePublisher
-        description = RobotStatePublisher(ctx, parameters={"robot_description": robot.urdf_path.read_text()})
-        # 바퀴 -> odom 토픽. TF(odom -> base_footprint)는 EKF가 내므로 끈다
-        odometry = DiffDriveOdometry(ctx, parameters={"wheel_radius": WHEEL_RADIUS, "wheel_separation": WHEEL_SEPARATION, "publish_tf": False})
-        # robot_localization ekf_node처럼: 바퀴의 앞 속도/회전 속도 + 자이로 회전 속도 -> odometry/filtered, odom -> base_footprint TF
-        ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
-        # SLAM/위치 추정 (map -> odom)과 지도 파일 (이 예제 폴더의 artifacts/maps). viz 패널에서 모드를 바꾸고, 지도를 저장/불러오고, 2D Pose Estimate를 찍는다
-        slam = Cartographer(ctx, parameters={"mode": "idle"})
-        maps = {"maps_directory": str(MAPS_DIRECTORY)}
-        # 내비게이션 (nav2처럼): 경로 계획은 Smac(Hybrid-A*), 따라가기는 MPPI. 둘 다 안에 costmap을 만든다 (로봇 몸 반지름으로 inflation)
-        footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
-        planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters=footprint)
-        # controller_parameters: dict[str, ParameterValue] = {"odom_topic": "odometry/filtered", "FollowPath.plugin": "nav2_mppi_controller::MPPIController", "cmd_vel_topic": "cmd_vel_nav"}
-        # 따라가기는 isaac/training/rl_maze에서 학습한 정책 (rl_nav_controller: 실기와 같은 관측/행동). 모델이 없거나 못 읽으면 안에 품은 MPPI로 돈다
-        controller_parameters: dict[str, ParameterValue] = {
-            "odom_topic": "odometry/filtered",
-            "cmd_vel_topic": "cmd_vel_nav",
-            "FollowPath.plugin": "nav2_mppi_controller::MPPIController",
-            "general_goal_checker.xy_goal_tolerance": 0.4,
-            "general_goal_checker.yaw_goal_tolerance": 0.4,
-            "progress_checker.movement_time_allowance": 2.0,
-            "progress_checker.required_movement_radius": 0.2,
-        }
-        controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
-        behavior = BehaviorServer(ctx)  # 회복 동작 (spin · backup · wait) — bt_navigator가 실패 시 부른다
-        # 속도 명령의 길: controller -> cmd_vel_nav -+-> twist_mux -> cmd_vel_mux -> collision_monitor -> cmd_vel -> RobotBridge
-        #                 (다른 프로그램의) teleop -> cmd_vel_teleop -+   (사람이 이긴다)       (라이다로 앞이 막히면 멈추거나 늦춘다)
-        mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
-        monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})
-        navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 3초마다 재계획
-        return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller, behavior, navigator, mux, monitor]
 
-    kros = Kros(create_nodes, time_source=time_source)
-    runner.start()
+def run_hardware(robot: RealTurtleBot3, stop: threading.Event) -> None:
+    """실시간 루프: OpenCR/LDS-03에 Clock을 내려준다. OpenCR 명령(10Hz), 라이다(10Hz), IMU(20Hz)는 부품이 주기를 지킨다."""
+    start = last = time.monotonic()
+    while not stop.is_set():
+        now = time.monotonic()
+        dt = now - last
+        if dt < LOOP_PERIOD:
+            time.sleep(min(LOOP_PERIOD - dt, 0.005))
+            continue
+        last = now
+        robot.tick(Clock(now - start, dt))
+
+
+def _local_addresses() -> list[str]:
+    addresses = set()
     try:
-        viewer = Viewer(recorder, lambda keys: keyboard.set_keys(keys))  # 창이 받은 키를 키보드 입력으로
-        Viz(kros, robot.description_dir, base=viewer)  # rviz 같은 두 번째 창: 토픽만 구독해서 그린다
-        viewer.run()
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            addresses.add(info[4][0])
+    except OSError:
+        pass
+    try:  # 기본 경로로 나가는 주소 (mDNS로 이름이 안 풀릴 때)
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        addresses.add(probe.getsockname()[0])
+        probe.close()
+    except OSError:
+        pass
+    return sorted(address for address in addresses if not address.startswith("127."))
+
+
+def main() -> None:
+    enable_console()
+    robot = RealTurtleBot3(
+        opencr_port=os.environ.get("OPENCR_PORT", OPENCR_PORT),
+        lidar_port=os.environ.get("LIDAR_PORT", ""),
+    )
+    print(f"[kos] {robot}", flush=True)
+    print("[kos] OpenCR IMU는 켜고 2초 동안 가만히 둬야 자이로 편향을 잡습니다", flush=True)
+
+    stop = threading.Event()
+
+    def request_stop(signum: int, frame: object) -> None:
+        stop.set()
+
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
+
+    port = int(os.environ.get("KROS_SERVER_PORT", "9000"))
+    host = {"ip": "0.0.0.0", "port": port} if port > 0 else None
+    kros = Kros(lambda ctx: create_nodes(ctx, robot), host=host)
+    if host is not None:
+        addresses = ", ".join(f"{address}:{port}" for address in _local_addresses()) or f"<ip>:{port}"
+        print(f"[kos] host mode: port {port} (PC에서: viz_remote.py <pi-ip> {port})", flush=True)
+        print(f"[kos] 연결 주소: {addresses}", flush=True)
+
+    hardware = threading.Thread(target=run_hardware, args=(robot, stop), name="hardware", daemon=True)
+    hardware.start()
+    try:
+        while not stop.wait(0.5):
+            pass
     finally:
-        runner.stop()
+        stop.set()
+        hardware.join(timeout=2.0)
+        robot.stop()  # 마지막 C,0,0 + 시리얼 닫기
         kros.shutdown()
+        print("[kos] 종료", flush=True)
 
 
 if __name__ == "__main__":

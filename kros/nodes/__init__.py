@@ -8,8 +8,8 @@ from .diagnostic_aggregator import DiagnosticAggregator
 from .diff_drive_odometry import DiffDriveOdometry
 from .cartographer import Cartographer
 from .ekf import Ekf
-from .map_server import MapSaver, MapServer
+from .map_server import MapCatalog, MapSaver, MapServer
 from .robot_state_publisher import RobotStatePublisher
 from .tf_echo import TfEcho
 
-__all__ = ["Cartographer", "DiagnosticAggregator", "DiffDriveOdometry", "Ekf", "MapSaver", "MapServer", "Node", "RobotStatePublisher", "TfEcho"]
+__all__ = ["Cartographer", "DiagnosticAggregator", "DiffDriveOdometry", "Ekf", "MapCatalog", "MapSaver", "MapServer", "Node", "RobotStatePublisher", "TfEcho"]

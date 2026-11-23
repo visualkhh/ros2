@@ -1,3 +1,2 @@
-panda3d==1.10.16
-numpy
-onnxruntime  # rl_nav_controller가 학습한 정책(policy.onnx)을 돌린다 (없으면 MPPI로)
+# 실기 실행에는 추가 패키지가 없다 (kros core + 표준 라이브러리 termios).
+# 시뮬레이터/화면(Panda3D)과 RL 정책(onnxruntime)은 kos_ws에서 쓰지 않는다.

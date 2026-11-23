@@ -31,10 +31,22 @@ class OpenCrSerial(DiffDriveBoard):
     imu: SerialMpu9250  # 인터페이스(Imu)보다 좁게: 읽기 스레드가 update()로 새 줄을 넣는다
 
     def __init__(
-        self, wheel_radius: float, wheel_separation: float, port: str = "/dev/opencr", baud: int = 115200, period: float | None = COMMAND_PERIOD
+        self,
+        wheel_radius: float,
+        wheel_separation: float,
+        port: str = "/dev/opencr",
+        baud: int = 115200,
+        period: float | None = COMMAND_PERIOD,
+        left_dir: float = 1.0,
+        right_dir: float = 1.0,
+        max_wheel: float = MAX_WHEEL,
     ) -> None:
         super().__init__(period)
         self.wheel_radius, self.wheel_separation = wheel_radius, wheel_separation
+        # 이 로봇은 두 모터 모두 +속도 = 뒤로 (robot.yaml left_dir/right_dir = -1). 명령과 엔코더에 같은 부호를 적용해
+        # kros 안에서는 +가 앞으로가 되게 한다 (DiffDriveOdometry가 그대로 쓴다).
+        self.left_dir, self.right_dir = left_dir, right_dir
+        self.max_wheel = max_wheel
         self.left, self.right = SerialWheel(), SerialWheel()
         self.imu = SerialMpu9250()
         self.add(self.left, "left_wheel")
@@ -66,9 +78,9 @@ class OpenCrSerial(DiffDriveBoard):
     def write(self, command: Twist) -> None:
         """몸체 속도 명령을 내린다 (바퀴 목표로 바꿔 두면 다음 주기에 보낸다)."""
         self._command = command
-        left, right = wheel_speeds(command, self.wheel_radius, self.wheel_separation, MAX_WHEEL)
-        self.left.write(left)
-        self.right.write(right)
+        left, right = wheel_speeds(command, self.wheel_radius, self.wheel_separation, self.max_wheel)
+        self.left.write(left * self.left_dir)
+        self.right.write(right * self.right_dir)
 
     def on_period(self, clock: Clock) -> None:
         sent = self._link.write_line(protocol.format_command(self.left.command, self.right.command))
@@ -90,8 +102,8 @@ class OpenCrSerial(DiffDriveBoard):
                 self.bad_lines += 1
                 return
             self.status = status
-            self.left.position, self.left.velocity = status.left_position, status.left_velocity
-            self.right.position, self.right.velocity = status.right_position, status.right_velocity
+            self.left.position, self.left.velocity = status.left_position * self.left_dir, status.left_velocity * self.left_dir
+            self.right.position, self.right.velocity = status.right_position * self.right_dir, status.right_velocity * self.right_dir
         elif kind == "I":
             imu = protocol.parse_imu(values)
             if imu is None:
