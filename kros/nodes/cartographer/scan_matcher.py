@@ -32,5 +32,7 @@ def match(grid: ProbabilityGrid, points: list[tuple[float, float]], guess: Pose2
                     value = sum(grid.probability(x + rx, y + ry) for rx, ry in rotated) / len(points)
                     if value > best_score:
                         best, best_score = (x, y, yaw), value
-        window = (linear_step, angular_step)
+        # 다음 단계는 앞 단계 격자의 절반만 본다: 참 위치는 고른 격자점에서 반 칸 안에 있다.
+        # (전체 한 칸씩 보면 2단계부터 9x9x9=729 자세씩 헛수고: Pi에서 매칭 한 번에 100ms 넘게 걸렸다)
+        window = (linear_step / 2, angular_step / 2)
     return best, best_score

@@ -15,7 +15,7 @@ from kros.msgs.geometry_msgs import Twist
 from kros.worlds.clock import Clock
 
 logger = logging.getLogger(__name__)
-COMMAND_PERIOD = 0.1  # 초. 펌웨어는 500ms 동안 C가 없으면 바퀴를 세우므로 그 안에 계속 보낸다
+COMMAND_PERIOD = 0.05  # 초. 20Hz: 제어 주기와 맞춰 바퀴 목표가 100ms마다 계단처럼 바뀌지 않게 (펌웨어 타임아웃 500ms)
 COMMAND_TIMEOUT = 0.5  # 초. 이 시간 동안 write()가 없으면 마지막 명령을 계속 보내지 않고 0으로 세운다 (네트워크/노드가 멈춘 경우)
 MAX_WHEEL = 8.0  # rad/s, 펌웨어가 한 바퀴씩 자르는 한계. 넘으면 두 바퀴를 같은 비율로 줄인다 (호의 모양을 지킨다)
 

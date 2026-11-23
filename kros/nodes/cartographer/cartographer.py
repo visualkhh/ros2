@@ -28,6 +28,8 @@ from .scan_matcher import Pose2, match
 MODES = ("idle", "mapping", "localization")
 INITIAL_POSE_TOPIC_NAME = "initialpose"
 RELOCALIZE_SCALE = 3.0  # /initialpose 뒤 첫 매칭은 탐색 범위를 이만큼 넓힌다 (사람이 찍은 위치는 대충이다)
+MATCH_MIN_LINEAR = 0.01  # m: 이만큼도 안 움직였으면 스캔 매칭을 건너뛴다 (서 있을 때 CPU를 쓰지 않게)
+MATCH_MIN_ANGULAR = math.radians(0.5)
 
 
 def compose(a: Pose2, b: Pose2) -> Pose2:
@@ -78,6 +80,7 @@ class Cartographer(Node):
         self._scan_index = 0
         self._lock = threading.Lock()
         self._last_inserted: Pose2 | None = None
+        self._last_match_odom: Pose2 | None = None  # 마지막 매칭 때 센서의 odom 자세 (제자리면 매칭 생략)
         self._localized = False  # map -> odom을 알게 됐다 (스캔을 처리했거나 /initialpose를 받았다): 그때부터 TF를 낸다
         self._relocalize = False  # 다음 매칭은 넓게 (/initialpose 직후)
         self._dirty = False
@@ -132,6 +135,10 @@ class Cartographer(Node):
             except TransformException:
                 return
         sensor_in_odom = (t.translation.x, t.translation.y, yaw_of(t.rotation))
+        last = self._last_match_odom
+        if self._mode == "localization" and self._localized and last is not None and not self._relocalize and math.hypot(sensor_in_odom[0] - last[0], sensor_in_odom[1] - last[1]) < MATCH_MIN_LINEAR and abs(math.atan2(math.sin(sensor_in_odom[2] - last[2]), math.cos(sensor_in_odom[2] - last[2]))) < MATCH_MIN_ANGULAR:
+            return  # 저장된 지도로 위치추정 중 서 있을 때만 생략 (매핑은 지도를 계속 맞춰야 해서 생략하지 않는다)
+        self._last_match_odom = sensor_in_odom
         points = []  # 센서 좌표의 스캔 끝점 (잰 것만)
         for i, r in enumerate(scan.ranges):
             if math.isfinite(r) and scan.range_min <= r <= scan.range_max:

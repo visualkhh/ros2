@@ -71,21 +71,18 @@ class MPPIController(Controller):
         follow = path[min(len(path) - 1, start + self.path_follow_offset.value)]
         ahead = path[min(len(path) - 1, start + self.path_angle_offset.value)]
         rng, vx_std, wz_std = self._rng, self.vx_std.value, self.wz_std.value
+        w = {name: parameter.value for name, parameter in self.weights.items()}  # 후보마다 읽지 않는다 (64 x 7회 절약)
         candidates: list[tuple[float, list[Velocity], list[Pose2]]] = []
         for k in range(self.batch_size.value):
             if k == 0:  # 0번은 지난 시퀀스 그대로 (잡음 없이)
                 noisy = self.control
             else:
-                # 후보 하나 안에서는 잡음이 이어지게(랜덤워크) 준다: 스텝마다 완전히 독립이면 표본 80개로는 가중 평균이
-                # 매 주기 크게 흔들려 실기 바퀴가 100ms마다 튄다 (nav2는 1000개라 괜찮지만 Pi에서는 80개).
+                # 후보 하나에는 한 번 뽑은 편향만 준다: 스텝마다 잡음을 새로 뽑으면 gauss 호출이 후보당 40번이라
+                # Pi에서 CPU를 많이 먹고, 표본 64개로는 가중 평균이 흔들려 바퀴가 튄다.
                 dv, dw = rng.gauss(0.0, vx_std), rng.gauss(0.0, wz_std)
-                noisy = []
-                for v, w in self.control:
-                    noisy.append((min(vx_max, max(vx_min, v + dv)), min(wz_max, max(-wz_max, w + dw))))
-                    dv += rng.gauss(0.0, vx_std * 0.5)
-                    dw += rng.gauss(0.0, wz_std * 0.5)
+                noisy = [(min(vx_max, max(vx_min, v + dv)), min(wz_max, max(-wz_max, w + dw))) for v, w in self.control]
             trajectory = _rollout(pose, noisy, model_dt)
-            candidates.append((self._score(trajectory, noisy, costmap, local, goal, to_goal, follow, ahead, pose, model_dt), noisy, trajectory))
+            candidates.append((self._score(trajectory, noisy, costmap, local, goal, to_goal, follow, ahead, pose, model_dt, w), noisy, trajectory))
         lowest = min(c[0] for c in candidates)
         if lowest >= COLLISION_COST:
             self.control = []
@@ -103,9 +100,9 @@ class MPPIController(Controller):
         return command
 
     def _score(
-        self, trajectory: list[Pose2], controls: list[Velocity], costmap: Costmap, local: list[Pose2], goal: Pose2, to_goal: float, follow: Pose2, ahead: Pose2, pose: Pose2, model_dt: float
+        self, trajectory: list[Pose2], controls: list[Velocity], costmap: Costmap, local: list[Pose2], goal: Pose2, to_goal: float,
+        follow: Pose2, ahead: Pose2, pose: Pose2, model_dt: float, w: dict[str, float]
     ) -> float:
-        w = {name: parameter.value for name, parameter in self.weights.items()}
         n = len(trajectory)
         score = 0.0
         cost_sum = 0.0
@@ -121,7 +118,8 @@ class MPPIController(Controller):
         if to_goal < self.goal_angle_threshold.value:  # GoalAngleCritic
             score += w["GoalAngleCritic"] * sum(abs(wrap(yaw - goal[2])) for _, _, yaw in trajectory) / n
         if to_goal >= self.goal_angle_threshold.value:  # PathAlignCritic: 목표 가까이에서는 끈다 (경로 끝을 넘어서려 하지 않게)
-            score += w["PathAlignCritic"] * sum(min(math.hypot(x - p[0], y - p[1]) for p in local) for x, y, _ in trajectory[1::2]) / max(1, n // 2)
+            sampled = trajectory[2::3]
+            score += w["PathAlignCritic"] * sum(min(math.hypot(x - p[0], y - p[1]) for p in local) for x, y, _ in sampled) / max(1, len(sampled))
         if to_goal >= self.path_follow_threshold.value:  # PathFollowCritic: 경로 앞쪽 점까지 가까이 (앞으로 나아가게)
             score += w["PathFollowCritic"] * math.hypot(end[0] - follow[0], end[1] - follow[1])
         angle_to_ahead = math.atan2(ahead[1] - pose[1], ahead[0] - pose[0])

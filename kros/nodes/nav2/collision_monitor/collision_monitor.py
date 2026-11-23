@@ -117,6 +117,7 @@ class CollisionMonitor(Node):
         self.teleop_timeout = self.declare_parameter("teleop_timeout", 0.5, validator=lambda value: value > 0)
         # 앞 장애물에 막혔을 때 후진으로 빠져나오는 것은 허용한다 (0이면 막는다). 후진은 비율만큼만.
         self.reverse_escape_ratio = self.declare_parameter("reverse_escape_ratio", 0.3, validator=lambda value: 0 <= value <= 1)
+        self.max_observation_range = self.declare_parameter("max_observation_range", 1.5, validator=lambda value: value > 0)  # 이 밖의 점은 검사에 안 쓴다
         # 제자리 회전: 가장 가까운 점이 로봇 반지름(0.22m) 밖이면 돌 수 있다 (벽 앞에서도 방향을 돌릴 수 있게).
         self.rotation_clearance = self.declare_parameter("rotation_clearance", 0.22, validator=lambda value: value >= 0)
         self.rotation_escape_ratio = self.declare_parameter("rotation_escape_ratio", 0.5, validator=lambda value: 0 <= value <= 1)
@@ -146,7 +147,7 @@ class CollisionMonitor(Node):
         c, s = math.cos(yaw), math.sin(yaw)
         points = []
         for i, r in enumerate(scan.ranges):
-            if math.isfinite(r) and scan.range_min <= r <= scan.range_max:
+            if math.isfinite(r) and scan.range_min <= r <= min(scan.range_max, self.max_observation_range.value):
                 a = scan.angle_min + i * scan.angle_increment
                 px, py = r * math.cos(a), r * math.sin(a)
                 points.append((t.translation.x + c * px - s * py, t.translation.y + s * px + c * py))

@@ -15,7 +15,7 @@ from kros.nodes.node import Node
 from kros.parameter import ParameterValue
 from kros.tf import TransformException
 
-from .controller import Controller, ControllerError, Pose2, Velocity
+from .controller import Controller, ControllerError, Pose2, Velocity, wrap
 from .dwb import DWBLocalPlanner
 from .mppi import MPPIController
 from .goal_checker import SimpleGoalChecker, SimpleProgressChecker
@@ -72,6 +72,13 @@ class ControllerServer(Node):
             self._diagnostics.add(plugin_id, partial(controller.diagnostic_status))
         self.goal_checker = SimpleGoalChecker(self)
         self.progress_checker = SimpleProgressChecker(self)
+        # 목표 근처에서 남은 방향만 돌 때: MPPI가 전진/후진을 섞지 않게 제자리 회전으로 마무리한다
+        self.final_rotation_gain = self.declare_parameter("final_rotation_gain", 1.5, validator=lambda value: value > 0)
+        self.final_rotation_speed = self.declare_parameter("final_rotation_speed", 0.8, validator=lambda value: value > 0)
+        # 명령 가속 제한 (0이면 끔). 실기는 0.5 m/s^2, 2 rad/s^2로 바퀴가 한 번에 튀지 않게.
+        self.max_linear_accel = self.declare_parameter("max_linear_accel", 0.0, validator=lambda value: value >= 0)
+        self.max_angular_accel = self.declare_parameter("max_angular_accel", 0.0, validator=lambda value: value >= 0)
+        self._last_command: Velocity = (0.0, 0.0)
         self.velocity: Velocity = (0.0, 0.0)
         self._tick = threading.Event()  # 제어 주기마다 (시뮬레이션 시간이면 시뮬레이션 시간으로) 켜진다
         self._preempt = threading.Event()  # 새 goal이 들어왔다: 지금 goal은 물러난다 (액션 서버는 goal을 하나씩 차례로 돌린다)
@@ -87,6 +94,7 @@ class ControllerServer(Node):
         self.velocity = (odom.twist.twist.linear.x, odom.twist.twist.angular.z)
 
     def _stop(self) -> None:
+        self._last_command = (0.0, 0.0)
         self.publish(self.cmd_vel_topic.value, Twist())
 
     def _execute(self, handle: ServerGoalHandle[FollowPathGoal, FollowPathFeedback]) -> FollowPathResult:
@@ -105,6 +113,9 @@ class ControllerServer(Node):
         started = self.now()
         self._preempt.clear()
         period = 1.0 / self.controller_frequency.value
+        cached_key: tuple[float, float, float] | None = None
+        cached_path: list[Pose2] = original
+        tick = 0
         while True:
             self._tick.clear()
             while not self._tick.wait(0.2):  # 다음 제어 주기까지 (취소/교체는 주기마다 본다)
@@ -121,12 +132,30 @@ class ControllerServer(Node):
                     continue
                 return self._fail(R.TF_ERROR, "local_costmap이 없거나 로봇 위치(TF)를 모른다")
             try:
-                path = self._in_frame(original, path_frame, frame)
+                if path_frame == frame:
+                    path = original
+                else:  # map -> odom은 스캔 매칭 때만 바뀐다: 그대로면 지난 변환을 재사용 (경로 수백 점 x 20Hz 절약)
+                    t = self.costmap_ros.buffer.lookup_transform(frame, path_frame).transform
+                    key = (t.translation.x, t.translation.y, _yaw(t.rotation))
+                    if key != cached_key:
+                        cached_key, cached_path = key, self._in_frame(original, path_frame, frame)
+                    path = cached_path
             except TransformException as error:
                 return self._fail(R.TF_ERROR, str(error))
-            if self.goal_checker.is_goal_reached(pose, path[-1]):
+            last_pose = path[-1]
+            dist_to_goal = math.hypot(last_pose[0] - pose[0], last_pose[1] - pose[1])
+            yaw_error = wrap(last_pose[2] - pose[2])
+            if self.goal_checker.is_goal_reached(pose, last_pose):
                 self._stop()
                 return R(R.NONE)
+            if dist_to_goal <= self.goal_checker.xy_goal_tolerance.value and abs(yaw_error) > self.goal_checker.yaw_goal_tolerance.value:
+                # 목표 근처: 제자리에서 목표 방향으로만 돈다 (MPPI가 전진/후진을 고르며 버벅이지 않게)
+                if not self.progress_checker.check(pose, self.now()):
+                    return self._fail(R.FAILED_TO_MAKE_PROGRESS, f"{self.progress_checker.movement_time_allowance.value}초 동안 움직이지 못했다")
+                v, w = 0.0, max(-self.final_rotation_speed.value, min(self.final_rotation_speed.value, self.final_rotation_gain.value * yaw_error))
+                self._publish_command(v, w, controller.local_plan, dist_to_goal, frame, handle, tick)
+                tick += 1
+                continue
             if not self.progress_checker.check(pose, self.now()):
                 return self._fail(R.FAILED_TO_MAKE_PROGRESS, f"{self.progress_checker.movement_time_allowance.value}초 동안 움직이지 못했다")
             try:
@@ -134,15 +163,29 @@ class ControllerServer(Node):
             except ControllerError as error:
                 return self._fail(error.code, str(error))
             # 목표 가까이에서는 감속한다 (Nav2의 goal critic/deceleration 흉내 — 오버슈트 방지)
-            dist_to_goal = math.hypot(path[-1][0] - pose[0], path[-1][1] - pose[1])
             if dist_to_goal < 0.6 and v > 0:
                 scale = max(0.2, dist_to_goal / 0.6)
                 v, w = v * scale, w * scale
-            self.publish(self.cmd_vel_topic.value, Twist(Vector3(x=v), Vector3(z=w)))
-            stamp = self.now()
-            local = tuple(PoseStamped(Header(stamp, frame), Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))) for x, y, yaw in controller.local_plan)
+            self._publish_command(v, w, controller.local_plan, dist_to_goal, frame, handle, tick)
+            tick += 1
+
+    def _publish_command(self, v: float, w: float, local_plan: list[Pose2], distance: float, frame: str, handle: ServerGoalHandle[FollowPathGoal, FollowPathFeedback], tick: int) -> None:
+        """가속 제한 -> cmd_vel, local_plan은 10Hz, 액션 피드백은 5Hz로만 (20Hz 전부 보내면 Pi에서 낭비)."""
+        last_v, last_w = self._last_command
+        max_dv = self.max_linear_accel.value * (1.0 / self.controller_frequency.value)
+        max_dw = self.max_angular_accel.value * (1.0 / self.controller_frequency.value)
+        if max_dv > 0:
+            v = max(last_v - max_dv, min(last_v + max_dv, v))
+        if max_dw > 0:
+            w = max(last_w - max_dw, min(last_w + max_dw, w))
+        self._last_command = (v, w)
+        self.publish(self.cmd_vel_topic.value, Twist(Vector3(x=v), Vector3(z=w)))
+        stamp = self.now()
+        if tick % 2 == 0:
+            local = tuple(PoseStamped(Header(stamp, frame), Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))) for x, y, yaw in local_plan)
             self.publish(LOCAL_PLAN_TOPIC_NAME, Path(Header(stamp, frame), local))  # nav2처럼: 고른 명령의 예상 자취
-            handle.publish_feedback(FollowPathFeedback(math.hypot(path[-1][0] - pose[0], path[-1][1] - pose[1]), v))
+        if tick % 4 == 0:
+            handle.publish_feedback(FollowPathFeedback(distance, v))
 
     def _in_frame(self, path: list[Pose2], source: str, target: str) -> list[Pose2]:
         """경로를 costmap 좌표계로 (지금 TF로)."""
