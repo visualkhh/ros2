@@ -2,7 +2,7 @@
 # kos_ws 환경 켜기 — underlay(ros2_ws) + overlay(kos_ws)를 순서대로 source한다.
 #   source ./setup.sh
 set -eo pipefail
-WS="$(cd "$(dirname "$0")" && pwd)"
+WS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UNDERLAY="${ROS2_UNDERLAY:-$HOME/ros2/ros2_ws}"
 
 set +u

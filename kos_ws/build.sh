@@ -4,7 +4,7 @@
 #   ./build.sh            # src/ 아래 패키지를 빌드한다 (underlay source 후)
 #   ./build.sh --clean    # build/install/log를 지우고 다시 빌드
 set -eo pipefail
-WS="$(cd "$(dirname "$0")" && pwd)"
+WS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UNDERLAY="${ROS2_UNDERLAY:-$HOME/ros2/ros2_ws}"
 
 if [[ "${1:-}" == "--clean" ]]; then
