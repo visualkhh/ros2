@@ -423,7 +423,10 @@ class Viz:
             self._pressed.clear()
             v = w = 0.0
         if v != 0.0 or w != 0.0:
-            self.node.publish("cmd_vel_teleop", Twist(linear=Vector3(x=v), angular=Vector3(z=w)))
+            now = time.monotonic()
+            if now - getattr(self, "_last_teleop_pub", 0.0) >= 0.05:  # 20Hz면 충분 (네트워크/모니터 부하 감소)
+                self.node.publish("cmd_vel_teleop", Twist(linear=Vector3(x=v), angular=Vector3(z=w)))
+                self._last_teleop_pub = now
             self._was_pressed = True
             if self._debug_keys and (v, w) != getattr(self, "_last_teleop_printed", (0.0, 0.0)):
                 print(f"[viz-key] cmd_vel_teleop publish v={v:+.2f} w={w:+.2f}", flush=True)

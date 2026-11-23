@@ -11,6 +11,7 @@
   ./kos_ws/run.sh                    # 포트 9000
   KROS_SERVER_PORT=0 ./kos_ws/run.sh # 네트워크 없이
 """
+import math
 import os
 import signal
 import socket
@@ -55,7 +56,10 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     )
     ekf = Ekf(ctx, parameters={"odom0": "odom", "odom0_config": ODOM_CONFIG, "imu0": "imu", "imu0_config": IMU_CONFIG})
     # Pi 4는 pure Python 스캔매칭이 무거워서 두 번째 스캔마다(5Hz)만 맞춘다 (TF는 계속 20Hz)
-    slam = Cartographer(ctx, parameters={"mode": "idle", "match_every": 2, "num_matching_points": 40, "map_publish_period_sec": 2.0})
+    slam = Cartographer(ctx, parameters={
+        "mode": "idle", "match_every": 3, "num_matching_points": 30, "map_publish_period_sec": 2.0,
+        "linear_search_window": 0.05, "angular_search_window": math.radians(3),
+    })
     maps = {"maps_directory": str(MAPS_DIRECTORY)}
     footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
     planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters={**footprint, "update_frequency": 1.0})
@@ -68,7 +72,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
         "progress_checker.movement_time_allowance": 2.0,
         "progress_checker.required_movement_radius": 0.2,
     }
-    controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters={**footprint, "update_frequency": 3.0})
+    controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters={**footprint, "update_frequency": 3.0, "scan_period": 1.0 / 3.0})
     behavior = BehaviorServer(ctx)
     mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
     # 0.5m 안이면 감속: 0.3은 너무 느려서 0.6 (정지 상자 0.3m는 그대로)
@@ -159,8 +163,12 @@ def main() -> None:
         stop.set()
         hardware.join(timeout=2.0)
         robot.stop()  # 마지막 C,0,0 + 시리얼 닫기
-        kros.shutdown()
+        # kros.shutdown()이 콜백/시리얼을 기다리며 오래 걸릴 수 있다: 정지는 이미 보냈으니 3초 뒤 강제 종료.
+        shutdown = threading.Thread(target=kros.shutdown, daemon=True)
+        shutdown.start()
+        shutdown.join(timeout=3.0)
         print("[kos] 종료", flush=True)
+        os._exit(0)
 
 
 if __name__ == "__main__":

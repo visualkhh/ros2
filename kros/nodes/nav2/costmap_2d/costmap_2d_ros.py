@@ -54,10 +54,13 @@ class Costmap2DROS(Node):
         self.height = self.declare_parameter("height", 3.0, validator=positive)
         self.resolution = self.declare_parameter("resolution", 0.05, validator=positive)
         self.update_frequency = self.declare_parameter("update_frequency", 5.0, validator=positive)
+        # 스캔 콜백(장애물 레이캐스팅)을 몇 초에 한 번 처리할지. 0이면 매 스캔 (Pi 실기는 1/3: 3Hz)
+        self.scan_period = self.declare_parameter("scan_period", 0.0, validator=lambda value: value >= 0)
         self.observation_sources = self.declare_parameter("observation_sources", ("scan",))
         self.obstacle_max_range = self.declare_parameter("obstacle_max_range", 2.5, validator=positive)
         self.raytrace_max_range = self.declare_parameter("raytrace_max_range", 3.0, validator=positive)
         self._lock = threading.Lock()
+        self._last_scan_time = 0.0
         self._map: OccupancyGrid | None = None
         self._costmap: Costmap | None = None
         self._obstacles: set[Cell] = set()  # obstacle_layer가 칠한 칸 (global_frame, resolution 칸)
@@ -93,6 +96,11 @@ class Costmap2DROS(Node):
     # ---- obstacle_layer --------------------------------------------------------------------------------
 
     def _on_scan(self, scan: LaserScan) -> None:
+        if self.scan_period.value > 0.0:
+            now = self.now()
+            if now - self._last_scan_time < self.scan_period.value:
+                return  # Pi CPU: 스캔 레이캐스팅을 update_frequency에 맞춰 줄인다
+            self._last_scan_time = now
         try:  # 스캔을 잰 순간의 센서 자리 (global_frame)
             t = self.buffer.lookup_transform(self.global_frame.value, scan.header.frame_id, scan.header.stamp).transform
         except TransformException:
