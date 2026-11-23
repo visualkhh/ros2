@@ -564,7 +564,8 @@ class Viz:
     def _find_package_root() -> Path:
         """URDF의 package:// 메시 파일을 찾을 base 폴더를 자동으로 찾는다."""
         candidates = [
-            Path(__file__).resolve().parents[2] / "worlds" / "robots" / "turtlebot3" / "description",
+            Path(__file__).resolve().parents[1] / "worlds" / "robots" / "turtlebot3" / "description",
+            Path(__file__).resolve().parents[2] / "kros" / "worlds" / "robots" / "turtlebot3" / "description",
             Path("kros/worlds/robots/turtlebot3/description"),
             Path("."),
         ]

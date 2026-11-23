@@ -53,10 +53,13 @@ class UrdfModel:
                 geometry = visual.find("geometry")
                 mesh = geometry.find("mesh") if geometry is not None else None
                 if mesh is None:
-                    raise NotImplementedError(f"link {node.getName()!r}: mesh가 아닌 visual은 지원하지 않음")
+                    continue  # mesh가 아닌 visual은 건너뛴다 (box/cylinder 미지원)
                 relative = mesh.get("filename", "").split("://", 1)[1].split("/", 1)[1]  # package://pkg/<relative>
+                path = package_root / relative
+                if not path.exists():
+                    continue  # 메시 파일이 없으면 이 visual은 건너뛴다 (원격 viz 등)
                 scale = _floats(mesh.get("scale"), (1.0, 1.0, 1.0))
-                shape = load_stl(package_root / relative, (scale[0], scale[1], scale[2]))
+                shape = load_stl(path, (scale[0], scale[1], scale[2]))
                 material = visual.find("material")
                 if material is not None and material.get("name") in colors:
                     shape.setColor(*colors[material.get("name")])
