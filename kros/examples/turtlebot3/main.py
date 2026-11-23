@@ -91,6 +91,8 @@ def main() -> None:
             "FollowPath.fallback_controller": "mppi",
             "general_goal_checker.xy_goal_tolerance": 0.4,
             "general_goal_checker.yaw_goal_tolerance": 0.4,
+            "progress_checker.movement_time_allowance": 3.0,
+            "progress_checker.required_movement_radius": 0.3,
         }
         controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
         behavior = BehaviorServer(ctx)  # 회복 동작 (spin · backup · wait) — bt_navigator가 실패 시 부른다
@@ -98,7 +100,7 @@ def main() -> None:
         #                 (다른 프로그램의) teleop -> cmd_vel_teleop -+   (사람이 이긴다)       (라이다로 앞이 막히면 멈추거나 늦춘다)
         mux = TwistMux(ctx, parameters={"cmd_vel_out": "cmd_vel_mux"})
         monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel"})
-        navigator = BtNavigator(ctx)  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 1초마다 재계획
+        navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 3초마다 재계획
         return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller, behavior, navigator, mux, monitor]
 
     kros = Kros(create_nodes, time_source=time_source)
