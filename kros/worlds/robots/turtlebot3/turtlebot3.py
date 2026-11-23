@@ -43,7 +43,7 @@ class TurtleBot3(Robot):
     urdf_path = DESCRIPTION_DIR / "urdf" / "turtlebot3_waffle_pi.urdf"
     mass = 1.8  # kg, 실제 waffle pi. movable은 False: 모터가 스스로 움직이고 부딪혀도 밀리지 않는다
     height = 0.141  # m, waffle pi 높이 (라이다 높이 0.132보다 높아서 다른 로봇의 라이다에 보인다)
-    radius = 0.2  # waffle pi를 바퀴축 중심 원으로 근사 (뒤쪽 끝 0.197). 회전 중 뒤 모서리(0.25)는 벽을 살짝 파고들 수 있음
+    radius = 0.22  # waffle pi: 시각 모델이 base_footprint 기준 x -0.197~0.205, y -0.139~0.139까지 뻗는다 (URDF visual mesh). 원형 충돌 판정이 모서리를 커버하도록 0.22로 잡는다.
 
     def __init__(self, pose: Pose2D = Pose2D(0.0, 0.0, 0.0), serial_port: str | None = None, noisy: bool = False, seed: int | None = None) -> None:
         """부품은 로봇이 정한다. 시뮬레이션이 기본이다: OpenCR 보드(XL430-W250 바퀴 모터 둘, MPU-9250)와 LDS-01 라이다.
