@@ -62,7 +62,7 @@ class MessageManager:
                     self._last_broadcast: dict[str, float] = {}
                 last = self._last_broadcast.get(topic, 0.0)
                 throttle_topics = {"scan", "odom", "tf", "tf_static", "imu", "odometry/filtered", "local_costmap/costmap", "global_costmap/costmap"}
-                min_interval = 0.1 if topic in throttle_topics else 0.0
+                min_interval = 0.2 if topic in throttle_topics else 0.0
                 if now - last >= min_interval:
                     self._last_broadcast[topic] = now
                     self._broadcast({"type": "topic", "name": topic, "msg": msg})
@@ -281,7 +281,7 @@ class MessageManager:
             last = self._last_broadcast.get(topic, 0.0)
             # 고빈도 토픽 (scan, odom, tf, imu)은 10Hz로 제한
             throttle_topics = {"scan", "odom", "tf", "tf_static", "imu", "odometry/filtered", "local_costmap/costmap"}
-            min_interval = 0.1 if topic in throttle_topics else 0.0
+            min_interval = 0.5 if topic in ("scan", "local_costmap/costmap", "global_costmap/costmap") else 0.2 if topic in throttle_topics else 0.0
             if now - last >= min_interval:
                 self._last_broadcast[topic] = now
                 self._broadcast({"type": "topic", "name": topic, "msg": msg})
