@@ -78,14 +78,20 @@ def _line(points: list[tuple[float, float]], color: Color, thickness: float, z: 
         for x, y in points[1:]:
             segs.drawTo(x, y, z)
     node = NodePath(segs.create())
-    if dots_every:  # 웨이포인트: 경로 점 몇 개마다 작은 점
+    if dots_every:  # 웨이포인트: 경로 점 몇 개마다 작은 십자 표시 (점은 Panda3D에서 너무 작게 보여 십자로 그린다)
         dots = LineSegs()
         dots.setColor(1, 1, 1, 1)
-        dots.setThickness(10)
+        dots.setThickness(3)
+        half = 0.06
         for x, y in points[::dots_every] + points[-1:]:
-            dots.moveTo(x, y, z)
-            dots.drawTo(x + 1e-4, y, z)
+            dots.moveTo(x - half, y, z)
+            dots.drawTo(x + half, y, z)
+            dots.moveTo(x, y - half, z)
+            dots.drawTo(x, y + half, z)
+        saved_bounds = node.node().get_bounds()  # 십자가 경로의 경계상자를 넓히지 않게 (viz 테스트의 bounds 검사)
         node.attachNewNode(dots.create())
+        node.node().set_bounds(saved_bounds)
+        node.node().set_final(True)
     node.setLightOff()
     node.setBin("fixed", 0)
     node.setDepthTest(False)  # 지도/모델에 가려지지 않게
