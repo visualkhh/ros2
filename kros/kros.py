@@ -26,12 +26,12 @@ class Kros:
         node_create: NodeCreate | None = None,
         parameters: Mapping[str, Mapping[str, ParameterValue]] | None = None,
         time_source: TimeSource | None = None,
-        server: Mapping[str, object] | None = None,
-        clients: list[Mapping[str, object]] | None = None,
+        host: Mapping[str, object] | None = None,
+        servers: list[Mapping[str, object]] | None = None,
     ) -> None:
         if node_create is None:
             node_create = lambda ctx: []  # noqa: E731
-        self.context: Context = Context(parameters, time_source, server=server, clients=clients)
+        self.context: Context = Context(parameters, time_source, host=host, servers=servers)
         self.nodes: list[Node] = list(node_create(self.context))
         for unused in self.context.parameter_manager.unused_overrides():
             logger.warning("값을 줬는데 선언된 파라미터가 없다 (오타?): %s", unused)
