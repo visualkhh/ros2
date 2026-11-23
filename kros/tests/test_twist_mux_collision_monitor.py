@@ -103,6 +103,15 @@ class TestCollisionMonitor(Setup):
         self.send("cmd_vel_mux", twist(0.2, 0.5))
         self.assertEqual(self.out[-1], twist(0.0))  # 0.3m 상자: 정지 (둘 다 걸리면 더 느린 것)
 
+    def test_reverse_can_escape_a_front_stop(self) -> None:
+        """앞 0.3m 안에 장애물이 있어도 후진은 느리게 허용한다 (벽에 갇혀 못 빠져나오지 않게)."""
+        self.obstacle(0.2)
+        self.send("cmd_vel_mux", twist(0.2))
+        self.assertEqual(self.out[-1], twist(0.0))  # 전진은 정지
+        self.send("cmd_vel_mux", twist(-0.2))
+        self.assertAlmostEqual(self.out[-1].linear.x, -0.2 * 0.3)
+        self.assertGreater(self.out[-1].linear.x, -0.2)
+
     def test_approach_slows_in_proportion_to_time_before_collision(self) -> None:
         for name in ("PolygonStop", "PolygonSlow"):
             self.node.set_parameter(f"{name}.enabled", False)

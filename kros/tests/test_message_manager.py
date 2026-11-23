@@ -71,6 +71,31 @@ class TestNetworkProtocol(unittest.TestCase):
         time.sleep(0.4)
         self.assertEqual(subscribed, ["wanted"])
 
+    def test_client_reconnects_after_the_server_restarts(self) -> None:
+        """Viz를 켜 둔 채 Pi 앱만 재시작해도 다시 붙는다."""
+        server = MessageManager(host={"ip": "127.0.0.1", "port": 0})
+        port = _wait_port(server)
+        client = MessageManager(servers=[{"ip": "127.0.0.1", "port": port}])
+        self.addCleanup(client.shutdown)
+        got: list[str] = []
+        client.subscribe("hello", String, lambda message: got.append(message.data))
+        for _ in range(100):
+            if "before" in got:
+                break
+            server.publish("hello", String(data="before"))
+            time.sleep(0.02)
+        self.assertIn("before", got)
+        server.shutdown()
+        time.sleep(0.8)  # accept 스레드가 0.5초 타임아웃으로 깨어나 포트를 놓는다
+        server2 = MessageManager(host={"ip": "127.0.0.1", "port": port})
+        self.addCleanup(server2.shutdown)
+        for _ in range(200):  # 재연결은 2초 간격이다
+            server2.publish("hello", String(data="after"))
+            time.sleep(0.05)
+            if "after" in got:
+                break
+        self.assertIn("after", got)
+
     def test_service_is_forwarded_to_the_server(self) -> None:
         """로컬에 없는 서비스는 연결 너머의 서버가 처리한다 (원격 Viz의 지도 저장/불러오기)."""
         server = MessageManager(host={"ip": "127.0.0.1", "port": 0})

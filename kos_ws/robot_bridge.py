@@ -6,14 +6,11 @@ from kros.msgs.std_msgs import Header
 from kros.nodes import Node
 from kros.tf import JOINT_STATES_TOPIC_NAME
 from kros.timer import Timer
-from kros.worlds.robots.turtlebot3 import TurtleBot3
 
-try:  # 패키지(kos_ws)로 실행할 때와 main.py를 직접 실행할 때 둘 다
-    from .hardware_status import hardware_path, leaves, make_task
-    from .topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
-except ImportError:  # python kos_ws/main.py
-    from hardware_status import hardware_path, leaves, make_task
-    from topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
+from kos_ws.robot import RealTurtleBot3
+
+from kos_ws.hardware_status import hardware_path, leaves, make_task
+from kos_ws.topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
 
 
 class RobotBridge(Node):
@@ -26,7 +23,7 @@ class RobotBridge(Node):
     joint_states_period(joint_states 발행 주기 초, 실행 중에도 바꿀 수 있다).
     """
 
-    def __init__(self, context: Context, robot: TurtleBot3) -> None:
+    def __init__(self, context: Context, robot: RealTurtleBot3) -> None:
         super().__init__(context)  # 이름은 클래스 이름(RobotBridge)
         self._robot = robot
         self.data_timeout = self.declare_parameter("data_timeout", 2.0, validator=lambda seconds: seconds > 0)

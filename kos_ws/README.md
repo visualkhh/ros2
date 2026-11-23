@@ -70,6 +70,13 @@ cd /home/pank/workspaces/visualkhh/source/ros2
 
 - `main.py`: 실시간 50Hz 루프 + kros 노드 (RobotBridge, TF, EKF, Cartographer, map_server/saver/catalog,
   Smac, MPPI, behavior_server, bt_navigator, twist_mux, collision_monitor)
-- `robot.py`: `RealTurtleBot3` — `OpenCrSerial`(방향 -1/-1, 7.8 rad/s 제한) + `SerialLds03`(230400, 몸통 필터)
-- `urdf/turtlebot3_real.urdf`: LDS-03 1층 앞(x=0.060, z=0.022), OpenCR IMU 위치
+- `robot/`: 이 프로젝트의 로봇
+  - `robot.py`: `RealTurtleBot3` (실기 조립: OpenCR + LDS-03)
+  - `turtlebot3.py`: 로봇 정의/시뮬레이션 변형 (치수, 부품)
+  - `description/`: URDF + 메시. `urdf/turtlebot3_real.urdf`는 LDS-03 1층 앞(x=0.060,z=0.022), OpenCR IMU 반영
+- `hardwares/`: 장치 드라이버만
+  - `opencr/`: OpenCR 시리얼 (방향 -1/-1, 7.8 rad/s 제한, 0.5s 명령 타임아웃)
+  - `lds_03.py`: LDS-03 라이다 (230400, 몸통 필터, **reverse=True**: 이 장치는 각도가 시계방향)
 - `robot_bridge.py`, `hardware_status.py`, `topics.py`: cmd_vel/scan/imu/joint_states + 진단
+
+`kros/`는 공용 라이브러리입니다. 이 로봇을 커스텀할 때는 **kos_ws/robot**과 **kos_ws/hardwares**만 고치세요.

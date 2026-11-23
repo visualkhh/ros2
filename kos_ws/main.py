@@ -35,13 +35,11 @@ from kros.nodes.nav2.planner import PlannerServer
 from kros.nodes.twist_mux import TwistMux
 from kros.parameter import ParameterValue
 from kros.worlds.clock import Clock
-from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS
 
-from kos_ws.robot import OPENCR_PORT, RealTurtleBot3
+from kos_ws.robot import OPENCR_PORT, WHEEL_RADIUS, WHEEL_SEPARATION, RealTurtleBot3
 from kos_ws.robot_bridge import RobotBridge
 
 MAPS_DIRECTORY = Path(__file__).resolve().parent / "artifacts" / "maps"
-WHEEL_SEPARATION = 0.287  # m, 실측 (Waffle Pi 개조형)
 LOOP_PERIOD = 0.02  # 50Hz: 하드웨어 tick (OpenCR 명령은 10Hz, 라이다는 10Hz, IMU는 20Hz)
 
 # robot_localization의 *_config 15칸 (x y z roll pitch yaw vx vy vz vroll vpitch vyaw ax ay az) 중 켤 칸
@@ -109,16 +107,16 @@ def run_hardware(robot: RealTurtleBot3, stop: threading.Event) -> None:
 
 
 def _local_addresses() -> list[str]:
-    addresses = set()
+    addresses: set[str] = set()
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            addresses.add(info[4][0])
+            addresses.add(str(info[4][0]))
     except OSError:
         pass
     try:  # 기본 경로로 나가는 주소 (mDNS로 이름이 안 풀릴 때)
         probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         probe.connect(("8.8.8.8", 80))
-        addresses.add(probe.getsockname()[0])
+        addresses.add(str(probe.getsockname()[0]))
         probe.close()
     except OSError:
         pass

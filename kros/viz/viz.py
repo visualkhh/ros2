@@ -1,4 +1,5 @@
 import math
+import os
 import threading
 import time
 from collections.abc import Mapping
@@ -35,7 +36,7 @@ from .nav_display import NavDisplay
 from .slam_panel import BUTTON_COLOR, SlamPanel
 
 NAME = "Viz"
-HELP = "left drag: orbit (pose/goal tool: press = position, drag = heading)    right drag: pan    wheel: zoom    esc: close"
+HELP = "left drag: orbit (pose/goal tool: press = position, drag = heading)    right drag: pan    wheel: zoom    W/A/S/D: teleop    esc: close"
 PANEL_WIDTH, ROW_TOP, ROW_STEP = 0.7, 0.86, 0.072  # 2D 장면 좌표: 세로 +-1, 가로는 창 비율에 따라 (왼쪽 끝에서 잰다)
 ODOMETRY_ARROWS = {"odom": (1.0, 0.35, 0.85, 1.0), "odometry/filtered": (0.3, 0.9, 1.0, 1.0)}  # 바퀴 오도메트리(분홍, TF 부모 선이 노랑이라)와 EKF 결과(하늘색)를 화살표로 겹쳐 본다
 # 패널 줄 순서. tf_static은 tf 화면에 같이 쓰여서 토글이 없다. grid, trail은 토픽이 아니다 (trail: 로봇이 fixed frame에서 지나온 궤적)
@@ -182,6 +183,7 @@ class Viz:
         shade = (0.05, 0.05, 0.08, 0.75)  # 밝은 지도 위에서도 읽히게
         self.controller_line = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.58), align=TextNode.ALeft, scale=0.042, bg=shade, mayChange=True)
         self.hud = OnscreenText(parent=self.hud_anchor, pos=(0.04, 0.92), align=TextNode.ALeft, fg=(1, 1, 1, 1), bg=shade, scale=0.05, mayChange=True)
+        self.teleop_line = OnscreenText(parent=self.hud_anchor, pos=(0.04, -0.86), align=TextNode.ALeft, fg=(0.5, 1.0, 0.6, 1), bg=shade, scale=0.04, mayChange=True)
         OnscreenText(text=HELP, parent=self.hud_anchor, pos=(0.04, -0.95), align=TextNode.ALeft, fg=(0.8, 0.8, 0.8, 1), bg=shade, scale=0.04)
         OnscreenText(text="Fixed Frame", parent=self.left, pos=(0.04, -0.82), align=TextNode.ALeft, fg=(0.6, 0.8, 1, 1), scale=0.045)
         frames = list(FIXED_FRAMES) if fixed_frame in FIXED_FRAMES else [fixed_frame, *FIXED_FRAMES]
@@ -301,29 +303,52 @@ class Viz:
         base가 없는 경우(원격 Viz 단독 창): ShowBase가 이미 이 창에 MouseAndKeyboard/MouseWatcher를 붙여 놓았다.
         여기에 또 만들면 입력 장치가 덮여서 마우스/버튼이 전혀 안 먹는다 → ShowBase 것을 그대로 쓴다.
         """
+        self._debug_keys = os.environ.get("KOS_VIZ_DEBUG_KEYS", "") not in ("", "0")
         self._events = DirectObject()  # 이벤트는 이 객체 이름으로 받는다 (base.accept로 받으면 ShowBase 자신의 window-event 처리를 덮어써서 Viewer가 창 이벤트를 못 받는다)
         if self.own_base:
             watcher = self.base.mouseWatcherNode  # 오프스크린이면 None (입력 장치가 없다)
             self.mouse = NodePath(watcher) if watcher is not None else NodePath(MouseWatcher("viz"))
             prefix = ""  # ShowBase 기본 ButtonThrower는 접두사가 없다
+            mk = self.mouse.getParent() if watcher is not None else NodePath()
         else:
             self.mouse = NodePath(MouseWatcher("viz"))  # 오프스크린(GraphicsBuffer)은 입력 장치가 없어서 연결하지 않는다
+            mk = NodePath()
             if isinstance(self.win, GraphicsWindow):
                 mk = self.base.dataRoot.attachNewNode(MouseAndKeyboard(self.win, 0, "viz"))
                 self.mouse.reparentTo(mk)
                 self.mouse.attachNewNode(ButtonThrower("viz")).node().setPrefix("viz-")
                 self.mouse.node().addRegion(PGMouseWatcherBackground())  # 3D 화면 위에서도 마우스 위치를 추적한다
             prefix = "viz-"
+        # 키보드는 MouseWatcher(버튼 위에서 이벤트를 막는다)가 아니라 MouseAndKeyboard에 직접 붙인 ButtonThrower로도 받는다.
+        # 그래야 마우스가 패널 버튼 위에 있어도 W/A/S/D가 먹는다.
+        self._key_prefix = "vizkey-"
+        if not mk.isEmpty():
+            mk.attachNewNode(ButtonThrower("viz-teleop")).node().setPrefix(self._key_prefix)
         self.aspect.node().setMouseWatcher(self.mouse.node())
         self._events.accept(f"{prefix}wheel_up", self._zoom, [0.88])
         self._events.accept(f"{prefix}wheel_down", self._zoom, [1 / 0.88])
-        self._events.accept(f"{prefix}escape", self.close)
+        for esc in {f"{prefix}escape", f"{self._key_prefix}escape"}:
+            self._events.accept(esc, self.close)
         self._events.accept("window-event", self._window_event)
         # 키보드 조종 (W/A/S/D 또는 화살표) — cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)
         self._pressed: set[str] = set()
         for key in ("w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right"):
-            self._events.accept(f"{prefix}{key}", self._on_key, [key, True])
-            self._events.accept(f"{prefix}{key}-up", self._on_key, [key, False])
+            for source in (prefix, self._key_prefix):  # watcher 쪽(일반)과 M&K 쪽(GUI 위에서도) 둘 다
+                self._events.accept(f"{source}{key}", self._on_key, [key, True])
+                self._events.accept(f"{source}{key}-up", self._on_key, [key, False])
+        if self._debug_keys:  # 어느 이벤트가 오는지 터미널에 찍는다 (KOS_VIZ_DEBUG_KEYS=1)
+            # DirectObject.accept은 같은 이벤트의 기존 바인딩을 덮어쓴다: 텔레옵 키/ESC는 _on_key가 이미 찍으므로 건드리지 않는다.
+            teleop_keys = {"w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right", "escape"}
+            keys = [chr(code) for code in range(ord("a"), ord("z") + 1)] + [str(digit) for digit in range(10)]
+            keys += ["space", "shift", "control", "alt", "tab", "return"]
+            self._debug_events = DirectObject()  # 별도 객체: 기존 바인딩을 덮어쓰지 않는다
+            for key in keys:
+                if key in teleop_keys:
+                    continue
+                for source in (prefix, self._key_prefix):
+                    self._debug_events.accept(f"{source}{key}", self._log_key, [f"{source}{key}", True])
+                    self._debug_events.accept(f"{source}{key}-up", self._log_key, [f"{source}{key}", False])
+            print(f"[viz-key] debug on (own_base={self.own_base}, watcher={self.mouse.node().getName()}, active={self.win.isActive()})", flush=True)
         self._teleop_speed = 0.2  # m/s
         self._teleop_turn = 1.0  # rad/s
 
@@ -334,10 +359,15 @@ class Viz:
 
     def _on_key(self, key: str, pressed: bool) -> None:
         """키보드 조종: W/A/S/D 또는 화살표. cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)."""
+        if self._debug_keys:
+            print(f"[viz-key] {key} {'DOWN' if pressed else 'up'} (teleop)", flush=True)
         if pressed:
             self._pressed.add(key)
         else:
             self._pressed.discard(key)
+
+    def _log_key(self, event: str, pressed: bool) -> None:
+        print(f"[viz-key] {event} {'DOWN' if pressed else 'up'} active={self.win.isActive()}", flush=True)
 
     def _teleop_cmd(self) -> tuple[float, float]:
         """현재 눌린 키에서 (v, w)를 계산한다."""
@@ -355,6 +385,8 @@ class Viz:
         return v, w
 
     def _window_event(self, win: GraphicsWindow) -> None:
+        if self._debug_keys:
+            print(f"[viz-window] valid={win.isValid()} active={win.isActive()} size={win.getXSize()}x{win.getYSize()}", flush=True)
         if win is self.win and not win.isValid() and not self.own_base:
             self.close()
 
@@ -384,9 +416,20 @@ class Viz:
         if v != 0.0 or w != 0.0:
             self.node.publish("cmd_vel_teleop", Twist(linear=Vector3(x=v), angular=Vector3(z=w)))
             self._was_pressed = True
-        elif getattr(self, "_was_pressed", False):
-            self.node.publish("cmd_vel_teleop", Twist())  # 키 떼면 정지
-            self._was_pressed = False
+            if self._debug_keys and (v, w) != getattr(self, "_last_teleop_printed", (0.0, 0.0)):
+                print(f"[viz-key] cmd_vel_teleop publish v={v:+.2f} w={w:+.2f}", flush=True)
+                self._last_teleop_printed = (v, w)
+            teleop_text = f"TELEOP  v={v:+.2f} m/s  w={w:+.2f} rad/s"
+        else:
+            if getattr(self, "_was_pressed", False):
+                self.node.publish("cmd_vel_teleop", Twist())  # 키 떼면 정지
+                self._was_pressed = False
+                if self._debug_keys:
+                    print("[viz-key] cmd_vel_teleop publish STOP", flush=True)
+                self._last_teleop_printed = (0.0, 0.0)
+            teleop_text = ""
+        if self.teleop_line.getText() != teleop_text:  # 같은 글자를 매 프레임 다시 그리지 않는다
+            self.teleop_line.setText(teleop_text)
         self.hud.setText(self._hud_text())
         text, color = self._controller_status()
         self.controller_line.setText(text)

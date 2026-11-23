@@ -108,6 +108,8 @@ class CollisionMonitor(Node):
         self.source_timeout = self.declare_parameter("source_timeout", 2.0, validator=lambda value: value > 0)
         self.polygon_names = self.declare_parameter("polygons", tuple(DEFAULT_POLYGONS))
         self.observation_sources = self.declare_parameter("observation_sources", ("scan",))
+        # 앞 장애물에 막혔을 때 후진으로 빠져나오는 것은 허용한다 (0이면 막는다). 후진은 비율만큼만.
+        self.reverse_escape_ratio = self.declare_parameter("reverse_escape_ratio", 0.3, validator=lambda value: 0 <= value <= 1)
         self.polygons = [Polygon(self, str(name)) for name in self.polygon_names.value]
         self.buffer = Buffer()
         self._listener = TransformListener(self.buffer, self)
@@ -150,6 +152,10 @@ class CollisionMonitor(Node):
             if not polygon.enabled.value:
                 continue
             result = polygon.apply(v, w, points)
+            front = bool(polygon.points) and sum(px for px, _ in polygon.points) > 0.0
+            if v < 0.0 and result == (0.0, 0.0) and polygon.action_type.value == "stop" and front:
+                # 앞이 막혀도 뒤로는 빠져나올 수 있게 (벽에 갇히지 않게). 아주 느리게.
+                result = (v * self.reverse_escape_ratio.value, w * self.reverse_escape_ratio.value)
             if (abs(result[0]), abs(result[1])) < (abs(best[0]), abs(best[1])):
                 best, self.state = result, f"{polygon.name}: {polygon.action_type.value}"
         return best

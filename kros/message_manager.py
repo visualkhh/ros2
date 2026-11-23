@@ -286,6 +286,7 @@ class MessageManager:
             self._tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._tcp_server.bind((ip, port))
             self._tcp_server.listen(8)
+            self._tcp_server.settimeout(0.5)  # shutdown 때 accept가 0.5초 안에 깨어나 포트를 놓는다
             threading.Thread(target=self._accept_loop, daemon=True).start()
         for c in self.servers:
             ip = c.get("ip", "127.0.0.1")
@@ -299,21 +300,24 @@ class MessageManager:
                 if server is None:
                     break
                 conn, addr = server.accept()
-                self._register_conn(conn, addr)
+            except TimeoutError:  # settimeout: 주기적으로 _running을 확인한다
+                continue
             except OSError:
                 break
+            self._register_conn(conn, addr)
 
     def _connect_loop(self, ip: str, port: int) -> None:
         while self._running:
             try:
                 conn = socket.create_connection((ip, port), timeout=5.0)
                 conn.settimeout(None)
-                self._register_conn(conn, (ip, port))
-                return
+                peer = self._register_conn(conn, (ip, port))
+                while self._running and peer.alive:  # 서버가 꺼지면 다시 연결한다 (Viz를 켜 둔 채 서버만 재시작)
+                    time.sleep(0.2)
             except OSError:
                 time.sleep(2.0)
 
-    def _register_conn(self, conn: socket.socket, addr: Any) -> None:
+    def _register_conn(self, conn: socket.socket, addr: Any) -> _Peer:
         try:
             conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)  # 작은 메시지의 지연(Nagle) 제거
         except OSError:
@@ -337,6 +341,7 @@ class MessageManager:
             except Exception:
                 pass  # 파라미터 표를 못 만들면 연결은 계속한다
         threading.Thread(target=self._recv_loop, args=(peer,), daemon=True).start()
+        return peer
 
     def _recv_loop(self, peer: _Peer) -> None:
         buf = bytearray()

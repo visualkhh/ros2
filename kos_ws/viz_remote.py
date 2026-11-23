@@ -50,7 +50,7 @@ from kros.viz import Viz  # noqa: E402
 
 host = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("KOS_VIZ_HOST", "pak.local")
 port = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("KOS_VIZ_PORT", "9000"))
-package_root = Path(sys.argv[3]).expanduser() if len(sys.argv) > 3 else None
+package_root = Path(sys.argv[3]).expanduser() if len(sys.argv) > 3 else ROOT / "kos_ws" / "robot" / "description"
 
 print(f"[kos viz] {host}:{port} 에 연결 (서버가 켜져 있어야 한다)", flush=True)
 print("[kos viz] 창을 클릭해 포커스를 준 뒤 W/A/S/D 로 텔레옵, 떼면 정지 / ESC 또는 Ctrl+C 로 종료", flush=True)
