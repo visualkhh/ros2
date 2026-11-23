@@ -365,11 +365,11 @@ kros/examples/turtlebot3/run.sh
 kros 인스턴스끼리 TCP로 토픽을 주고받을 수 있다. Viz를 PC에서 띄우고 실제 로봇(kros)은 Pi에서 돌릴 때 쓴다.
 
 ```python
-# 서버 (Pi 또는 PC)
-kros = Kros(node_create, server={"ip": "0.0.0.0", "port": 9000})
+# host (Pi 또는 PC에서 수신)
+kros = Kros(node_create, host={"ip": "0.0.0.0", "port": 9000})
 
-# 클라이언트 (PC)
-kros = Kros(node_create, clients=[{"ip": "192.168.1.10", "port": 9000}])
+# servers (PC에서 원격 kros에 접속)
+kros = Kros(node_create, servers=[{"ip": "192.168.1.10", "port": 9000}])
 ```
 
 - 서버/클라이언트가 모두 없으면 로컬 전용 모드 (기존 동작).

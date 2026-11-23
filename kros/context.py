@@ -13,10 +13,10 @@ class Context:
         self,
         parameters: Mapping[str, Mapping[str, ParameterValue]] | None = None,
         time_source: TimeSource | None = None,
-        server: Mapping[str, object] | None = None,
-        clients: list[Mapping[str, object]] | None = None,
+        host: Mapping[str, object] | None = None,
+        servers: list[Mapping[str, object]] | None = None,
     ) -> None:
-        self.message_manager: MessageManager = MessageManager(server=server, clients=clients, time_source=time_source)
+        self.message_manager: MessageManager = MessageManager(host=host, servers=servers, time_source=time_source)
         # 하위 호환: 기존 코드가 context.topic_executor 등을 직접 쓰는 경우
         self.topic_executor = self.message_manager.topic_executor
         self.service_executor = self.message_manager.service_executor
