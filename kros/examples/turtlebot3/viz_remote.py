@@ -22,16 +22,14 @@ if Path("/proc/driver/nvidia/version").exists():
 
 from kros import Kros
 from kros.viz import Viz
-from kros.worlds.robots.turtlebot3 import TurtleBot3
 from direct.showbase.ShowBase import ShowBase
 
 server_ip = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
 server_port = int(sys.argv[2]) if len(sys.argv) > 2 else 9000
-package_root = Path(sys.argv[3]) if len(sys.argv) > 3 else TurtleBot3.description_dir
 
 kros = None
 base = ShowBase()
-viz = Viz(package_root=package_root, base=base, servers=[{"ip": server_ip, "port": server_port}])
+viz = Viz(base=base, servers=[{"ip": server_ip, "port": server_port}])
 kros = viz.kros if viz.kros is not None else None
 print(f"[viz_remote] connected to {server_ip}:{server_port}", flush=True)
 base.run()
