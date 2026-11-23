@@ -134,6 +134,11 @@ class ControllerServer(Node):
                 v, w = controller.compute_velocity_commands(pose, self.velocity, path, costmap, period)
             except ControllerError as error:
                 return self._fail(error.code, str(error))
+            # 목표 가까이에서는 감속한다 (Nav2의 goal critic/deceleration 흉내 — 오버슈트 방지)
+            dist_to_goal = math.hypot(path[-1][0] - pose[0], path[-1][1] - pose[1])
+            if dist_to_goal < 0.6 and v > 0:
+                scale = max(0.2, dist_to_goal / 0.6)
+                v, w = v * scale, w * scale
             self.publish(self.cmd_vel_topic.value, Twist(Vector3(x=v), Vector3(z=w)))
             stamp = self.now()
             local = tuple(PoseStamped(Header(stamp, frame), Pose(Point(x, y, 0.0), Quaternion(0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)))) for x, y, yaw in controller.local_plan)

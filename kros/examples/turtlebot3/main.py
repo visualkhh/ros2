@@ -89,6 +89,8 @@ def main() -> None:
             "FollowPath.model_path": str(RL_POLICY),
             "FollowPath.lidar_inflation": 0.03,  # 이 정책은 inflation 0.01~0.05m로 학습했다 (params/env.yaml의 inflation_range)
             "FollowPath.fallback_controller": "mppi",
+            "general_goal_checker.xy_goal_tolerance": 0.4,
+            "general_goal_checker.yaw_goal_tolerance": 0.4,
         }
         controller = ControllerServer(ctx, parameters=controller_parameters, costmap_parameters=footprint)
         behavior = BehaviorServer(ctx)  # 회복 동작 (spin · backup · wait) — bt_navigator가 실패 시 부른다
