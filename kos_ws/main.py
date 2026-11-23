@@ -132,6 +132,57 @@ def _local_addresses() -> list[str]:
     return sorted(address for address in addresses if not address.startswith("127."))
 
 
+def start_profiler(kros: Kros, stop: threading.Event) -> None:
+    """KOS_PROFILE=1이면 2초마다 프로세스/스레드 CPU와 각 노드 타이머의 실제 주기·놓친 횟수를 /tmp/kos.log에 남긴다.
+
+    GIL 때문에 이 앱은 코어 하나만 쓴다: 75%만 넘어도 다른 스레드(제어 20Hz)가 밀린다. 어느 타이머가 미는지 보려고 만든 계측이다.
+    """
+    if os.environ.get("KOS_PROFILE", "").lower() not in ("1", "true", "yes", "on"):
+        return
+    clock = os.sysconf("SC_CLK_TCK")
+
+    def ticks(path: str) -> int:
+        try:
+            fields = Path(path).read_text().rsplit(")", 1)[1].split()
+            return int(fields[11]) + int(fields[12])
+        except (OSError, IndexError, ValueError):
+            return 0
+
+    def loop() -> None:
+        last_time = time.monotonic()
+        last_total = ticks("/proc/self/stat")
+        last_threads: dict[int, int] = {}
+        last_timers = {name: (calls, missed) for name, _period, calls, missed in kros.context.timer_manager.stats()}
+        while not stop.wait(2.0):
+            now = time.monotonic()
+            dt = max(now - last_time, 1e-6)
+            last_time = now
+            total = ticks("/proc/self/stat")
+            cpu = (total - last_total) / clock / dt * 100.0
+            last_total = total
+            rows: list[tuple[float, str]] = []
+            for thread in threading.enumerate():
+                tid = thread.native_id
+                if tid is None:
+                    continue
+                value = ticks(f"/proc/self/task/{tid}/stat")
+                previous = last_threads.get(tid, value)
+                last_threads[tid] = value
+                rows.append(((value - previous) / clock / dt * 100.0, thread.name))
+            rows.sort(reverse=True)
+            busiest = " ".join(f"{name}={value:.0f}%" for value, name in rows[:6])
+            rates: list[str] = []
+            for name, _period, calls, missed in kros.context.timer_manager.stats():
+                old_calls, old_missed = last_timers.get(name, (calls, missed))
+                last_timers[name] = (calls, missed)
+                drops = missed - old_missed
+                if drops or name in ("controller_server", "local_costmap", "global_costmap", "cartographer", "planner_server", "collision_monitor"):
+                    rates.append(f"{name}={((calls - old_calls) / dt):.1f}Hz" + (f"(miss {drops})" if drops else ""))
+            print(f"[prof] load={os.getloadavg()[0]:.2f} cpu={cpu:.0f}% | {busiest} | {' '.join(rates)}", flush=True)
+
+    threading.Thread(target=loop, name="profiler", daemon=True).start()
+
+
 def main() -> None:
     enable_console()
     robot = RealTurtleBot3(
@@ -157,6 +208,7 @@ def main() -> None:
         print(f"[kos] host mode: port {port} (PC에서: viz_remote.py <pi-ip> {port})", flush=True)
         print(f"[kos] 연결 주소: {addresses}", flush=True)
 
+    start_profiler(kros, stop)
     hardware = threading.Thread(target=run_hardware, args=(robot, stop), name="hardware", daemon=True)
     hardware.start()
     try:

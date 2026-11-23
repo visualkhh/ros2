@@ -151,7 +151,20 @@ class TestMppi(unittest.TestCase):
         self.assertEqual(a.compute_velocity_commands((0.0, 0.0, 0.0), (0.1, 0.0), path, costmap(), 0.05), b.compute_velocity_commands((0.0, 0.0, 0.0), (0.1, 0.0), path, costmap(), 0.05))
         walls = [(x / 100, y / 100) for x in range(-30, 31) for y in range(-30, 31) if max(abs(x), abs(y)) >= 25]
         with self.assertRaises(ControllerError):  # 0.25m 상자 (몸 반지름 0.2 + 잡음 자취는 모두 닿는다)
-            self.make(vx_min=0.0, wz_max=0.01).compute_velocity_commands((0.0, 0.0, 0.0), (0.2, 0.0), path, costmap(walls), 0.05)
+            self.make(vx_min=0.0, wz_max=0.01, vx_std=0.0, wz_std=0.0).compute_velocity_commands((0.0, 0.0, 0.0), (0.2, 0.0), path, costmap(walls), 0.05)
+
+    def test_commands_are_smooth_and_reach_cruising_speed(self) -> None:
+        mppi = self.make()
+        path = line((0.0, 0.0), (1.5, 0.0))
+        vs: list[float] = []
+        ws: list[float] = []
+        for _ in range(30):
+            v, w = mppi.compute_velocity_commands((0.0, 0.0, 0.0), (0.1, 0.0), path, costmap(), 0.05)
+            vs.append(v)
+            ws.append(w)
+        self.assertGreater(vs[-1], 0.15)  # 열린 공간에서는 최고 속도(0.22) 근처로 간다
+        self.assertLess(max(abs(b - a) for a, b in zip(vs, vs[1:])), 0.05)  # 50ms마다 5cm/s 넘게 튀지 않는다
+        self.assertLess(max(abs(b - a) for a, b in zip(ws, ws[1:])), 0.15)  # 50ms마다 0.15rad/s 넘게 튀지 않는다
 
 
 class TestCheckers(unittest.TestCase):

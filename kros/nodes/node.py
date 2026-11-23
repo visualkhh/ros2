@@ -58,7 +58,7 @@ class Node:
 
     def create_timer(self, period: float, callback: Callable[[], None]) -> Timer:
         """period(초)마다 callback()을 부른다. 첫 호출은 period 뒤. 콜백은 이 타이머 전용 스레드에서 순서대로 돈다."""
-        return self.context.timer_manager.create(period, callback)
+        return self.context.timer_manager.create(period, callback, name=self.name)
 
     def destroy_timer(self, timer: Timer) -> None:
         self.context.timer_manager.destroy(timer)

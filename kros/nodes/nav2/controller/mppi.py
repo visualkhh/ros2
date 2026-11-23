@@ -28,6 +28,8 @@ class MPPIController(Controller):
     critic (낮을수록 좋다): CostCritic(지나는 칸 비용, 벽에 닿으면 사실상 버림), GoalCritic/GoalAngleCritic(목표 가까이에서 목표 자리/방향),
     PathAlignCritic(자취가 경로에서 떨어진 정도), PathFollowCritic(경로 앞쪽 점까지 거리: 앞으로 나아가게), PathAngleCritic(경로 앞쪽 점을 보게), PreferForwardCritic(후진 벌점).
     기본 batch_size/time_steps는 nav2(2000 x 56)보다 훨씬 작다: 순수 파이썬으로 20Hz에 돌게. seed가 같으면 같은 잡음.
+    잡음은 후보마다 "한 번" 뽑아 시퀀스 전체에 같은 편향으로 준다 (스텝마다 따로 주면 80개 표본으로는 평균이 흔들려
+    실기에서 명령이 100ms마다 튀었다). 고른 시퀀스는 smoothing_window 칸 이동평균으로 부드럽게 만든 뒤 첫 명령을 낸다.
     """
 
     def configure(self, node: Node, name: str) -> None:
@@ -38,11 +40,12 @@ class MPPIController(Controller):
         self.time_steps = node.declare_parameter(f"{name}.time_steps", 20, validator=positive)
         self.model_dt = node.declare_parameter(f"{name}.model_dt", 0.1, validator=positive)
         self.vx_std = node.declare_parameter(f"{name}.vx_std", 0.2, validator=non_negative)
-        self.wz_std = node.declare_parameter(f"{name}.wz_std", 0.4, validator=non_negative)
+        self.wz_std = node.declare_parameter(f"{name}.wz_std", 0.2, validator=non_negative)  # nav2 기본 0.4는 표본 1000개일 때: 80개로는 회전이 튄다
         self.vx_max = node.declare_parameter(f"{name}.vx_max", 0.22, validator=positive)
         self.vx_min = node.declare_parameter(f"{name}.vx_min", -0.1, validator=lambda value: value <= 0)
         self.wz_max = node.declare_parameter(f"{name}.wz_max", 1.5, validator=positive)
         self.temperature = node.declare_parameter(f"{name}.temperature", 0.3, validator=positive)
+        self.smoothing_window = node.declare_parameter(f"{name}.smoothing_window", 7, validator=lambda value: value >= 1)  # 고른 제어 시퀀스 이동평균 (홀수 권장)
         self.seed = node.declare_parameter(f"{name}.seed", 0)
         self.weights = {critic: node.declare_parameter(f"{name}.{critic}.cost_weight", weight, validator=non_negative) for critic, weight in CRITIC_WEIGHTS.items()}
         self.goal_threshold = node.declare_parameter(f"{name}.GoalCritic.threshold_to_consider", 1.0, validator=positive)
@@ -70,9 +73,17 @@ class MPPIController(Controller):
         rng, vx_std, wz_std = self._rng, self.vx_std.value, self.wz_std.value
         candidates: list[tuple[float, list[Velocity], list[Pose2]]] = []
         for k in range(self.batch_size.value):
-            noisy = self.control if k == 0 else [  # 0번은 지난 시퀀스 그대로 (잡음 없이)
-                (min(vx_max, max(vx_min, v + rng.gauss(0.0, vx_std))), min(wz_max, max(-wz_max, w + rng.gauss(0.0, wz_std)))) for v, w in self.control
-            ]
+            if k == 0:  # 0번은 지난 시퀀스 그대로 (잡음 없이)
+                noisy = self.control
+            else:
+                # 후보 하나 안에서는 잡음이 이어지게(랜덤워크) 준다: 스텝마다 완전히 독립이면 표본 80개로는 가중 평균이
+                # 매 주기 크게 흔들려 실기 바퀴가 100ms마다 튄다 (nav2는 1000개라 괜찮지만 Pi에서는 80개).
+                dv, dw = rng.gauss(0.0, vx_std), rng.gauss(0.0, wz_std)
+                noisy = []
+                for v, w in self.control:
+                    noisy.append((min(vx_max, max(vx_min, v + dv)), min(wz_max, max(-wz_max, w + dw))))
+                    dv += rng.gauss(0.0, vx_std * 0.5)
+                    dw += rng.gauss(0.0, wz_std * 0.5)
             trajectory = _rollout(pose, noisy, model_dt)
             candidates.append((self._score(trajectory, noisy, costmap, local, goal, to_goal, follow, ahead, pose, model_dt), noisy, trajectory))
         lowest = min(c[0] for c in candidates)
@@ -82,9 +93,10 @@ class MPPIController(Controller):
         temperature = self.temperature.value
         weights = [math.exp(-(c[0] - lowest) / temperature) for c in candidates]
         total = sum(weights)
-        self.control = [
-            (sum(wt * c[1][t][0] for wt, c in zip(weights, candidates)) / total, sum(wt * c[1][t][1] for wt, c in zip(weights, candidates)) / total) for t in range(steps)
-        ]
+        self.control = _smooth(
+            [(sum(wt * c[1][t][0] for wt, c in zip(weights, candidates)) / total, sum(wt * c[1][t][1] for wt, c in zip(weights, candidates)) / total) for t in range(steps)],
+            self.smoothing_window.value,
+        )
         self.best = self.local_plan = _rollout(pose, self.control, model_dt)
         command = self.control[0]
         self.control = self.control[1:] + self.control[-1:]  # 한 칸 밀어 다음 주기의 출발점으로
@@ -117,6 +129,19 @@ class MPPIController(Controller):
             score += w["PathAngleCritic"] * sum(abs(wrap(math.atan2(ahead[1] - y, ahead[0] - x) - yaw)) for x, y, yaw in trajectory) / n
         score += w["PreferForwardCritic"] * sum(max(0.0, -v) * model_dt for v, _ in controls)  # PreferForwardCritic
         return score
+
+
+def _smooth(controls: list[Velocity], window: int) -> list[Velocity]:
+    """제어 시퀀스 이동평균: 고른 명령이 시간에 따라 부드럽게 변하게 한다 (nav2의 Savitzky-Golay 흉내)."""
+    if window <= 1 or len(controls) < 3:
+        return controls
+    half = window // 2
+    smoothed: list[Velocity] = []
+    for i in range(len(controls)):
+        lo, hi = max(0, i - half), min(len(controls), i + half + 1)
+        n = hi - lo
+        smoothed.append((sum(c[0] for c in controls[lo:hi]) / n, sum(c[1] for c in controls[lo:hi]) / n))
+    return smoothed
 
 
 def _rollout(pose: Pose2, controls: list[Velocity], dt: float) -> list[Pose2]:

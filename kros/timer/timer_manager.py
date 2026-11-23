@@ -40,10 +40,10 @@ class TimerManager:
     def now(self) -> float:
         return self.time_source.now()
 
-    def create(self, period: float, callback: Callable[[], None]) -> Timer:
+    def create(self, period: float, callback: Callable[[], None], name: str = "") -> Timer:
         if period <= 0:
             raise ValueError(f"타이머 주기는 0보다 커야 한다: {period}")
-        timer = Timer(period, callback, self.destroy)
+        timer = Timer(period, callback, self.destroy, name)
         with self._cond:
             if self._stopped:
                 raise RuntimeError("타이머 매니저가 종료됐다")
@@ -68,6 +68,11 @@ class TimerManager:
     def timer_count(self) -> int:
         with self._cond:
             return len(self._entries)
+
+    def stats(self) -> list[tuple[str, float, int, int]]:
+        """(이름, 주기, 실제 호출 횟수, 놓친 횟수) 목록. 프로파일에서 어느 노드가 제 주기를 못 지키는지 본다."""
+        with self._cond:
+            return [(entry.timer.name or "timer", entry.timer.period, entry.timer.calls, entry.timer.missed) for entry in self._entries]
 
     def join(self, timeout: float | None = None) -> bool:
         """지금 실행 중이거나 대기 중인 콜백이 모두 끝날 때까지 기다린다. 끝났으면 True."""
@@ -117,6 +122,8 @@ class TimerManager:
     def _run(self, entry: _Entry) -> None:
         try:
             if not entry.canceled:
+                if entry.timer.name:  # 타이머 전용 스레드라 이름을 붙여 두면 프로파일에서 노드별 CPU가 보인다
+                    threading.current_thread().name = entry.timer.name
                 entry.timer.callback()
                 entry.timer.calls += 1
         except Exception:

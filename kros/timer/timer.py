@@ -7,8 +7,9 @@ class Timer:
     사실만 노출한다: calls(콜백이 실제로 불린 횟수), missed(주기가 됐지만 부르지 못한 횟수: 이전 콜백이 아직 실행 중이었거나 시간이 한꺼번에 건너뛰었다).
     """
 
-    def __init__(self, period: float, callback: Callable[[], None], cancel: Callable[["Timer"], None]) -> None:
+    def __init__(self, period: float, callback: Callable[[], None], cancel: Callable[["Timer"], None], name: str = "") -> None:
         self.period = period
+        self.name = name  # 만든 노드 이름 (프로파일/디버그용)
         self.callback = callback
         self.calls = 0
         self.missed = 0
