@@ -60,6 +60,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
         "mode": "idle", "match_every": 3, "num_matching_points": 30, "map_publish_period_sec": 2.0,
         "linear_search_window": 0.05, "angular_search_window": math.radians(3),
     })
+    print(f"[kos] cartographer: match_every={slam.match_every.value} points={slam.num_matching_points.value} linear={slam.linear_search_window.value} angular={slam.angular_search_window.value}", flush=True)
     maps = {"maps_directory": str(MAPS_DIRECTORY)}
     footprint = {"robot_radius": robot.radius, "inflation_radius": 0.3}
     planner = PlannerServer(ctx, parameters={"GridBased.plugin": "nav2_smac_planner::SmacPlannerHybrid"}, costmap_parameters={**footprint, "update_frequency": 1.0})
