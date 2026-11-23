@@ -114,14 +114,14 @@ class Viz:
     odom과 odometry/filtered의 위치 화살표 (둘 다 fixed_frame 기준일 때만: TF는 둘 중 하나만 내므로 나머지는 화살표로 비교한다).
     """
 
-    def __init__(self, package_root: Path | None = None, base: ShowBase | None = None, fixed_frame: str = "odom", imu_frame: str = "imu_link", servers: list[Mapping[str, object]] | None = None, host: Mapping[str, object] | None = None, context: Context | None = None) -> None:
+    def __init__(self, base: ShowBase | None = None, fixed_frame: str = "odom", imu_frame: str = "imu_link", servers: list[Mapping[str, object]] | None = None, host: Mapping[str, object] | None = None, context: Context | None = None, package_root: Path | None = None) -> None:
         if context is None:
             self.kros: Kros | None = Kros(servers=servers, host=host)
             context = self.kros.context if self.kros is not None else None
         else:
             self.kros = None
         assert context is not None
-        self.package_root = package_root if package_root is not None else Path(".")
+        self.package_root = package_root if package_root is not None else self._find_package_root()
         self.fixed_frame = fixed_frame
         self.node = VizNode(context)
         self.own_base = base is None
@@ -504,6 +504,19 @@ class Viz:
             }.get(status.level, (0.8, 0.8, 0.8, 1.0))
             return text, color
         return "Controller: (no controller diagnostics)", (0.7, 0.7, 0.7, 1)
+
+    @staticmethod
+    def _find_package_root() -> Path:
+        """URDF의 package:// 메시 파일을 찾을 base 폴더를 자동으로 찾는다."""
+        candidates = [
+            Path(__file__).resolve().parents[2] / "worlds" / "robots" / "turtlebot3" / "description",
+            Path("kros/worlds/robots/turtlebot3/description"),
+            Path("."),
+        ]
+        for c in candidates:
+            if (c / "meshes" / "bases" / "waffle_pi_base.stl").exists():
+                return c
+        return Path(".")
 
     def _update_multi_goals(self) -> None:
         """Multi Goal로 찍은 점들을 map 좌표계에서 십자로 그린다 (fixed frame이 map이 아니면 TF로 놓는다)."""
