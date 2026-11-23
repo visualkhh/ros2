@@ -113,9 +113,9 @@ class Viz:
     odom과 odometry/filtered의 위치 화살표 (둘 다 fixed_frame 기준일 때만: TF는 둘 중 하나만 내므로 나머지는 화살표로 비교한다).
     """
 
-    def __init__(self, kros: Kros | None = None, package_root: Path | None = None, base: ShowBase | None = None, fixed_frame: str = "odom", imu_frame: str = "imu_link", clients: list[Mapping[str, object]] | None = None, server: Mapping[str, object] | None = None) -> None:
+    def __init__(self, kros: Kros | None = None, package_root: Path | None = None, base: ShowBase | None = None, fixed_frame: str = "odom", imu_frame: str = "imu_link", servers: list[Mapping[str, object]] | None = None) -> None:
         if kros is None:
-            kros = Kros(clients=clients, server=server)
+            kros = Kros(servers=servers)
         self.kros, self.package_root = kros, package_root if package_root is not None else Path(".")
         self.fixed_frame = fixed_frame
         self.node = VizNode(kros.context)

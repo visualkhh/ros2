@@ -31,7 +31,7 @@ package_root = Path(sys.argv[3]) if len(sys.argv) > 3 else TurtleBot3.descriptio
 
 kros = None
 base = ShowBase()
-viz = Viz(None, package_root, base=base, clients=[{"ip": server_ip, "port": server_port}])
+viz = Viz(None, package_root, base=base, servers=[{"ip": server_ip, "port": server_port}])
 kros = viz.kros
 print(f"[viz_remote] connected to {server_ip}:{server_port}", flush=True)
 base.run()

@@ -1,7 +1,7 @@
 """kros의 메시지 관리: 토픽/서비스/액션 실행기를 한 곳에 묶고, 네트워크(TCP) 서버/클라이언트를 관리한다.
 
 - 로컬 모드 (server/clients 없음): 지금까지의 동작과 같다.
-- 네트워크 모드: server={ip,port} 또는 clients=[{ip,port}]를 주면 TCP로 다른 kros 인스턴스와 토픽/서비스/액션을 주고받는다.
+- 네트워크 모드: host={ip,port} (로컬 수신) 또는 servers=[{ip,port}] (원격 접속)를 주면 TCP로 다른 kros 인스턴스와 토픽/서비스/액션을 주고받는다.
 - MessageManager를 통해 구독/발행/서비스/액션을 하면, 먼저 로컬에서 찾고, 없으면 네트워크에서 찾는다.
 
 프로토콜 (TCP, pickle 직렬화, 길이 접두사):
@@ -38,13 +38,13 @@ class MessageManager:
 
     def __init__(
         self,
-        server: Mapping[str, Any] | None = None,
-        clients: list[Mapping[str, Any]] | None = None,
+        host: Mapping[str, Any] | None = None,
+        servers: list[Mapping[str, Any]] | None = None,
         time_source: TimeSource | None = None,
     ) -> None:
-        self.server = server  # {"ip": str, "port": int} or None
-        self.clients = clients or []  # [{"ip": str, "port": int}, ...]
-        self.network_mode = bool(server or clients)
+        self.host = host  # {"ip": str, "port": int} or None
+        self.servers = servers or []  # [{"ip": str, "port": int}, ...]
+        self.network_mode = bool(host or servers)
 
         # 실행기 (기존 매니저와 동일)
         self.topic_executor: TopicExecutor = TopicExecutor()
@@ -82,15 +82,15 @@ class MessageManager:
             self._broadcast({"type": "heartbeat", "ts": time.time()})
 
     def _start_network(self) -> None:
-        if self.server:
-            ip = self.server.get("ip", "0.0.0.0")
-            port = int(self.server.get("port", 9000))
+        if self.host:
+            ip = self.host.get("ip", "0.0.0.0")
+            port = int(self.host.get("port", 9000))
             self._tcp_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._tcp_server.bind((ip, port))
             self._tcp_server.listen(8)
             threading.Thread(target=self._accept_loop, daemon=True).start()
-        for c in self.clients:
+        for c in self.servers:
             ip = c.get("ip", "127.0.0.1")
             port = int(c.get("port", 9000))
             threading.Thread(target=self._connect_loop, args=(ip, port), daemon=True).start()

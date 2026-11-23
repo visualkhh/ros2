@@ -105,10 +105,10 @@ def main() -> None:
 
     import os
     server_port = int(os.environ.get("KROS_SERVER_PORT", "9000"))
-    server = {"ip": "0.0.0.0", "port": server_port} if server_port > 0 else None
-    kros = Kros(create_nodes, time_source=time_source, server=server)
-    if server:
-        print(f"[kros] server mode: port {server_port} (remote Viz can connect)", flush=True)
+    host = {"ip": "0.0.0.0", "port": server_port} if server_port > 0 else None
+    kros = Kros(create_nodes, time_source=time_source, host=host)
+    if host:
+        print(f"[kros] host mode: port {server_port} (remote Viz can connect)", flush=True)
     runner.start()
     try:
         viewer = Viewer(recorder, lambda keys: keyboard.set_keys(keys))  # 창이 받은 키를 키보드 입력으로
