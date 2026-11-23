@@ -37,10 +37,14 @@ OPENCR_PORT=/dev/opencr LIDAR_PORT=/dev/tb3_lidar ./kos_ws/run.sh
 
 ```bash
 cd /home/pank/workspaces/visualkhh/source/ros2
-./kros/.venv/bin/python kros/examples/turtlebot3/viz_remote.py <라즈베리파이-IP> 9000
+./kos_ws/viz_remote.py                 # 기본 pak.local:9000 (Pi의 mDNS 이름)
+./kos_ws/viz_remote.py 10.2.150.172 9000
 # URDF 메시가 없는 PC라면 package_root를 직접:
-# ... viz_remote.py <ip> 9000 /path/to/turtlebot3/description
+# ./kos_ws/viz_remote.py <ip> 9000 /path/to/turtlebot3/description
 ```
+
+- `viz_remote.py`는 Panda3D가 없는 python으로 실행해도 `kros/.venv`로 다시 실행합니다.
+- 창을 클릭해 포커스를 준 뒤 **W/A/S/D**로 텔레옵, 떼면 정지. **ESC/Ctrl+C**로 종료.
 
 ## Viz 조작
 
