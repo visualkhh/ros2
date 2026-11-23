@@ -86,6 +86,15 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
     # 0.5m 안이면 감속: 0.3은 너무 느려서 0.6 (정지 상자 0.3m는 그대로)
     monitor = CollisionMonitor(ctx, parameters={"cmd_vel_in_topic": "cmd_vel_mux", "cmd_vel_out_topic": "cmd_vel", "PolygonSlow.slowdown_ratio": 0.6, "ignore_collision_during_teleop": True})
     navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0, "recovery_backup": False})
+    mppi = controller.controllers["FollowPath"]
+    batch = getattr(mppi, "batch_size", None)
+    print(
+        f"[kos] tuning: mppi_batch={batch.value if batch is not None else '-'} ekf_hz={ekf.frequency.value} "
+        f"scan_period={controller.costmap_ros.scan_period.value:.2f} raytrace={controller.costmap_ros.raytrace_max_range.value} "
+        f"match_every={slam.match_every.value} accel={controller.max_linear_accel.value}/{controller.max_angular_accel.value} "
+        f"collision={monitor.enabled.value}",
+        flush=True,
+    )
     return [
         RobotBridge(ctx, robot),
         description,
