@@ -52,6 +52,14 @@ class MessageManager:
         self.action_executor: ActionExecutor = ActionExecutor(self.topic_executor, self.service_executor)
         self.timer_manager: TimerManager = TimerManager(time_source)
 
+        # 토픽 발행 시 네트워크 브로드캐스트를 자동으로 하도록 publish를 래핑한다
+        _orig_publish = self.topic_executor.publish
+        def _publish_with_broadcast(topic: str, msg: Any, qos: QoS = QOS_DEFAULT) -> None:
+            _orig_publish(topic, msg, qos)
+            if self.network_mode and not getattr(self, "_receiving", False):
+                self._broadcast({"type": "topic", "name": topic, "msg": msg})
+        self.topic_executor.publish = _publish_with_broadcast  # type: ignore[method-assign]
+
         # 네트워크
         self._lock = threading.Lock()
         self._tcp_server: socket.socket | None = None
@@ -145,7 +153,9 @@ class MessageManager:
                     msg = pickle.loads(buf[4:4 + length])
                     buf = buf[4 + length:]
                     self._handle_msg(conn, msg)
-            except (OSError, pickle.UnpicklingError, EOFError):
+            except (OSError, pickle.UnpicklingError, EOFError) as e:
+                import logging
+                logging.warning("recv_loop error: %s", e)
                 break
         with self._conn_lock:
             if conn in self._connections:
@@ -185,9 +195,19 @@ class MessageManager:
                 self._remote_actions.add(a)
             # 내 목록도 보낸다
             self._send(conn, {"type": "discover", "topics": self._local_topics(), "services": self._local_services(), "actions": self._local_actions()})
+            # latched 메시지도 보낸다 (late subscriber 지원)
+            try:
+                history = getattr(self.topic_executor, "_history", {})
+                for topic, msgs in history.items():
+                    for m in msgs:
+                        self._send(conn, {"type": "topic", "name": topic, "msg": m})
+            except Exception:
+                pass
         elif mtype == "topic":
             name = msg.get("name")
             if name is not None:
+                import logging
+                logging.info("NET recv topic: %s", name)
                 # 네트워크에서 받은 메시지를 로컬 토픽으로 전달 (재브로드캐스트 방지)
                 # QOS_LATCHED로 발행해 늦게 구독한 쪽도 마지막 메시지를 받게 한다
                 self._receiving = True
@@ -238,9 +258,7 @@ class MessageManager:
 
     def publish(self, topic: str, msg: Any, qos: QoS = QOS_DEFAULT) -> None:
         self.topic_executor.publish(topic, msg, qos)
-        # 네트워크 브로드캐스트 (원격 구독자가 있으면) — 네트워크에서 받은 메시지는 다시 보내지 않는다
-        if self.network_mode and not getattr(self, "_receiving", False):
-            self._broadcast({"type": "topic", "name": topic, "msg": msg})
+        # 브로드캐스트는 topic_executor.publish에 이미 포함됨 (network_mode일 때)
 
     def subscribe(self, topic: str, msg_type: type, callback: Callable[[Any], None], qos: QoS = QOS_DEFAULT) -> Any:
         # 로컬 구독
