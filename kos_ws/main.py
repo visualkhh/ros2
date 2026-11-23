@@ -68,7 +68,7 @@ def create_nodes(ctx: Context, robot: RealTurtleBot3) -> list[Node]:
         "odom_topic": "odometry/filtered",
         "cmd_vel_topic": "cmd_vel_nav",
         "FollowPath.plugin": "nav2_mppi_controller::MPPIController",
-        "FollowPath.vx_min": 0.0,  # 자율주행에서 MPPI 후진 금지 (복구 후진도 아래에서 끔)
+        "FollowPath.vx_min": -0.1,  # 좁은 곳에서 몇 cm 후진은 허용 (0.5m 복구 후진은 아래에서 끔)
         "general_goal_checker.xy_goal_tolerance": 0.4,
         "general_goal_checker.yaw_goal_tolerance": 0.4,
         "progress_checker.movement_time_allowance": 5.0,
