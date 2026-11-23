@@ -5,7 +5,7 @@
 #   ./build.sh --clean    # build/install/log를 지우고 다시 빌드
 set -eo pipefail
 WS="$(cd "$(dirname "$0")" && pwd)"
-UNDERLAY="/home/pank/workspaces/visualkhh/source/ros2/ros2_ws"
+UNDERLAY="${ROS2_UNDERLAY:-$HOME/ros2/ros2_ws}"
 
 if [[ "${1:-}" == "--clean" ]]; then
   rm -rf "$WS/build" "$WS/install" "$WS/log"
