@@ -26,7 +26,7 @@ from typing import Any, Callable, Mapping
 from kros.action import ActionExecutor, ActionType
 from kros.parameter import ParameterValue
 from kros.service import ServiceExecutor, ServiceType
-from kros.topic import TopicExecutor, QOS_DEFAULT, QoS
+from kros.topic import TopicExecutor, QOS_DEFAULT, QoS, QOS_LATCHED
 from kros.timer import TimeSource, TimerManager
 
 
@@ -181,9 +181,10 @@ class MessageManager:
             name = msg.get("name")
             if name is not None:
                 # 네트워크에서 받은 메시지를 로컬 토픽으로 전달 (재브로드캐스트 방지)
+                # QOS_LATCHED로 발행해 늦게 구독한 쪽도 마지막 메시지를 받게 한다
                 self._receiving = True
                 try:
-                    self.topic_executor.publish(name, msg.get("msg"))
+                    self.topic_executor.publish(name, msg.get("msg"), QOS_LATCHED)
                 finally:
                     self._receiving = False
         # TODO: service_req, service_res, action_goal, etc.

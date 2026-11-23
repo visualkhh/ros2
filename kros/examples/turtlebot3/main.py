@@ -103,7 +103,12 @@ def main() -> None:
         navigator = BtNavigator(ctx, parameters={"replanning_period": 3.0})  # goal_pose(viz의 2D Goal Pose) -> 계획 -> 따라가기 -> 3초마다 재계획
         return [RobotBridge(ctx, robot), description, odometry, ekf, slam, MapServer(ctx, parameters=maps), MapSaver(ctx, parameters=maps), planner, controller, behavior, navigator, mux, monitor]
 
-    kros = Kros(create_nodes, time_source=time_source)
+    import os
+    server_port = int(os.environ.get("KROS_SERVER_PORT", "9000"))
+    server = {"ip": "0.0.0.0", "port": server_port} if server_port > 0 else None
+    kros = Kros(create_nodes, time_source=time_source, server=server)
+    if server:
+        print(f"[kros] server mode: port {server_port} (remote Viz can connect)", flush=True)
     runner.start()
     try:
         viewer = Viewer(recorder, lambda keys: keyboard.set_keys(keys))  # 창이 받은 키를 키보드 입력으로
