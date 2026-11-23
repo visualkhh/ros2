@@ -29,12 +29,10 @@ server_ip = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
 server_port = int(sys.argv[2]) if len(sys.argv) > 2 else 9000
 package_root = Path(sys.argv[3]) if len(sys.argv) > 3 else TurtleBot3.description_dir
 
-kros = Kros(
-    lambda ctx: [],
-    clients=[{"ip": server_ip, "port": server_port}],
-)
+kros = None
 base = ShowBase()
-Viz(kros, package_root, base=base)
+viz = Viz(None, package_root, base=base, clients=[{"ip": server_ip, "port": server_port}])
+kros = viz.kros
 print(f"[viz_remote] connected to {server_ip}:{server_port}", flush=True)
 base.run()
 kros.shutdown()

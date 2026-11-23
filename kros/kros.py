@@ -23,12 +23,14 @@ class Kros:
 
     def __init__(
         self,
-        node_create: NodeCreate,
+        node_create: NodeCreate | None = None,
         parameters: Mapping[str, Mapping[str, ParameterValue]] | None = None,
         time_source: TimeSource | None = None,
         server: Mapping[str, object] | None = None,
         clients: list[Mapping[str, object]] | None = None,
     ) -> None:
+        if node_create is None:
+            node_create = lambda ctx: []  # noqa: E731
         self.context: Context = Context(parameters, time_source, server=server, clients=clients)
         self.nodes: list[Node] = list(node_create(self.context))
         for unused in self.context.parameter_manager.unused_overrides():
