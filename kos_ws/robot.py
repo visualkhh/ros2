@@ -41,7 +41,7 @@ class RealTurtleBot3(TurtleBot3):
     ) -> None:
         Robot.__init__(self)  # 월드에 넣지 않는다: 실시간 루프가 tick을 준다
         self.opencr: DiffDriveBoard = OpenCrSerial(WHEEL_RADIUS, WHEEL_SEPARATION, opencr_port, max_wheel=MAX_WHEEL, left_dir=-1.0, right_dir=-1.0)
-        self._lidar: SerialLds03 | None = SerialLds03(port=lidar_port, mount_x=lidar_mount_x, mount_height=lidar_mount_height, frame_id="base_scan")
+        self._lidar: SerialLds03 | None = SerialLds03(port=lidar_port, mount_x=lidar_mount_x, mount_height=lidar_mount_height, frame_id="base_scan", period=0.05)
         self.add(self.opencr, "opencr")
         if self._lidar is not None:
             self.add(self._lidar, "lidar")
