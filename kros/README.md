@@ -335,7 +335,7 @@ kros/test.sh -v -p test_kros.py       # 파일 하나
 kros/examples/turtlebot3/run.sh
 ```
 
-`run.sh`가 venv와 Panda3D(`requirements.txt`)를 준비하고 실행한다. `python3 -m kros.examples`(ros2/ 에서)로도 되고, IDE에서 `examples/__main__.py`를 직접 실행해도 된다. NVIDIA 드라이버가 있으면 NVIDIA GPU로 렌더링하도록(PRIME offload) 환경변수를 설정하고, 시작할 때 `GPU renderer: ...`가 찍힌다.
+`run.sh`가 venv와 Panda3D(`requirements.txt`)를 준비하고 실행한다. `python3 -m kros.examples`(ros2/ 에서)로도 되고, `python3 -m kros.examples.turtlebot3`처럼 모듈 단위로도 되고, IDE에서 `examples/__main__.py` 또는 `examples/turtlebot3/__main__.py`를 직접 실행해도 된다. NVIDIA 드라이버가 있으면 NVIDIA GPU로 렌더링하도록(PRIME offload) 환경변수를 설정하고, 시작할 때 `GPU renderer: ...`가 찍힌다.
 
 **조작**
 
