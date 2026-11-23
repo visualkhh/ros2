@@ -360,6 +360,23 @@ kros/examples/turtlebot3/run.sh
 
 **테스트**: 3D 창 없이 `tests/test_maze_world.py`(월드 질문, 시계 신호, 월드가 로봇/센서를 모르는지, 현실 쪽이 kros와 무관한지), `tests/test_turtlebot3.py`(하드웨어 주기/전원/실패, 구동부, 라이다, 퍽 밀기), `tests/test_interaction.py`(입력 장치, 로봇이 입력을 받아 해석, `RobotBridge`), `tests/test_tf_math.py`/`test_tf_buffer.py`/`test_tf_nodes.py`/`test_urdf.py`(TF 수학, 버퍼, 브로드캐스터/리스너, RobotStatePublisher, URDF), `tests/test_tf_usage.py`(README의 TF 사용 예제를 실제로 실행), `tests/test_log.py`(rosout, log_level, 스레드, 콘솔), `tests/test_diagnostics.py`(진단 메시지, 업데이트, 집계, 하드웨어 사실 -> 수준), `tests/test_simulation_runner.py`(러너: 고정 스텝, 리스너, 스레드), `tests/test_snapshot.py`(스냅샷 기록기), `tests/test_viewer.py`(오프스크린으로 화면을 몇 프레임 돌려 보는 스모크 테스트, Panda3D가 있을 때), `tests/test_viz.py`(오프스크린으로 Viz가 토픽만으로 모델/TF/HUD를 만드는지), `tests/test_ekf.py`(EKF: 행렬, 이상값 거부, 시각 순서, 노이즈 TurtleBot3에서 바퀴만보다 정확한지), `tests/test_compute.py`(GPU/CPU/순수 파이썬), `tests/test_urdf_model.py`(Panda3D 있을 때)로 로직을 확인한다. `Viewer`의 그림 자체는 자동으로 검증하지 못하고(스크린샷으로 수동 확인), 오프스크린 스모크 테스트가 프레임이 죽지 않는지만 본다.
 
+## 네트워크 모드 (TCP)
+
+kros 인스턴스끼리 TCP로 토픽을 주고받을 수 있다. Viz를 PC에서 띄우고 실제 로봇(kros)은 Pi에서 돌릴 때 쓴다.
+
+```python
+# 서버 (Pi 또는 PC)
+kros = Kros(node_create, server={"ip": "0.0.0.0", "port": 9000})
+
+# 클라이언트 (PC)
+kros = Kros(node_create, clients=[{"ip": "192.168.1.10", "port": 9000}])
+```
+
+- 서버/클라이언트가 모두 없으면 로컬 전용 모드 (기존 동작).
+- 토픽 발행 시 자동으로 연결된 인스턴스에 브로드캐스트된다.
+- 하트비트(5초)로 연결 상태를 확인한다.
+- 끊기면 클라이언트가 자동 재연결한다.
+
 ## TODO
 
 [TODO.md](TODO.md) 참고.

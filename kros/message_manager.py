@@ -54,6 +54,7 @@ class MessageManager:
 
         # 네트워크
         self._lock = threading.Lock()
+        self._tcp_server: socket.socket | None = None
         self._connections: list[socket.socket] = []  # 활성 TCP 연결
         self._conn_lock = threading.Lock()
         self._running = True
@@ -62,6 +63,7 @@ class MessageManager:
         self._remote_topics: set[str] = set()
         self._remote_services: set[str] = set()
         self._remote_actions: set[str] = set()
+        self._receiving = False
         self._service_counter = 0
         self._action_counter = 0
         self._pending_services: dict[int, Any] = {}  # id -> result future
@@ -69,6 +71,15 @@ class MessageManager:
 
         if self.network_mode:
             self._start_network()
+            # 하트비트: 주기적으로 살아 있음을 알린다
+            threading.Thread(target=self._heartbeat_loop, daemon=True).start()
+
+    def _heartbeat_loop(self) -> None:
+        while self._running:
+            time.sleep(self._heartbeat_interval)
+            if not self._running:
+                break
+            self._broadcast({"type": "heartbeat", "ts": time.time()})
 
     def _start_network(self) -> None:
         if self.server:
@@ -87,6 +98,8 @@ class MessageManager:
     def _accept_loop(self) -> None:
         while self._running:
             try:
+                if self._tcp_server is None:
+                    break
                 conn, addr = self._tcp_server.accept()
                 self._register_conn(conn)
                 threading.Thread(target=self._recv_loop, args=(conn,), daemon=True).start()
@@ -166,9 +179,13 @@ class MessageManager:
             self._send(conn, {"type": "discover", "topics": self._local_topics(), "services": self._local_services(), "actions": self._local_actions()})
         elif mtype == "topic":
             name = msg.get("name")
-            if name in self._remote_topics:
-                # 로컬 구독자에게 전달
-                self.topic_executor.publish(f"_remote_{name}", msg.get("msg"))  # TODO: proper routing
+            if name is not None:
+                # 네트워크에서 받은 메시지를 로컬 토픽으로 전달 (재브로드캐스트 방지)
+                self._receiving = True
+                try:
+                    self.topic_executor.publish(name, msg.get("msg"))
+                finally:
+                    self._receiving = False
         # TODO: service_req, service_res, action_goal, etc.
 
     def _local_topics(self) -> list[str]:
@@ -212,8 +229,8 @@ class MessageManager:
 
     def publish(self, topic: str, msg: Any, qos: QoS = QOS_DEFAULT) -> None:
         self.topic_executor.publish(topic, msg, qos)
-        # 네트워크 브로드캐스트 (원격 구독자가 있으면)
-        if self.network_mode:
+        # 네트워크 브로드캐스트 (원격 구독자가 있으면) — 네트워크에서 받은 메시지는 다시 보내지 않는다
+        if self.network_mode and not getattr(self, "_receiving", False):
             self._broadcast({"type": "topic", "name": topic, "msg": msg})
 
     def subscribe(self, topic: str, msg_type: type, callback: Callable[[Any], None], qos: QoS = QOS_DEFAULT) -> Any:
