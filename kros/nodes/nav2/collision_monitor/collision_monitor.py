@@ -110,6 +110,9 @@ class CollisionMonitor(Node):
         self.observation_sources = self.declare_parameter("observation_sources", ("scan",))
         # 앞 장애물에 막혔을 때 후진으로 빠져나오는 것은 허용한다 (0이면 막는다). 후진은 비율만큼만.
         self.reverse_escape_ratio = self.declare_parameter("reverse_escape_ratio", 0.3, validator=lambda value: 0 <= value <= 1)
+        # 제자리 회전: 가장 가까운 점이 로봇 반지름(0.22m) 밖이면 돌 수 있다 (벽 앞에서도 방향을 돌릴 수 있게).
+        self.rotation_clearance = self.declare_parameter("rotation_clearance", 0.22, validator=lambda value: value >= 0)
+        self.rotation_escape_ratio = self.declare_parameter("rotation_escape_ratio", 0.5, validator=lambda value: 0 <= value <= 1)
         self.polygons = [Polygon(self, str(name)) for name in self.polygon_names.value]
         self.buffer = Buffer()
         self._listener = TransformListener(self.buffer, self)
@@ -153,9 +156,15 @@ class CollisionMonitor(Node):
                 continue
             result = polygon.apply(v, w, points)
             front = bool(polygon.points) and sum(px for px, _ in polygon.points) > 0.0
-            if v < 0.0 and result == (0.0, 0.0) and polygon.action_type.value == "stop" and front:
-                # 앞이 막혀도 뒤로는 빠져나올 수 있게 (벽에 갇히지 않게). 아주 느리게.
-                result = (v * self.reverse_escape_ratio.value, w * self.reverse_escape_ratio.value)
+            if result == (0.0, 0.0) and polygon.action_type.value == "stop":
+                if v < 0.0 and front:
+                    # 앞이 막혀도 뒤로는 빠져나올 수 있게 (벽에 갇히지 않게). 아주 느리게.
+                    result = (v * self.reverse_escape_ratio.value, w * self.reverse_escape_ratio.value)
+                elif abs(v) < 1e-6 and w != 0.0:
+                    nearest = min((math.hypot(px, py) for px, py in points), default=float("inf"))
+                    if nearest >= self.rotation_clearance.value:
+                        # 로봇 몸(반지름) 밖에만 있으면 제자리 회전은 안전하다
+                        result = (0.0, w * self.rotation_escape_ratio.value)
             if (abs(result[0]), abs(result[1])) < (abs(best[0]), abs(best[1])):
                 best, self.state = result, f"{polygon.name}: {polygon.action_type.value}"
         return best

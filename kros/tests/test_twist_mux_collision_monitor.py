@@ -112,6 +112,15 @@ class TestCollisionMonitor(Setup):
         self.assertAlmostEqual(self.out[-1].linear.x, -0.2 * 0.3)
         self.assertGreater(self.out[-1].linear.x, -0.2)
 
+    def test_rotation_escape_only_when_outside_the_robot_radius(self) -> None:
+        """앞이 막혀도 로봇 반지름(0.22m) 밖이면 제자리 회전은 허용한다 (벽 앞에서 방향 돌리기)."""
+        self.obstacle(0.30)  # 정지 상자(0.3m) 안, 로봇 반지름 밖
+        self.send("cmd_vel_mux", twist(0.0, 0.5))
+        self.assertGreater(abs(self.out[-1].angular.z), 0.0)
+        self.obstacle(0.18)  # 로봇 반지름 안: 회전 금지
+        self.send("cmd_vel_mux", twist(0.0, 0.5))
+        self.assertEqual(self.out[-1], twist(0.0))
+
     def test_approach_slows_in_proportion_to_time_before_collision(self) -> None:
         for name in ("PolygonStop", "PolygonSlow"):
             self.node.set_parameter(f"{name}.enabled", False)
