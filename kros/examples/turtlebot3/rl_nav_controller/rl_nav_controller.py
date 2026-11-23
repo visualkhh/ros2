@@ -19,7 +19,7 @@ from kros.nodes.nav2.costmap_2d import Costmap
 from kros.nodes.node import Node
 from kros.tf import Buffer, TransformException, TransformListener
 
-from .policy import OnnxPolicy
+from kros.examples.turtlebot3.rl_nav_controller.policy import OnnxPolicy
 
 FALLBACKS: dict[str, type[Controller]] = {"mppi": MPPIController, "dwb": DWBLocalPlanner, "rpp": RegulatedPurePursuitController}
 

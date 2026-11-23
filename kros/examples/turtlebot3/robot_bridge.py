@@ -8,8 +8,8 @@ from kros.tf import JOINT_STATES_TOPIC_NAME
 from kros.timer import Timer
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 
-from .hardware_status import hardware_path, leaves, make_task
-from .topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
+from kros.examples.turtlebot3.hardware_status import hardware_path, leaves, make_task
+from kros.examples.turtlebot3.topics import CMD_VEL_TOPIC_NAME, IMU_TOPIC_NAME, SCAN_TOPIC_NAME
 
 
 class RobotBridge(Node):

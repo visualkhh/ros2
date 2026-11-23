@@ -18,7 +18,7 @@ from kros.timer import SimulatedTimeSource
 from kros.worlds.maze.maze_world import MazeWorld
 from kros.worlds.robots.turtlebot3 import TurtleBot3
 
-from .robot_bridge import RobotBridge
+from kros.examples.turtlebot3.robot_bridge import RobotBridge
 
 
 class ScanToBase(Node):

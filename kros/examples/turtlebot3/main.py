@@ -10,6 +10,16 @@
 """
 from pathlib import Path
 
+# 파일을 직접 실행할 때(python main.py / IDE Run 버튼) 저장소 루트(ros2/)를 경로에 넣는다.
+# 모듈로 임포트할 때(__package__가 있음)는 건드리지 않는다.
+import os
+import sys
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+if Path("/proc/driver/nvidia/version").exists():
+    os.environ.setdefault("__NV_PRIME_RENDER_OFFLOAD", "1")
+    os.environ.setdefault("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+
 from kros import Kros
 from kros.context import Context
 from kros.interactions import Keyboard
@@ -31,8 +41,8 @@ from kros.worlds.robots.turtlebot3 import TurtleBot3
 from kros.worlds.robots.turtlebot3.turtlebot3 import WHEEL_RADIUS, WHEEL_SEPARATION
 from kros.worlds.simulation_runner import SimulationRunner
 
-from . import rl_nav_controller  # noqa: F401  # 이 예제의 controller: controller_server 플러그인 표에 rl_nav_controller::RlNavController를 넣는다
-from .robot_bridge import RobotBridge
+from kros.examples.turtlebot3 import rl_nav_controller  # noqa: F401  # 이 예제의 controller: controller_server 플러그인 표에 rl_nav_controller::RlNavController를 넣는다
+from kros.examples.turtlebot3.robot_bridge import RobotBridge
 
 MAPS_DIRECTORY = Path(__file__).resolve().parent / "artifacts" / "maps"
 # isaac/training/rl_maze에서 학습해 export한 정책 (policy.onnx + policy.onnx.data). isaac/artifacts는 git에 없다: 없으면 MPPI로 돈다
