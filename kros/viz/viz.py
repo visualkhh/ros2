@@ -126,8 +126,8 @@ class Viz:
         self.node = VizNode(context)
         self.own_base = base is None
         self.base = base or ShowBase()
-        self.win = self.base.win
         if base is None:
+            self.win = self.base.win
             props = WindowProperties()
             props.setTitle("kros viz")
             props.setSize(900, 700)
@@ -136,7 +136,7 @@ class Viz:
             props = WindowProperties()
             props.setTitle("kros viz")
             props.setSize(900, 700)
-            self.win.requestProperties(props)
+            self.win = base.openWindow(props=props, makeCamera=False)
         self.scene = NodePath("viz")
         self._build_scene()
         self.yaw, self.pitch, self.dist, self.target = 0.8, 0.8, 2.5, Vec3(0, 0, 0.1)
@@ -366,6 +366,10 @@ class Viz:
         v, w = self._teleop_cmd()
         if v != 0.0 or w != 0.0:
             self.node.publish("cmd_vel_teleop", Twist(linear=Vector3(x=v), angular=Vector3(z=w)))
+            self._was_pressed = True
+        elif getattr(self, "_was_pressed", False):
+            self.node.publish("cmd_vel_teleop", Twist())  # 키 떼면 정지
+            self._was_pressed = False
         self.hud.setText(self._hud_text())
         text, color = self._controller_status()
         self.controller_line.setText(text)
