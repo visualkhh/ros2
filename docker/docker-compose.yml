@@ -1,0 +1,37 @@
+name: krosc
+
+services:
+  krosc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: krosc:ubuntu-26.04
+    working_dir: /workspace/krosc
+    volumes:
+      # 소스는 이미지에 넣지 않고 호스트의 ros2/ 저장소를 그대로 마운트한다.
+      - ..:/workspace
+    environment:
+      QT_QPA_PLATFORM: ${QT_QPA_PLATFORM:-offscreen}
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # 브라우저(noVNC)로 리눅스 안의 sim+viz 창을 보는 서비스.
+  krosc-vnc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: krosc:ubuntu-26.04
+    working_dir: /workspace/krosc
+    volumes:
+      - ..:/workspace
+    environment:
+      DISPLAY: ":99"
+      QT_QPA_PLATFORM: xcb
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      XDG_RUNTIME_DIR: /tmp/runtime-root
+    ports:
+      - "6080:6080"
+    stdin_open: true
+    tty: true
+    command: ["/bin/bash", "/workspace/docker/run-vnc.sh"]
