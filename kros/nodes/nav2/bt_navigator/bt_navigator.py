@@ -251,6 +251,7 @@ class BtNavigator(Node):
 
     def _recover(self) -> None:
         """회복 동작: spin -> backup -> wait (Nav2 behavior_server와 같은 순서)."""
+        self.get_logger().info("recovery: spin")
         if self._cancel_requested:
             return
         try:
@@ -260,13 +261,15 @@ class BtNavigator(Node):
             self.get_logger().warn("recovery spin failed: %s", error)
         if self._cancel_requested:
             return
+        self.get_logger().info("recovery: backup")
         try:
-            handle = self._backup.send_goal(BackUpGoal(backup_dist=0.3, backup_speed=0.1, time_allowance=5.0), timeout=5.0)
+            handle = self._backup.send_goal(BackUpGoal(backup_dist=0.5, backup_speed=0.1, time_allowance=5.0), timeout=5.0)
             handle.result(10.0)
         except Exception as error:  # noqa: BLE001
             self.get_logger().warn("recovery backup failed: %s", error)
         if self._cancel_requested:
             return
+        self.get_logger().info("recovery: wait")
         try:
             handle = self._wait.send_goal(WaitGoal(wait_duration=1.0), timeout=5.0)
             handle.result(5.0)
