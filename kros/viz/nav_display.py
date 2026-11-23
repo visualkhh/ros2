@@ -82,7 +82,7 @@ def _line(points: list[tuple[float, ...]], color: Color, thickness: float, z: fl
         for p in points[1:]:
             segs.drawTo(p[0], p[1], z)
     node = NodePath(segs.create())
-    if dots_every:  # 웨이포인트: 경로 점 몇 개마다 작은 화살표 (로봇이 그 점에서 바라볼 방향)
+    if dots_every and points:  # 웨이포인트: 경로 점 몇 개마다 작은 화살표 (로봇이 그 점에서 바라볼 방향)
         dots = LineSegs()
         dots.setColor(1, 1, 1, 1)
         dots.setThickness(3)

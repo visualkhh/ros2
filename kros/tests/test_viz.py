@@ -351,6 +351,21 @@ class TestVizSlamPanel(unittest.TestCase):
 
 @unittest.skipUnless(HAS_PANDA, "panda3d 없음")
 class TestVizNavigationDisplays(unittest.TestCase):
+    def test_empty_path_is_ignored_without_crashing(self) -> None:
+        """bt_navigator가 실패/도착 때 빈 Path로 경로를 지운다: Viz가 죽지 않고 숨겨야 한다."""
+        made: dict[str, Node] = {}
+        kros = Kros(lambda ctx: [made.setdefault("n", Node(ctx, "Nav"))], time_source=SimulatedTimeSource())
+        self.addCleanup(kros.shutdown)
+        node = made["n"]
+        viz = Viz(context=kros.context, package_root=TurtleBot3.description_dir)
+        self.addCleanup(viz.close)
+        node.publish("plan", NavPath(Header(0.0, "odom")), QOS_LATCHED)
+        node.publish("local_plan", NavPath(Header(0.0, "odom")))
+        kros.context.topic_executor.join()
+        viz.base.taskMgr.step()  # 여기서 IndexError가 나면 실패
+        self.assertTrue(viz.nav.paths["plan"].isHidden())
+        self.assertTrue(viz.nav.paths["local_plan"].isHidden())
+
     def test_costmaps_plans_and_trail_are_drawn_where_their_frames_are(self) -> None:
         made: dict[str, Node] = {}
         kros = Kros(lambda ctx: [made.setdefault("n", Node(ctx, "Nav"))], time_source=SimulatedTimeSource())
