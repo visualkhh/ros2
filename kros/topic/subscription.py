@@ -12,7 +12,7 @@ class Subscription:
     """구독 하나. 전용 워커 스레드 1개 + 큐를 가져 같은 구독 안에서는 메시지 순서가 보장된다.
 
     큐 길이는 QoS.depth로 제한할 수 있다: 넘치면 가장 오래된 (아직 실행 전인) 메시지를 버리고 dropped로 센다.
-    메시지 하나가 처리되거나 버려질 때마다 on_done()이 한 번 불린다 (TopicManager.join()의 계산용).
+    메시지 하나가 처리되거나 버려질 때마다 on_done()이 한 번 불린다 (TopicExecutor.join()의 계산용).
     """
 
     def __init__(self, topic: str, callback: Callable[[Any], None], qos: QoS = QOS_DEFAULT, on_done: Callable[[], None] | None = None) -> None:

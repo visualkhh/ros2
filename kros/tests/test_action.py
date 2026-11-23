@@ -50,7 +50,7 @@ class TestAction(unittest.TestCase):
         got: list[CountFeedback] = []
         handle = client.send_goal(CountGoal(3), got.append)
         result = handle.result(5)
-        self.ctx.topic_manager.join()
+        self.ctx.topic_executor.join()
         self.assertEqual((result.status, result.result), (GoalStatus.SUCCEEDED, CountResult(3)))
         self.assertEqual(got, [CountFeedback(1), CountFeedback(2), CountFeedback(3)])
         self.assertEqual(handle.status, GoalStatus.SUCCEEDED)
@@ -154,19 +154,19 @@ class TestAction(unittest.TestCase):
         fb: list[CountFeedback] = []
         ha, hb = a.send_goal(CountGoal(2), fa.append), b.send_goal(CountGoal(3), fb.append)
         ha.result(5), hb.result(5)
-        self.ctx.topic_manager.join()
+        self.ctx.topic_executor.join()
         self.assertEqual((len(fa), len(fb)), (2, 3))
 
 
-class TestActionManager(unittest.TestCase):
-    """TopicManager/ServiceManager와 같은 결: Context가 액션 매니저를 가지고, Node는 매니저를 거친다."""
+class TestActionExecutor(unittest.TestCase):
+    """TopicExecutor/ServiceExecutor와 같은 결: Context가 액션 매니저를 가지고, Node는 매니저를 거친다."""
 
     def setUp(self) -> None:
         self.ctx = Context()
         self.addCleanup(self.ctx.shutdown)
         self.server_node = Node(self.ctx, "server")
         self.client_node = Node(self.ctx, "client")
-        self.manager = self.ctx.action_manager
+        self.manager = self.ctx.action_executor
 
     def blocking_execute(self, started: threading.Event, release: threading.Event) -> Callable[[H], CountResult]:
         def execute(h: H) -> CountResult:
@@ -179,7 +179,7 @@ class TestActionManager(unittest.TestCase):
 
         return execute
 
-    def test_context_owns_the_action_manager_and_node_goes_through_it(self) -> None:
+    def test_context_owns_the_action_executor_and_node_goes_through_it(self) -> None:
         self.assertEqual(self.manager.server_names(), [])
         server = self.server_node.create_action_server("count", Count, lambda h: CountResult(h.goal.n))
         self.assertEqual(self.manager.server_names(), ["count"])

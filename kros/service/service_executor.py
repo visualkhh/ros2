@@ -63,4 +63,3 @@ class ServiceExecutor:
             self._servers.clear()
         for server in servers:
             server.close(wait=True)
-ServiceManager = ServiceExecutor

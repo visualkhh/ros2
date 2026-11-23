@@ -35,7 +35,7 @@ def stamped(parent: str, child: str, stamp: float, x: float = 0.0) -> TransformS
 
 def settle(kros: Kros) -> None:
     kros.context.timer_manager.join()
-    kros.context.topic_manager.join()
+    kros.context.topic_executor.join()
 
 
 class TestBroadcasterAndListener(unittest.TestCase):

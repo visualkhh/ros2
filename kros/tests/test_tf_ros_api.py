@@ -167,7 +167,7 @@ class TestTfEcho(unittest.TestCase):
             TransformBroadcaster(pub).send_transform(
                 TransformStamped(Header(2.0, "odom"), "base", Transform(Vector3(1, 2, 3), from_axis_angle((0, 0, 1), math.pi / 2)))
             )
-            kros.context.topic_manager.join()
+            kros.context.topic_executor.join()
             self.tick(kros, source, 1.0)
         text = "\n".join(logs.output)
         self.assertEqual(text.count("모른다"), 1)

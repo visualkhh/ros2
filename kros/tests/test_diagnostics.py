@@ -27,7 +27,7 @@ class Watcher(Node):
 
 def settle(kros: Kros) -> None:
     kros.context.timer_manager.join()
-    kros.context.topic_manager.join()
+    kros.context.topic_executor.join()
 
 
 class TestMessages(unittest.TestCase):
@@ -174,7 +174,7 @@ class TestAggregator(unittest.TestCase):
 
     def publish(self, name: str, level: DiagnosticLevel, message: str = "") -> None:
         self.publisher.publish(DIAGNOSTICS_TOPIC_NAME, DiagnosticArray(Header(self.source.now()), (DiagnosticStatus(level, name, message),)))
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
     def test_collects_the_latest_status_per_name(self) -> None:
         self.publish("a", DiagnosticLevel.OK)

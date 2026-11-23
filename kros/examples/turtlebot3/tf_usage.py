@@ -75,7 +75,7 @@ def run(seconds: float = 2.0) -> dict[str, object]:
             source.set(world.time)
             kros.context.timer_manager.join()  # 시뮬레이션 시간을 sleep 없이 밀 때는 타이머가 따라오게 기다린다
             odom.report(robot.pose.x, robot.pose.theta)
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         base = scan.lidar_point_in_base(1.0)
         buffer = scan.tf_buffer
         return {

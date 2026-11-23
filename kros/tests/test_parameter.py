@@ -224,7 +224,7 @@ class TestDynamicChange(unittest.TestCase):
         node = kros.nodes[0]
         assert isinstance(node, Scaler)
         node.publish("in", 2)
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         def change() -> None:
             kros.set_parameter(node, "gain", 10)
 
@@ -232,7 +232,7 @@ class TestDynamicChange(unittest.TestCase):
         changer.start()
         changer.join(2)
         node.publish("in", 2)
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         self.assertEqual(node.out, [2, 20])
 
 
@@ -254,7 +254,7 @@ class TestParameterEvents(unittest.TestCase):
         return kros, watcher, speedy
 
     def settle(self, kros: Kros) -> None:
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
 
     def test_declaring_publishes_declared_events_with_the_starting_value(self) -> None:
         kros, watcher, _ = self.make({"Speedy": {"speed": 0.4}})
@@ -352,7 +352,7 @@ class TestManagersAreNotTiedTogether(unittest.TestCase):
         seen: list[ParameterEvent] = []
         Node(ctx, "w").subscribe(PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, seen.append)
         Node(ctx, "n").declare_parameter("x", 1)
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         self.assertEqual([(e.node, e.name) for e in seen], [("n", "log_level"), ("n", "x")])  # log_level은 모든 노드가 자동으로 선언한다
 
 

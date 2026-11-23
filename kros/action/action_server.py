@@ -2,8 +2,8 @@ import logging
 import threading
 from typing import Any, Callable, Generic, TypeVar
 
-from kros.topic import TopicManager
-from kros.service import ServiceManager
+from kros.topic import TopicExecutor
+from kros.service import ServiceExecutor
 
 from .action_type import ActionType
 from .cancel_goal_request import CancelGoalRequest
@@ -36,24 +36,24 @@ class ActionServer(Generic[Goal, Feedback, Result]):
         name: str,
         action_type: ActionType[Goal, Feedback, Result],
         execute: Callable[[ServerGoalHandle[Goal, Feedback]], Result],
-        topic_manager: TopicManager,
-        service_manager: ServiceManager,
+        topic_executor: TopicExecutor,
+        service_executor: ServiceExecutor,
         goal_callback: Callable[[Goal], bool] | None = None,
     ) -> None:
         self.name = name
         self._type = action_type
         self._execute = execute
         self._goal_callback = goal_callback
-        self._topics = topic_manager
-        self._sm = service_manager
+        self._topics = topic_executor
+        self._sm = service_executor
         self._lock = threading.Lock()
         self._goals: dict[str, ServerGoalHandle[Goal, Feedback]] = {}
         self._started: set[str] = set()  # 실행을 시작한 goal
         self._abandoned: set[str] = set()  # destroy로 시작도 못 하고 버려진 goal
         self._destroyed = False
-        self._send = service_manager.create_service(send_goal_service(name), SEND_GOAL, self._on_send_goal)
-        self._cancel = service_manager.create_service(cancel_goal_service(name), CANCEL_GOAL, self._on_cancel_goal)
-        self._goal_sub = topic_manager.subscribe(goal_topic(name), GoalMessage, self._run_goal)
+        self._send = service_executor.create_service(send_goal_service(name), SEND_GOAL, self._on_send_goal)
+        self._cancel = service_executor.create_service(cancel_goal_service(name), CANCEL_GOAL, self._on_cancel_goal)
+        self._goal_sub = topic_executor.subscribe(goal_topic(name), GoalMessage, self._run_goal)
 
     def _on_send_goal(self, request: SendGoalRequest) -> SendGoalResponse:
         if not isinstance(request.goal, self._type.goal):

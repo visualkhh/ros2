@@ -37,7 +37,7 @@ class Setup(unittest.TestCase):
         if at is not None:
             self.source.set(at)
         self.user.publish(topic, message)
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
 
 class TestTwistMux(Setup):
@@ -80,7 +80,7 @@ class TestCollisionMonitor(Setup):
     def setUp(self) -> None:
         self.make(CollisionMonitor, {"cmd_vel_in_topic": "cmd_vel_mux", "polygons": ("PolygonStop", "PolygonSlow", "Approach"), "Approach.action_type": "approach", "Approach.type": "circle", "Approach.radius": 0.25, "Approach.enabled": False}, "cmd_vel")
         StaticTransformBroadcaster(self.user).send_transform(TransformStamped(Header(0.0, "base_footprint"), "base_scan", Transform(Vector3(-0.05, 0.0, 0.0))))
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
     def obstacle(self, distance: float) -> None:
         """base_footprint에서 distance 앞 (라이다는 0.05m 뒤에 있다)."""

@@ -20,7 +20,7 @@ class _Entry:
 
 
 class TimerManager:
-    """타이머 레지스트리와 스케줄 (한 프로세스 안). TopicManager/ServiceManager와 같은 결이다.
+    """타이머 레지스트리와 스케줄 (한 프로세스 안). TopicExecutor/ServiceExecutor와 같은 결이다.
 
     - 시간은 TimeSource가 준다: 실제 시간이면 스케줄 스레드 하나가 기다렸다 깨우고, 시뮬레이션 시간이면 시간을 set하는 쪽이
       그 스레드에서 바로 타이머를 판정한다 (스레드 없이 결정적으로 동작).

@@ -1,12 +1,12 @@
 import threading
 import unittest
 
-from kros.topic import TopicManager
+from kros.topic import TopicExecutor
 
 
-class TestTopicManager(unittest.TestCase):
+class TestTopicExecutor(unittest.TestCase):
     def setUp(self) -> None:
-        self.m = TopicManager()
+        self.m = TopicExecutor()
         self.addCleanup(self.m.shutdown)
 
     def test_publish_reaches_subscribers_of_topic_only(self) -> None:

@@ -105,7 +105,7 @@ class Simulation:
             self.world.step(0.02)
             self.source.set(self.world.time)
             self.kros.context.timer_manager.join()
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
     def error(self, frame: str) -> float:
         t = self.buffer.lookup_transform(frame, "base_footprint").transform

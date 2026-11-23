@@ -2,7 +2,7 @@ import threading
 import unittest
 from dataclasses import dataclass
 
-from kros.service import ServiceManager, ServiceType
+from kros.service import ServiceExecutor, ServiceType
 
 
 @dataclass(frozen=True)
@@ -20,9 +20,9 @@ Add = ServiceType("Add", AddReq, AddRes)
 Other = ServiceType("Other", AddReq, AddRes)
 
 
-class TestServiceManager(unittest.TestCase):
+class TestServiceExecutor(unittest.TestCase):
     def setUp(self) -> None:
-        self.sm = ServiceManager()
+        self.sm = ServiceExecutor()
         self.addCleanup(self.sm.shutdown)
 
     def test_call_returns_response(self) -> None:

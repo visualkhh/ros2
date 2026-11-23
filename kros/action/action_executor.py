@@ -1,8 +1,8 @@
 import threading
 from typing import Any, Callable, TypeVar
 
-from kros.service import ServiceManager
-from kros.topic import TopicManager
+from kros.service import ServiceExecutor
+from kros.topic import TopicExecutor
 
 from .action_client import ActionClient
 from .action_server import ActionServer
@@ -15,7 +15,7 @@ Result = TypeVar("Result")
 
 
 class ActionExecutor:
-    """액션 이름 -> 서버 레지스트리와 서버/클라이언트의 수명 관리 (한 프로세스 안). TopicManager/ServiceManager와 같은 결이다.
+    """액션 이름 -> 서버 레지스트리와 서버/클라이언트의 수명 관리 (한 프로세스 안). TopicExecutor/ServiceExecutor와 같은 결이다.
 
     액션은 토픽과 서비스 위에 올라가는 기능이라 두 매니저를 받아 쓴다 (둘의 연결은 Context가 한다).
     - 액션 이름당 서버는 하나. 중복 등록은 ValueError.
@@ -24,9 +24,9 @@ class ActionExecutor:
     - shutdown: 클라이언트를 먼저(기다리던 결과는 ABORTED), 서버를 나중에 정리한다.
     """
 
-    def __init__(self, topic_manager: TopicManager, service_manager: ServiceManager) -> None:
-        self._topics = topic_manager
-        self._services = service_manager
+    def __init__(self, topic_executor: TopicExecutor, service_executor: ServiceExecutor) -> None:
+        self._topics = topic_executor
+        self._services = service_executor
         self._lock = threading.Lock()
         self._servers: dict[str, ActionServer[Any, Any, Any]] = {}
         self._clients: list[ActionClient[Any, Any, Any]] = []
@@ -77,4 +77,3 @@ class ActionExecutor:
             client.destroy()
         for server in servers:
             server.destroy()
-ActionManager = ActionExecutor

@@ -20,10 +20,10 @@ class TestNode(unittest.TestCase):
         sub_node, pub_node = Node(ctx, "s"), Node(ctx, "p")
         sub = sub_node.subscribe("n", int, got.append)
         pub_node.publish("n", 7)
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         sub_node.unsubscribe(sub)
         pub_node.publish("n", 8)
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         self.assertEqual(got, [7])
 
 

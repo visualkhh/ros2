@@ -66,7 +66,7 @@ class TestVizSmoke(unittest.TestCase):
             world.step(1 / 60)
             source.set(world.time)
         kros.context.timer_manager.join()
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         viz.base.taskMgr.step()
         self.assertIsNotNone(viz.model)  # robot_description을 받아 모델을 만들었다
         self.assertEqual(viz.node.buffer.lookup_transform("odom", "base_footprint").header.frame_id, "odom")
@@ -127,11 +127,11 @@ class TestVizMap(unittest.TestCase):
         cells = (OCCUPIED, UNKNOWN, FREE, FREE) + (FREE,) * 8
         grid = OccupancyGrid(Header(0.0, "odom"), MapMetaData(0.0, 0.5, 4, 3, Pose(Point(1.0, 2.0, 0.0))), cells)
         made["mapper"].publish("map", grid, QOS_LATCHED)
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         viz = Viz(kros, TurtleBot3.description_dir)  # 지도를 낸 뒤에 켜도 latch라 받는다
         self.addCleanup(viz.close)
         TransformBroadcaster(made["mapper"]).send_transform(TransformStamped(Header(0.0, "odom"), "base_footprint", Transform()))  # odom 프레임이 있게 (tf는 latch가 아니라 viz가 켜진 뒤에)
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         viz.base.taskMgr.step()
         self.assertFalse(viz.nav.grids["map"].isHidden())
         low, high = viz.nav.grids["map"].getTightBounds()
@@ -207,11 +207,11 @@ class TestVizSlamPanel(unittest.TestCase):
         self.assertEqual(self.cartographer.mode.value, "localization")  # 저장한 지도로 위치만 잡는다
         maps: list[OccupancyGrid] = []
         self.watcher.subscribe("map", OccupancyGrid, maps.append, QOS_LATCHED)
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertGreater(maps[-1].info.width, 0)  # 띄운 지도
         self.panel.unload_button["command"]()  # 지도 내리기
         self.wait_status("map unloaded")
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertEqual((maps[-1].info.width, maps[-1].info.height), (0, 0))  # 빈 지도 = 지도 없음
         self.assertEqual(self.cartographer.mode.value, "idle")  # 지도 없이 위치 추정은 끈다
         self.assertEqual(self.panel.map_menu.get(), "(select map)")
@@ -223,7 +223,7 @@ class TestVizSlamPanel(unittest.TestCase):
         self.panel.toggle_pose_tool()
         self.panel.update((1.0, 2.0), True)  # 바닥을 누르고
         self.panel.update((1.0, 3.0), False)  # +y 쪽으로 끌어 놓는다
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertEqual(len(got), 1)
         pose = got[0].pose.pose
         self.assertEqual((got[0].header.frame_id, pose.position.x, pose.position.y), ("map", 1.0, 2.0))
@@ -251,7 +251,7 @@ class TestVizSlamPanel(unittest.TestCase):
         self.assertFalse(arrow.isHidden())  # 끄는 동안 화살표로 미리 보인다
         self.assertAlmostEqual(arrow.getH() % 360, 180.0, places=3)
         self.panel.update((0.0, 2.0), False)  # 놓으면 낸다
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertTrue(arrow.isHidden())
         self.assertIsNone(self.panel.tool)
         self.assertEqual((got[-1].header.frame_id, got[-1].pose.position.x, got[-1].pose.position.y), ("map", 1.0, 2.0))
@@ -328,7 +328,7 @@ class TestVizNavigationDisplays(unittest.TestCase):
         path = NavPath(Header(0.0, "odom"), tuple(PoseStamped(Header(0.0, "odom"), Pose(Point(x / 10, 0.0, 0.0))) for x in range(10)))
         node.publish("plan", path, QOS_LATCHED)
         node.publish("local_plan", path)
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         viz.base.taskMgr.step()
         for name in ("global_costmap/costmap", "local_costmap/costmap"):
             root = viz.nav.grids[name]
@@ -347,7 +347,7 @@ class TestVizNavigationDisplays(unittest.TestCase):
         self.assertTrue(viz.nav.paths["plan"].isHidden())
         for x in (0.1, 0.2, 0.3):  # 로봇이 움직이면 지나온 궤적이 쌓인다
             broadcaster.send_transform(TransformStamped(Header(x, "odom"), "base_footprint", Transform(Vector3(x, 0.0, 0.0))))
-            kros.context.topic_manager.join()
+            kros.context.topic_executor.join()
             viz.base.taskMgr.step()
         self.assertEqual(len(viz.nav.trail), 4)
         self.assertAlmostEqual(viz.nav.trail[-1][0], 0.3)

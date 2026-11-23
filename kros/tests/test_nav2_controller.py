@@ -185,13 +185,13 @@ class TestControllerServer(unittest.TestCase):
         self.client = self.user.create_action_client("follow_path", FollowPath)
         self.user.publish("map", room(), QOS_LATCHED)
         TransformBroadcaster(self.user).send_transform(TransformStamped(Header(0.0, "map"), "base_footprint", Transform(Vector3(), Quaternion())))
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
     def path(self, frame: str = "map") -> Path:
         return Path(Header(0.0, frame), tuple(PoseStamped(Header(0.0, frame), Pose(Point(x, y, 0.0), Quaternion())) for x, y, _ in line((0.0, 0.0), (1.5, 0.0))))
 
     def run_until(self, done: Callable[[], bool]) -> None:
-        """시뮬레이션 시간을 제어 주기씩 민다. goal이 도는 동안은 topic_manager.join()을 부르지 않는다 (goal 실행이 구독 스레드라 끝나지 않는다)."""
+        """시뮬레이션 시간을 제어 주기씩 민다. goal이 도는 동안은 topic_executor.join()을 부르지 않는다 (goal 실행이 구독 스레드라 끝나지 않는다)."""
         for _ in range(400):
             if done():
                 return
@@ -206,7 +206,7 @@ class TestControllerServer(unittest.TestCase):
         handle.cancel(5)
         self.run_until(lambda: handle.status != GoalStatus.ACCEPTED)
         self.assertEqual(handle.result(5).result, FollowPathResult(FollowPathResult.NONE, "취소"))
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertEqual(self.commands[-1], Twist())  # 멈춤
 
     def test_a_new_path_replaces_the_running_one(self) -> None:

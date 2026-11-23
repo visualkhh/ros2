@@ -3,7 +3,7 @@ import unittest
 
 from kros.context import Context
 from kros.nodes import Node
-from kros.topic import QOS_DEFAULT, QOS_LATCHED, QOS_SENSOR_DATA, Durability, QoS, TopicManager
+from kros.topic import QOS_DEFAULT, QOS_LATCHED, QOS_SENSOR_DATA, Durability, QoS, TopicExecutor
 
 
 def latched(depth: int) -> QoS:
@@ -29,7 +29,7 @@ class TestQoSValue(unittest.TestCase):
 
 class TestLatch(unittest.TestCase):
     def setUp(self) -> None:
-        self.m = TopicManager()
+        self.m = TopicExecutor()
         self.addCleanup(self.m.shutdown)
 
     def late(self, qos: QoS, topic: str = "x") -> list[int]:
@@ -135,7 +135,7 @@ class TestLatch(unittest.TestCase):
 
 class TestBoundedQueue(unittest.TestCase):
     def setUp(self) -> None:
-        self.m = TopicManager()
+        self.m = TopicExecutor()
         self.addCleanup(self.m.shutdown)
 
     def blocked_subscriber(self, qos: QoS) -> tuple[list[int], threading.Event, threading.Event]:
@@ -252,7 +252,7 @@ class TestNodeQoS(unittest.TestCase):
         publisher.publish("static", 42, QOS_LATCHED)
         got: list[int] = []
         late.subscribe("static", int, got.append, QOS_LATCHED)
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         self.assertEqual(got, [42])  # 늦게 뜬 노드도 한 번만 낸 정보를 받는다
 
     def test_default_node_calls_behave_as_before(self) -> None:
@@ -262,7 +262,7 @@ class TestNodeQoS(unittest.TestCase):
         a.publish("t", 1)
         got: list[int] = []
         b.subscribe("t", int, got.append)
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         self.assertEqual(got, [])  # 기본은 휘발성: 구독 전에 나간 것은 못 받는다
 
 

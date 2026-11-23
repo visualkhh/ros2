@@ -57,10 +57,10 @@ class Setup(unittest.TestCase):
         self.user.subscribe("odometry/filtered", Odometry, self.filtered.append)
 
     def tick(self, t: float) -> None:
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.source.set(t)
         self.kros.context.timer_manager.join()
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
     def odom(self, stamp: float, v: float, w: float = 0.0) -> None:
         twist = TwistWithCovariance(Twist(Vector3(x=v), Vector3(z=w)), TWIST_COV)
@@ -161,7 +161,7 @@ class TestAgainstTheSimulation(unittest.TestCase):
             world.step(0.02)
             source.set(world.time)
             kros.context.timer_manager.join()
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         truth = robot.pose
 
         def error(m: Odometry) -> float:

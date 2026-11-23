@@ -160,7 +160,7 @@ class TestPlannerServer(unittest.TestCase):
     def ready(self) -> None:
         self.user.publish("map", room(), QOS_LATCHED)
         TransformBroadcaster(self.user).send_transform(TransformStamped(Header(0.0, "map"), "base_footprint", Transform(Vector3(0.5, 0.5, 0.0), Quaternion())))
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
     def plan(self, planner_id: str = "") -> ComputePathToPoseResult:
         goal = PoseStamped(Header(0.0, "map"), Pose(Point(2.5, 0.5, 0.0), Quaternion(0.0, 0.0, math.sin(0.5), math.cos(0.5))))
@@ -179,7 +179,7 @@ class TestPlannerServer(unittest.TestCase):
         last = poses[-1].pose.orientation
         self.assertAlmostEqual(2 * math.atan2(last.z, last.w), 1.0)  # 끝은 목표 방향
         self.assertEqual(result.path.header.frame_id, "map")
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertEqual(self.plans[-1], result.path)
 
     def test_planner_id_picks_the_algorithm(self) -> None:
@@ -192,7 +192,7 @@ class TestPlannerServer(unittest.TestCase):
         with self.assertLogs("kros.node.planner_server", level="WARNING"):
             self.assertEqual(self.plan().error_code, ComputePathToPoseResult.UNKNOWN)  # 지도 없음
         self.user.publish("map", room(), QOS_LATCHED)
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         with self.assertLogs("kros.node.planner_server", level="WARNING"):
             self.assertEqual(self.plan().error_code, ComputePathToPoseResult.TF_ERROR)  # 로봇 위치 모름
 

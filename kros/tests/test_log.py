@@ -39,7 +39,7 @@ def make(parameters: dict[str, dict[str, bool | int | float | str]] | None = Non
 
 
 def settle(kros: Kros) -> None:
-    kros.context.topic_manager.join()
+    kros.context.topic_executor.join()
 
 
 class TestLogMessage(unittest.TestCase):

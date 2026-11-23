@@ -2,6 +2,7 @@ from collections.abc import Mapping
 
 from kros.message_manager import MessageManager
 from kros.parameter import PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, ParameterManager, ParameterValue
+from kros.topic import QOS_DEFAULT
 from kros.timer import TimeSource
 
 
@@ -16,17 +17,32 @@ class Context:
         clients: list[Mapping[str, object]] | None = None,
     ) -> None:
         self.message_manager: MessageManager = MessageManager(server=server, clients=clients, time_source=time_source)
-        # 하위 호환: 기존 코드가 context.topic_manager 등을 직접 쓰는 경우
-        self.topic_manager = self.message_manager.topic_executor
-        self.service_manager = self.message_manager.service_executor
-        self.action_manager = self.message_manager.action_executor
+        # 하위 호환: 기존 코드가 context.topic_executor 등을 직접 쓰는 경우
+        self.topic_executor = self.message_manager.topic_executor
+        self.service_executor = self.message_manager.service_executor
+        self.action_executor = self.message_manager.action_executor
         self.timer_manager = self.message_manager.timer_manager
         # parameters: {노드이름: {파라미터: 값}} 시작 값. 선언/변경은 parameter_events 토픽으로 알린다 (파라미터 매니저는 토픽을 모르고 콜백만 부른다)
         self.parameter_manager: ParameterManager = ParameterManager(parameters, on_event=self._publish_parameter_event)
         self._node_names: set[str] = set()
+        self._applying_remote_param = False
+        # 네트워크에서 받은 파라미터 변경을 로컬에 적용한다
+        self.topic_executor.subscribe(PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, self._apply_remote_parameter_event, QOS_DEFAULT)
 
     def _publish_parameter_event(self, event: ParameterEvent) -> None:
-        self.topic_manager.publish(PARAMETER_EVENTS_TOPIC_NAME, event)
+        if self._applying_remote_param:
+            return  # 원격에서 받은 변경은 다시 브로드캐스트하지 않는다
+        self.message_manager.publish(PARAMETER_EVENTS_TOPIC_NAME, event)
+
+    def _apply_remote_parameter_event(self, event: ParameterEvent) -> None:
+        # 원격에서 온 파라미터 변경을 로컬에 적용한다
+        self._applying_remote_param = True
+        try:
+            self.parameter_manager.set(event.node, event.name, event.new)
+        except Exception:
+            pass
+        finally:
+            self._applying_remote_param = False
 
     def register_node(self, name: str) -> None:
         """노드 이름을 등록한다. 같은 Context에서 이름이 겹치면 ValueError."""

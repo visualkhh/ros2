@@ -84,7 +84,7 @@ class TestMapNodes(unittest.TestCase):
         self.user = made["user"]
         self.maps: list[OccupancyGrid] = []
         self.user.subscribe("map", OccupancyGrid, self.maps.append, QOS_LATCHED)
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
 
     def test_map_server_publishes_the_start_map_latched(self) -> None:
         self.assertEqual(len(self.maps), 1)  # 노드가 먼저 냈어도 latch라 받는다
@@ -96,14 +96,14 @@ class TestMapNodes(unittest.TestCase):
         self.assertTrue((self.dir / "saved.yaml").exists() and (self.dir / "saved.pgm").exists())
         response = self.user.call_service("map_server/load_map", LoadMap, LoadMapRequest(str(self.dir / "saved.yaml")), timeout=2.0)
         self.assertEqual(response.result, LoadMapResponse.RESULT_SUCCESS)
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertEqual(len(self.maps), 2)
         self.assertEqual(self.maps[-1].data, response.map.data)
 
     def test_unload_publishes_an_empty_map(self) -> None:
         response = self.user.call_service("map_server/unload_map", Trigger, TriggerRequest(), timeout=2.0)
         self.assertTrue(response.success)
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertEqual((self.maps[-1].info.width, self.maps[-1].info.height), (0, 0))
 
     def test_load_failures_keep_the_current_map(self) -> None:
@@ -114,7 +114,7 @@ class TestMapNodes(unittest.TestCase):
         with self.assertLogs("kros.node.map_server", level="ERROR"):
             response = self.user.call_service("map_server/load_map", LoadMap, LoadMapRequest("broken.yaml"), timeout=2.0)
         self.assertEqual(response.result, LoadMapResponse.RESULT_INVALID_MAP_DATA)
-        self.kros.context.topic_manager.join()
+        self.kros.context.topic_executor.join()
         self.assertEqual(len(self.maps), 1)  # 실패하면 새 지도를 내지 않는다
 
     def test_save_fails_when_no_map_arrives(self) -> None:

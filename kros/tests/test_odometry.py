@@ -23,7 +23,7 @@ LEFT, RIGHT = "wheel_left_joint", "wheel_right_joint"
 
 def settle(kros: Kros) -> None:
     kros.context.timer_manager.join()
-    kros.context.topic_manager.join()
+    kros.context.topic_executor.join()
 
 
 class Setup(unittest.TestCase):

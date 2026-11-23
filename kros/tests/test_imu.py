@@ -135,7 +135,7 @@ class TestDummyAndBridge(unittest.TestCase):
         got: list[ImuMessage] = []
         made["watcher"].subscribe("imu", ImuMessage, got.append)
         run(robot, world, 0.2)
-        kros.context.topic_manager.join()
+        kros.context.topic_executor.join()
         self.assertTrue(got)
         self.assertEqual(got[-1].header.frame_id, "imu_link")
 

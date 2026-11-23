@@ -65,30 +65,30 @@ class Node:
 
     def publish(self, topic: str, msg: T, qos: QoS = QOS_DEFAULT) -> None:
         """토픽에 발행한다. qos=QOS_LATCHED처럼 TRANSIENT_LOCAL로 내면 마지막 메시지를 기억해 늦게 구독한 쪽에게도 전달한다."""
-        self.context.topic_manager.publish(topic, msg, qos)
+        self.context.topic_executor.publish(topic, msg, qos)
 
     def subscribe(self, topic: str, msg_type: type[T], callback: Callable[[T], None], qos: QoS = QOS_DEFAULT) -> Subscription:
         """토픽을 구독한다. qos.depth로 대기 큐 길이를 제한하고(넘치면 오래된 것을 버림), TRANSIENT_LOCAL이면 늦게 구독해도 기억된 메시지를 받는다."""
-        return self.context.topic_manager.subscribe(topic, msg_type, callback, qos)
+        return self.context.topic_executor.subscribe(topic, msg_type, callback, qos)
 
     def unsubscribe(self, subscription: Subscription) -> None:
-        self.context.topic_manager.unsubscribe(subscription)
+        self.context.topic_executor.unsubscribe(subscription)
 
     def create_service(
         self, name: str, srv_type: ServiceType[Req, Res], handler: Callable[[Req], Res]
     ) -> ServiceServer:
-        return self.context.service_manager.create_service(name, srv_type, handler)
+        return self.context.service_executor.create_service(name, srv_type, handler)
 
     def destroy_service(self, server: ServiceServer) -> None:
-        self.context.service_manager.destroy_service(server)
+        self.context.service_executor.destroy_service(server)
 
     def call_service(
         self, name: str, srv_type: ServiceType[Req, Res], request: Req, timeout: float | None = None
     ) -> Res:
-        return self.context.service_manager.call(name, srv_type, request, timeout)
+        return self.context.service_executor.call(name, srv_type, request, timeout)
 
     def call_service_async(self, name: str, srv_type: ServiceType[Req, Res], request: Req) -> Future[Res]:
-        return self.context.service_manager.call_async(name, srv_type, request)
+        return self.context.service_executor.call_async(name, srv_type, request)
 
     def create_action_server(
         self,
@@ -97,18 +97,18 @@ class Node:
         execute: Callable[[ServerGoalHandle[Goal, Feedback]], Result],
         goal_callback: Callable[[Goal], bool] | None = None,
     ) -> ActionServer[Goal, Feedback, Result]:
-        return self.context.action_manager.create_server(name, action_type, execute, goal_callback)
+        return self.context.action_executor.create_server(name, action_type, execute, goal_callback)
 
     def destroy_action_server(self, server: ActionServer[Goal, Feedback, Result]) -> None:
-        self.context.action_manager.destroy_server(server)
+        self.context.action_executor.destroy_server(server)
 
     def create_action_client(
         self, name: str, action_type: ActionType[Goal, Feedback, Result]
     ) -> ActionClient[Goal, Feedback, Result]:
-        return self.context.action_manager.create_client(name, action_type)
+        return self.context.action_executor.create_client(name, action_type)
 
     def destroy_action_client(self, client: ActionClient[Goal, Feedback, Result]) -> None:
-        self.context.action_manager.destroy_client(client)
+        self.context.action_executor.destroy_client(client)
 
     def __repr__(self) -> str:
         return f"Node({self.name!r})"

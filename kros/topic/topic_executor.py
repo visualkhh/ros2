@@ -90,4 +90,3 @@ class TopicExecutor:
             self._history.clear()
         for sub in subs:
             sub.close(wait=True)
-TopicManager = TopicExecutor

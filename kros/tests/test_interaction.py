@@ -127,11 +127,11 @@ class TestRobotBridge(unittest.TestCase):
         scans: list[LaserScan] = []
         listener.subscribe(SCAN_TOPIC_NAME, LaserScan, scans.append)
         listener.publish(CMD_VEL_TOPIC_NAME, Twist(Vector3(x=0.2), Vector3()))
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         x = robot.pose.x
         world.step(1.0)
         self.assertAlmostEqual(robot.pose.x - x, 0.2)
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         self.assertEqual(len(scans), 1)
 
 

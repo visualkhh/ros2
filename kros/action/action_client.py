@@ -2,8 +2,8 @@ import threading
 import uuid
 from typing import Any, Callable, Generic, TypeVar
 
-from kros.topic import TopicManager
-from kros.service import ServiceManager
+from kros.topic import TopicExecutor
+from kros.service import ServiceExecutor
 
 from .action_type import ActionType
 from .cancel_goal_request import CancelGoalRequest
@@ -26,16 +26,16 @@ class ActionClient(Generic[Goal, Feedback, Result]):
         self,
         name: str,
         action_type: ActionType[Goal, Feedback, Result],
-        topic_manager: TopicManager,
-        service_manager: ServiceManager,
+        topic_executor: TopicExecutor,
+        service_executor: ServiceExecutor,
     ) -> None:
         self.name = name
         self._type = action_type
-        self._topics = topic_manager
-        self._sm = service_manager
+        self._topics = topic_executor
+        self._sm = service_executor
         self._lock = threading.Lock()
         self._handles: dict[str, ClientGoalHandle] = {}
-        self._event_sub = topic_manager.subscribe(event_topic(name), ActionEvent, self._on_event)
+        self._event_sub = topic_executor.subscribe(event_topic(name), ActionEvent, self._on_event)
 
     def send_goal(
         self, goal: Goal, feedback_callback: Callable[[Feedback], None] | None = None, timeout: float | None = None

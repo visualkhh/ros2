@@ -240,7 +240,7 @@ class TestNodeAndContext(unittest.TestCase):
         node.create_timer(0.1, lambda: node.publish("t", 1))
         source.set(0.1)
         ctx.timer_manager.join()
-        ctx.topic_manager.join()
+        ctx.topic_executor.join()
         self.assertEqual(seen, [1])
         ctx.shutdown()
         source.set(1.0)  # 종료 뒤에는 타이머가 돌지 않는다
