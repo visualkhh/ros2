@@ -1,5 +1,7 @@
 import logging
 import math
+import time
+from collections.abc import Callable
 
 from kros.worlds.robots.turtlebot3.opencr_serial import protocol
 from kros.worlds.robots.turtlebot3.opencr_serial.board_status import BoardStatus
@@ -14,6 +16,7 @@ from kros.worlds.clock import Clock
 
 logger = logging.getLogger(__name__)
 COMMAND_PERIOD = 0.1  # 초. 펌웨어는 500ms 동안 C가 없으면 바퀴를 세우므로 그 안에 계속 보낸다
+COMMAND_TIMEOUT = 0.5  # 초. 이 시간 동안 write()가 없으면 마지막 명령을 계속 보내지 않고 0으로 세운다 (네트워크/노드가 멈춘 경우)
 MAX_WHEEL = 8.0  # rad/s, 펌웨어가 한 바퀴씩 자르는 한계. 넘으면 두 바퀴를 같은 비율로 줄인다 (호의 모양을 지킨다)
 
 
@@ -40,6 +43,8 @@ class OpenCrSerial(DiffDriveBoard):
         left_dir: float = 1.0,
         right_dir: float = 1.0,
         max_wheel: float = MAX_WHEEL,
+        command_timeout: float = COMMAND_TIMEOUT,
+        now: Callable[[], float] = time.monotonic,
     ) -> None:
         super().__init__(period)
         self.wheel_radius, self.wheel_separation = wheel_radius, wheel_separation
@@ -47,6 +52,9 @@ class OpenCrSerial(DiffDriveBoard):
         # kros 안에서는 +가 앞으로가 되게 한다 (DiffDriveOdometry가 그대로 쓴다).
         self.left_dir, self.right_dir = left_dir, right_dir
         self.max_wheel = max_wheel
+        self.command_timeout = command_timeout
+        self._now = now
+        self._last_write = now()
         self.left, self.right = SerialWheel(), SerialWheel()
         self.imu = SerialMpu9250()
         self.add(self.left, "left_wheel")
@@ -78,11 +86,17 @@ class OpenCrSerial(DiffDriveBoard):
     def write(self, command: Twist) -> None:
         """몸체 속도 명령을 내린다 (바퀴 목표로 바꿔 두면 다음 주기에 보낸다)."""
         self._command = command
+        self._last_write = self._now()
         left, right = wheel_speeds(command, self.wheel_radius, self.wheel_separation, self.max_wheel)
         self.left.write(left * self.left_dir)
         self.right.write(right * self.right_dir)
 
     def on_period(self, clock: Clock) -> None:
+        if self._now() - self._last_write > self.command_timeout:  # 명령이 끊겼다: 계속 달리지 않게 0으로
+            self._command = Twist()
+            self.left.write(0.0)
+            self.right.write(0.0)
+            self._last_write = self._now()
         sent = self._link.write_line(protocol.format_command(self.left.command, self.right.command))
         if not sent and not self._send_failed:  # 연결이 끊긴 사실은 한 번만 기록한다 (주기마다 세지 않는다)
             self.fail(HardwareError("명령을 보내지 못했다 (연결 안 됨)"))

@@ -31,7 +31,7 @@ OPENCR_PORT=/dev/opencr LIDAR_PORT=/dev/tb3_lidar ./kos_ws/run.sh
 - 시작 로그에 `host mode: port 9000`과 접속 주소가 나옵니다.
 - OpenCR IMU는 켜고 **2초 동안 가만히** (자이로 편향 보정).
 - Ctrl+C / SIGTERM → `C,0,0` 정지 후 시리얼을 닫고 종료.
-- 펌웨어 watchdog: 500ms 동안 `C`가 없으면 바퀴 자동 정지.
+- 펌웨어 watchdog: 500ms 동안 `C`가 없으면 바퀴 자동 정지. kros 쪽도 0.5초 동안 새 `cmd_vel`이 없으면 마지막 속도를 버리고 0을 보냅니다.
 
 ## PC에서 보기
 

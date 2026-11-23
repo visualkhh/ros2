@@ -191,6 +191,25 @@ class TestOpenCrSerialDirection(unittest.TestCase):
         self.assertEqual((board.left.position, board.right.position), (-1.5, -2.5))
 
 
+class TestCommandTimeout(unittest.TestCase):
+    def test_last_command_is_dropped_when_writes_stop(self) -> None:
+        """0.5초 동안 새 cmd_vel이 없으면 마지막 속도를 계속 보내지 않고 0으로 세운다 (네트워크가 끊겨도 로봇이 달리지 않게)."""
+        firmware = Firmware()
+        now = [0.0]
+        board = OpenCrSerial(0.033, 0.288, port=firmware.port, command_timeout=0.5, now=lambda: now[0])
+        self.addCleanup(firmware.close)
+        board.start()
+        self.addCleanup(board.stop)
+        self.assertTrue(eventually(lambda: board.connected))
+        board.write(Twist(Vector3(x=0.2)))
+        now[0] = 0.1
+        board.tick(Clock(1.0, 0.1))
+        self.assertTrue(eventually(lambda: "C,6.0606,6.0606" in firmware.lines()))
+        now[0] = 0.7  # 0.6초 지남: 새 명령 없음
+        board.tick(Clock(1.1, 0.1))
+        self.assertTrue(eventually(lambda: "C,0.0000,0.0000" in firmware.lines()))
+
+
 class TestNoPort(unittest.TestCase):
     def test_it_starts_without_the_port_and_records_the_send_failure_once(self) -> None:
         board = OpenCrSerial(0.033, 0.288, port="/dev/does-not-exist")
