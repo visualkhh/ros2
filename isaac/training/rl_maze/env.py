@@ -3,7 +3,7 @@
 한 스텝 (20 Hz):
   관측: 다음 웨이포인트 K개(로봇 기준) · 라이다(미로 격자 + 동적 장애물, 인플레이션 적용) · 엔코더 v, w · 자이로 w · 이전 행동 · inflation
   행동 [v, w] ∈ [-1, 1] → × (max_lin, max_ang) → 바퀴 (드라이버 식, BaseEnv)
-  보상: 안전 최우선 — 웨이포인트 진행 + 도착 보너스 − 시간 − 충돌 − 벽/사람/공 근접 − 떨림 − 후진
+  보상: reward.py — 웨이포인트 진행이 주 신호, 경로 이탈·벽/사람/공 근접·떨림·회전·후진은 벌점, 충돌은 끝
   끝: 마지막 웨이포인트 도착 · 벽/사람/공 충돌(중심이 표면에서 collide_r 안) · 시간
 미로는 지형 prim 아래 하나 (모든 env가 같은 미로, env끼리는 충돌 안 함). 라이다 · 충돌은 maze_grid.py 격자로.
 동적 장애물(사람 · 공)과 마찰 패치도 미로와 같이 전역 1세트 — 모든 env가 같은 것을 본다.
@@ -26,6 +26,7 @@ from training.rl_maze.command import RlMazeCommand
 from training.rl_maze.dynamic import DynamicObstacles
 from training.rl_maze.ground import spawn_friction_patches
 from training.rl_maze.maze_grid import inside, load
+from training.rl_maze.reward import compute_rewards
 from training.rl_maze.markers import CommandMarkers, LidarMarkers, WheelMarkers
 
 if TYPE_CHECKING:
@@ -207,42 +208,7 @@ class RlMazeEnv(BaseEnv):
         return self.goal_done | self.collided, time_out
 
     def _get_rewards(self) -> torch.Tensor:
-        c = self.cfg
-        v_enc, _ = self.encoders(self.r_nom, self.sep_nom)
-        active = (self.grace_steps <= 0).float()
-        span = (self.inflation - c.collide_r).clamp(min=1e-3)
-        wall_overlap = (self.inflation - self.wall_clearance).clamp(min=0.0)
-        dyn_overlap = (self.inflation - self.dyn_clearance).clamp(min=0.0)
-        wall_near = (wall_overlap / span).clamp(0.0, 1.0) * active
-        dyn_near = (dyn_overlap / span).clamp(0.0, 1.0) * active
-        terms = {
-            "progress": c.w_progress * self.progress.clamp(-0.25, 0.25),
-            "reach": c.w_reach * self.reached.float(),
-            "goal": c.w_goal * self.goal_done.float(),
-            "time": torch.full_like(self.progress, -c.w_time),
-            "collision": -c.w_collide * self.collided.float(),
-            "wall": -c.w_wall * wall_near,
-            "dynamic": -c.w_dynamic * dyn_near,
-            "smooth": -c.w_smooth * (self.action - self.prev_action).square().sum(-1),
-            "back": -c.w_back * (-v_enc).clamp(min=0.0),
-        }
-        r = torch.stack(list(terms.values()), dim=0).sum(dim=0)
-
-        log = self.extras.setdefault("log", {})
-        for name, value in terms.items():
-            log[f"Reward/{name}"] = value.mean().item()
-        log["Reward/total"] = r.mean().item()
-        log["Metrics/waypoints_done"] = (self.wp_idx - 1).float().mean().item()
-        log["Metrics/goal_rate"] = self.goal_done.float().mean().item()
-        log["Metrics/collision_rate"] = self.collided.float().mean().item()
-        log["Metrics/wall_collision_rate"] = self.wall_hit.float().mean().item()
-        log["Metrics/dyn_collision_rate"] = self.dyn_hit.float().mean().item()
-        log["Metrics/wall_clear"] = self.wall_clearance.mean().item()
-        log["Metrics/dyn_clear"] = self.dyn_clearance.clamp(max=2.0).mean().item()
-        log["Metrics/wall_overlap"] = wall_overlap.mean().item()
-        log["Metrics/dyn_overlap"] = dyn_overlap.mean().item()
-        log["Metrics/inflation"] = self.inflation.mean().item()
-        return r
+        return compute_rewards(self)   # reward.py
 
     def _get_observations(self) -> dict:
         c = self.cfg

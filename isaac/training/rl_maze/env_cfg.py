@@ -47,13 +47,13 @@ class RlMazeEnvCfg(BaseEnvCfg):
     # LiDAR 인플레이션 — 사용자가 주는 값(런타임 ROS 파라미터와 같은 단위 m).
     #   obs 마지막 1개 = inflation / inflation_scale · 스캔 = clamp(거리 - inflation, 0, lidar_max)
     #   학습은 env마다 에피소드 시작 때 범위에서 뽑는다 (한 에피소드 안에서는 고정).
-    inflation_range = (0.20, 0.24)  # [m] 학습 범위 = 사용자 지원 범위 — 경로 최소 = max + path_margin(0.34)
-    inflation_scale = 0.50          # 관측 정규화 상수 (사용자 값 아님) — 0.24 → 0.48
-    path_margin = 0.10              # [m] 경로 최소 = max(inflation_range) + path_margin — 가상 간격 확보
+    inflation_range = (0.01, 0.05)  # [m] 거의 없음 (rl_maze_beebot과 같게) — 실기 lidar_inflation을 이 범위 안으로. 경로 최소 = max + path_margin(0.37)
+    inflation_scale = 0.50          # 관측 정규화 상수 (사용자 값 아님) — 0.05 → 0.1 (입력이 거의 일정해짐, 52차원 계약 유지용)
+    path_margin = 0.32              # [m] 경로 최소 = max(inflation_range) + path_margin — 인플레이션이 작아도 경로는 벽에서 0.37 m 유지
 
     # 동적 장애물 — 미로 하나(env_spacing=0)라 전역 1세트. 사람은 걷고, 공은 튄다.
-    n_people = 3                   # 걷는 사람 수 (전역)
-    n_balls = 2                    # 공 수 (전역)
+    n_people = 0                   # 동적 장애물 없음 (rl_maze_beebot과 같게) — 켜려면 3. env는 0개여도 그대로 동작
+    n_balls = 0                    # 켜려면 2
     person_radius = 0.26           # [m] 충돌 · 라이다 원 반경 (몸 + 팔)
     person_speed = (0.25, 0.65)    # [m/s] 걷는 속도 범위 (로봇 0.26 m/s보다 조금 빠른 정도)
     person_pause_chance = 0.35     # 방향을 바꿀 때 이 확률로 잠깐 멈춘다
@@ -88,15 +88,22 @@ class RlMazeEnvCfg(BaseEnvCfg):
     gyro_noise = 0.01              # [rad/s] 정책 gyro 관측 잡음
     gyro_bias = 0.01               # [rad/s] ± gyro bias
 
-    # 보상 — 안전 최우선 + 가장 빨리 도착:
-    #   진행 + 도착 보너스 − 시간 − 충돌(끝) − 인플레이션 안쪽 겹침 − 떨림 − 후진
-    #   인플레이션 점군은 soft cost: 실제 라이다/충돌(0.17 m)은 hard, 겹치면 감점만.
-    w_progress = 2.0               # × [m] 줄인 거리 (최대한 빨리 = 진행을 크게)
-    w_reach = 10.0                 # 웨이포인트 하나 통과 (건너뛰기 없음 — 순서대로 다 밟아야 해서 크게)
-    w_goal = 100.0                 # 마지막 도착
-    w_time = 0.10                  # 매 스텝 (20 Hz → 2/s)
-    w_collide = 200.0              # 벽/사람/공 실제 충돌 (끝)
-    w_wall = 0.2                   # 매 스텝 × 인플레이션 안쪽 겹침 [0,1] (soft)
-    w_dynamic = 0.3                # 매 스텝 × 사람/공 인플레이션 겹침 [0,1] (soft)
+    # 보상 (reward.py) — rl_maze_beebot과 같은 크기: 진행(매 스텝)이 주 신호, 나머지는 작은 모양 잡기.
+    #   전진 1 m ≈ progress 10 + reach 3.3 = 13.3, 최고속 시간 −2/m → 움직이면 이득. 충돌 −20 ≈ 1.5 m어치 + 그 뒤 보상을 잃음.
+    #   옛 값(충돌 −200 · 도착 100 · 통과 10 · 시간 0.1 · 진행 ×2)은 가치 손실이 커서 학습이 불안했다 (rl_maze_beebot overnight2).
+    w_progress = 10.0              # × [m] 줄인 거리
+    w_reach = 1.0                  # 웨이포인트 하나 통과 (0.3 m 간격이라 1 m ≈ 3.3)
+    w_goal = 20.0                  # 마지막 도착
+    w_time = 0.02                  # 매 스텝
+    w_collide = 20.0               # 벽/사람/공 실제 충돌 (끝)
+    # 벽 근접 soft 벌점 — 경계가 collide_r + inflation(0.01~0.05)이라 표면 1~5 cm 안에서만 켜진다. 매 스텝이라 진행(0.13)보다 작게
+    w_inflate = 0.05
     w_smooth = 0.10                # × |행동 변화|² — 실기 좌우 떨림 억제 (기존 0.02)
+    w_speed = 0.05                 # × (전진속도/max_lin) × cos(길 방향 오차)
+    w_heading = 0.02               # × (1−cos 오차)/2 — 길에서 몸이 틀어질수록 −
+    w_spin = 0.02                  # × (각속도/max_ang)² — 지그재그 회전 −
+    w_center = 0.03                # × |l−r|/(l+r) — 복도에서 한쪽 벽에 치우칠수록 −
+    center_range = 1.0             # [m] 좌우 벽이 둘 다 이 안일 때만 중앙 벌점
+    w_path = 0.5                   # × 경로 선분까지 거리 [m] (허용 오차 없음, 최대 0.5 m)
+    w_action = 0.02                # × 정책 원출력이 [-1, 1]을 넘은 크기² — mean이 무한히 커지지 않게
     w_back = 0.5                   # × 뒤로 간 속도 [m/s]
