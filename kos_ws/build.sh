@@ -5,7 +5,11 @@
 #   ./build.sh --clean    # build/install/log를 지우고 다시 빌드
 set -eo pipefail
 WS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UNDERLAY="${ROS2_UNDERLAY:-$HOME/ros2/ros2_ws}"
+if [[ -d "$HOME/ros2/ros2_ws/install" ]]; then
+  UNDERLAY="${ROS2_UNDERLAY:-$HOME/ros2/ros2_ws}"
+else
+  UNDERLAY="${ROS2_UNDERLAY:-$(cd "$WS/../ros2_ws" && pwd)}"
+fi
 
 if [[ "${1:-}" == "--clean" ]]; then
   rm -rf "$WS/build" "$WS/install" "$WS/log"

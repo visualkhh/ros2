@@ -3,7 +3,11 @@
 #   source ./setup.sh
 set -eo pipefail
 WS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UNDERLAY="${ROS2_UNDERLAY:-$HOME/ros2/ros2_ws}"
+if [[ -d "$HOME/ros2/ros2_ws/install" ]]; then
+  UNDERLAY="${ROS2_UNDERLAY:-$HOME/ros2/ros2_ws}"
+else
+  UNDERLAY="${ROS2_UNDERLAY:-$(cd "$WS/../ros2_ws" && pwd)}"
+fi
 
 set +u
 if [[ -f "$UNDERLAY/install/setup.bash" ]]; then
