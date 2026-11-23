@@ -54,12 +54,17 @@ class UrdfModel:
                 mesh = geometry.find("mesh") if geometry is not None else None
                 if mesh is None:
                     continue  # mesh가 아닌 visual은 건너뛴다 (box/cylinder 미지원)
-                relative = mesh.get("filename", "").split("://", 1)[1].split("/", 1)[1]  # package://pkg/<relative>
-                path = package_root / relative
-                if not path.exists():
-                    continue  # 메시 파일이 없으면 이 visual은 건너뛴다 (원격 viz 등)
+                filename = mesh.get("filename", "")
+                if "://" in filename:  # package://<pkg>/<relative> → <relative>
+                    filename = filename.split("://", 1)[1].split("/", 1)[1]
+                path = package_root / filename
+                if not filename or not path.exists():
+                    continue  # 메시 파일이 없으면 이 visual은 건너뛴다 (원격 viz 등) — URDF 나머지는 그린다
                 scale = _floats(mesh.get("scale"), (1.0, 1.0, 1.0))
-                shape = load_stl(path, (scale[0], scale[1], scale[2]))
+                try:
+                    shape = load_stl(path, (scale[0], scale[1], scale[2]))
+                except (OSError, ValueError):
+                    continue  # 깨진 STL도 건너뛴다
                 material = visual.find("material")
                 if material is not None and material.get("name") in colors:
                     shape.setColor(*colors[material.get("name")])

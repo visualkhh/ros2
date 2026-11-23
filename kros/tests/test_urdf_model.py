@@ -54,9 +54,10 @@ class TestUrdfModel(unittest.TestCase):
         after = self.model.root.getRelativePoint(wheel, (0.033, 0, 0))
         self.assertLess(after.z, before.z)  # 앞쪽이 아래로 말림 = 전진 구름
 
-    def test_unsupported_visual_raises(self) -> None:
+    def test_unsupported_or_missing_visual_is_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             urdf = Path(d, "r.urdf")
             urdf.write_text('<robot name="r"><link name="l"><visual><geometry><box size="1 1 1"/></geometry></visual></link></robot>')
-            with self.assertRaises(NotImplementedError):
-                UrdfModel(urdf.read_text(), Path(d))
+            model = UrdfModel(urdf.read_text(), Path(d))
+            self.assertIn("l", model.links)  # box visual은 건너뛰고 링크는 만든다 (에러로 죽지 않는다)
+            self.assertEqual(model.links["l"].getNumChildren(), 0)

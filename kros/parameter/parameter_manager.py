@@ -113,6 +113,27 @@ class ParameterManager:
         with self._lock:
             return self._entry(node, name).value
 
+    def all_declared(self) -> dict[str, dict[str, ParameterValue]]:
+        """모든 노드가 선언한 파라미터의 현재 값 {노드: {이름: 값}} (네트워크 동기화용)."""
+        with self._lock:
+            result: dict[str, dict[str, ParameterValue]] = {}
+            for (node, name), entry in self._entries.items():
+                result.setdefault(node, {})[name] = entry.value
+            return result
+
+    def adopt(self, node: str, name: str, value: ParameterValue) -> None:
+        """다른 kros가 선언한 파라미터 값을 로컬에 반영한다 (검증/on_change/이벤트 없이).
+
+        원격 Viz가 서버 노드의 파라미터(예: cartographer mode)를 읽고 바꿀 수 있게 한다.
+        """
+        _kind(value)  # 지원하는 타입인지 확인 (아니면 TypeError)
+        with self._lock:
+            entry = self._entries.get((node, name))
+            if entry is None:
+                self._entries[(node, name)] = _Entry(value, None, None)
+            else:
+                entry.value = value
+
     def set(self, node: str, name: str, value: ParameterValue) -> None:
         """값을 바꾼다. 타입이 다르면 TypeError, 검증이 거절하면 ParameterRejectedError(값은 그대로)."""
         with self._lock:

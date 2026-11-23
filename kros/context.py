@@ -1,4 +1,7 @@
+import os
+import uuid
 from collections.abc import Mapping
+from dataclasses import replace
 
 from kros.message_manager import MessageManager
 from kros.parameter import PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, ParameterManager, ParameterValue
@@ -26,21 +29,36 @@ class Context:
         self.parameter_manager: ParameterManager = ParameterManager(parameters, on_event=self._publish_parameter_event)
         self._node_names: set[str] = set()
         self._applying_remote_param = False
+        # 이 인스턴스가 낸 파라미터 이벤트의 출처 id: 토픽으로 되돌아온 자기 이벤트를 다시 적용하지 않는다
+        self._origin = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        # 네트워크: 연결할 때 서버의 파라미터를 받아 오고, 받은 값을 로컬에 반영한다
+        self.message_manager.set_parameter_hooks(snapshot=self.parameter_manager.all_declared, apply=self._adopt_parameters)
         # 네트워크에서 받은 파라미터 변경을 로컬에 적용한다
         self.topic_executor.subscribe(PARAMETER_EVENTS_TOPIC_NAME, ParameterEvent, self._apply_remote_parameter_event, QOS_DEFAULT)
+
+    def _adopt_parameters(self, parameters: dict[str, dict[str, ParameterValue]]) -> None:
+        """연결 시 받은 원격 파라미터 표를 로컬에 반영한다 (원격 Viz가 서버 노드의 값을 읽고 바꿀 수 있게)."""
+        for node, values in parameters.items():
+            for name, value in values.items():
+                try:
+                    self.parameter_manager.adopt(node, name, value)
+                except TypeError:
+                    pass  # 지원하지 않는 타입은 무시
 
     def _publish_parameter_event(self, event: ParameterEvent) -> None:
         if self._applying_remote_param:
             return  # 원격에서 받은 변경은 다시 브로드캐스트하지 않는다
-        self.message_manager.publish(PARAMETER_EVENTS_TOPIC_NAME, event)
+        self.message_manager.publish(PARAMETER_EVENTS_TOPIC_NAME, replace(event, origin=self._origin))
 
     def _apply_remote_parameter_event(self, event: ParameterEvent) -> None:
+        if event.origin == self._origin:
+            return  # 내가 낸 이벤트가 로컬 토픽으로 되돌아온 것 (이미 반영돼 있다)
         # 원격에서 온 파라미터 변경을 로컬에 적용한다
         self._applying_remote_param = True
         try:
             self.parameter_manager.set(event.node, event.name, event.new)
         except Exception:
-            pass
+            pass  # 이쪽에 없는 노드/파라미터, 타입 불일치 등
         finally:
             self._applying_remote_param = False
 

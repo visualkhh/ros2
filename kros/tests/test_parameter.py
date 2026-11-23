@@ -270,7 +270,10 @@ class TestParameterEvents(unittest.TestCase):
         watcher.events.clear()
         kros.set_parameter(speedy, "speed", 0.9)
         self.settle(kros)
-        self.assertEqual(watcher.events, [ParameterEvent("Speedy", "speed", ParameterEventKind.CHANGED, 0.26, 0.9)])
+        self.assertEqual(len(watcher.events), 1)
+        event = watcher.events[0]
+        self.assertEqual((event.node, event.name, event.kind, event.old, event.new), ("Speedy", "speed", ParameterEventKind.CHANGED, 0.26, 0.9))
+        self.assertTrue(event.origin)  # 이 인스턴스가 낸 이벤트 표시 (자기 에코를 다시 적용하지 않는다)
 
     def test_every_way_of_changing_is_announced_to_other_nodes(self) -> None:
         kros, watcher, speedy = self.make()

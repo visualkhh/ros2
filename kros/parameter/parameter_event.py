@@ -13,10 +13,15 @@ class ParameterEventKind(Enum):
 
 @dataclass(frozen=True)
 class ParameterEvent:
-    """파라미터 변화 알림. ROS2의 ParameterEvent와 달리 이전 값(old)도 담는다. 선언일 때 old는 None."""
+    """파라미터 변화 알림. ROS2의 ParameterEvent와 달리 이전 값(old)도 담는다. 선언일 때 old는 None.
+
+    origin: 이 이벤트를 낸 kros 인스턴스의 id. 같은 프로세스 안에서 자기 이벤트가 토픽으로 되돌아올 때
+    (로컬 구독) 다시 적용하지 않도록 한다 (원격 변경만 적용).
+    """
 
     node: str
     name: str
     kind: ParameterEventKind
     old: ParameterValue | None
     new: ParameterValue
+    origin: str = ""

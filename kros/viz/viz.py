@@ -13,7 +13,7 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, ButtonThrower, Camera, CardMaker, DirectionalLight, Geom, GeomNode, GeomPoints, GeomVertexData, GeomVertexFormat, GeomVertexWriter,
     LineSegs, MouseAndKeyboard, OrthographicLens, PGTop, MouseButton, MouseWatcher, NodePath, PerspectiveLens, TextNode, Vec3, WindowProperties, LQuaternionf,
-    LVecBase4f, GraphicsWindow, Point2, Point3,
+    LVecBase4f, GraphicsWindow, Point2, Point3, PGMouseWatcherBackground,
 )
 
 from kros import Kros
@@ -57,6 +57,7 @@ class VizNode(Node):
         self._listener = TransformListener(self.buffer, self)
         self._lock = threading.Lock()
         self._latest: dict[str, object] = {}
+        self._version = 0  # 받은 메시지가 바뀔 때마다 증가 (화면이 패널 통계를 언제 다시 읽을지)
         self._stats: dict[str, tuple[str, int, float, float]] = {}  # 토픽 -> (타입 이름, 받은 개수, 첫 수신 시각, 마지막 수신 시각)
         for topic, msg_type, qos in (
             (TF_TOPIC_NAME, TFMessage, QOS_TF),  # 이 둘은 TransformListener도 따로 구독한다: 여기서는 패널의 통계용
@@ -80,8 +81,13 @@ class VizNode(Node):
         now = time.monotonic()
         with self._lock:
             self._latest[key] = message
+            self._version += 1
             kind, count, first, _ = self._stats[key]
             self._stats[key] = (kind, count + 1, first or now, now)
+
+    def stats_version(self) -> int:
+        with self._lock:
+            return self._version
 
     def topic_rows(self) -> dict[str, tuple[bool, str]]:
         """구독 중인 토픽마다 (최근 2초 안에 받았나, "타입 n=개수 평균Hz")."""
@@ -128,10 +134,11 @@ class Viz:
         self.base = base or ShowBase()
         if base is None:
             self.win = self.base.win
-            props = WindowProperties()
-            props.setTitle("kros viz")
-            props.setSize(900, 700)
-            self.win.requestProperties(props)
+            if isinstance(self.win, GraphicsWindow):  # 오프스크린(GraphicsBuffer)은 창 속성이 없다
+                props = WindowProperties()
+                props.setTitle("kros viz")
+                props.setSize(900, 700)
+                self.win.requestProperties(props)
         else:
             props = WindowProperties()
             props.setTitle("kros viz")
@@ -187,6 +194,7 @@ class Viz:
         self._multi_goals_version: int | None = None
         self._last_rows = 0.0
         self._cached_rows: dict[str, tuple[bool, str]] = {}
+        self._rows_version = -1
         self.nav = NavDisplay(self)
         self._tf_skip = 0
         self.base.taskMgr.add(self._update, "viz-update")
@@ -286,23 +294,36 @@ class Viz:
         self.checks[name]["text_fg"] = (1, 1, 1, 1) if on else (0.55, 0.55, 0.6, 1)
 
     def _build_input(self) -> None:
-        """이 창만의 마우스/키 입력 (ShowBase의 전역 입력과 섞이지 않게 'viz-' 접두사 이벤트로)."""
-        self.mouse = NodePath(MouseWatcher("viz"))  # 오프스크린(GraphicsBuffer)은 입력 장치가 없어서 연결하지 않는다
-        if isinstance(self.win, GraphicsWindow):
-            mk = self.base.dataRoot.attachNewNode(MouseAndKeyboard(self.win, 0, "viz"))
-            self.mouse.reparentTo(mk)
-            self.mouse.attachNewNode(ButtonThrower("viz")).node().setPrefix("viz-")
-        self.aspect.node().setMouseWatcher(self.mouse.node())
+        """이 창의 마우스/키 입력.
+
+        base를 받은 경우(시뮬레이터 창 옆의 두 번째 창): 그 창에는 ShowBase가 입력 장치를 붙여 주지 않으므로
+        이 창 전용 MouseAndKeyboard/MouseWatcher를 만들고 'viz-' 접두사 이벤트로 받는다.
+        base가 없는 경우(원격 Viz 단독 창): ShowBase가 이미 이 창에 MouseAndKeyboard/MouseWatcher를 붙여 놓았다.
+        여기에 또 만들면 입력 장치가 덮여서 마우스/버튼이 전혀 안 먹는다 → ShowBase 것을 그대로 쓴다.
+        """
         self._events = DirectObject()  # 이벤트는 이 객체 이름으로 받는다 (base.accept로 받으면 ShowBase 자신의 window-event 처리를 덮어써서 Viewer가 창 이벤트를 못 받는다)
-        self._events.accept("viz-wheel_up", self._zoom, [0.88])
-        self._events.accept("viz-wheel_down", self._zoom, [1 / 0.88])
-        self._events.accept("viz-escape", self.close)
+        if self.own_base:
+            watcher = self.base.mouseWatcherNode  # 오프스크린이면 None (입력 장치가 없다)
+            self.mouse = NodePath(watcher) if watcher is not None else NodePath(MouseWatcher("viz"))
+            prefix = ""  # ShowBase 기본 ButtonThrower는 접두사가 없다
+        else:
+            self.mouse = NodePath(MouseWatcher("viz"))  # 오프스크린(GraphicsBuffer)은 입력 장치가 없어서 연결하지 않는다
+            if isinstance(self.win, GraphicsWindow):
+                mk = self.base.dataRoot.attachNewNode(MouseAndKeyboard(self.win, 0, "viz"))
+                self.mouse.reparentTo(mk)
+                self.mouse.attachNewNode(ButtonThrower("viz")).node().setPrefix("viz-")
+                self.mouse.node().addRegion(PGMouseWatcherBackground())  # 3D 화면 위에서도 마우스 위치를 추적한다
+            prefix = "viz-"
+        self.aspect.node().setMouseWatcher(self.mouse.node())
+        self._events.accept(f"{prefix}wheel_up", self._zoom, [0.88])
+        self._events.accept(f"{prefix}wheel_down", self._zoom, [1 / 0.88])
+        self._events.accept(f"{prefix}escape", self.close)
         self._events.accept("window-event", self._window_event)
         # 키보드 조종 (W/A/S/D 또는 화살표) — cmd_vel_teleop으로 발행 (twist_mux에서 navigation보다 우선)
         self._pressed: set[str] = set()
         for key in ("w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right"):
-            self._events.accept(f"viz-{key}", self._on_key, [key, True])
-            self._events.accept(f"viz-{key}-up", self._on_key, [key, False])
+            self._events.accept(f"{prefix}{key}", self._on_key, [key, True])
+            self._events.accept(f"{prefix}{key}-up", self._on_key, [key, False])
         self._teleop_speed = 0.2  # m/s
         self._teleop_turn = 1.0  # rad/s
 
@@ -347,13 +368,9 @@ class Viz:
         if self._closed:
             return task.done
         now = time.monotonic()
-        self._frame_count = getattr(self, "_frame_count", 0) + 1
-        if now - getattr(self, "_last_update", 0.0) < 1.0 / 3.0:
-            return task.cont
-        self._last_update = now
-        self._camera()
+        self._camera()  # 카메라는 매 프레임 (마우스 조작이 끊기지 않게)
         self._update_model()
-        self._tf_skip = (self._tf_skip + 1) % 10
+        self._tf_skip = (self._tf_skip + 1) % 2
         if self._tf_skip == 0:
             self._update_tf()
         mouse = self.mouse.node()
@@ -375,13 +392,17 @@ class Viz:
         self.controller_line.setText(text)
         self.controller_line["fg"] = color
         self._resize()
-        if now - getattr(self, "_last_rows", 0.0) > 1.0:
+        version = self.node.stats_version()
+        if version != self._rows_version or now - self._last_rows > 1.0:
             self._cached_rows = self.node.topic_rows()
             self._last_rows = now
-        stats = getattr(self, "_cached_rows", {})
+            self._rows_version = version
+        stats = self._cached_rows
         for name, row in self.rows.items():
             live, text = stats.get(name, (False, ""))
-            row.setText(text.split(" ", 1)[1] if text else "")  # "n=..  ..Hz" (타입은 길어서 뺀다)
+            line = text.split(" ", 1)[1] if text else ""  # "n=..  ..Hz" (타입은 길어서 뺀다)
+            if row.getText() != line:
+                row.setText(line)
             row["fg"] = (0.4, 1.0, 0.5, 1) if live else (0.6, 0.62, 0.7, 1)  # 최근 2초 안에 받았으면 초록
         mode = self.slam.mode
         self.mode_banner.setText({"mapping": " SLAM (mapping) ", "localization": " LOCALIZATION ", "idle": " IDLE (no SLAM) "}.get(mode, ""))
@@ -417,7 +438,6 @@ class Viz:
     def _update_model(self) -> None:
         text = self.node.latest(ROBOT_DESCRIPTION_TOPIC_NAME)
         if isinstance(text, String) and (self.model_text is None or getattr(self.model_text, "data", None) != text.data):
-            self.model_text = text
             self.model_text = text
             if self.model:
                 self.model.root.removeNode()
