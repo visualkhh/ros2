@@ -57,7 +57,15 @@ class MessageManager:
         def _publish_with_broadcast(topic: str, msg: Any, qos: QoS = QOS_DEFAULT) -> None:
             _orig_publish(topic, msg, qos)
             if self.network_mode and not getattr(self, "_receiving", False):
-                self._broadcast({"type": "topic", "name": topic, "msg": msg})
+                now = time.monotonic()
+                if not hasattr(self, "_last_broadcast"):
+                    self._last_broadcast: dict[str, float] = {}
+                last = self._last_broadcast.get(topic, 0.0)
+                throttle_topics = {"scan", "odom", "tf", "tf_static", "imu", "odometry/filtered", "local_costmap/costmap", "global_costmap/costmap"}
+                min_interval = 0.1 if topic in throttle_topics else 0.0
+                if now - last >= min_interval:
+                    self._last_broadcast[topic] = now
+                    self._broadcast({"type": "topic", "name": topic, "msg": msg})
         self.topic_executor.publish = _publish_with_broadcast  # type: ignore[method-assign]
 
         # 네트워크
@@ -206,10 +214,17 @@ class MessageManager:
         elif mtype == "topic":
             name = msg.get("name")
             if name is not None:
-                import logging
-                logging.info("NET recv topic: %s", name)
+                # 고빈도 토픽은 10Hz로 스로틀
+                throttle_topics = {"scan", "odom", "tf", "tf_static", "imu", "odometry/filtered", "local_costmap/costmap", "global_costmap/costmap"}
+                if name in throttle_topics:
+                    now = time.monotonic()
+                    if not hasattr(self, "_last_recv"):
+                        self._last_recv: dict[str, float] = {}
+                    last = self._last_recv.get(name, 0.0)
+                    if now - last < 0.1:
+                        return  # 너무 빠르게 오는 메시지는 건너뛴다
+                    self._last_recv[name] = now
                 # 네트워크에서 받은 메시지를 로컬 토픽으로 전달 (재브로드캐스트 방지)
-                # QOS_LATCHED로 발행해 늦게 구독한 쪽도 마지막 메시지를 받게 한다
                 self._receiving = True
                 try:
                     self.topic_executor.publish(name, msg.get("msg"), QOS_LATCHED)
@@ -258,7 +273,18 @@ class MessageManager:
 
     def publish(self, topic: str, msg: Any, qos: QoS = QOS_DEFAULT) -> None:
         self.topic_executor.publish(topic, msg, qos)
-        # 브로드캐스트는 topic_executor.publish에 이미 포함됨 (network_mode일 때)
+        # 네트워크 브로드캐스트 (원격 구독자가 있으면) — 고빈도 토픽은 10Hz로 스로틀
+        if self.network_mode and not getattr(self, "_receiving", False):
+            now = time.monotonic()
+            if not hasattr(self, "_last_broadcast"):
+                self._last_broadcast = {}
+            last = self._last_broadcast.get(topic, 0.0)
+            # 고빈도 토픽 (scan, odom, tf, imu)은 10Hz로 제한
+            throttle_topics = {"scan", "odom", "tf", "tf_static", "imu", "odometry/filtered", "local_costmap/costmap"}
+            min_interval = 0.1 if topic in throttle_topics else 0.0
+            if now - last >= min_interval:
+                self._last_broadcast[topic] = now
+                self._broadcast({"type": "topic", "name": topic, "msg": msg})
 
     def subscribe(self, topic: str, msg_type: type, callback: Callable[[Any], None], qos: QoS = QOS_DEFAULT) -> Any:
         # 로컬 구독

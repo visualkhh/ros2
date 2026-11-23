@@ -316,12 +316,12 @@ class Viz:
         if self._closed:
             return task.done
         now = time.monotonic()
-        if now - getattr(self, "_last_update", 0.0) < 1.0 / 15.0:
+        if now - getattr(self, "_last_update", 0.0) < 1.0 / 10.0:
             return task.cont
         self._last_update = now
         self._camera()
         self._update_model()
-        self._tf_skip = (self._tf_skip + 1) % 4
+        self._tf_skip = (self._tf_skip + 1) % 6
         if self._tf_skip == 0:
             self._update_tf()
         mouse = self.mouse.node()
