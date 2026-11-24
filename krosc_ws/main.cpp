@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <numbers>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -21,6 +22,7 @@
 
 #include "krosc/context.hpp"
 #include "krosc/net.hpp"
+#include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
@@ -89,7 +91,8 @@ std::vector<std::string> local_addresses() {
 }
 
 void usage() {
-  std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--no-lidar]\n"
+  std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--no-lidar] [--slam]\n"
+               "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
                "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000)\n";
 }
 
@@ -109,6 +112,7 @@ int main(int argc, char** argv) {
     }
   }
   bool enable_lidar = true;
+  bool slam = false;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--opencr" && i + 1 < argc) {
@@ -121,6 +125,8 @@ int main(int argc, char** argv) {
       urdf_path = argv[++i];
     } else if (argument == "--no-lidar") {
       enable_lidar = false;
+    } else if (argument == "--slam") {
+      slam = true;
     } else if (argument == "-h" || argument == "--help") {
       usage();
       return 0;
@@ -183,6 +189,18 @@ int main(int argc, char** argv) {
                          {"imu0_config", ekf_config({11})},
                          {"frequency", 20.0},
                          {"publish_tf", true}});
+  constexpr double kDegreesToRadians = std::numbers::pi / 180.0;
+  krosc::nodes::Cartographer cartographer(
+      context, "Cartographer",
+      {{"mode", std::string(slam ? "mapping" : "idle")},
+       {"match_every", std::int64_t{4}},
+       {"num_matching_points", std::int64_t{20}},
+       {"linear_search_window", 0.05},
+       {"angular_search_window", 3.0 * kDegreesToRadians},
+       {"map_publish_period_sec", 2.0},
+       {"tf_publish_period_sec", 0.05},
+       {"tf_smoothing", 0.35}});
+  std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
 
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);

@@ -15,6 +15,7 @@ add_library(krosc_core STATIC
   src/tf.cpp
   src/tf_ros.cpp
   src/urdf.cpp
+  src/nodes/cartographer.cpp
   src/nodes/diff_drive_odometry.cpp
   src/nodes/ekf.cpp
   src/nodes/robot_state_publisher.cpp
@@ -43,6 +44,7 @@ if(KROSC_BUILD_TESTS)
     tests/test_tf.cpp
     tests/test_urdf.cpp
     tests/test_nodes.cpp
+    tests/test_cartographer.cpp
     tests/test_net.cpp
   )
   target_link_libraries(krosc_core_tests PRIVATE krosc::core)
