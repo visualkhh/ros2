@@ -804,7 +804,9 @@ void SceneView::mouseMoveEvent(QMouseEvent* event) {
     const double scale = camera_.distance * 0.0016;
     const QVector3D right(static_cast<float>(-std::sin(camera_.yaw)), static_cast<float>(std::cos(camera_.yaw)), 0.0F);
     const QVector3D forward(static_cast<float>(-std::cos(camera_.yaw)), static_cast<float>(-std::sin(camera_.yaw)), 0.0F);
-    camera_.target -= right * static_cast<float>(delta.x() * scale) + forward * static_cast<float>(delta.y() * scale);
+    // 좌우는 그대로, 위아래는 반대로: 마우스를 아래로 끌면 화면도 아래로 (RViz pan과 같은 방향)
+    camera_.target -= right * static_cast<float>(delta.x() * scale);
+    camera_.target += forward * static_cast<float>(delta.y() * scale);
     if (follow_) {
       follow_target_ = camera_.target;
     }
