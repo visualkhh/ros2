@@ -474,6 +474,9 @@ void VizWindow::refresh_slam() {
   } else {
     status += " | map -";
   }
+  if (const auto goal = model_.goal_status()) {
+    status += QString(" | goal: %1").arg(QString::fromStdString(goal->data));
+  }
   slam_status_label_->setText(status);
   teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * scene_->teleop_scale(), 0, 'f', 2));
   update_tool_buttons();

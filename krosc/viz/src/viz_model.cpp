@@ -23,6 +23,7 @@ VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_,
   subscribe_latest<msgs::String>(ROBOT_DESCRIPTION_TOPIC_NAME, robot_description_, QOS_LATCHED);
   subscribe_latest<msgs::String>("map_list", map_list_, QOS_LATCHED);
   subscribe_latest<msgs::String>("map_status", map_status_, QOS_LATCHED);
+  subscribe_latest<msgs::String>("goal_status", goal_status_, QOS_LATCHED);
   subscribe_latest<msgs::String>("slam_status", slam_status_, QOS_LATCHED);
   subscribe_stats_only(TF_TOPIC_NAME, "tf2_msgs/TFMessage", QOS_TF);
   subscribe_stats_only(TF_STATIC_TOPIC_NAME, "tf2_msgs/TFMessage", QOS_TF_STATIC);
@@ -153,6 +154,11 @@ std::shared_ptr<const msgs::String> VizModel::map_list() const {
 std::shared_ptr<const msgs::String> VizModel::map_status() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return map_status_;
+}
+
+std::shared_ptr<const msgs::String> VizModel::goal_status() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return goal_status_;
 }
 
 std::shared_ptr<const msgs::String> VizModel::slam_status() const {

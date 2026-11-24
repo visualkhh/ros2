@@ -791,7 +791,7 @@ struct Server::Impl {
       if (topic == "cmd_vel" && kind == Kind::Twist) {
         Reader reader(payload);
         if (const auto twist = decode_twist(reader); reader.ok()) {
-          context.topics().publish("cmd_vel", twist, QOS_COMMAND);
+          context.topics().publish("cmd_vel_teleop", twist, QOS_COMMAND);
         }
       } else if (topic == "initialpose" && kind == Kind::PoseCov) {
         Reader reader(payload);

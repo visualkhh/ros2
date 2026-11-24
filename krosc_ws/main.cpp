@@ -24,6 +24,8 @@
 #include "krosc/net.hpp"
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/map_catalog.hpp"
+#include "krosc/nodes/navigator.hpp"
+#include "krosc/nodes/twist_mux.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
@@ -211,6 +213,16 @@ int main(int argc, char** argv) {
                                 {{"maps_directory", maps_dir},
                                  {"map_frame", std::string("map")},
                                  {"list_period", 1.0}});
+  krosc::nodes::Navigator navigator(context, "navigator",
+                                    {{"map_topic", std::string("map")},
+                                     {"cmd_vel_topic", std::string("cmd_vel_nav")},
+                                     {"vx_max", 0.20},
+                                     {"wz_max", 1.0},
+                                     {"lookahead", 0.35},
+                                     {"inflation", 0.24},
+                                     {"xy_tolerance", 0.20},
+                                     {"yaw_tolerance", 0.35}});
+  krosc::nodes::TwistMux mux(context, "twist_mux", {{"cmd_vel_out", std::string("cmd_vel")}});
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
   std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
 
