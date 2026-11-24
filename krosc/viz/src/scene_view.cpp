@@ -1155,10 +1155,19 @@ void SceneView::publish_teleop() {
   const double left = (held({Qt::Key_A, Qt::Key_Left}) ? 1.0 : 0.0) - (held({Qt::Key_D, Qt::Key_Right}) ? 1.0 : 0.0);
   const double linear = 0.26 * teleop_scale_ * forward;
   const double angular = 1.5 * teleop_scale_ * left;
-  if (linear != last_linear_ || angular != last_angular_) {
+  // 키를 누르고 있는 동안에는 계속 보낸다. 한 번만 보내면 twist_mux/OpenCR의
+  // 0.5초 명령 타임아웃에 걸려 로봇이 가다가 멈춘다.
+  if (linear != 0.0 || angular != 0.0) {
     model_.publish_cmd_vel(linear, angular);
     last_linear_ = linear;
     last_angular_ = angular;
+    return;
+  }
+  // 키를 모두 뗀 순간에는 0을 한 번 보내 즉시 정지시킨다.
+  if (last_linear_ != 0.0 || last_angular_ != 0.0) {
+    model_.publish_cmd_vel(0.0, 0.0);
+    last_linear_ = 0.0;
+    last_angular_ = 0.0;
   }
 }
 
