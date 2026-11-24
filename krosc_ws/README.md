@@ -284,7 +284,7 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 - 상태: `moveit_status`, `moveit_state`, `moveit_target_pose`, `moveit_arm`, `moveit_path`
 
 핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, MoveIt 플러그인/노드는
-`krosc/engine/include/krosc/moveit/`, `krosc/engine/core/moveit/move_group.cpp`에 있다.
+`krosc/engine/include/krosc/moveit/`와 `krosc/engine/core/nodes/moveit/move_group.cpp`에 있다.
 ros2_control 레이어는 `krosc/engine/include/krosc/ros2_control/`, 실기 하드웨어 플러그인은
 `krosc_ws/robot/hardware/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.

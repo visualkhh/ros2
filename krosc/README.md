@@ -258,16 +258,33 @@ nav2/ros2_control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파�
 
 | 영역 | 베이스 | 구현 (파일 한 세트씩) |
 |---|---|---|
-| nav2 controller | `NavControllerPlugin` (`nodes/nav2/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController` |
-| nav2 planner | `NavPlannerPlugin` (`nodes/nav2/global_planner.hpp`) | `NavfnPlanner`, `ThetaStarPlanner`, `SmacPlanner2D`, `SmacPlannerHybrid` |
+| nav2 controller | `NavControllerPlugin` (`nodes/nav2/controllers/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController` |
+| nav2 planner | `NavPlannerPlugin` (`nodes/nav2/planners/global_planner.hpp`) | `NavfnPlanner`, `ThetaStarPlanner`, `SmacPlanner2D`, `SmacPlannerHybrid` |
 | ros2_control hardware | `SystemInterface` (`ros2_control/hardware_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
 | ros2_control controller | `ControllerInterface` (`ros2_control/controller_interface.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
-| MoveIt kinematics | `MoveItKinematicsPlugin` (`moveit/kinematics_base.hpp`) | `ArmChainKinematics` |
-| MoveIt planner | `MoveItPlannerPlugin` (`moveit/planner_manager.hpp`) | `CartesianPlanner`, `JointSpacePlanner` |
-| MoveIt controller manager | `MoveItControllerManagerPlugin` (`moveit/controller_manager.hpp`) | `SimpleControllerManager` |
+| MoveIt kinematics | `MoveItKinematicsPlugin` (`moveit/kinematics/kinematics_base.hpp`) | `ArmChainKinematics` |
+| MoveIt planner | `MoveItPlannerPlugin` (`moveit/planners/planner_manager.hpp`) | `CartesianPlanner`, `JointSpacePlanner` |
+| MoveIt controller manager | `MoveItControllerManagerPlugin` (`moveit/controllers/controller_manager.hpp`) | `SimpleControllerManager` |
 
 새 알고리즘은 베이스 클래스를 상속해 `compute_velocity_commands`/`create_plan`/`plan`/`read`/`write`를
 오버라이드하고, `builtin_*()`에 팩토리를 한 줄 추가하면 된다.
+
+```text
+engine/include/krosc/nodes/nav2/
+├── controllers/   controller.hpp, rpp/dwb/mppi 플러그인, controller_plugins.hpp
+├── planners/      global_planner.hpp, navfn/theta*/smac2d/smac_hybrid 플러그인
+├── costmap/       costmap.hpp, costmap_2d_ros.hpp
+├── controller_server.hpp, planner_server.hpp, behavior_server.hpp, bt_navigator.hpp
+engine/include/krosc/moveit/
+├── kinematics/    kinematics_base.hpp, arm_chain_kinematics.hpp
+├── planners/      planner_manager.hpp, cartesian/joint_space 플러그인
+└── controllers/   controller_manager.hpp, simple_controller_manager.hpp
+engine/include/krosc/nodes/moveit/
+└── move_group.hpp  # 노드는 nodes 아래
+```
+
+소스도 같은 구조다 (`engine/core/nodes/nav2/controllers`, `planners`, `costmap`,
+`engine/core/nodes/moveit/move_group.cpp`, `engine/core/moveit/kinematics`, `planners`, `controllers`).
 
 ROS 2와 맞춘 노드 이름:
 

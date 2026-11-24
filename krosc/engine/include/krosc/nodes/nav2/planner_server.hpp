@@ -14,8 +14,8 @@
 #include "krosc/tf.hpp"
 #include "krosc/tf_ros.hpp"
 
-#include "krosc/nodes/nav2/costmap_2d_ros.hpp"
-#include "krosc/nodes/nav2/global_planner.hpp"
+#include "krosc/nodes/nav2/costmap/costmap_2d_ros.hpp"
+#include "krosc/nodes/nav2/planners/global_planner.hpp"
 
 namespace krosc::nodes::nav2 {
 

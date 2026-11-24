@@ -9,7 +9,7 @@
 
 #include "krosc/action.hpp"
 #include "krosc/context.hpp"
-#include "krosc/moveit/move_group.hpp"
+#include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/msgs/control_msgs.hpp"
 #include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/node.hpp"

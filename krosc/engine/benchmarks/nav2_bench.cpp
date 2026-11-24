@@ -8,9 +8,9 @@
 
 #include "krosc/context.hpp"
 #include "krosc/node.hpp"
-#include "krosc/nodes/nav2/controller_plugins.hpp"
-#include "krosc/nodes/nav2/costmap.hpp"
-#include "krosc/nodes/nav2/planner_plugins.hpp"
+#include "krosc/nodes/nav2/controllers/controller_plugins.hpp"
+#include "krosc/nodes/nav2/costmap/costmap.hpp"
+#include "krosc/nodes/nav2/planners/planner_plugins.hpp"
 
 namespace {
 

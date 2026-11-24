@@ -17,8 +17,8 @@
 #include "krosc/tf_ros.hpp"
 #include "krosc/timer.hpp"
 
-#include "krosc/nodes/nav2/controller.hpp"
-#include "krosc/nodes/nav2/costmap_2d_ros.hpp"
+#include "krosc/nodes/nav2/controllers/controller.hpp"
+#include "krosc/nodes/nav2/costmap/costmap_2d_ros.hpp"
 
 namespace krosc::nodes::nav2 {
 

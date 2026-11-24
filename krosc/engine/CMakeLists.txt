@@ -31,33 +31,33 @@ add_library(krosc_core STATIC
   core/nodes/twist_mux.cpp
   core/nodes/nav2/behavior_server.cpp
   core/nodes/nav2/bt_navigator.cpp
-  core/nodes/nav2/controller_plugins.cpp
+  core/nodes/nav2/controllers/controller_plugins.cpp
   core/nodes/nav2/controller_server.cpp
-  core/nodes/nav2/dwb_local_planner.cpp
-  core/nodes/nav2/mppi_controller.cpp
-  core/nodes/nav2/regulated_pure_pursuit_controller.cpp
-  core/nodes/nav2/costmap.cpp
-  core/nodes/nav2/costmap_2d_ros.cpp
-  core/nodes/nav2/navfn_planner.cpp
-  core/nodes/nav2/planner_plugins.cpp
+  core/nodes/nav2/controllers/dwb_local_planner.cpp
+  core/nodes/nav2/controllers/mppi_controller.cpp
+  core/nodes/nav2/controllers/regulated_pure_pursuit_controller.cpp
+  core/nodes/nav2/costmap/costmap.cpp
+  core/nodes/nav2/costmap/costmap_2d_ros.cpp
+  core/nodes/nav2/planners/navfn_planner.cpp
+  core/nodes/nav2/planners/planner_plugins.cpp
   core/nodes/nav2/planner_server.cpp
-  core/nodes/nav2/smac_planner_2d.cpp
-  core/nodes/nav2/smac_planner_hybrid.cpp
-  core/nodes/nav2/theta_star_planner.cpp
+  core/nodes/nav2/planners/smac_planner_2d.cpp
+  core/nodes/nav2/planners/smac_planner_hybrid.cpp
+  core/nodes/nav2/planners/theta_star_planner.cpp
   core/ros2_control/controller_manager.cpp
   core/ros2_control/diff_drive_controller.cpp
   core/ros2_control/forward_command_controller.cpp
   core/ros2_control/joint_state_broadcaster.cpp
   core/ros2_control/joint_trajectory_controller.cpp
-  core/moveit/arm_chain_kinematics.cpp
-  core/moveit/cartesian_planner.cpp
-  core/moveit/controller_manager_plugins.cpp
-  core/moveit/joint_space_planner.cpp
-  core/moveit/kinematics_plugins.cpp
-  core/moveit/move_group.cpp
-  core/moveit/planner_manager.cpp
-  core/moveit/planner_plugins.cpp
-  core/moveit/simple_controller_manager.cpp
+  core/moveit/kinematics/arm_chain_kinematics.cpp
+  core/moveit/planners/cartesian_planner.cpp
+  core/moveit/controllers/controller_manager_plugins.cpp
+  core/moveit/planners/joint_space_planner.cpp
+  core/moveit/kinematics/kinematics_plugins.cpp
+  core/nodes/moveit/move_group.cpp
+  core/moveit/planners/planner_manager.cpp
+  core/moveit/planners/planner_plugins.cpp
+  core/moveit/controllers/simple_controller_manager.cpp
 )
 
 add_library(krosc::core ALIAS krosc_core)

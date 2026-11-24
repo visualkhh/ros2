@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/moveit/move_group.hpp"
+#include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/net.hpp"
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
@@ -32,7 +32,7 @@
 #include "krosc/nodes/nav2/behavior_server.hpp"
 #include "krosc/nodes/nav2/bt_navigator.hpp"
 #include "krosc/nodes/nav2/controller_server.hpp"
-#include "krosc/nodes/nav2/costmap_2d_ros.hpp"
+#include "krosc/nodes/nav2/costmap/costmap_2d_ros.hpp"
 #include "krosc/nodes/nav2/planner_server.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/nodes/twist_mux.hpp"

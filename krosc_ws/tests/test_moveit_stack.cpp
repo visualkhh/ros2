@@ -12,7 +12,7 @@
 
 #include "krosc/action.hpp"
 #include "krosc/context.hpp"
-#include "krosc/moveit/move_group.hpp"
+#include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/ros2_control/controller_manager.hpp"
