@@ -497,6 +497,23 @@ void VizWindow::set_tool(const std::string& tool) {
 }
 
 void VizWindow::handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map) {
+  if (!from_map && model_.fixed_frame() != "map") {
+    try {
+      const msgs::TransformStamped transform = model_.tf_buffer().lookup_transform("map", model_.fixed_frame());
+      const double offset = tfmath::yaw_of(transform.transform.rotation);
+      const double c = std::cos(offset);
+      const double s = std::sin(offset);
+      const double px = x;
+      const double py = y;
+      x = transform.transform.translation.x + c * px - s * py;
+      y = transform.transform.translation.y + s * px + c * py;
+      yaw = std::atan2(std::sin(offset + yaw), std::cos(offset + yaw));
+      from_map = true;
+    } catch (const TransformException&) {
+      slam_status_label_->setText("no map TF (2D Pose Estimate first)");
+      return;
+    }
+  }
   if (tool == "multi") {
     multi_goals_.emplace_back(x, y, yaw);
     if (slam_status_label_ != nullptr) {
