@@ -25,6 +25,7 @@
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
 #include "krosc/nodes/map_catalog.hpp"
+#include "krosc/nodes/velocity_smoother.hpp"
 #include "krosc/nodes/navigator.hpp"
 #include "krosc/nodes/twist_mux.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
@@ -224,9 +225,19 @@ int main(int argc, char** argv) {
                                      {"xy_tolerance", 0.20},
                                      {"yaw_tolerance", 0.35}});
   krosc::nodes::TwistMux mux(context, "twist_mux", {{"cmd_vel_out", std::string("cmd_vel_mux")}});
+  krosc::nodes::VelocitySmoother smoother(
+      context, "velocity_smoother",
+      {{"cmd_vel_in_topic", std::string("cmd_vel_mux")},
+       {"cmd_vel_out_topic", std::string("cmd_vel_smoothed")},
+       {"max_linear_accel", 0.5},
+       {"max_angular_accel", 2.0},
+       {"max_linear_speed", 0.26},
+       {"max_angular_speed", 1.82},
+       {"frequency", 50.0},
+       {"input_timeout", 0.5}});
   krosc::nodes::CollisionMonitor collision_monitor(
       context, "collision_monitor",
-      {{"cmd_vel_in_topic", std::string("cmd_vel_mux")},
+      {{"cmd_vel_in_topic", std::string("cmd_vel_smoothed")},
        {"cmd_vel_out_topic", std::string("cmd_vel")},
        {"PolygonSlow.slowdown_ratio", 0.6},
        {"ignore_collision_during_teleop", true}});

@@ -17,6 +17,7 @@ add_library(krosc_core STATIC
   src/urdf.cpp
   src/nodes/cartographer.cpp
   src/nodes/collision_monitor.cpp
+  src/nodes/velocity_smoother.cpp
   src/nodes/navigator.cpp
   src/nodes/map_catalog.cpp
   src/nodes/map_io.cpp
