@@ -8,7 +8,7 @@
 #include "krosc/parameter.hpp"
 #include "krosc/topic.hpp"
 
-#include "robot/real_turtlebot3.hpp"
+#include "real_turtlebot3.hpp"
 
 namespace krosc_ws {
 

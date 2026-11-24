@@ -138,11 +138,11 @@ cmake --build build -j
 
 ## Viz 플러그인 / 프로젝트 Viz main
 
-로봇 쪽 진입점이 `src/main.cpp`라면, Viz 쪽 진입점은 `viz/main.cpp`다.
+로봇 쪽 진입점이 `robot/main.cpp`라면, Viz 쪽 진입점은 `viz/main.cpp`다.
 
 ```text
 krosc_ws/
-├── src/main.cpp              # 로봇(Pi) 엔드포인트
+├── robot/main.cpp            # 로봇(Pi) 엔드포인트
 ├── viz/
 │   ├── main.cpp              # 프로젝트 Viz 엔드포인트
 │   ├── CMakeLists.txt
@@ -197,22 +197,26 @@ Viz의 **MoveIt** 도킹 패널은 ROS 2 MoveIt 없이 URDF 체인으로 계획�
 - 상태: `moveit_status`, `moveit_state`, `moveit_target_pose`, `moveit_arm`, `moveit_path`
 
 핵심 계산은 `krosc/core/src/manipulation/arm_chain.cpp`, 노드는
-`krosc/core/src/nodes/moveit_lite.cpp`에 있고 `krosc_ws/src/main.cpp`에서 조립한다.
+`krosc/core/src/nodes/moveit_lite.cpp`에 있고 `krosc_ws/robot/main.cpp`에서 조립한다.
 
 ## 구성
 
 ```
 krosc_ws/
-├── src/
+├── robot/                       # 로봇(Pi) 앱
 │   ├── main.cpp                 # 50Hz 실시간 루프, 노드 조립, TCP 서버
 │   ├── robot_bridge.cpp/.hpp    # cmd_vel, scan/imu/joint_states/diagnostics
-│   ├── robot/real_turtlebot3.cpp/.hpp  # 이 로봇의 치수/장착 위치/시리얼 조립
-│   └── hardwares/
-│       ├── serial.cpp/.hpp          # POSIX termios
-│       ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
-│       ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 20Hz C/A 명령
-│       └── lds03.cpp/.hpp           # LDS-03 패킷 파서 + 시리얼 + 몸통 필터
-├── robot/description/urdf/turtlebot3_real.urdf
+│   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
+│   ├── hardwares/
+│   │   ├── serial.cpp/.hpp          # POSIX termios
+│   │   ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
+│   │   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 20Hz C/A 명령
+│   │   └── lds03.cpp/.hpp           # LDS-03 패킷 파서 + 시리얼 + 몸통 필터
+│   └── description/urdf/turtlebot3_real.urdf
+├── viz/                         # PC Viz 앱 + 프로젝트 플러그인
+│   ├── main.cpp
+│   ├── CMakeLists.txt
+│   └── plugins/
 ├── firmware/opencr/             # 이 프로젝트 전용 OpenCR 펌웨어 사본
 │   ├── turtlebot_opencr/turtlebot_opencr.ino
 │   ├── turtlebot_opencr/arm_config.h

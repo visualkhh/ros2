@@ -14,17 +14,17 @@ set(KROSC_BUILD_EXAMPLES OFF)
 add_subdirectory(../krosc/core core_build)
 
 add_executable(krosc_real
-  src/main.cpp
-  src/robot_bridge.cpp
-  src/robot/real_turtlebot3.cpp
-  src/hardwares/lds03.cpp
-  src/hardwares/opencr_protocol.cpp
-  src/hardwares/opencr_serial.cpp
-  src/hardwares/serial.cpp
+  robot/main.cpp
+  robot/robot_bridge.cpp
+  robot/real_turtlebot3.cpp
+  robot/hardwares/lds03.cpp
+  robot/hardwares/opencr_protocol.cpp
+  robot/hardwares/opencr_serial.cpp
+  robot/hardwares/serial.cpp
 )
 
 target_include_directories(krosc_real PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/robot
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(krosc_real PRIVATE krosc::core)
 target_compile_definitions(krosc_real PRIVATE
@@ -42,14 +42,14 @@ if(KROSC_WS_BUILD_TESTS)
   add_executable(krosc_ws_tests
     tests/test_protocol.cpp
     tests/test_serial.cpp
-    src/hardwares/lds03.cpp
-    src/hardwares/opencr_protocol.cpp
-    src/hardwares/opencr_serial.cpp
-    src/hardwares/serial.cpp
+    robot/hardwares/lds03.cpp
+    robot/hardwares/opencr_protocol.cpp
+    robot/hardwares/opencr_serial.cpp
+    robot/hardwares/serial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/core/tests/test_main.cpp
   )
   target_include_directories(krosc_ws_tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/robot
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/core/tests
   )

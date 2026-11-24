@@ -34,7 +34,7 @@
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/time.hpp"
 
-#include "robot/real_turtlebot3.hpp"
+#include "real_turtlebot3.hpp"
 #include "robot_bridge.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
