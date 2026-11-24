@@ -191,11 +191,11 @@ int main(int argc, char** argv) {
        {"wheel_separation", krosc_ws::RealTurtleBot3::kWheelSeparation},
        {"publish_tf", false},
        {"twist_covariance_diagonal", std::vector<double>{0.005, 0.005, 1e6, 1e6, 1e6, 0.02}}});
+  // IMU yaw rate는 정지 중에도 bias/진동이 커서 EKF에서 제외한다. 휠 오도메트리의
+  // yaw 자세(5)를 절대 기준으로 쓰고, vx/vyaw(6/11)만 융합한다.
   krosc::nodes::Ekf ekf(context, "Ekf",
                         {{"odom0", std::string("odom")},
-                         {"odom0_config", ekf_config({6, 11})},
-                         {"imu0", std::string("imu")},
-                         {"imu0_config", ekf_config({11})},
+                         {"odom0_config", ekf_config({5, 6, 11})},
                          {"frequency", 20.0},
                          {"publish_tf", true}});
   constexpr double kDegreesToRadians = std::numbers::pi / 180.0;
