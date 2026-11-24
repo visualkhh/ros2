@@ -21,5 +21,5 @@ cmake -S "$root/krosc" -B "$root/krosc/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo 
       -DKROSC_BUILD_TESTS=OFF -DKROSC_BUILD_BENCH=OFF -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=OFF
 cmake --build "$root/krosc/build" --target krosc_viz_app -j"$jobs"
 
-echo "[run-viz] $host:$port fixed=$frame tab=$tab"
-exec "$root/krosc/build/viz/krosc_viz_app" --server "$host:$port" --fixed-frame "$frame" --tab "$tab" --manual "$@"
+echo "[run-viz] $host:$port fixed=$frame tab=$tab panels=teleop,manipulator,moveit"
+exec "$root/krosc/build/viz/krosc_viz_app" --server "$host:$port" --fixed-frame "$frame" --tab "$tab" --manual --moveit "$@"

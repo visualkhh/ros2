@@ -378,6 +378,19 @@ UrdfRobot parse_urdf(std::string_view text, const std::map<std::string, std::str
     if (const XmlNode* axis = child(*joint, "axis"); axis != nullptr) {
       parsed.axis = floats3(attribute(*axis, "xyz"), {1.0, 0.0, 0.0}, "관절 " + parsed.name + " axis");
     }
+    if (const XmlNode* limit = child(*joint, "limit"); limit != nullptr) {
+      const std::string lower = attribute(*limit, "lower");
+      const std::string upper = attribute(*limit, "upper");
+      const std::string velocity = attribute(*limit, "velocity");
+      parsed.has_limits = !lower.empty() && !upper.empty();
+      if (parsed.has_limits) {
+        parsed.lower = std::stod(lower);
+        parsed.upper = std::stod(upper);
+      }
+      if (!velocity.empty()) {
+        parsed.velocity = std::stod(velocity);
+      }
+    }
     robot.joints.push_back(std::move(parsed));
   }
 

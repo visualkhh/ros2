@@ -47,6 +47,10 @@ struct UrdfJoint {
   std::array<double, 3> xyz{0.0, 0.0, 0.0};
   std::array<double, 3> rpy{0.0, 0.0, 0.0};
   std::array<double, 3> axis{1.0, 0.0, 0.0};
+  bool has_limits = false;
+  double lower = 0.0;
+  double upper = 0.0;
+  double velocity = 0.0;
 
   [[nodiscard]] bool movable() const {
     return type == "continuous" || type == "revolute" || type == "prismatic";

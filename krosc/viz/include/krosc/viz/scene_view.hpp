@@ -30,6 +30,15 @@ class QWheelEvent;
 
 namespace krosc::viz {
 
+// MoveIt-lite 미리보기. 좌표는 모두 base_link 기준이며, 그릴 때 fixed_frame으로 변환한다.
+struct ArmPreview {
+  bool active = false;
+  std::vector<msgs::Transform> links;  // link1..link5 (URDF 체인 순서)
+  msgs::Vector3 tcp{};
+  std::vector<msgs::Vector3> tcp_path;
+  std::optional<msgs::Transform> target;  // 목표 TCP 프레임
+};
+
 // rviz 같은 3D 장면: QPainter로 투영해 그린다 (OpenGL 없이 CPU/래스터). 토픽만 읽는다.
 class SceneView : public QWidget {
   Q_OBJECT
@@ -51,6 +60,8 @@ class SceneView : public QWidget {
   [[nodiscard]] std::string tool() const { return tool_; }
   void reset_camera();
   void fixed_frame_changed();
+  void set_arm_preview(ArmPreview preview);
+  void clear_arm_preview();
   [[nodiscard]] QString help_text() const;
 
  signals:
@@ -109,6 +120,7 @@ class SceneView : public QWidget {
   void draw_hud(QPainter& painter) const;
   void draw_tool_preview(QPainter& painter) const;
   void draw_waypoints(QPainter& painter) const;
+  void draw_arm_preview(QPainter& painter) const;
 
   void draw_line(QPainter& painter, const QVector3D& a, const QVector3D& b, const QColor& color,
                  double width = 1.0) const;
@@ -150,6 +162,7 @@ class SceneView : public QWidget {
   double teleop_scale_ = 1.0;
   std::string tool_;
   std::vector<std::tuple<double, double, double>> waypoints_;
+  ArmPreview arm_preview_;
   bool tool_dragging_ = false;
   QPoint tool_start_;
   std::optional<QVector3D> tool_start_ground_;

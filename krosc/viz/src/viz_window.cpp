@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLineEdit>
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <sstream>
@@ -34,6 +36,7 @@
 #include <vector>
 
 #include "krosc/math.hpp"
+#include "krosc/urdf.hpp"
 #include "krosc/viz/map_view.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
@@ -73,6 +76,11 @@ struct ToggleSpec {
   const char* key;
   const char* label;
 };
+
+double steady_seconds() {
+  using namespace std::chrono;
+  return duration<double>(steady_clock::now().time_since_epoch()).count();
+}
 
 constexpr ToggleSpec kToggles[] = {
     {"grid", "Grid"},          {"tf", "TF axes"},        {"model", "Robot model"}, {"scan", "Laser scan"},
@@ -598,8 +606,10 @@ void VizWindow::update_collision_button() {
 void VizWindow::build_manual_docks() {
   build_teleop_dock();
   build_manipulator_dock();
+  build_moveit_dock();
   teleop_dock_->hide();
   manipulator_dock_->hide();
+  moveit_dock_->hide();
 }
 
 void VizWindow::build_teleop_dock() {
@@ -686,6 +696,16 @@ void VizWindow::build_manipulator_dock() {
     buttons->addWidget(button);
   }
   layout->addLayout(buttons);
+  auto* reset_row = new QHBoxLayout();
+  auto* reset_name = new QLabel("reset", panel);
+  reset_name->setMinimumWidth(46);
+  arm_reset_target_ = new QComboBox(panel);
+  arm_reset_target_->addItems({"all", "joint1", "joint2", "joint3", "joint4", "gripper"});
+  arm_reset_button_ = new QPushButton("Reset (AR)", panel);
+  reset_row->addWidget(reset_name);
+  reset_row->addWidget(arm_reset_target_, 1);
+  reset_row->addWidget(arm_reset_button_);
+  layout->addLayout(reset_row);
   auto set_torque_button = [this] {
     arm_torque_button_->setText(arm_torque_on_ ? "Torque ON" : "Torque OFF");
     arm_torque_button_->setStyleSheet(arm_torque_on_ ? "background:#1f6b43;" : "background:#7a2a2a;");
@@ -795,6 +815,7 @@ void VizWindow::build_manipulator_dock() {
     arm_moving_ = false;
     arm_status_label_->setText("E-STOP: hold current pose");
   });
+  connect(arm_reset_button_, &QPushButton::clicked, this, &VizWindow::reset_arm);
 
   manipulator_dock_->setWidget(panel);
   addDockWidget(Qt::RightDockWidgetArea, manipulator_dock_);
@@ -805,6 +826,107 @@ void VizWindow::build_manipulator_dock() {
   manual_refresh_timer_ = new QTimer(this);
   connect(manual_refresh_timer_, &QTimer::timeout, this, &VizWindow::refresh_manual);
   manual_refresh_timer_->start(100);
+}
+
+void VizWindow::build_moveit_dock() {
+  moveit_dock_ = new QDockWidget("MoveIt", this);
+  moveit_dock_->setObjectName("moveitDock");
+  moveit_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+  moveit_dock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable |
+                            QDockWidget::DockWidgetClosable);
+  auto* panel = new QWidget(moveit_dock_);
+  auto* layout = new QVBoxLayout(panel);
+  layout->setContentsMargins(8, 8, 8, 8);
+  layout->setSpacing(6);
+
+  auto* title = new QLabel("TCP target (base_link)", panel);
+  title->setObjectName("Section");
+  layout->addWidget(title);
+
+  const auto make_spin = [&](double minimum, double maximum, double step, int decimals,
+                             const QString& suffix) {
+    auto* spin = new QDoubleSpinBox(panel);
+    spin->setRange(minimum, maximum);
+    spin->setSingleStep(step);
+    spin->setDecimals(decimals);
+    spin->setSuffix(suffix);
+    spin->setKeyboardTracking(false);
+    return spin;
+  };
+  moveit_x_ = make_spin(-0.8, 0.8, 0.005, 3, " m");
+  moveit_y_ = make_spin(-0.8, 0.8, 0.005, 3, " m");
+  moveit_z_ = make_spin(-0.2, 1.0, 0.005, 3, " m");
+  moveit_pitch_ = make_spin(-90.0, 90.0, 1.0, 1, QString::fromUtf8("°"));
+  moveit_gripper_ = make_spin(0.0, 27.0, 0.5, 1, " mm");
+  auto* grid = new QGridLayout();
+  grid->addWidget(new QLabel("X", panel), 0, 0);
+  grid->addWidget(moveit_x_, 0, 1);
+  grid->addWidget(new QLabel("Y", panel), 0, 2);
+  grid->addWidget(moveit_y_, 0, 3);
+  grid->addWidget(new QLabel("Z", panel), 1, 0);
+  grid->addWidget(moveit_z_, 1, 1);
+  grid->addWidget(new QLabel("Pitch", panel), 1, 2);
+  grid->addWidget(moveit_pitch_, 1, 3);
+  grid->addWidget(new QLabel("Grip", panel), 2, 0);
+  grid->addWidget(moveit_gripper_, 2, 1);
+  moveit_cartesian_ = new QCheckBox("Cartesian", panel);
+  moveit_cartesian_->setChecked(true);
+  grid->addWidget(moveit_cartesian_, 2, 2, 1, 2);
+  layout->addLayout(grid);
+
+  auto* buttons = new QHBoxLayout();
+  moveit_current_button_ = new QPushButton("Current", panel);
+  moveit_plan_button_ = new QPushButton("Plan", panel);
+  moveit_execute_button_ = new QPushButton("Execute", panel);
+  moveit_cancel_button_ = new QPushButton("Cancel", panel);
+  for (auto* button : {moveit_current_button_, moveit_plan_button_, moveit_execute_button_,
+                       moveit_cancel_button_}) {
+    buttons->addWidget(button);
+  }
+  layout->addLayout(buttons);
+  moveit_execute_button_->setEnabled(false);
+  moveit_cancel_button_->setEnabled(false);
+
+  layout->addWidget(new QLabel("trajectory", panel));
+  moveit_scrub_ = new QSlider(Qt::Horizontal, panel);
+  moveit_scrub_->setRange(0, 0);
+  layout->addWidget(moveit_scrub_);
+  moveit_current_label_ = new QLabel("now: waiting for joint_states", panel);
+  moveit_current_label_->setWordWrap(true);
+  moveit_status_label_ = new QLabel("MoveIt: waiting for robot_description", panel);
+  moveit_status_label_->setWordWrap(true);
+  moveit_status_label_->setMinimumHeight(44);
+  layout->addWidget(moveit_current_label_);
+  layout->addWidget(moveit_status_label_);
+  layout->addStretch(1);
+
+  const auto target_changed = [this] {
+    if (moveit_updating_) {
+      return;
+    }
+    moveit_invalidate_plan();
+    moveit_preview_target();
+  };
+  for (auto* spin : {moveit_x_, moveit_y_, moveit_z_, moveit_pitch_, moveit_gripper_}) {
+    connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            [target_changed](double) { target_changed(); });
+  }
+  connect(moveit_cartesian_, &QCheckBox::toggled, this, [target_changed](bool) { target_changed(); });
+  connect(moveit_current_button_, &QPushButton::clicked, this, &VizWindow::moveit_set_target_from_current);
+  connect(moveit_plan_button_, &QPushButton::clicked, this, &VizWindow::moveit_plan);
+  connect(moveit_execute_button_, &QPushButton::clicked, this, &VizWindow::moveit_execute);
+  connect(moveit_cancel_button_, &QPushButton::clicked, this, [this] { moveit_stop(true); });
+  connect(moveit_scrub_, &QSlider::valueChanged, this, [this](int index) {
+    if (!moveit_executing_) {
+      moveit_update_preview(index);
+    }
+  });
+
+  moveit_dock_->setWidget(panel);
+  addDockWidget(Qt::RightDockWidgetArea, moveit_dock_);
+  splitDockWidget(manipulator_dock_, moveit_dock_, Qt::Vertical);
+  moveit_exec_timer_ = new QTimer(this);
+  connect(moveit_exec_timer_, &QTimer::timeout, this, &VizWindow::moveit_tick);
 }
 
 void VizWindow::publish_teleop_pad() {
@@ -932,19 +1054,503 @@ void VizWindow::refresh_manual() {
   if (const auto collision = model_.collision_status()) {
     status += "  | " + QString::fromStdString(collision->data);
   }
+  const QString arm_errors = arm_error_summary();
+  if (!arm_errors.isEmpty()) {
+    status = "ARM ERR " + arm_errors + "  |  " + status;
+    arm_status_label_->setStyleSheet("color:#ff7070;");
+  } else {
+    arm_status_label_->setStyleSheet("");
+  }
   arm_status_label_->setText(status);
+  refresh_moveit();
 }
 
-void VizWindow::set_manual_panels(bool teleop, bool manipulator) {
+std::optional<std::array<double, 5>> VizWindow::current_arm_state() const {
+  const auto states = model_.joint_states();
+  if (!states) {
+    return std::nullopt;
+  }
+  std::map<std::string, double> values;
+  for (std::size_t i = 0; i < states->name.size() && i < states->position.size(); ++i) {
+    values[states->name[i]] = states->position[i];
+  }
+  std::array<double, 5> positions{};
+  positions.fill(std::numeric_limits<double>::quiet_NaN());
+  for (int i = 0; i < 4; ++i) {
+    const auto found = values.find("joint" + std::to_string(i + 1));
+    if (found == values.end()) {
+      return std::nullopt;
+    }
+    positions[static_cast<std::size_t>(i)] = found->second;
+  }
+  const auto gripper = values.find("gripper_left_joint");
+  if (gripper != values.end()) {
+    positions[4] = gripper->second;
+  }
+  return positions;
+}
+
+bool VizWindow::ensure_arm_chain(std::string& error) {
+  const auto description = model_.robot_description();
+  if (!description || description->data.empty()) {
+    error = "robot_description 대기 중";
+    return false;
+  }
+  if (arm_chain_ && arm_chain_source_ == description->data && arm_chain_->valid()) {
+    return true;
+  }
+  try {
+    const UrdfRobot robot = parse_urdf(description->data);
+    std::string build_error;
+    auto chain = manipulation::ArmChain::from_urdf(
+        robot, "base_link", "end_effector_link", {"joint1", "joint2", "joint3", "joint4"}, build_error);
+    if (!chain) {
+      error = build_error;
+      return false;
+    }
+    // URDF의 joint2/3 한계(-1.5)는 실제 영점과 달라 현재 자세(-2.05, +1.50 rad)를
+    // 포함하지 못한다. 실기에서 확인한 동작 범위로 넓혀 계획이 시작 자세에서 실패하지 않게 한다.
+    chain->lower = {-3.141592653589793, -2.20, -2.00, -2.00};
+    chain->upper = {3.141592653589793, 2.20, 2.00, 2.20};
+    arm_chain_ = std::move(*chain);
+    arm_chain_source_ = description->data;
+    error.clear();
+    return true;
+  } catch (const std::exception& exception) {
+    error = std::string("URDF: ") + exception.what();
+    return false;
+  }
+}
+
+msgs::Transform VizWindow::target_transform() const {
+  const double x = moveit_x_ == nullptr ? 0.0 : moveit_x_->value();
+  const double y = moveit_y_ == nullptr ? 0.0 : moveit_y_->value();
+  const double z = moveit_z_ == nullptr ? 0.0 : moveit_z_->value();
+  const double pitch =
+      moveit_pitch_ == nullptr ? 0.0 : moveit_pitch_->value() * 3.141592653589793 / 180.0;
+  // link1 원점(base x=0.047985) + joint1 원점(0.012)에서 목표를 바라보는 yaw.
+  const double yaw = std::atan2(y + 0.000230, x - 0.059985);
+  return {{x, y, z}, tfmath::from_rpy(0.0, pitch, yaw)};
+}
+
+void VizWindow::moveit_preview_target() {
+  if (scene_ == nullptr) {
+    return;
+  }
+  ArmPreview preview;
+  preview.active = true;
+  preview.target = target_transform();
+  scene_->set_arm_preview(std::move(preview));
+}
+
+void VizWindow::moveit_invalidate_plan() {
+  if (moveit_executing_) {
+    moveit_stop(true);
+  }
+  moveit_trajectory_.reset();
+  moveit_preview_index_ = 0;
+  if (moveit_scrub_ != nullptr) {
+    const QSignalBlocker blocker(moveit_scrub_);
+    moveit_scrub_->setRange(0, 0);
+    moveit_scrub_->setValue(0);
+  }
+  if (moveit_execute_button_ != nullptr) {
+    moveit_execute_button_->setEnabled(false);
+  }
+  if (moveit_status_label_ != nullptr && !moveit_executing_) {
+    moveit_status_label_->setText("target changed — Plan을 누르세요");
+  }
+}
+
+void VizWindow::moveit_set_target_from_current() {
+  std::string error;
+  if (!ensure_arm_chain(error)) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText(QString::fromStdString(error));
+    }
+    return;
+  }
+  const auto state = current_arm_state();
+  if (!state) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText("joint_states 대기 중");
+    }
+    return;
+  }
+  if (moveit_executing_) {
+    moveit_stop(true);
+  }
+  const std::array<double, 4> q{(*state)[0], (*state)[1], (*state)[2], (*state)[3]};
+  const msgs::Vector3 tcp = arm_chain_->tcp(q);
+  const double pitch = arm_chain_->pitch_down(q);
+  moveit_updating_ = true;
+  moveit_x_->setValue(tcp.x);
+  moveit_y_->setValue(tcp.y);
+  moveit_z_->setValue(tcp.z);
+  moveit_pitch_->setValue(pitch * 180.0 / 3.141592653589793);
+  if (std::isfinite((*state)[4])) {
+    moveit_gripper_->setValue((*state)[4] * 1000.0);
+  }
+  moveit_updating_ = false;
+  moveit_target_initialized_ = true;
+  moveit_invalidate_plan();
+  moveit_preview_target();
+  if (moveit_status_label_ != nullptr) {
+    moveit_status_label_->setText(QString("target = current TCP  (x %1, y %2, z %3, pitch %4°)")
+                                      .arg(tcp.x, 0, 'f', 3)
+                                      .arg(tcp.y, 0, 'f', 3)
+                                      .arg(tcp.z, 0, 'f', 3)
+                                      .arg(pitch * 180.0 / 3.141592653589793, 0, 'f', 1));
+  }
+}
+
+void VizWindow::moveit_plan() {
+  std::string error;
+  if (!ensure_arm_chain(error)) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText(QString::fromStdString("Plan 실패: " + error));
+    }
+    return;
+  }
+  const auto state = current_arm_state();
+  if (!state) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText("Plan 실패: joint_states가 없다");
+    }
+    return;
+  }
+  const QString arm_errors = arm_error_summary();
+  if (!arm_errors.isEmpty()) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText("Plan 실패: ARM ERR " + arm_errors + " — 먼저 Reset");
+    }
+    return;
+  }
+  if (moveit_executing_) {
+    moveit_stop(true);
+  }
+  const std::array<double, 4> start{(*state)[0], (*state)[1], (*state)[2], (*state)[3]};
+  const msgs::Vector3 target{moveit_x_->value(), moveit_y_->value(), moveit_z_->value()};
+  const double pitch = moveit_pitch_->value() * 3.141592653589793 / 180.0;
+  std::array<double, 4> goal{};
+  if (!arm_chain_->ik(target, pitch, start, goal, error)) {
+    moveit_trajectory_.reset();
+    moveit_execute_button_->setEnabled(false);
+    moveit_preview_target();
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText(QString::fromStdString("Plan 실패: " + error));
+    }
+    return;
+  }
+  manipulation::PlanOptions options;
+  options.max_joint_speed = std::max(0.10, arm_speed_);
+  options.max_joint_accel = std::max(0.5, arm_speed_ * 3.0);
+  options.sample_time = 0.05;
+  options.cartesian = moveit_cartesian_->isChecked();
+  auto trajectory = manipulation::plan_trajectory(*arm_chain_, start, goal, options, error);
+  if (!trajectory) {
+    moveit_trajectory_.reset();
+    moveit_execute_button_->setEnabled(false);
+    moveit_preview_target();
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText(QString::fromStdString("Plan 실패: " + error));
+    }
+    return;
+  }
+  moveit_trajectory_ = std::move(*trajectory);
+  const int last = static_cast<int>(moveit_trajectory_->points.size()) - 1;
+  {
+    const QSignalBlocker blocker(moveit_scrub_);
+    moveit_scrub_->setRange(0, last);
+    moveit_scrub_->setValue(last);
+  }
+  moveit_update_preview(last);
+  moveit_execute_button_->setEnabled(true);
+  moveit_cancel_button_->setEnabled(false);
+  if (moveit_status_label_ != nullptr) {
+    QString text = QString("Plan OK: %1 pts, %2 s, %3")
+                       .arg(moveit_trajectory_->points.size())
+                       .arg(moveit_trajectory_->duration, 0, 'f', 2)
+                       .arg(moveit_trajectory_->cartesian ? "Cartesian" : "joint-space");
+    if (moveit_trajectory_->fallback) {
+      text += "\nCartesian 실패 → joint-space 대체";
+    }
+    if (!moveit_trajectory_->note.empty() && !moveit_trajectory_->fallback) {
+      text += "\n" + QString::fromStdString(moveit_trajectory_->note);
+    }
+    moveit_status_label_->setText(text);
+  }
+}
+
+void VizWindow::moveit_execute() {
+  if (!moveit_trajectory_ || moveit_trajectory_->points.empty() || !arm_chain_) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText("Execute: 계획이 없다. Plan 먼저");
+    }
+    return;
+  }
+  const auto state = current_arm_state();
+  if (!state) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText("Execute: joint_states가 없다");
+    }
+    return;
+  }
+  const QString arm_errors = arm_error_summary();
+  if (!arm_errors.isEmpty()) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText("Execute 거부: ARM ERR " + arm_errors + " — 먼저 Reset");
+    }
+    return;
+  }
+  const auto& first = moveit_trajectory_->points.front().position;
+  double difference = 0.0;
+  for (std::size_t i = 0; i < 4; ++i) {
+    difference = std::max(difference, std::abs(first[i] - (*state)[i]));
+  }
+  if (difference > 0.08) {
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText(
+          QString("Execute 거부: 현재 자세가 계획 시작과 %1 rad 다르다. 다시 Plan").arg(difference, 0, 'f', 3));
+    }
+    return;
+  }
+  moveit_executing_ = true;
+  moveit_start_time_ = steady_seconds();
+  moveit_plan_button_->setEnabled(false);
+  moveit_execute_button_->setEnabled(false);
+  moveit_current_button_->setEnabled(false);
+  moveit_cancel_button_->setEnabled(true);
+  moveit_scrub_->setEnabled(false);
+  arm_moving_ = false;
+  moveit_tick();
+  if (moveit_executing_) {
+    moveit_exec_timer_->start(50);
+  }
+}
+
+void VizWindow::moveit_tick() {
+  if (!moveit_executing_ || !moveit_trajectory_ || moveit_trajectory_->points.empty() || !arm_chain_) {
+    if (moveit_exec_timer_ != nullptr) {
+      moveit_exec_timer_->stop();
+    }
+    return;
+  }
+  const auto& points = moveit_trajectory_->points;
+  double elapsed = steady_seconds() - moveit_start_time_;
+  const double duration = moveit_trajectory_->duration;
+  elapsed = std::clamp(elapsed, 0.0, duration);
+  std::size_t index = 0;
+  while (index + 1 < points.size() && points[index + 1].time <= elapsed) {
+    ++index;
+  }
+  std::array<double, 4> position = points[index].position;
+  if (index + 1 < points.size()) {
+    const double segment = points[index + 1].time - points[index].time;
+    if (segment > 1e-9) {
+      const double ratio = std::clamp((elapsed - points[index].time) / segment, 0.0, 1.0);
+      for (std::size_t i = 0; i < 4; ++i) {
+        position[i] = points[index].position[i] +
+                      (points[index + 1].position[i] - points[index].position[i]) * ratio;
+      }
+    }
+  }
+  msgs::JointState command;
+  for (int i = 0; i < 4; ++i) {
+    command.name.push_back("joint" + std::to_string(i + 1));
+    command.position.push_back(position[static_cast<std::size_t>(i)]);
+  }
+  command.name.push_back("gripper_left_joint");
+  command.position.push_back(moveit_gripper_->value() / 1000.0);
+  model_.node().publish("arm_joint_command", command, QOS_DEFAULT);
+  arm_output_ = {position[0], position[1], position[2], position[3], moveit_gripper_->value() / 1000.0};
+  moveit_update_preview(static_cast<int>(index));
+  if (moveit_scrub_ != nullptr) {
+    const QSignalBlocker blocker(moveit_scrub_);
+    moveit_scrub_->setValue(static_cast<int>(index));
+  }
+  if (moveit_status_label_ != nullptr) {
+    const double percent = duration > 1e-9 ? 100.0 * elapsed / duration : 100.0;
+    moveit_status_label_->setText(
+        QString("Execute: %1 / %2 s  (%3%)").arg(elapsed, 0, 'f', 2).arg(duration, 0, 'f', 2).arg(percent, 0, 'f', 0));
+  }
+  if (elapsed >= duration - 1e-9) {
+    moveit_stop(false);
+  }
+}
+
+void VizWindow::moveit_stop(bool publish_stop) {
+  if (moveit_exec_timer_ != nullptr) {
+    moveit_exec_timer_->stop();
+  }
+  const bool was_executing = moveit_executing_;
+  moveit_executing_ = false;
+  arm_moving_ = false;
+  if (moveit_plan_button_ != nullptr) {
+    moveit_plan_button_->setEnabled(true);
+    moveit_current_button_->setEnabled(true);
+    moveit_cancel_button_->setEnabled(false);
+    moveit_scrub_->setEnabled(true);
+  }
+  if (publish_stop) {
+    model_.node().publish("arm_stop", msgs::Empty{}, QOS_DEFAULT);
+    moveit_trajectory_.reset();
+    if (moveit_scrub_ != nullptr) {
+      const QSignalBlocker blocker(moveit_scrub_);
+      moveit_scrub_->setRange(0, 0);
+      moveit_scrub_->setValue(0);
+    }
+    if (moveit_execute_button_ != nullptr) {
+      moveit_execute_button_->setEnabled(false);
+    }
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText(was_executing ? "Cancel: 정지, 다시 Plan 필요" : "Plan 취소");
+    }
+    moveit_preview_target();
+  } else {
+    if (moveit_execute_button_ != nullptr) {
+      moveit_execute_button_->setEnabled(moveit_trajectory_.has_value());
+    }
+    if (moveit_status_label_ != nullptr) {
+      moveit_status_label_->setText("Execute 완료");
+    }
+  }
+}
+
+void VizWindow::moveit_update_preview(int index) {
+  if (!arm_chain_ || !moveit_trajectory_ || moveit_trajectory_->points.empty() || scene_ == nullptr) {
+    return;
+  }
+  const int last = static_cast<int>(moveit_trajectory_->points.size()) - 1;
+  index = std::clamp(index, 0, last);
+  const auto& q = moveit_trajectory_->points[static_cast<std::size_t>(index)].position;
+  ArmPreview preview;
+  preview.active = true;
+  for (const auto& link : arm_chain_->link_transforms(q)) {
+    preview.links.push_back(link.second);
+  }
+  preview.tcp = arm_chain_->tcp(q);
+  preview.tcp_path = moveit_trajectory_->tcp_path;
+  preview.target = arm_chain_->fk(moveit_trajectory_->points.back().position);
+  scene_->set_arm_preview(std::move(preview));
+  moveit_preview_index_ = index;
+}
+
+void VizWindow::reset_arm() {
+  if (arm_reset_target_ == nullptr || arm_reset_button_ == nullptr) {
+    return;
+  }
+  const QString target = arm_reset_target_->currentText();
+  if (moveit_executing_) {
+    moveit_stop(true);
+  }
+  arm_moving_ = false;
+  model_.node().publish("arm_reset", msgs::String{target.toStdString()}, QOS_DEFAULT);
+  if (arm_status_label_ != nullptr) {
+    arm_status_label_->setText(QString("reset(AR) 요청: %1 — 서보 재부팅 후 토크 복구").arg(target));
+    arm_status_label_->setStyleSheet("color:#ffd166;");
+  }
+  arm_reset_button_->setEnabled(false);
+  QTimer::singleShot(2000, this, [this] {
+    if (arm_reset_button_ != nullptr) {
+      arm_reset_button_->setEnabled(true);
+    }
+  });
+}
+
+QString VizWindow::arm_error_summary() const {
+  const auto status = model_.arm_status();
+  if (!status) {
+    return {};
+  }
+  const QString text = QString::fromStdString(status->data);
+  const int start = text.indexOf("err=");
+  if (start < 0) {
+    return {};
+  }
+  const int end = text.indexOf(';', start);
+  const QString list = text.mid(start + 4, end < 0 ? -1 : end - start - 4);
+  const QStringList values = list.split(',');
+  QStringList errors;
+  for (int i = 0; i < values.size() && i < 5; ++i) {
+    if (values[i] == "0" || values[i].isEmpty()) {
+      continue;
+    }
+    const QString name = i == 4 ? QString("grip") : QString("j%1").arg(i + 1);
+    errors << name + "=" + values[i];
+  }
+  return errors.join(" ");
+}
+
+void VizWindow::refresh_moveit() {
+  if (moveit_dock_ == nullptr || moveit_current_label_ == nullptr) {
+    return;
+  }
+  std::string error;
+  const bool ready = ensure_arm_chain(error);
+  if (!arm_chain_) {
+    moveit_current_label_->setText(QString::fromStdString("now: " + error));
+    if (moveit_status_label_ != nullptr && moveit_status_label_->text().startsWith("MoveIt:")) {
+      moveit_status_label_->setText(QString::fromStdString("MoveIt: " + error));
+    }
+    return;
+  }
+  if (!moveit_target_initialized_ && !moveit_executing_) {
+    const auto state = current_arm_state();
+    if (state) {
+      moveit_set_target_from_current();
+    }
+  }
+  const auto state = current_arm_state();
+  if (!state) {
+    moveit_current_label_->setText("now: joint_states 대기");
+    return;
+  }
+  const std::array<double, 4> q{(*state)[0], (*state)[1], (*state)[2], (*state)[3]};
+  const msgs::Vector3 tcp = arm_chain_->tcp(q);
+  const double pitch = arm_chain_->pitch_down(q);
+  moveit_current_label_->setText(QString("now TCP  x %1  y %2  z %3  pitch %4°")
+                                     .arg(tcp.x, 0, 'f', 3)
+                                     .arg(tcp.y, 0, 'f', 3)
+                                     .arg(tcp.z, 0, 'f', 3)
+                                     .arg(pitch * 180.0 / 3.141592653589793, 0, 'f', 1));
+  (void)ready;
+}
+
+void VizWindow::set_manual_panels(bool teleop, bool manipulator, bool moveit) {
   if (teleop_dock_ != nullptr) {
     teleop_dock_->setVisible(teleop);
   }
   if (manipulator_dock_ != nullptr) {
     manipulator_dock_->setVisible(manipulator);
   }
+  if (moveit_dock_ != nullptr) {
+    moveit_dock_->setVisible(moveit);
+  }
   if (teleop && manipulator && teleop_dock_ != nullptr && manipulator_dock_ != nullptr) {
     splitDockWidget(teleop_dock_, manipulator_dock_, Qt::Vertical);
-    resizeDocks({teleop_dock_, manipulator_dock_}, {210, 430}, Qt::Vertical);
+  }
+  if (moveit && manipulator && manipulator_dock_ != nullptr && moveit_dock_ != nullptr) {
+    splitDockWidget(manipulator_dock_, moveit_dock_, Qt::Vertical);
+  } else if (moveit && teleop && teleop_dock_ != nullptr && moveit_dock_ != nullptr) {
+    splitDockWidget(teleop_dock_, moveit_dock_, Qt::Vertical);
+  }
+  QList<QDockWidget*> docks;
+  QList<int> sizes;
+  if (teleop && teleop_dock_ != nullptr) {
+    docks.push_back(teleop_dock_);
+    sizes.push_back(170);
+  }
+  if (manipulator && manipulator_dock_ != nullptr) {
+    docks.push_back(manipulator_dock_);
+    sizes.push_back(330);
+  }
+  if (moveit && moveit_dock_ != nullptr) {
+    docks.push_back(moveit_dock_);
+    sizes.push_back(430);
+  }
+  if (!docks.isEmpty()) {
+    resizeDocks(docks, sizes, Qt::Vertical);
   }
 }
 

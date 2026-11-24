@@ -15,6 +15,7 @@ add_library(krosc_core STATIC
   src/tf.cpp
   src/tf_ros.cpp
   src/urdf.cpp
+  src/manipulation/arm_chain.cpp
   src/nodes/cartographer.cpp
   src/nodes/collision_monitor.cpp
   src/nodes/velocity_smoother.cpp

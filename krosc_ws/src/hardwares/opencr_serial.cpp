@@ -105,6 +105,23 @@ void OpenCrSerial::set_arm_torque(bool enabled) {
   (void)write_command(enabled ? "AT,1" : "AT,0");
 }
 
+void OpenCrSerial::reboot_arm(const std::array<bool, 5>& joints) {
+  {
+    std::lock_guard<std::mutex> lock(arm_command_mutex_);
+    last_arm_target_.fill(std::numeric_limits<double>::quiet_NaN());
+    has_arm_target_ = false;
+  }
+  std::string line = "AR";
+  for (bool selected : joints) {
+    line += selected ? ",1" : ",0";
+  }
+  (void)write_command(line);
+}
+
+void OpenCrSerial::reboot_arm_all() {
+  reboot_arm({true, true, true, true, true});
+}
+
 ArmStatus OpenCrSerial::arm_status() const {
   std::lock_guard<std::mutex> lock(arm_mutex_);
   return arm_status_;

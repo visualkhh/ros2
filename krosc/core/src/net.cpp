@@ -868,6 +868,11 @@ struct Server::Impl {
         }
       } else if (topic == "arm_stop" && kind == Kind::Empty) {
         context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
+      } else if (topic == "arm_reset" && kind == Kind::String) {
+        Reader reader(payload);
+        if (auto message = decode_string(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
       }
     }
     close_client(connection);
@@ -1072,6 +1077,9 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
       "collision_status", Kind::String, QOS_LATCHED, true,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "arm_status", Kind::String, QOS_DEFAULT, false,
       [](Writer& w, const msgs::String& message) { encode(w, message); });
 
   const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -1462,6 +1470,9 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
       [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
   impl_->forward_topic<msgs::Empty>(
       "arm_stop", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
+  impl_->forward_topic<msgs::String>(
+      "arm_reset", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
   impl_->reader_thread = std::thread([impl = impl_.get()] { impl->reader_loop(); });
   impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
 }

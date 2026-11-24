@@ -1126,6 +1126,7 @@ void SceneView::paintEvent(QPaintEvent* event) {
   if (enabled("model")) {
     draw_robot(painter);
   }
+  draw_arm_preview(painter);
   if (enabled("scan")) {
     draw_scan(painter);
   }
@@ -1184,6 +1185,92 @@ void SceneView::draw_waypoints(QPainter& painter) const {
     draw_line(painter, end, left, QColor(255, 205, 70, 230), 1.6);
     draw_line(painter, end, right, QColor(255, 205, 70, 230), 1.6);
     draw_label(painter, origin, QString("#%1").arg(index + 1), QColor(255, 235, 150));
+  }
+}
+
+void SceneView::set_arm_preview(ArmPreview preview) {
+  arm_preview_ = std::move(preview);
+  update();
+}
+
+void SceneView::clear_arm_preview() {
+  arm_preview_ = {};
+  update();
+}
+
+void SceneView::draw_arm_preview(QPainter& painter) const {
+  if (!arm_preview_.active) {
+    return;
+  }
+  const auto base = model_.transform_in_fixed("base_link");
+  if (!base) {
+    return;
+  }
+  const auto to_fixed = [&](const msgs::Vector3& point) {
+    const msgs::Vector3 moved = tfmath::apply(base->transform, point);
+    return QVector3D(static_cast<float>(moved.x), static_cast<float>(moved.y), static_cast<float>(moved.z));
+  };
+
+  const QColor arm_color(90, 205, 255, 220);
+  const QColor joint_color(190, 235, 255, 245);
+  std::optional<QVector3D> previous;
+  for (const auto& link : arm_preview_.links) {
+    const QVector3D point = to_fixed(link.translation);
+    if (previous) {
+      draw_line(painter, *previous, point, arm_color, 4.0);
+    }
+    draw_line(painter, point - QVector3D(0.012F, 0.0F, 0.0F), point + QVector3D(0.012F, 0.0F, 0.0F),
+              joint_color, 2.0);
+    draw_line(painter, point - QVector3D(0.0F, 0.012F, 0.0F), point + QVector3D(0.0F, 0.012F, 0.0F),
+              joint_color, 2.0);
+    previous = point;
+  }
+  const QVector3D tcp = to_fixed(arm_preview_.tcp);
+  if (previous) {
+    draw_line(painter, *previous, tcp, arm_color, 4.0);
+  }
+  // TCP 프레임(빨강=x, 초록=y, 파랑=z)
+  if (!arm_preview_.links.empty()) {
+    const msgs::Transform& tip = arm_preview_.links.back();
+    const auto axis = [&](const msgs::Vector3& local) {
+      return to_fixed(tfmath::apply(tip, local));
+    };
+    draw_line(painter, tcp, axis({0.05, 0.0, 0.0}), QColor(255, 95, 95, 240), 2.2);
+    draw_line(painter, tcp, axis({0.0, 0.05, 0.0}), QColor(95, 235, 130, 240), 2.2);
+    draw_line(painter, tcp, axis({0.0, 0.0, 0.05}), QColor(110, 165, 255, 240), 2.2);
+  }
+
+  if (arm_preview_.tcp_path.size() >= 2) {
+    const std::size_t stride =
+        std::max<std::size_t>(1, arm_preview_.tcp_path.size() / 400);
+    QVector3D last = to_fixed(arm_preview_.tcp_path.front());
+    for (std::size_t i = stride; i < arm_preview_.tcp_path.size(); i += stride) {
+      const QVector3D point = to_fixed(arm_preview_.tcp_path[i]);
+      draw_line(painter, last, point, QColor(80, 235, 150, 215), 2.0);
+      last = point;
+    }
+    const QVector3D end = to_fixed(arm_preview_.tcp_path.back());
+    draw_line(painter, last, end, QColor(80, 235, 150, 215), 2.0);
+    draw_label(painter, end, QString("TCP path (%1)").arg(arm_preview_.tcp_path.size()),
+               QColor(135, 245, 175));
+  }
+
+  if (arm_preview_.target) {
+    const msgs::Transform& target = *arm_preview_.target;
+    const QVector3D origin = to_fixed(target.translation);
+    const auto axis = [&](const msgs::Vector3& local) {
+      return to_fixed(tfmath::apply(target, local));
+    };
+    draw_line(painter, origin, axis({0.055, 0.0, 0.0}), QColor(255, 100, 100, 250), 2.6);
+    draw_line(painter, origin, axis({0.0, 0.055, 0.0}), QColor(100, 245, 140, 250), 2.6);
+    draw_line(painter, origin, axis({0.0, 0.0, 0.055}), QColor(120, 175, 255, 250), 2.6);
+    draw_line(painter, origin - QVector3D(0.012F, 0.0F, 0.0F), origin + QVector3D(0.012F, 0.0F, 0.0F),
+              QColor(255, 220, 90, 250), 2.0);
+    draw_line(painter, origin - QVector3D(0.0F, 0.012F, 0.0F), origin + QVector3D(0.0F, 0.012F, 0.0F),
+              QColor(255, 220, 90, 250), 2.0);
+    draw_line(painter, origin - QVector3D(0.0F, 0.0F, 0.012F), origin + QVector3D(0.0F, 0.0F, 0.012F),
+              QColor(255, 220, 90, 250), 2.0);
+    draw_label(painter, origin + QVector3D(0.0F, 0.0F, 0.035F), "TCP target", QColor(255, 225, 120));
   }
 }
 

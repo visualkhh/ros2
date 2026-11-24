@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <cstdio>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -41,6 +42,7 @@ RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
                                               [](double value) { return value > 0.0; })) {
   last_joint_states_ = now();
   last_diagnostics_ = now();
+  last_arm_status_ = now();
   command_subscription_ = subscribe<krosc::msgs::Twist>(
       "cmd_vel",
       [this](const krosc::msgs::Twist& twist) {
@@ -62,6 +64,43 @@ RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
         if (arm.present) {
           robot_.opencr().write_arm(arm.position);
         }
+      },
+      krosc::QOS_DEFAULT);
+  arm_reset_subscription_ = subscribe<krosc::msgs::String>(
+      "arm_reset",
+      [this](const krosc::msgs::String& message) {
+        std::array<bool, 5> mask{};
+        const std::string text = message.data;
+        if (text.empty() || text == "all" || text == "*") {
+          mask.fill(true);
+        } else {
+          std::stringstream stream(text);
+          std::string token;
+          while (std::getline(stream, token, ',')) {
+            const std::size_t begin = token.find_first_not_of(" \t");
+            const std::size_t end = token.find_last_not_of(" \t");
+            if (begin == std::string::npos) {
+              continue;
+            }
+            token = token.substr(begin, end - begin + 1);
+            if (token == "all" || token == "*") {
+              mask.fill(true);
+            } else if (token == "joint1" || token == "1" || token == "11") {
+              mask[0] = true;
+            } else if (token == "joint2" || token == "2" || token == "12") {
+              mask[1] = true;
+            } else if (token == "joint3" || token == "3" || token == "13") {
+              mask[2] = true;
+            } else if (token == "joint4" || token == "4" || token == "14") {
+              mask[3] = true;
+            } else if (token == "gripper" || token == "grip" || token == "5" || token == "15") {
+              mask[4] = true;
+            }
+          }
+        }
+        robot_.opencr().reboot_arm(mask);
+        logger().info("팔 리셋(AR): j1=%d j2=%d j3=%d j4=%d grip=%d", mask[0], mask[1], mask[2],
+                      mask[3], mask[4]);
       },
       krosc::QOS_DEFAULT);
   logger().info("로봇 %s: OpenCR=%s, LDS-03=%s", robot_.name().c_str(),
@@ -86,6 +125,10 @@ void RobotBridge::poll() {
   if (current - last_diagnostics_ >= diagnostics_period_.value()) {
     publish_diagnostics();
     last_diagnostics_ = current;
+  }
+  if (current - last_arm_status_ >= 0.5) {
+    publish_arm_status();
+    last_arm_status_ = current;
   }
 }
 
@@ -134,6 +177,35 @@ void RobotBridge::publish_joint_states() {
     state.position.push_back(position);
   }
   publish(krosc::JOINT_STATES_TOPIC_NAME, std::move(state));
+}
+
+void RobotBridge::publish_arm_status() {
+  const ArmStatus arm = robot_.opencr().arm_status();
+  std::string text = "present=";
+  text += arm.present ? "1" : "0";
+  text += ";err=";
+  for (std::size_t i = 0; i < arm.error.size(); ++i) {
+    if (i != 0) {
+      text += ",";
+    }
+    if (arm.error[i] < 0) {
+      text += "x";
+    } else {
+      text += std::to_string(arm.error[i]);
+    }
+  }
+  text += ";temp=";
+  for (std::size_t i = 0; i < arm.temperature.size(); ++i) {
+    if (i != 0) {
+      text += ",";
+    }
+    if (!std::isfinite(arm.temperature[i])) {
+      text += "x";
+    } else {
+      text += std::to_string(static_cast<int>(std::lround(arm.temperature[i])));
+    }
+  }
+  publish("arm_status", krosc::msgs::String{text}, krosc::QOS_DEFAULT);
 }
 
 void RobotBridge::publish_diagnostics() {

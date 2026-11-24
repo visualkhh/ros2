@@ -24,6 +24,7 @@ class RobotBridge final : public krosc::Node {
  private:
   void publish_joint_states();
   void publish_diagnostics();
+  void publish_arm_status();
   void on_arm_command(const krosc::msgs::JointState& message);
 
   RealTurtleBot3& robot_;
@@ -32,10 +33,12 @@ class RobotBridge final : public krosc::Node {
   krosc::Parameter<double> data_timeout_;
   double last_joint_states_ = 0.0;
   double last_diagnostics_ = 0.0;
+  double last_arm_status_ = 0.0;
   krosc::Subscription<krosc::msgs::Twist> command_subscription_;
   krosc::Subscription<krosc::msgs::JointState> arm_command_subscription_;
   krosc::Subscription<krosc::msgs::Bool> arm_torque_subscription_;
   krosc::Subscription<krosc::msgs::Empty> arm_stop_subscription_;
+  krosc::Subscription<krosc::msgs::String> arm_reset_subscription_;
 };
 
 }  // namespace krosc_ws
