@@ -160,6 +160,7 @@ int16_t arm_temp[ARM_N];
 ArmPresent arm_present[ARM_N] = {};
 float gripper_ma = GRIPPER_GOAL_CURRENT_MA;
 uint32_t arm_cmd_ms = 0, arm_check_ms = 0, arm_try_ms = 0, arm_err_ms = 0;
+bool arm_err_reported = false;          // 부팅 후 첫 F 줄을 보내 앱이 err=0을 알 수 있게 한다
 
 static const float RAW_PER_RAD = 4096.0f / (2.0f * 3.14159265f);
 static float rad_to_raw_f(float rad, float dir) { return 2048.0f + dir * rad * RAW_PER_RAD; }
@@ -416,7 +417,8 @@ static void arm_check() {
   }
   bool changed = false, in_error = false;
   for (size_t i = 0; i < ARM_N; ++i) { changed |= arm_err[i] != arm_last_err[i]; in_error |= arm_err[i] != 0; }
-  if (changed || (in_error && now - arm_err_ms >= ERR_REPEAT_MS)) {
+  if (!arm_err_reported || changed || (in_error && now - arm_err_ms >= ERR_REPEAT_MS)) {
+    arm_err_reported = true;
     memcpy(arm_last_err, arm_err, sizeof(arm_err));
     arm_err_ms = now;
     arm_print_errors();

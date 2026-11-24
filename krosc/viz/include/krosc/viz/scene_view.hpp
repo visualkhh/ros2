@@ -3,6 +3,7 @@
 #include <QElapsedTimer>
 #include <QImage>
 #include <QMatrix4x4>
+#include <QHash>
 #include <QPointF>
 #include <QSet>
 #include <QTimer>
@@ -144,6 +145,7 @@ class SceneView : public QWidget {
   bool orbiting_ = false;
   bool panning_ = false;
   QSet<int> keys_;
+  QHash<int, int> key_codes_;
   bool follow_ = true;
   QVector3D follow_target_{0.0F, 0.0F, 0.1F};
   std::deque<QVector3D> trail_;

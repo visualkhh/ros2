@@ -873,6 +873,14 @@ struct Server::Impl {
         if (auto message = decode_string(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
         }
+      } else if ((topic == "moveit_target" || topic == "moveit_scrub") && kind == Kind::String) {
+        Reader reader(payload);
+        if (auto message = decode_string(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if ((topic == "moveit_plan" || topic == "moveit_execute" || topic == "moveit_cancel") &&
+                 kind == Kind::Empty) {
+        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
       }
     }
     close_client(connection);
@@ -1081,6 +1089,21 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
   impl_->subscribe_topic<msgs::String>(
       "arm_status", Kind::String, QOS_DEFAULT, false,
       [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "moveit_status", Kind::String, QOS_DEFAULT, false,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "moveit_state", Kind::String, QOS_DEFAULT, false,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::PoseStamped>(
+      "moveit_target_pose", Kind::Pose, QOS_DEFAULT, false,
+      [](Writer& w, const msgs::PoseStamped& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::Path>(
+      "moveit_arm", Kind::Path, QOS_DEFAULT, false,
+      [](Writer& w, const msgs::Path& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::Path>(
+      "moveit_path", Kind::Path, QOS_DEFAULT, false,
+      [](Writer& w, const msgs::Path& message) { encode(w, message); });
 
   const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
@@ -1473,6 +1496,18 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
   impl_->forward_topic<msgs::String>(
       "arm_reset", Kind::String,
       [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "moveit_target", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "moveit_scrub", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Empty>(
+      "moveit_plan", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
+  impl_->forward_topic<msgs::Empty>(
+      "moveit_execute", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
+  impl_->forward_topic<msgs::Empty>(
+      "moveit_cancel", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
   impl_->reader_thread = std::thread([impl = impl_.get()] { impl->reader_loop(); });
   impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
 }

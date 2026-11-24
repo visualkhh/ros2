@@ -25,6 +25,7 @@
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
 #include "krosc/nodes/map_catalog.hpp"
+#include "krosc/nodes/moveit_lite.hpp"
 #include "krosc/nodes/velocity_smoother.hpp"
 #include "krosc/nodes/navigator.hpp"
 #include "krosc/nodes/twist_mux.hpp"
@@ -187,6 +188,18 @@ int main(int argc, char** argv) {
   krosc_ws::RobotBridge bridge(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "RobotStatePublisher",
                                                 {{"robot_description", urdf}});
+  krosc::nodes::MoveItLite moveit(
+      context, "moveit_lite",
+      {{"base_link", std::string("base_link")},
+       {"tip_link", std::string("end_effector_link")},
+       {"joint_names", std::vector<std::string>{"joint1", "joint2", "joint3", "joint4"}},
+       {"lower_limits", std::vector<double>{-3.141592653589793, -2.20, -2.00, -2.00}},
+       {"upper_limits", std::vector<double>{3.141592653589793, 2.20, 2.00, 2.20}},
+       {"max_joint_speed", 0.35},
+       {"max_joint_accel", 1.0},
+       {"cartesian_speed", 0.08},
+       {"cartesian_accel", 0.25},
+       {"sample_time", 0.05}});
   krosc::nodes::DiffDriveOdometry odometry(
       context, "DiffDriveOdometry",
       {{"wheel_radius", krosc_ws::RealTurtleBot3::kWheelRadius},

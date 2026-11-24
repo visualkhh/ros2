@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QMainWindow>
 
 #include <array>
@@ -10,7 +11,6 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/manipulation/arm_chain.hpp"
 #include "krosc/viz/scene_view.hpp"
 #include "krosc/viz/viz_model.hpp"
 
@@ -66,18 +66,13 @@ class VizWindow : public QMainWindow {
   void send_arm_target();
   void refresh_manual();
   void refresh_moveit();
-  [[nodiscard]] bool ensure_arm_chain(std::string& error);
-  [[nodiscard]] std::optional<std::array<double, 5>> current_arm_state() const;
+  void publish_moveit_target();
+  void update_moveit_preview();
   void moveit_set_target_from_current();
-  void moveit_preview_target();
-  void moveit_invalidate_plan();
   void moveit_plan();
   void moveit_execute();
-  void moveit_stop(bool publish_stop);
-  void moveit_tick();
-  void moveit_update_preview(int index);
+  void moveit_stop();
   void reset_arm();
-  [[nodiscard]] msgs::Transform target_transform() const;
   [[nodiscard]] QString arm_error_summary() const;
   void set_arm_slider_values(const std::array<double, 5>& positions);
   void set_tool(const std::string& tool);
@@ -138,15 +133,11 @@ class VizWindow : public QMainWindow {
   QLabel* moveit_current_label_ = nullptr;
   QLabel* moveit_status_label_ = nullptr;
   QSlider* moveit_scrub_ = nullptr;
-  QTimer* moveit_exec_timer_ = nullptr;
-  std::optional<krosc::manipulation::ArmChain> arm_chain_;
-  std::string arm_chain_source_;
-  std::optional<krosc::manipulation::Trajectory> moveit_trajectory_;
   bool moveit_executing_ = false;
   bool moveit_updating_ = false;
   bool moveit_target_initialized_ = false;
-  double moveit_start_time_ = 0.0;
-  int moveit_preview_index_ = 0;
+  bool moveit_has_plan_ = false;
+  int moveit_points_ = 0;
   std::array<QSlider*, 4> arm_sliders_{};
   std::array<QLabel*, 4> arm_value_labels_{};
   QSlider* gripper_slider_ = nullptr;
@@ -159,6 +150,7 @@ class VizWindow : public QMainWindow {
   QTimer* arm_send_timer_ = nullptr;
   QTimer* manual_refresh_timer_ = nullptr;
   int teleop_direction_ = 0;
+  QHash<int, int> teleop_key_codes_;
   double teleop_last_linear_ = 0.0;
   double teleop_last_angular_ = 0.0;
   std::array<double, 5> arm_target_{};

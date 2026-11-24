@@ -26,6 +26,11 @@ VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_,
   subscribe_latest<msgs::String>("goal_status", goal_status_, QOS_LATCHED);
   subscribe_latest<msgs::String>("collision_status", collision_status_, QOS_LATCHED);
   subscribe_latest<msgs::String>("arm_status", arm_status_, QOS_DEFAULT);
+  subscribe_latest<msgs::String>("moveit_status", moveit_status_, QOS_DEFAULT);
+  subscribe_latest<msgs::String>("moveit_state", moveit_state_, QOS_DEFAULT);
+  subscribe_latest<msgs::PoseStamped>("moveit_target_pose", moveit_target_pose_, QOS_DEFAULT);
+  subscribe_latest<msgs::Path>("moveit_arm", moveit_arm_, QOS_DEFAULT);
+  subscribe_latest<msgs::Path>("moveit_path", moveit_path_, QOS_DEFAULT);
   subscribe_latest<msgs::JointState>("joint_states", joint_states_, QOS_DEFAULT);
   subscribe_latest<msgs::String>("slam_status", slam_status_, QOS_LATCHED);
   subscribe_stats_only(TF_TOPIC_NAME, "tf2_msgs/TFMessage", QOS_TF);
@@ -172,6 +177,31 @@ std::shared_ptr<const msgs::String> VizModel::collision_status() const {
 std::shared_ptr<const msgs::String> VizModel::arm_status() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return arm_status_;
+}
+
+std::shared_ptr<const msgs::String> VizModel::moveit_status() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return moveit_status_;
+}
+
+std::shared_ptr<const msgs::String> VizModel::moveit_state() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return moveit_state_;
+}
+
+std::shared_ptr<const msgs::PoseStamped> VizModel::moveit_target_pose() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return moveit_target_pose_;
+}
+
+std::shared_ptr<const msgs::Path> VizModel::moveit_arm() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return moveit_arm_;
+}
+
+std::shared_ptr<const msgs::Path> VizModel::moveit_path() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return moveit_path_;
 }
 
 std::shared_ptr<const msgs::JointState> VizModel::joint_states() const {

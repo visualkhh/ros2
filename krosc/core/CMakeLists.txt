@@ -22,6 +22,7 @@ add_library(krosc_core STATIC
   src/nodes/navigator.cpp
   src/nodes/map_catalog.cpp
   src/nodes/map_io.cpp
+  src/nodes/moveit_lite.cpp
   src/nodes/diff_drive_odometry.cpp
   src/nodes/ekf.cpp
   src/nodes/robot_state_publisher.cpp

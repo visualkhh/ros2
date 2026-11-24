@@ -1,5 +1,7 @@
 #include "krosc/viz/scene_view.hpp"
 
+#include "krosc/viz/key_bindings.hpp"
+
 #include <QFocusEvent>
 #include <QFont>
 #include <QKeyEvent>
@@ -110,6 +112,8 @@ QColor link_color(const std::string& name) {
 
 SceneView::SceneView(VizModel& model, QWidget* parent) : QWidget(parent), model_(model) {
   setFocusPolicy(Qt::StrongFocus);
+  // 한글 IME가 키를 조합해 버리지 않게 한다 (W/A/S/D가 ㅈ/ㅁ/ㄴ/ㅇ으로 바뀌어도 key_bindings가 복원).
+  setAttribute(Qt::WA_InputMethodEnabled, false);
   setMouseTracking(true);
   setMinimumSize(640, 420);
   for (const auto& key : {"grid", "tf", "model", "scan", "imu", "odom", "filtered", "map", "global_costmap",
@@ -1382,26 +1386,20 @@ void SceneView::wheelEvent(QWheelEvent* event) {
 }
 
 void SceneView::keyPressEvent(QKeyEvent* event) {
+  const int code = qwerty_key(event);
   if (event->isAutoRepeat()) {
-    if (event->key() == Qt::Key_W || event->key() == Qt::Key_A || event->key() == Qt::Key_S ||
-        event->key() == Qt::Key_D || event->key() == Qt::Key_Up || event->key() == Qt::Key_Down ||
-        event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) {
-      keys_.insert(event->key());
+    if (is_move_key(code)) {
+      keys_.insert(code);
     }
     return;
   }
-  switch (event->key()) {
-    case Qt::Key_W:
-    case Qt::Key_A:
-    case Qt::Key_S:
-    case Qt::Key_D:
-    case Qt::Key_Up:
-    case Qt::Key_Down:
-    case Qt::Key_Left:
-    case Qt::Key_Right:
-      keys_.insert(event->key());
-      event->accept();
-      return;
+  if (is_move_key(code)) {
+    key_codes_[physical_key(event)] = code;
+    keys_.insert(code);
+    event->accept();
+    return;
+  }
+  switch (code) {
     case Qt::Key_Q:
       set_teleop_scale(teleop_scale_ * 1.25);
       return;
@@ -1429,14 +1427,24 @@ void SceneView::keyPressEvent(QKeyEvent* event) {
 }
 
 void SceneView::keyReleaseEvent(QKeyEvent* event) {
-  if (!event->isAutoRepeat()) {
-    keys_.remove(event->key());
+  if (event->isAutoRepeat()) {
+    return;
   }
+  const auto found = key_codes_.find(physical_key(event));
+  int code = event->key();
+  if (found != key_codes_.end()) {
+    code = found.value();
+    key_codes_.erase(found);
+  } else {
+    code = qwerty_key(event);
+  }
+  keys_.remove(code);
 }
 
 void SceneView::focusOutEvent(QFocusEvent* event) {
   (void)event;
   keys_.clear();
+  key_codes_.clear();
   orbiting_ = false;
   panning_ = false;
 }
