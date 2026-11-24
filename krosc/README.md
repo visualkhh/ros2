@@ -16,7 +16,8 @@
 *왼쪽 `SimWindow`(진실), 오른쪽 `VizWindow`(토픽). 이 화면은 Docker의 Ubuntu 26.04 안에서 두 Qt 창을 띄우고,
 맥 브라우저(noVNC)로 그대로 본 것이다.*
 
-원격 모드 검증 (같은 TCP 경로, 로컬 서버 + 원격 viz): `docs/remote-viz.png`
+원격 모드 검증 (같은 TCP 경로, 로컬 서버 + 원격 viz): `docs/remote-viz.png`  
+실기 C++ vs Python 성능 비교: [`docs/performance-vs-python.md`](docs/performance-vs-python.md)
 
 ## 맥에서 UI 보기 (Docker + noVNC)
 
