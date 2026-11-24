@@ -269,6 +269,11 @@ nav2/ros2_control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파�
 새 알고리즘은 베이스 클래스를 상속해 `compute_velocity_commands`/`create_plan`/`plan`/`read`/`write`를
 오버라이드하고, `builtin_*()`에 팩토리를 한 줄 추가하면 된다.
 
+플러그인의 `configure(Node&, name)`에서 첫 인자는 서버 타입이 아니라 **parent Node**다
+(nav2의 `configure(LifecycleNode::WeakPtr parent, ...)`와 같은 역할). `ControllerServer`는
+자기 자신을 `Node&`로 넘기므로 플러그인은 파라미터/토픽/TF만 쓰고 서버 내부에는 의존하지 않는다.
+primary controller를 만드는 플러그인만 `set_registry()`로 정적 registry를 받는다 (pluginlib 대체).
+
 ```text
 engine/include/krosc/nodes/nav2/
 ├── controllers/   controller.hpp, rpp/dwb/mppi/rotation_shim 플러그인, controller_plugins.hpp

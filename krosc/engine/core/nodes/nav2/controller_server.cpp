@@ -79,6 +79,8 @@ ControllerServer::ControllerServer(Context& context, Costmap2DROS& local_costmap
       throw std::runtime_error("controller plugin not found: " + kind);
     }
     controller->set_registry(&registry_);
+    // nav2의 configure(parent, ...)와 같이 서버가 아니라 parent Node로 넘긴다.
+    // *this는 ControllerServer지만 플러그인 계약은 Node&다 (슬라이싱 없음).
     controller->configure(*this, id);
     controllers_[id] = std::move(controller);
     logger().info("controller %s: %s", id.c_str(), kind.c_str());

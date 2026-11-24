@@ -92,6 +92,8 @@ class NavControllerPlugin {
   // pluginlib 대신 정적 registry를 쓰므로, primary controller를 만드는 플러그인
   // (rotation shim)이 서버의 registry를 볼 수 있게 넘긴다.
   void set_registry(const ControllerRegistry* registry) { registry_ = registry; }
+  // nav2_core::Controller::configure(parent, ...)와 같이 '서버'가 아니라 parent Node를 받는다.
+  // ControllerServer는 자기 자신(*this)을 Node&로 넘긴다 (복사/슬라이싱 없음).
   virtual void configure(Node& node, const std::string& name) {
     node_ = &node;
     name_ = name;
