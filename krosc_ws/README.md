@@ -5,14 +5,20 @@
 
 ```
 [라즈베리파이] krosc_real
-  OpenCRSerial (115200, C/S/I/E) ──┐
-  LDS-03     (230400, 10Hz) ───────┤
-                                   ├─ RobotBridge ─ scan/imu/joint_states/diagnostics
-                                   ├─ RobotStatePublisher (URDF/TF)
-                                   ├─ DiffDriveOdometry ─ odom
-                                   ├─ Ekf ─ odometry/filtered + odom->base_footprint TF
-                                   └─ net::Server (TCP 9000) ──> [맥] krosc_viz_app --server
-                                            ^ cmd_vel
+  OpenCRSerial (115200, C/S/I/E/A) ─┐
+  LDS-03     (230400, 10Hz) ────────┤
+                                    ├─ TurtleBot3Driver ─ scan/imu/arm_status/diagnostics
+                                    ├─ controller_manager (ros2_control)
+                                    │    ├─ OpenCrSystem (hardware plugin)
+                                    │    ├─ joint_state_broadcaster ─ joint_states
+                                    │    ├─ diff_drive_controller ─ odom
+                                    │    └─ joint_trajectory_controller ─ 팔
+                                    ├─ MoveGroup (MoveIt 플러그인) ─ moveit_*
+                                    ├─ RobotStatePublisher (URDF/TF)
+                                    ├─ Ekf ─ odometry/filtered + odom->base_footprint TF
+                                    ├─ nav2: planner/controller/behavior/bt_navigator
+                                    └─ net::Server (TCP 9000) ──> [맥] krosc_ws_viz_app
+                                             ^ cmd_vel / goal / moveit_*
 ```
 
 ## 준비 (라즈베리파이)
@@ -108,8 +114,9 @@ cmake --build build -j
 - 네트워크는 신뢰할 수 있는 LAN 전용이다 (인증 없음). 포트 9000을 외부에 열지 마라.
 
 원격 토픽: `tf`, `tf_static`, `robot_description`, `scan`, `imu`, `odom`, `odometry/filtered`,
-`joint_states`, `arm_status`, `diagnostics`, `rosout` (+ `cmd_vel`, `arm_joint_command`, `arm_torque`,
-`arm_stop`, `arm_reset` 역방향).
+`joint_states`, `arm_status`, `diagnostics`, `rosout`, `rl_nav_model_list`
+(+ `cmd_vel`, `goal_*`, `moveit_*`, `rl_nav_model`, `arm_joint_command`, `arm_torque`, `arm_stop`,
+`arm_reset` 역방향).
 
 ## 매니퓰레이터 (OpenMANIPULATOR-X 4축 + 그리퍼)
 
@@ -206,10 +213,15 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 
 Isaac `rl_maze` 정책(52관측 → 2행동, 20Hz)을 Pi에서 ONNX Runtime으로 실행한다.
 
-- 모델: `models/rl_maze/policy.onnx` + `policy.onnx.data` (둘 다 필요)
-- 노드: `robot/nodes/rl_nav_controller.cpp`
-- Viz: `viz/plugins/rl_nav_plugin.cpp` — RL ON/OFF, fallback, 상태
-- 기본은 **RL OFF**. Viz의 `RL Nav` 도크에서 켠다.
+- 모델 폴더: `artifacts/models/rl_nav_controller/<name>/`에 `*.onnx` + `*.onnx.data`
+  (기본 `rl_maze`: `policy.onnx` + `policy.onnx.data`)
+- 노드: `robot/nodes/rl_nav_controller.cpp`, 폴더 스캔은 `robot/ml/model_catalog.hpp`
+- Viz: `viz/plugins/rl_nav_plugin.cpp` — 모델 선택, RL ON/OFF, fallback, 상태
+- 지도와 같은 방식으로 **모델 목록**을 고른다:
+  - `rl_nav_model_list`(String, latch): 모델 이름들 (한 줄에 하나)
+  - `rl_nav_model`(String): 선택한 모델 이름 → 그 자리에서 다시 로드
+  - `rl_nav_status`에 `model=<이름>`이 포함된다
+- 기본은 **RL OFF**. Viz의 `RL Nav` 도크에서 모델을 고르고 켠다.
 
 ```text
 teleop   priority 100
@@ -244,6 +256,7 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 
 - `controller_manager` 노드: `hardware_plugin`(OpenCR) → state/command interfaces → controllers
 - `joint_state_broadcaster`: `joint_states` 발행
+- `diff_drive_controller`: `cmd_vel` → 바퀴 velocity command, 바퀴 position → `odom`
 - `joint_trajectory_controller`: `FollowJointTrajectory` 액션으로 팔 궤적 실행
 - `forward_command_controller`: `arm_joint_command` 수동 명령 (기본 비활성)
 - `controller_manager/list_controllers`, `load_controller`, `configure_controller`,
@@ -271,10 +284,12 @@ Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 �
 krosc_ws/
 ├── robot/                       # 로봇(Pi) 앱
 │   ├── main.cpp                 # 50Hz 실시간 루프, 노드 조립, TCP 서버
-│   ├── robot_bridge.cpp/.hpp    # cmd_vel, scan/imu/joint_states/diagnostics
+│   ├── turtlebot3_driver.cpp/.hpp # scan/imu/arm_status/diagnostics, 팔 서비스
 │   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
+│   ├── hardware/opencr_system.cpp # ros2_control SystemInterface (바퀴+팔)
 │   ├── nodes/rl_nav_controller.cpp
 │   ├── ml/onnx_policy.cpp/.hpp
+│   ├── ml/model_catalog.hpp     # artifacts/models/rl_nav_controller 스캔
 │   ├── hardwares/
 │   │   ├── serial.cpp/.hpp          # POSIX termios
 │   │   ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
@@ -285,7 +300,7 @@ krosc_ws/
 │   ├── main.cpp
 │   ├── CMakeLists.txt
 │   └── plugins/
-├── models/rl_maze/              # policy.onnx + policy.onnx.data
+├── artifacts/models/rl_nav_controller/<name>/  # policy.onnx + policy.onnx.data
 ├── firmware/opencr/             # 이 프로젝트 전용 OpenCR 펌웨어 사본
 │   ├── turtlebot_opencr/turtlebot_opencr.ino
 │   ├── turtlebot_opencr/arm_config.h
@@ -334,7 +349,6 @@ ctest --test-dir build --output-on-failure
 ## 아직 안 된 것
 
 - full MoveIt 2 (OMPL planning scene, collision world) — 지금은 URDF 체인 + 자체 플러그인
-- 바퀴 구동의 ros2_control `diff_drive_controller` 전환 (현재 cmd_vel → OpenCR 유지)
 - 파라미터/서비스/액션의 네트워크 전달, rosbag
 - Cartographer 전체 기능(loop closure, submap) — 현재는 scan matching + occupancy map 수준
 

@@ -1,5 +1,10 @@
 #pragma once
 
+#include <mutex>
+#include <string>
+
+#include "krosc/msgs.hpp"
+#include "krosc/topic.hpp"
 #include "krosc/viz/viz_plugin.hpp"
 
 class QComboBox;
@@ -22,15 +27,21 @@ class RlNavPlugin final : public krosc::viz::VizPlugin {
   void refresh();
   void set_enabled(bool enabled);
   void set_fallback(const QString& fallback);
+  void set_model(const QString& model);
 
   krosc::viz::VizHost* host_ = nullptr;
   QDockWidget* dock_ = nullptr;
   QPushButton* toggle_ = nullptr;
   QComboBox* fallback_ = nullptr;
+  QComboBox* model_ = nullptr;
   QPushButton* reload_ = nullptr;
   QLabel* status_ = nullptr;
   QLabel* detail_ = nullptr;
   QTimer* timer_ = nullptr;
+  krosc::Subscription<krosc::msgs::String> model_list_subscription_;
+  mutable std::mutex model_mutex_;
+  std::string model_list_;
+  bool model_list_dirty_ = false;
   bool updating_ = false;
   bool enabled_ = false;
 };

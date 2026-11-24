@@ -1,4 +1,4 @@
-#include "robot_bridge.hpp"
+#include "turtlebot3_driver.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -30,8 +30,8 @@ void add_value(krosc::msgs::DiagnosticStatus& status, const std::string& key, co
 
 }  // namespace
 
-RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
-    : Node(context, "RobotBridge"),
+TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robot)
+    : Node(context, "TurtleBot3Driver"),
       robot_(robot),
       diagnostics_period_(declare_parameter<double>("diagnostics_period", 1.0,
                                                     [](double value) { return value > 0.0; })),
@@ -39,13 +39,6 @@ RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
                                               [](double value) { return value > 0.0; })) {
   last_diagnostics_ = now();
   last_arm_status_ = now();
-  command_subscription_ = subscribe<krosc::msgs::Twist>(
-      "cmd_vel",
-      [this](const krosc::msgs::Twist& twist) {
-        logger().debug("cmd_vel: v=%.2f w=%.2f", twist.linear.x, twist.angular.z);
-        robot_.opencr().write(twist);
-      },
-      krosc::QOS_COMMAND);
   arm_torque_subscription_ = subscribe<krosc::msgs::Bool>(
       "arm_torque", [this](const krosc::msgs::Bool& message) { robot_.opencr().set_arm_torque(message.data); },
       krosc::QOS_DEFAULT);
@@ -100,7 +93,7 @@ RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
   logger().info("OpenCR IMU는 켠 뒤 2초 동안 가만히 둬야 자이로 편향을 잡는다");
 }
 
-void RobotBridge::poll() {
+void TurtleBot3Driver::poll() {
   const double current = now();
   if (auto imu = robot_.opencr().consume_imu()) {
     imu->header.stamp = current;
@@ -120,7 +113,7 @@ void RobotBridge::poll() {
   }
 }
 
-void RobotBridge::publish_arm_status() {
+void TurtleBot3Driver::publish_arm_status() {
   const ArmStatus arm = robot_.opencr().arm_status();
   std::string text = "present=";
   text += arm.present ? "1" : "0";
@@ -149,7 +142,7 @@ void RobotBridge::publish_arm_status() {
   publish("arm_status", krosc::msgs::String{text}, krosc::QOS_DEFAULT);
 }
 
-void RobotBridge::publish_diagnostics() {
+void TurtleBot3Driver::publish_diagnostics() {
   krosc::msgs::DiagnosticArray array;
   array.header.stamp = now();
 

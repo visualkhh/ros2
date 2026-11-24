@@ -110,11 +110,13 @@ krosc/
 ├── CMakeLists.txt                 # 최상위 (engine, sim, viz, examples)
 ├── engine/                        # krosc_core (표준 라이브러리만)
 │   ├── CMakeLists.txt
-│   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/msgs/urdf/log
-│   │   └── nodes/                 # DiffDriveOdometry, Ekf, RobotStatePublisher, TfEcho, TwistMux
+│   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/action/msgs
+│   │   ├── nodes/                 # DiffDriveOdometry, Ekf, RobotStatePublisher, TfEcho, TwistMux, nav2
+│   │   ├── ros2_control/          # controller_manager, JSB/JTC/forward/diff_drive
+│   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 29 tests (net 포함)
-│   └── benchmarks/bench.cpp
+│   ├── tests/                     # core 40 tests (nav2/ros2_control/MoveIt 포함)
+│   └── benchmarks/                # bench.cpp, nav2_bench.cpp
 ├── sim/                           # krosc_sim (+ krosc_sim_qt)
 │   ├── CMakeLists.txt
 │   ├── include/krosc/sim/         # world, maze_world, turtlebot3, runner, snapshot, view_window
@@ -232,6 +234,9 @@ tf lookup           :   ~0.6 us/op   (300개 이력, 보간)
 lidar 360 rays      :  60-70 us/scan (20개 벽)
 ```
 
+nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)와 `kros/benchmarks/nav2_bench.py`(Python)로 같은 맵/횟수에서 돌린다.
+결과와 해석은 [`docs/performance-vs-python.md`](docs/performance-vs-python.md) 9장에 있다.
+
 ## 테스트
 
 ```bash
@@ -241,7 +246,7 @@ ctest --test-dir build --output-on-failure
 
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI, planner/controller/behavior server, bt_navigator (계획·주행·취소)
-- ros2_control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller
+- ros2_control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + moveit_* 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
 - ASan/UBSan으로 core/sim 테스트와 데모 실행 검증 완료 (오류/누수 없음)

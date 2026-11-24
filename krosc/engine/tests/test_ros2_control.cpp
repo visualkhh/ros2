@@ -67,6 +67,14 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
     }
     wheel_left_ = std::make_shared<krosc::ros2_control::StateInterface>("wheel_left_joint/position");
     wheel_right_ = std::make_shared<krosc::ros2_control::StateInterface>("wheel_right_joint/position");
+    wheel_left_velocity_ =
+        std::make_shared<krosc::ros2_control::StateInterface>("wheel_left_joint/velocity");
+    wheel_right_velocity_ =
+        std::make_shared<krosc::ros2_control::StateInterface>("wheel_right_joint/velocity");
+    wheel_left_command_ =
+        std::make_shared<krosc::ros2_control::CommandInterface>("wheel_left_joint/velocity");
+    wheel_right_command_ =
+        std::make_shared<krosc::ros2_control::CommandInterface>("wheel_right_joint/velocity");
   }
 
   std::vector<std::shared_ptr<krosc::ros2_control::StateInterface>> export_state_interfaces() override {
@@ -77,6 +85,8 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
     }
     result.push_back(wheel_left_);
     result.push_back(wheel_right_);
+    result.push_back(wheel_left_velocity_);
+    result.push_back(wheel_right_velocity_);
     return result;
   }
 
@@ -86,12 +96,19 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
       (void)joint;
       result.push_back(command);
     }
+    result.push_back(wheel_left_command_);
+    result.push_back(wheel_right_command_);
     return result;
   }
 
   bool read(double time, double period) override {
     (void)time;
-    (void)period;
+    left_angle_ += wheel_left_command_->get() * period;
+    right_angle_ += wheel_right_command_->get() * period;
+    wheel_left_->set(left_angle_);
+    wheel_right_->set(right_angle_);
+    wheel_left_velocity_->set(wheel_left_command_->get());
+    wheel_right_velocity_->set(wheel_right_command_->get());
     for (const auto& [joint, command] : command_) {
       state_[joint]->set(command->get());
     }
@@ -108,12 +125,23 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
     const auto it = command_.find(joint);
     return it == command_.end() ? 0.0 : it->second->get();
   }
+  [[nodiscard]] double wheel_command(const std::string& joint) const {
+    if (joint == "left") return wheel_left_command_->get();
+    if (joint == "right") return wheel_right_command_->get();
+    return 0.0;
+  }
 
  private:
   std::map<std::string, std::shared_ptr<krosc::ros2_control::StateInterface>> state_;
   std::map<std::string, std::shared_ptr<krosc::ros2_control::CommandInterface>> command_;
   std::shared_ptr<krosc::ros2_control::StateInterface> wheel_left_;
   std::shared_ptr<krosc::ros2_control::StateInterface> wheel_right_;
+  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_left_velocity_;
+  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_right_velocity_;
+  std::shared_ptr<krosc::ros2_control::CommandInterface> wheel_left_command_;
+  std::shared_ptr<krosc::ros2_control::CommandInterface> wheel_right_command_;
+  double left_angle_ = 0.0;
+  double right_angle_ = 0.0;
 };
 
 class FakeKinematics final : public krosc::moveit::KinematicsBase {
@@ -185,13 +213,19 @@ KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
        {"hardware.plugin", std::string("test/MockArmSystem")},
        {"controller_plugins",
         std::vector<std::string>{"joint_state_broadcaster", "joint_trajectory_controller",
-                                 "arm_command_controller"}},
+                                 "diff_drive_controller", "arm_command_controller"}},
        {"joint_state_broadcaster.type",
         std::string("joint_state_broadcaster/JointStateBroadcaster")},
        {"joint_trajectory_controller.type",
         std::string("joint_trajectory_controller/JointTrajectoryController")},
        {"joint_trajectory_controller.joints",
         std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
+       {"diff_drive_controller.type", std::string("diff_drive_controller/DiffDriveController")},
+       {"diff_drive_controller.wheel_separation", 0.2},
+       {"diff_drive_controller.wheel_radius", 0.05},
+       {"diff_drive_controller.cmd_vel_topic", std::string("cmd_vel")},
+       {"diff_drive_controller.odom_topic", std::string("odom")},
+       {"diff_drive_controller.publish_tf", false},
        {"arm_command_controller.type",
         std::string("forward_command_controller/ForwardCommandController")},
        {"arm_command_controller.joints",
@@ -204,6 +238,8 @@ KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
         krosc::ros2_control::ControllerManager::State::Active);
   CHECK(manager.state_of("joint_trajectory_controller") ==
         krosc::ros2_control::ControllerManager::State::Active);
+  CHECK(manager.state_of("diff_drive_controller") ==
+        krosc::ros2_control::ControllerManager::State::Active);
   CHECK(manager.state_of("arm_command_controller") ==
         krosc::ros2_control::ControllerManager::State::Inactive);
 
@@ -213,13 +249,26 @@ KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
       "joint_states",
       [&](const krosc::msgs::JointState& message) { joint_states.store(static_cast<int>(message.name.size())); });
   CHECK(wait_until([&] { return joint_states.load() >= 6; }, 2.0));
+  krosc::msgs::Odometry odom;
+  monitor.subscribe<krosc::msgs::Odometry>(
+      "odom", [&](const krosc::msgs::Odometry& message) { odom = message; });
+  krosc::msgs::Twist drive;
+  drive.linear.x = 0.2;
+  monitor.publish("cmd_vel", drive, krosc::QOS_COMMAND);
+  CHECK(wait_until(
+      [&] {
+        return std::abs(hardware->wheel_command("left") - 4.0) < 1e-6 &&
+               std::abs(hardware->wheel_command("right") - 4.0) < 1e-6;
+      },
+      2.0));
+  CHECK(wait_until([&] { return odom.pose.pose.position.x > 0.01; }, 2.0));
 
   const auto list = context.services().call<krosc::ros2_control::ListControllersRequest,
                                              krosc::ros2_control::ListControllersResponse>(
       "controller_manager/list_controllers", {});
-  CHECK_EQ(3u, list.name.size());
-  CHECK_EQ(3u, list.type.size());
-  CHECK_EQ(3u, list.state.size());
+  CHECK_EQ(4u, list.name.size());
+  CHECK_EQ(4u, list.type.size());
+  CHECK_EQ(4u, list.state.size());
 
   krosc::ActionClient<krosc::msgs::control::FollowJointTrajectoryGoal,
                               krosc::msgs::control::FollowJointTrajectoryFeedback,

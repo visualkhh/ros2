@@ -41,9 +41,12 @@ class RlNavController final : public krosc::Node {
   void on_enable(const krosc::msgs::Bool& message);
   void on_fallback(const krosc::msgs::String& message);
   void on_reload(const krosc::msgs::Empty& message);
+  void on_model(const krosc::msgs::String& message);
   void tick();
 
-  bool load_policy(std::string& error);
+  bool load_policy(const std::string& model, std::string& error);
+  void refresh_models_locked();
+  void publish_model_list_locked();
   [[nodiscard]] std::optional<Pose2D> robot_pose() const;
   [[nodiscard]] double laser_yaw(const std::string& scan_frame) const;
   [[nodiscard]] std::vector<float> waypoints(const Pose2D& pose, const krosc::msgs::Path& plan) const;
@@ -54,7 +57,12 @@ class RlNavController final : public krosc::Node {
   void publish_zero_locked();
 
   // parameters
+  krosc::Parameter<std::string> models_directory_;
   krosc::Parameter<std::string> model_path_;
+  krosc::Parameter<std::string> model_;
+  krosc::Parameter<double> model_list_period_;
+  krosc::Parameter<std::string> model_list_topic_;
+  krosc::Parameter<std::string> model_topic_;
   krosc::Parameter<bool> enable_default_;
   krosc::Parameter<std::string> fallback_default_;
   krosc::Parameter<std::int64_t> lookahead_;
@@ -76,6 +84,8 @@ class RlNavController final : public krosc::Node {
   mutable std::mutex mutex_;
   ml::OnnxPolicy policy_;
   std::string policy_error_;
+  std::string current_model_;
+  std::vector<std::string> model_names_;
   bool enable_ = false;
   std::string fallback_ = "pursuit";
 
@@ -100,7 +110,9 @@ class RlNavController final : public krosc::Node {
   krosc::Subscription<krosc::msgs::Bool> enable_subscription_;
   krosc::Subscription<krosc::msgs::String> fallback_subscription_;
   krosc::Subscription<krosc::msgs::Empty> reload_subscription_;
+  krosc::Subscription<krosc::msgs::String> model_subscription_;
   krosc::Timer timer_;
+  krosc::Timer model_timer_;
 };
 
 }  // namespace krosc_ws

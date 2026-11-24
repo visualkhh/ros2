@@ -3,6 +3,13 @@
 측정일: **2026-11-24 (KST)**  
 대상: TurtleBot3 실기 + Raspberry Pi + PC Viz
 
+> **2026-11-25 갱신**
+> C++ `krosc_ws`는 이제 nav2 풀스택(Navfn/Smac, RPP/DWB/MPPI, costmap, BT), ros2_control
+> (`controller_manager`, JSB/JTC/diff_drive), MoveIt 플러그인까지 돌린다. 아래 Pi 수치는
+> 2026-11-24의 **A* + pure pursuit** 시점이므로 현재 C++ 풀스택의 수치가 아니다.
+> 현재 스택의 알고리즘 비용은 **10장의 Mac 마이크로벤치마크**를 참고하고, Pi는 8장 샘플러로
+> 다시 측정해야 한다.
+
 ---
 
 ## 1. 요약
@@ -23,7 +30,9 @@
 - 4코어 전체로 보면 **약 1%** 수준이라, 센서·SLAM·네트워크가 CPU 병목이 아니다.
 - Python은 GIL 때문에 코어 1개를 거의 혼자 쓰는 구조였고, 33~36%에서도 여유가 크지 않았다.
 - 단일 클라이언트 주행 기준으로는 **약 8~9배**, 2 clients를 포함해도 **6.5배 이상** 낮다.
-- **단, Python은 nav2 전체(Smac + MPPI + costmap + BT)를 돌렸고 C++은 아직 A* + pure pursuit 최소 nav**다. 차이에는 언어뿐 아니라 **알고리즘 스택 차이**도 포함되어 있다.
+- **단, 이 Pi 수치는 C++이 아직 A* + pure pursuit 최소 nav이던 시점의 값**이다. 2026-11-25 이후
+  C++도 nav2 풀스택 + ros2_control + MoveIt을 돌리므로, Pi 수치는 다시 측정해야 한다.
+  언어/구현 차이는 10장의 동일 알고리즘 마이크로벤치마크로 분리했다.
 
 ---
 
@@ -261,10 +270,53 @@ pidstat -p "$(pgrep -x krosc_viz_app)" 1 10
 
 ---
 
-## 9. 결론
+## 9. 2026-11-25 Mac nav2 마이크로벤치마크 (C++ vs Python)
+
+Pi 전체 스택 재측정 전에, **같은 알고리즘을 같은 맵/횟수로** 돌려 언어/구현 차이를 분리했다.
+C++는 Release `-O2`, Python은 CPython이다. 맵은 200x200(0.05 m, 10 m x 10 m)이고 내부 벽/방 구조가 같다.
+
+| 작업 | C++ `krosc` | Python `kros` | 배수 |
+|---|---:|---:|---:|
+| costmap inflate (50회) | **1.708 ms/op** | 163.164 ms/op | **95.5x** |
+| Navfn (A*, 100회) | **19.710 ms/op** | 174.941 ms/op | **8.9x** |
+| Theta* (50회) | **60.026 ms/op** | 3663.412 ms/op | **61.0x** |
+| Smac2D (50회) | **19.640 ms/op** | 192.149 ms/op | **9.8x** |
+| SmacHybrid (10회) | **29.040 ms/op** | 172.965 ms/op | **6.0x** |
+| RPP (2000회) | **0.00085 ms/op** | 0.058 ms/op | **68x** |
+| DWB (100회) | **0.136 ms/op** | 2.380 ms/op | **17.5x** |
+| MPPI (100회) | **0.170 ms/op** | 3.726 ms/op | **21.9x** |
+
+- 재현:
+  ```bash
+  # C++ (Release)
+  cmake -S krosc -B krosc/build-bench -DCMAKE_BUILD_TYPE=Release \
+        -DKROSC_BUILD_BENCH=ON -DKROSC_BUILD_TESTS=OFF \
+        -DKROSC_BUILD_VIZ=OFF -DKROSC_BUILD_EXAMPLES=OFF
+  cmake --build krosc/build-bench --target krosc_nav2_bench -j
+  ./krosc/build-bench/engine/krosc_nav2_bench
+
+  # Python (ros2/에서)
+  PYTHONPATH=. python3 kros/benchmarks/nav2_bench.py
+  ```
+- 둘 다 **같은 맵·같은 start/goal·같은 횟수**다. C++ 플래너는 `std::map` 기반 open set,
+  Python은 dict/heapq라 자료구조 차이도 포함된다.
+- **costmap inflate**가 약 95배 차이 난다. local costmap 5Hz와 지도 로드에서 가장 체감이 큰 부분이다.
+- **Theta***는 Python에서 3.66 s/op로 사실상 실시간 계획에 쓰기 어렵다. C++도 61 ms라
+  1Hz 재계획에는 충분하지만, 200x200 맵에서는 Navfn/Smac2D가 더 낫다.
+- **MPPI**는 C++ 0.18 ms/op, Python 3.7 ms/op다. 20Hz 제어 주기(50 ms) 기준으로 둘 다 여유가
+  있지만, Pi에서는 C++ 쪽이 훨씬 안전하다.
+- MoveIt/ros2_control은 Python `kros`에 동일 구현이 없어 이 표에 넣지 않았다. C++ 쪽은
+  `krosc_ws/tests/test_moveit_stack.cpp`에서 실제 OpenMANIPULATOR URDF로 IK → 계획 → JTC 실행을
+  확인했다.
+
+---
+
+## 10. 결론
 
 현재 C++ 실기 스택은 **Pi CPU 1% 내외(4코어 환산), RSS 20~24 MiB**로 매우 가볍다.
 
 Python 풀스택 대비 주행 중 CPU가 **단일 클라이언트 기준 약 8~9배 낮고**, 멀티 클라이언트 2명이 붙어도 **1코어의 5%** 수준이다. 지금 상태라면 SLAM, 자율주행, 원격 Viz, 추가 디버그 도구를 동시에 돌려도 Pi가 병목이 될 가능성은 낮다.
 
-다만 Python은 nav2 전체, C++은 최소 nav라는 차이를 감안해야 한다. 다음 단계로 MPPI/Smac/local costmap을 포팅할 경우, 이 보고서의 C++ 수치를 **베이스라인**으로 삼아 추가 비용을 측정하면 된다.
+다만 위 Pi 수치는 C++이 A* + pure pursuit이던 시점의 값이다. 현재 C++은 nav2 풀스택 +
+ros2_control + MoveIt을 돌리므로, **Pi에서 같은 주행 시나리오로 다시 측정**해야 한다. 그 전까지는
+9장의 Mac 마이크로벤치마크가 알고리즘별 비용 비교의 기준이다.

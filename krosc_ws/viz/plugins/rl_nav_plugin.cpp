@@ -14,6 +14,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
@@ -92,12 +93,23 @@ void RlNavPlugin::initialize(krosc::viz::VizHost& host) {
   fallback_ = new QComboBox(panel);
   fallback_->addItems({"pursuit", "stop"});
   fallback_row->addWidget(fallback_, 1);
-  reload_ = new QPushButton("Reload", panel);
-  fallback_row->addWidget(reload_);
   layout->addLayout(fallback_row);
   QObject::connect(fallback_, qOverload<int>(&QComboBox::currentIndexChanged), dock_, [this](int) {
     if (!updating_) {
       set_fallback(fallback_->currentText());
+    }
+  });
+
+  auto* model_row = new QHBoxLayout();
+  model_row->addWidget(new QLabel("model", panel));
+  model_ = new QComboBox(panel);
+  model_row->addWidget(model_, 1);
+  reload_ = new QPushButton("Reload", panel);
+  model_row->addWidget(reload_);
+  layout->addLayout(model_row);
+  QObject::connect(model_, qOverload<int>(&QComboBox::currentIndexChanged), dock_, [this](int) {
+    if (!updating_ && model_ != nullptr && model_->currentIndex() >= 0) {
+      set_model(model_->currentText());
     }
   });
   QObject::connect(reload_, &QPushButton::clicked, dock_, [this] {
@@ -105,6 +117,14 @@ void RlNavPlugin::initialize(krosc::viz::VizHost& host) {
       host_->model().node().publish("rl_nav_reload", krosc::msgs::Empty{}, krosc::QOS_DEFAULT);
     }
   });
+  model_list_subscription_ = host.model().node().subscribe<krosc::msgs::String>(
+      "rl_nav_model_list",
+      [this](const krosc::msgs::String& message) {
+        std::lock_guard<std::mutex> lock(model_mutex_);
+        model_list_ = message.data;
+        model_list_dirty_ = true;
+      },
+      krosc::QOS_LATCHED);
 
   status_ = new QLabel("RL: waiting for rl_nav_controller", panel);
   status_->setWordWrap(true);
@@ -128,6 +148,7 @@ void RlNavPlugin::shutdown() {
   if (timer_ != nullptr) {
     timer_->stop();
   }
+  model_list_subscription_.cancel();
 }
 
 void RlNavPlugin::set_enabled(bool enabled) {
@@ -147,6 +168,14 @@ void RlNavPlugin::set_fallback(const QString& fallback) {
                                 krosc::msgs::String{fallback.toStdString()}, krosc::QOS_DEFAULT);
 }
 
+void RlNavPlugin::set_model(const QString& model) {
+  if (host_ == nullptr) {
+    return;
+  }
+  host_->model().node().publish("rl_nav_model", krosc::msgs::String{model.toStdString()},
+                                krosc::QOS_DEFAULT);
+}
+
 void RlNavPlugin::refresh() {
   if (host_ == nullptr || status_ == nullptr) {
     return;
@@ -158,6 +187,38 @@ void RlNavPlugin::refresh() {
     return;
   }
   const auto values = fields(message->data);
+  std::string model_list;
+  bool dirty = false;
+  {
+    std::lock_guard<std::mutex> lock(model_mutex_);
+    model_list = model_list_;
+    dirty = model_list_dirty_;
+    model_list_dirty_ = false;
+  }
+  if (dirty || (model_ != nullptr && model_->count() == 0 && !model_list.empty())) {
+    std::vector<QString> names;
+    std::stringstream stream(model_list);
+    std::string item;
+    while (std::getline(stream, item)) {
+      if (!item.empty()) {
+        names.push_back(QString::fromStdString(item));
+      }
+    }
+    if (model_ != nullptr && !names.empty()) {
+      updating_ = true;
+      model_->clear();
+      for (const auto& name : names) {
+        model_->addItem(name);
+      }
+      updating_ = false;
+    }
+  }
+  const auto current_model = QString::fromStdString(get(values, "model", ""));
+  if (model_ != nullptr && !current_model.isEmpty()) {
+    updating_ = true;
+    model_->setCurrentText(current_model);
+    updating_ = false;
+  }
   const bool enabled = get(values, "enable", "0") == "1";
   const bool policy = get(values, "policy", "0") == "1";
   const bool scan = get(values, "scan", "0") == "1";
@@ -181,7 +242,7 @@ void RlNavPlugin::refresh() {
   detail_->setText(
       QString("policy %1 · scan %2 (age %3s, min %4m) · odom %5 · plan %6\n"
               "v %7  w %8  |  a0 %9  a1 %10  |  infer %11 ms\n"
-              "fallback: %12%13")
+              "model: %12  |  fallback: %13%14")
           .arg(policy ? "loaded" : "none")
           .arg(scan ? "ok" : "no")
           .arg(QString::fromStdString(get(values, "scan_age")))
@@ -193,6 +254,7 @@ void RlNavPlugin::refresh() {
           .arg(QString::fromStdString(get(values, "a0", "0")))
           .arg(QString::fromStdString(get(values, "a1", "0")))
           .arg(QString::fromStdString(get(values, "infer_ms", "0")))
+          .arg(current_model.isEmpty() ? "-" : current_model)
           .arg(fallback)
           .arg(values.count("error") != 0 ? "\nerror: " + QString::fromStdString(get(values, "error")) : ""));
 }

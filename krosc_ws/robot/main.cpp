@@ -25,7 +25,6 @@
 #include "krosc/net.hpp"
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
-#include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/map_catalog.hpp"
 #include "krosc/nodes/nav2/behavior_server.hpp"
@@ -41,7 +40,7 @@
 
 #include "hardware/opencr_system.hpp"
 #include "real_turtlebot3.hpp"
-#include "robot_bridge.hpp"
+#include "turtlebot3_driver.hpp"
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
 #include "nodes/rl_nav_controller.hpp"
@@ -195,7 +194,7 @@ int main(int argc, char** argv) {
   }
 
   krosc_ws::RealTurtleBot3 robot(opencr_port, lidar_port, enable_lidar);
-  krosc_ws::RobotBridge bridge(context, robot);
+  krosc_ws::TurtleBot3Driver driver(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "RobotStatePublisher",
                                                 {{"robot_description", urdf}});
   // ros2_control: OpenCR을 SystemInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
@@ -210,7 +209,7 @@ int main(int argc, char** argv) {
        {"hardware.name", std::string("turtlebot3_real")},
        {"controller_plugins",
         std::vector<std::string>{"joint_state_broadcaster", "joint_trajectory_controller",
-                                 "arm_command_controller"}},
+                                 "diff_drive_controller", "arm_command_controller"}},
        {"joint_state_broadcaster.type",
         std::string("joint_state_broadcaster/JointStateBroadcaster")},
        {"joint_trajectory_controller.type",
@@ -218,6 +217,17 @@ int main(int argc, char** argv) {
        {"joint_trajectory_controller.joints",
         std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
        {"joint_trajectory_controller.goal_time_tolerance", 0.5},
+       {"diff_drive_controller.type", std::string("diff_drive_controller/DiffDriveController")},
+       {"diff_drive_controller.wheel_separation", 0.287},
+       {"diff_drive_controller.wheel_radius", 0.033},
+       {"diff_drive_controller.left_wheel", std::string("wheel_left_joint")},
+       {"diff_drive_controller.right_wheel", std::string("wheel_right_joint")},
+       {"diff_drive_controller.cmd_vel_topic", std::string("cmd_vel")},
+       {"diff_drive_controller.odom_topic", std::string("odom")},
+       {"diff_drive_controller.odom_frame", std::string("odom")},
+       {"diff_drive_controller.base_frame", std::string("base_footprint")},
+       {"diff_drive_controller.publish_tf", false},
+       {"diff_drive_controller.command_timeout", 0.5},
        {"arm_command_controller.type",
         std::string("forward_command_controller/ForwardCommandController")},
        {"arm_command_controller.joints",
@@ -244,12 +254,6 @@ int main(int argc, char** argv) {
        {"controller_manager.plugin", std::string("krosc_moveit/SimpleControllerManager")},
        {"controller_manager.action",
         std::string("joint_trajectory_controller/follow_joint_trajectory")}});
-  krosc::nodes::DiffDriveOdometry odometry(
-      context, "DiffDriveOdometry",
-      {{"wheel_radius", krosc_ws::RealTurtleBot3::kWheelRadius},
-       {"wheel_separation", krosc_ws::RealTurtleBot3::kWheelSeparation},
-       {"publish_tf", false},
-       {"twist_covariance_diagonal", std::vector<double>{0.005, 0.005, 1e6, 1e6, 1e6, 0.02}}});
   // IMU yaw rate는 정지 중에도 bias/진동이 커서 EKF에서 제외한다. 휠 오도메트리의
   // yaw 자세(5)를 절대 기준으로 쓰고, vx/vyaw(6/11)만 융합한다.
   krosc::nodes::Ekf ekf(context, "Ekf",
@@ -374,7 +378,7 @@ int main(int argc, char** argv) {
   auto last_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
     robot.tick();
-    bridge.poll();
+    driver.poll();
     next += kPeriod;
     std::this_thread::sleep_until(next);
     const auto now = std::chrono::steady_clock::now();

@@ -36,6 +36,7 @@ add_library(krosc_core STATIC
   core/nodes/nav2/planner_plugins.cpp
   core/nodes/nav2/planner_server.cpp
   core/ros2_control/controller_manager.cpp
+  core/ros2_control/diff_drive_controller.cpp
   core/ros2_control/forward_command_controller.cpp
   core/ros2_control/joint_state_broadcaster.cpp
   core/ros2_control/joint_trajectory_controller.cpp
@@ -77,6 +78,8 @@ endif()
 if(KROSC_BUILD_BENCH)
   add_executable(krosc_bench benchmarks/bench.cpp)
   target_link_libraries(krosc_bench PRIVATE krosc::core)
+  add_executable(krosc_nav2_bench benchmarks/nav2_bench.cpp)
+  target_link_libraries(krosc_nav2_bench PRIVATE krosc::core)
 endif()
 
 install(TARGETS krosc_core ARCHIVE DESTINATION lib)

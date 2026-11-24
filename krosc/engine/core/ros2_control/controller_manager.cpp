@@ -4,6 +4,7 @@
 #include <exception>
 #include <utility>
 
+#include "krosc/ros2_control/diff_drive_controller.hpp"
 #include "krosc/ros2_control/forward_command_controller.hpp"
 #include "krosc/ros2_control/joint_state_broadcaster.hpp"
 #include "krosc/ros2_control/joint_trajectory_controller.hpp"
@@ -354,6 +355,8 @@ ControllerRegistry builtin_controllers() {
                [] { return std::make_unique<JointTrajectoryController>(); });
   registry.add("forward_command_controller/ForwardCommandController",
                [] { return std::make_unique<ForwardCommandController>(); });
+  registry.add("diff_drive_controller/DiffDriveController",
+               [] { return std::make_unique<DiffDriveController>(); });
   return registry;
 }
 

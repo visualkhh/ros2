@@ -21,9 +21,17 @@ OpenCrSystem::OpenCrSystem(RealTurtleBot3& robot) : robot_(robot) {
         "gripper_left_joint", "gripper_right_joint"}) {
     states_[name] = std::make_shared<krosc::ros2_control::StateInterface>(std::string(name) + "/position");
   }
+  states_["wheel_left_joint/velocity"] =
+      std::make_shared<krosc::ros2_control::StateInterface>("wheel_left_joint/velocity");
+  states_["wheel_right_joint/velocity"] =
+      std::make_shared<krosc::ros2_control::StateInterface>("wheel_right_joint/velocity");
   for (const auto& name : arm_joints()) {
     commands_[name] = std::make_shared<krosc::ros2_control::CommandInterface>(name + "/position");
   }
+  commands_["wheel_left_joint/velocity"] =
+      std::make_shared<krosc::ros2_control::CommandInterface>("wheel_left_joint/velocity");
+  commands_["wheel_right_joint/velocity"] =
+      std::make_shared<krosc::ros2_control::CommandInterface>("wheel_right_joint/velocity");
 }
 
 bool OpenCrSystem::on_init(const krosc::ros2_control::HardwareInfo& info) {
@@ -59,6 +67,8 @@ OpenCrSystem::export_command_interfaces() {
 bool OpenCrSystem::read(double time, double period) {
   (void)time;
   (void)period;
+  states_["wheel_left_joint/velocity"]->set(robot_.opencr().left_velocity());
+  states_["wheel_right_joint/velocity"]->set(robot_.opencr().right_velocity());
   const auto positions = robot_.joint_positions();
   for (const auto& [name, position] : positions) {
     const auto found = states_.find(name);
@@ -75,6 +85,16 @@ bool OpenCrSystem::read(double time, double period) {
 
 bool OpenCrSystem::write(double time, double period) {
   (void)period;
+  const auto left_velocity = commands_.find("wheel_left_joint/velocity");
+  const auto right_velocity = commands_.find("wheel_right_joint/velocity");
+  if (left_velocity != commands_.end() && right_velocity != commands_.end()) {
+    krosc::msgs::Twist twist;
+    twist.linear.x = (right_velocity->second->get() + left_velocity->second->get()) *
+                     RealTurtleBot3::kWheelRadius / 2.0;
+    twist.angular.z = (right_velocity->second->get() - left_velocity->second->get()) *
+                      RealTurtleBot3::kWheelRadius / RealTurtleBot3::kWheelSeparation;
+    robot_.opencr().write(twist);
+  }
   if (!arm_ready_) {
     return true;  // OpenCR에서 팔 상태를 아직 못 받았다: 0을 쏘지 않는다
   }

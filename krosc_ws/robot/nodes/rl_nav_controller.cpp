@@ -4,15 +4,17 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <limits>
 #include <sstream>
 #include <utility>
 
 #include "krosc/math.hpp"
+#include "ml/model_catalog.hpp"
 #include "krosc/qos.hpp"
 
 #ifndef KROSC_WS_MODELS_DIR
-#define KROSC_WS_MODELS_DIR "models"
+#define KROSC_WS_MODELS_DIR "artifacts/models"
 #endif
 
 namespace krosc_ws {
@@ -29,8 +31,14 @@ double now_seconds() {
 RlNavController::RlNavController(krosc::Context& context, std::string name,
                                  std::map<std::string, krosc::ParamValue> parameters)
     : Node(context, std::move(name), std::move(parameters)),
-      model_path_(declare_parameter<std::string>(
-          "model_path", std::string(KROSC_WS_MODELS_DIR) + "/rl_maze/policy.onnx")),
+      models_directory_(declare_parameter<std::string>(
+          "models_directory", std::string(KROSC_WS_MODELS_DIR) + "/rl_nav_controller")),
+      model_path_(declare_parameter<std::string>("model_path", "")),
+      model_(declare_parameter<std::string>("model", "rl_maze")),
+      model_list_period_(declare_parameter<double>("model_list_period", 1.0,
+                                                   [](double value) { return value > 0.0; })),
+      model_list_topic_(declare_parameter<std::string>("model_list_topic", "rl_nav_model_list")),
+      model_topic_(declare_parameter<std::string>("model_topic", "rl_nav_model")),
       enable_default_(declare_parameter<bool>("enable", false)),
       fallback_default_(declare_parameter<std::string>("fallback", "pursuit")),
       lookahead_(declare_parameter<std::int64_t>("lookahead", 5, [](std::int64_t value) { return value > 0 && value <= 16; })),
@@ -56,8 +64,17 @@ RlNavController::RlNavController(krosc::Context& context, std::string name,
     if (fallback_ != "stop") {
       fallback_ = "pursuit";
     }
+    refresh_models_locked();
+    publish_model_list_locked();
+    std::string requested = model_.value();
+    if (!model_path_.value().empty()) {
+      requested = std::filesystem::path(model_path_.value()).parent_path().filename().string();
+    } else if (std::find(model_names_.begin(), model_names_.end(), requested) == model_names_.end() &&
+               !model_names_.empty()) {
+      requested = model_names_.front();
+    }
     std::string error;
-    if (!load_policy(error)) {
+    if (!requested.empty() && !load_policy(requested, error)) {
       logger().warn("RL policy 없음: %s", error.c_str());
     }
     if (enable_ && !policy_.loaded()) {
@@ -79,35 +96,71 @@ RlNavController::RlNavController(krosc::Context& context, std::string name,
       "rl_nav_fallback", [this](const auto& message) { on_fallback(message); }, krosc::QOS_DEFAULT);
   reload_subscription_ = subscribe<krosc::msgs::Empty>(
       "rl_nav_reload", [this](const auto& message) { on_reload(message); }, krosc::QOS_DEFAULT);
+  model_subscription_ = subscribe<krosc::msgs::String>(
+      model_topic_.value(), [this](const auto& message) { on_model(message); }, krosc::QOS_DEFAULT);
   tf_listener_ = std::make_unique<krosc::TransformListener>(tf_buffer_, *this);
   timer_ = create_timer(1.0 / frequency_.value(), [this] { tick(); });
+  model_timer_ = create_timer(model_list_period_.value(), [this] {
+    std::lock_guard<std::mutex> lock(mutex_);
+    refresh_models_locked();
+  });
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
     publish_status_locked(enable_ ? 0 : 2, false, 0.0, 0.0, 0.0, 0.0, 0.0);
   }
-  logger().info("RlNavController: model=%s inputs=%lld outputs=%lld enable=%d fallback=%s",
+  logger().info("RlNavController: model=%s path=%s inputs=%lld outputs=%lld enable=%d fallback=%s",
+                current_model_.c_str(),
                 policy_.loaded() ? policy_.path().c_str() : "(none)",
                 static_cast<long long>(policy_.inputs()), static_cast<long long>(policy_.outputs()),
                 enable_ ? 1 : 0, fallback_.c_str());
 }
 
-bool RlNavController::load_policy(std::string& error) {
-  policy_.unload();
+void RlNavController::refresh_models_locked() {
+  std::vector<std::string> found = ml::list_models(models_directory_.value());
+  if (found != model_names_) {
+    model_names_ = std::move(found);
+    publish_model_list_locked();
+  }
+}
+
+void RlNavController::publish_model_list_locked() {
+  std::ostringstream text;
+  for (std::size_t index = 0; index < model_names_.size(); ++index) {
+    if (index != 0) {
+      text << '\n';
+    }
+    text << model_names_[index];
+  }
+  publish(model_list_topic_.value(), krosc::msgs::String{text.str()}, krosc::QOS_LATCHED);
+}
+
+bool RlNavController::load_policy(const std::string& model, std::string& error) {
   policy_error_.clear();
-  const std::string path = model_path_.value();
+  const std::string path = model_path_.value().empty()
+                                 ? ml::model_file(models_directory_.value(), model)
+                                 : model_path_.value();
+  if (path.empty()) {
+    error = "model not found: " + model + " (" + models_directory_.value() + ")";
+    policy_error_ = error;
+    return false;
+  }
   try {
-    policy_.load(path);
+    ml::OnnxPolicy candidate;
+    candidate.load(path);
     const std::int64_t expected = 2LL * lookahead_.value() + lidar_rays_.value() + 5;
-    if ((policy_.inputs() != expected && policy_.inputs() != expected + 1) || policy_.outputs() != 2) {
+    if ((candidate.inputs() != expected && candidate.inputs() != expected + 1) ||
+        candidate.outputs() != 2) {
       std::ostringstream stream;
-      stream << "정책 입출력이 맞지 않는다: input=" << policy_.inputs() << " output=" << policy_.outputs()
-             << " (기대 " << expected << " 또는 " << expected + 1 << " → 2)";
-      policy_.unload();
+      stream << "정책 입출력이 맞지 않는다: input=" << candidate.inputs()
+             << " output=" << candidate.outputs() << " (기대 " << expected << " 또는 "
+             << expected + 1 << " → 2)";
       error = stream.str();
       policy_error_ = error;
       return false;
     }
+    policy_ = std::move(candidate);
+    current_model_ = model;
     logger().info("RL ONNX loaded: %s (obs %lld → %lld)", path.c_str(),
                   static_cast<long long>(policy_.inputs()), static_cast<long long>(policy_.outputs()));
     return true;
@@ -173,13 +226,37 @@ void RlNavController::on_fallback(const krosc::msgs::String& message) {
 void RlNavController::on_reload(const krosc::msgs::Empty&) {
   std::lock_guard<std::mutex> lock(mutex_);
   std::string error;
-  const bool ok = load_policy(error);
-  if (!ok && enable_) {
+  const std::string target = current_model_.empty() ? model_.value() : current_model_;
+  const bool ok = load_policy(target, error);
+  if (!ok) {
     enable_ = false;
   }
   prev_action_ = {0.0F, 0.0F};
   active_last_ = false;
   publish_status_locked(ok ? (enable_ ? 0 : 2) : 1, false, 0.0, 0.0, 0.0, 0.0, 0.0);
+}
+
+void RlNavController::on_model(const krosc::msgs::String& message) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!model_path_.value().empty()) {
+    publish_status_locked(1, false, 0.0, 0.0, 0.0, 0.0, 0.0);
+    logger().warn("RL model 선택 무시: model_path=%s가 우선한다", model_path_.value().c_str());
+    return;
+  }
+  if (!ml::safe_model_name(message.data)) {
+    logger().warn("RL model 이름이 잘못됐다: %s", message.data.c_str());
+    return;
+  }
+  std::string error;
+  const bool ok = load_policy(message.data, error);
+  if (!ok) {
+    enable_ = false;
+    logger().warn("RL model 전환 실패 (%s): %s", message.data.c_str(), error.c_str());
+  }
+  prev_action_ = {0.0F, 0.0F};
+  active_last_ = false;
+  publish_status_locked(ok ? (enable_ ? 0 : 2) : 1, false, 0.0, 0.0, 0.0, 0.0, 0.0);
+  refresh_models_locked();
 }
 
 std::optional<RlNavController::Pose2D> RlNavController::robot_pose() const {
@@ -323,6 +400,7 @@ void RlNavController::publish_status_locked(int reason, bool active, double v, d
   stream.setf(std::ios::fixed);
   stream.precision(3);
   stream << "enable=" << (enable_ ? 1 : 0) << ";fallback=" << fallback_
+         << ";model=" << current_model_
          << ";policy=" << (policy_.loaded() ? 1 : 0) << ";scan=" << (scan_ok ? 1 : 0)
          << ";scan_age=" << scan_age << ";scan_min=" << scan_min
          << ";odom=" << (odom_ != nullptr ? 1 : 0) << ";plan="

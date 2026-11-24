@@ -878,7 +878,7 @@ struct Server::Impl {
         if (auto message = decode_bool(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
         }
-      } else if (topic == "rl_nav_fallback" && kind == Kind::String) {
+      } else if ((topic == "rl_nav_fallback" || topic == "rl_nav_model") && kind == Kind::String) {
         Reader reader(payload);
         if (auto message = decode_string(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
@@ -1103,6 +1103,9 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
       "rl_nav_status", Kind::String, QOS_DEFAULT, false,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "rl_nav_model_list", Kind::String, QOS_LATCHED, true,
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
       "moveit_status", Kind::String, QOS_DEFAULT, false,
@@ -1529,6 +1532,9 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
       [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
   impl_->forward_topic<msgs::String>(
       "rl_nav_fallback", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "rl_nav_model", Kind::String,
       [](Writer& writer, const msgs::String& message) { encode(writer, message); });
   impl_->forward_topic<msgs::Empty>(
       "rl_nav_reload", Kind::Empty,
