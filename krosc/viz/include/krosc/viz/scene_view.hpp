@@ -41,12 +41,19 @@ class SceneView : public QWidget {
   void set_follow(bool follow);
   [[nodiscard]] bool follow() const { return follow_; }
   void set_camera_distance(double distance);
+  void set_teleop_scale(double scale);
+  [[nodiscard]] double teleop_scale() const { return teleop_scale_; }
+  void set_tool(const std::string& tool);
+  [[nodiscard]] std::string tool() const { return tool_; }
   void reset_camera();
   void fixed_frame_changed();
   [[nodiscard]] QString help_text() const;
 
  signals:
   void follow_changed(bool follow);
+  void teleop_scale_changed(double scale);
+  void tool_changed(QString tool);
+  void tool_pose(double x, double y, double yaw);
 
  protected:
   void paintEvent(QPaintEvent* event) override;
@@ -75,6 +82,7 @@ class SceneView : public QWidget {
   void publish_teleop();
   void compute_matrix();
   [[nodiscard]] Projected project(const QVector3D& point) const;
+  [[nodiscard]] std::optional<QVector3D> screen_to_ground(const QPoint& point) const;
   [[nodiscard]] std::optional<msgs::PoseStamped> robot_pose() const;
   [[nodiscard]] std::optional<QVector3D> robot_position() const;
   [[nodiscard]] msgs::Transform link_transform(const std::string& frame) const;
@@ -131,6 +139,10 @@ class SceneView : public QWidget {
   int frame_count_ = 0;
   double fps_ = 0.0;
   double teleop_scale_ = 1.0;
+  std::string tool_;
+  bool tool_dragging_ = false;
+  QPoint tool_start_;
+  std::optional<QVector3D> tool_start_ground_;
   double last_linear_ = 0.0;
   double last_angular_ = 0.0;
   QTimer* teleop_timer_ = nullptr;

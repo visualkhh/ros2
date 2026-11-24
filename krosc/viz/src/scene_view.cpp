@@ -145,6 +145,20 @@ void SceneView::set_camera_distance(double distance) {
   update();
 }
 
+void SceneView::set_teleop_scale(double scale) {
+  teleop_scale_ = std::clamp(scale, 0.25, 1.5);
+  emit teleop_scale_changed(teleop_scale_);
+  update();
+}
+
+void SceneView::set_tool(const std::string& tool) {
+  tool_ = (tool == "initialpose" || tool == "goal" || tool == "multi") ? tool : std::string{};
+  tool_dragging_ = false;
+  tool_start_ground_.reset();
+  emit tool_changed(QString::fromStdString(tool_));
+  update();
+}
+
 void SceneView::reset_camera() {
   camera_ = Camera{};
   follow_ = true;
@@ -191,6 +205,36 @@ void SceneView::compute_matrix() {
   QMatrix4x4 projection;
   projection.perspective(58.0F, static_cast<float>(view_width_) / static_cast<float>(view_height_), 0.03F, 250.0F);
   matrix_ = projection * view;
+}
+
+std::optional<QVector3D> SceneView::screen_to_ground(const QPoint& point) const {
+  if (view_width_ <= 0 || view_height_ <= 0) {
+    return std::nullopt;
+  }
+  const QMatrix4x4 inverse = matrix_.inverted();
+  const auto unproject = [&](float depth) -> std::optional<QVector3D> {
+    const QVector4D clip(2.0F * static_cast<float>(point.x()) / static_cast<float>(view_width_) - 1.0F,
+                         1.0F - 2.0F * static_cast<float>(point.y()) / static_cast<float>(view_height_), depth, 1.0F);
+    const QVector4D world = inverse * clip;
+    if (std::abs(world.w()) < 1e-9F) {
+      return std::nullopt;
+    }
+    return QVector3D(world.x() / world.w(), world.y() / world.w(), world.z() / world.w());
+  };
+  const auto near = unproject(-1.0F);
+  const auto far = unproject(1.0F);
+  if (!near || !far) {
+    return std::nullopt;
+  }
+  const QVector3D direction = *far - *near;
+  if (std::abs(direction.z()) < 1e-6F) {
+    return std::nullopt;
+  }
+  const float t = -near->z() / direction.z();
+  if (t < 0.0F) {
+    return std::nullopt;
+  }
+  return *near + direction * t;
 }
 
 SceneView::Projected SceneView::project(const QVector3D& point) const {
@@ -785,6 +829,12 @@ void SceneView::paintEvent(QPaintEvent* event) {
 void SceneView::mousePressEvent(QMouseEvent* event) {
   setFocus(Qt::MouseFocusReason);
   last_mouse_ = event->position().toPoint();
+  if (event->button() == Qt::LeftButton && !tool_.empty()) {
+    tool_dragging_ = true;
+    tool_start_ = last_mouse_;
+    tool_start_ground_ = screen_to_ground(tool_start_);
+    return;
+  }
   if (event->button() == Qt::LeftButton) {
     orbiting_ = true;
   } else if (event->button() == Qt::RightButton || event->button() == Qt::MiddleButton) {
@@ -796,6 +846,10 @@ void SceneView::mouseMoveEvent(QMouseEvent* event) {
   const QPoint current = event->position().toPoint();
   const QPoint delta = current - last_mouse_;
   last_mouse_ = current;
+  if (tool_dragging_) {
+    update();
+    return;
+  }
   if (orbiting_) {
     camera_.yaw -= delta.x() * 0.008;
     camera_.pitch = std::clamp(camera_.pitch + delta.y() * 0.008, 0.08, 1.5);
@@ -815,7 +869,22 @@ void SceneView::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void SceneView::mouseReleaseEvent(QMouseEvent* event) {
-  (void)event;
+  if (tool_dragging_) {
+    tool_dragging_ = false;
+    const auto end_ground = screen_to_ground(event->position().toPoint());
+    if (tool_start_ground_ && end_ground) {
+      const double dx = end_ground->x() - tool_start_ground_->x();
+      const double dy = end_ground->y() - tool_start_ground_->y();
+      const double yaw = (dx * dx + dy * dy > 1e-4) ? std::atan2(dy, dx) : 0.0;
+      emit tool_pose(static_cast<double>(tool_start_ground_->x()), static_cast<double>(tool_start_ground_->y()), yaw);
+    }
+    if (tool_ != "multi") {
+      set_tool("");
+    } else {
+      update();
+    }
+    return;
+  }
   orbiting_ = false;
   panning_ = false;
 }
@@ -848,12 +917,10 @@ void SceneView::keyPressEvent(QKeyEvent* event) {
       event->accept();
       return;
     case Qt::Key_Q:
-      teleop_scale_ = std::min(4.0, teleop_scale_ * 1.25);
-      update();
+      set_teleop_scale(teleop_scale_ * 1.25);
       return;
     case Qt::Key_Z:
-      teleop_scale_ = std::max(0.25, teleop_scale_ / 1.25);
-      update();
+      set_teleop_scale(teleop_scale_ / 1.25);
       return;
     case Qt::Key_F:
       set_follow(!follow_);

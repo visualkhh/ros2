@@ -23,6 +23,7 @@
 #include "krosc/context.hpp"
 #include "krosc/net.hpp"
 #include "krosc/nodes/cartographer.hpp"
+#include "krosc/nodes/map_catalog.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
@@ -33,6 +34,9 @@
 
 #ifndef KROSC_WS_URDF_PATH
 #define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"
+#endif
+#ifndef KROSC_WS_MAPS_DIR
+#define KROSC_WS_MAPS_DIR "maps"
 #endif
 
 namespace {
@@ -200,7 +204,12 @@ int main(int argc, char** argv) {
        {"map_publish_period_sec", 2.0},
        {"tf_publish_period_sec", 0.05},
        {"tf_smoothing", 0.35}});
+  krosc::nodes::MapCatalog maps(context, "map_catalog",
+                                {{"maps_directory", std::string(KROSC_WS_MAPS_DIR)},
+                                 {"map_frame", std::string("map")},
+                                 {"list_period", 1.0}});
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
+  std::printf("[krosc_ws] maps: %s\n", KROSC_WS_MAPS_DIR);
 
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);

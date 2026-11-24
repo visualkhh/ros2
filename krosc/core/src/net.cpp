@@ -57,6 +57,10 @@ enum class Kind : std::uint8_t {
   Path = 9,
   Diagnostics = 10,
   Log = 11,
+  Pose = 12,
+  PoseCov = 13,
+  Empty = 14,
+  Bool = 15,
 };
 
 class Writer {
@@ -201,6 +205,19 @@ void encode(Writer& w, const msgs::TransformStamped& stamped) {
 }
 
 void encode(Writer& w, const msgs::String& message) { w.str(message.data); }
+void encode(Writer& w, const msgs::PoseStamped& message) {
+  encode(w, message.header);
+  encode(w, message.pose);
+}
+void encode(Writer& w, const msgs::PoseWithCovarianceStamped& message) {
+  encode(w, message.header);
+  encode(w, message.pose.pose);
+  for (const double value : message.pose.covariance) {
+    w.f64(value);
+  }
+}
+void encode(Writer& w, const msgs::Bool& message) { w.u8(message.data ? 1U : 0U); }
+void encode(Writer& w, const msgs::Empty&) { (void)w; }
 
 void encode(Writer& w, const msgs::TFMessage& message) {
   w.u32(static_cast<std::uint32_t>(message.transforms.size()));
@@ -365,6 +382,28 @@ std::optional<msgs::TFMessage> decode_tf(Reader& r) {
 std::optional<msgs::String> decode_string(Reader& r) {
   msgs::String message{r.str()};
   return r.ok() ? std::optional<msgs::String>(std::move(message)) : std::nullopt;
+}
+
+std::optional<msgs::PoseStamped> decode_pose_stamped(Reader& r) {
+  msgs::PoseStamped message;
+  message.header = decode_header(r);
+  message.pose = decode_pose(r);
+  return r.ok() ? std::optional<msgs::PoseStamped>(std::move(message)) : std::nullopt;
+}
+
+std::optional<msgs::PoseWithCovarianceStamped> decode_pose_covariance(Reader& r) {
+  msgs::PoseWithCovarianceStamped message;
+  message.header = decode_header(r);
+  message.pose.pose = decode_pose(r);
+  for (double& value : message.pose.covariance) {
+    value = r.f64();
+  }
+  return r.ok() ? std::optional<msgs::PoseWithCovarianceStamped>(std::move(message)) : std::nullopt;
+}
+
+std::optional<msgs::Bool> decode_bool(Reader& r) {
+  const std::uint8_t value = r.u8();
+  return r.ok() ? std::optional<msgs::Bool>(msgs::Bool{value != 0}) : std::nullopt;
 }
 
 std::optional<msgs::LaserScan> decode_scan(Reader& r) {
@@ -633,7 +672,8 @@ QoS qos_for_topic(const std::string& topic) {
     return QOS_TF_STATIC;
   }
   if (topic == "robot_description" || topic == "map" || topic == "global_costmap/costmap" ||
-      topic == "local_costmap/costmap" || topic == "plan") {
+      topic == "local_costmap/costmap" || topic == "plan" || topic == "map_list" ||
+      topic == "map_status" || topic == "slam_status" || topic == "goal_status") {
     return QOS_LATCHED;
   }
   if (topic == "scan" || topic == "imu" || topic == "odom" || topic == "odometry/filtered" ||
@@ -750,9 +790,36 @@ struct Server::Impl {
       }
       if (topic == "cmd_vel" && kind == Kind::Twist) {
         Reader reader(payload);
-        const msgs::Twist twist = decode_twist(reader);
-        if (reader.ok()) {
+        if (const auto twist = decode_twist(reader); reader.ok()) {
           context.topics().publish("cmd_vel", twist, QOS_COMMAND);
+        }
+      } else if (topic == "initialpose" && kind == Kind::PoseCov) {
+        Reader reader(payload);
+        if (auto message = decode_pose_covariance(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if ((topic == "goal_pose" || topic == "preview_goal") && kind == Kind::Pose) {
+        Reader reader(payload);
+        if (auto message = decode_pose_stamped(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if ((topic == "goal_poses" || topic == "preview_goals") && kind == Kind::Path) {
+        Reader reader(payload);
+        if (auto message = decode_path(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if ((topic == "map_change" || topic == "map_save" || topic == "slam_mode") &&
+                 kind == Kind::String) {
+        Reader reader(payload);
+        if (auto message = decode_string(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if ((topic == "cancel_goal" || topic == "map_unload") && kind == Kind::Empty) {
+        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
+      } else if (topic == "collision_set_enabled" && kind == Kind::Bool) {
+        Reader reader(payload);
+        if (auto message = decode_bool(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
         }
       }
     }
@@ -899,6 +966,18 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
       [](Writer& w, const msgs::DiagnosticArray& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::Log>(
       "rosout", Kind::Log, QOS_DEFAULT, false, [](Writer& w, const msgs::Log& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "map_list", Kind::String, QOS_LATCHED, true,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "map_status", Kind::String, QOS_LATCHED, true,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "slam_status", Kind::String, QOS_LATCHED, true,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "goal_status", Kind::String, QOS_LATCHED, true,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
 
   const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
@@ -962,6 +1041,31 @@ struct Client::Impl {
   std::condition_variable queue_cv;
   std::deque<std::vector<std::uint8_t>> queue;
   std::shared_ptr<detail::SubscriptionBase> command_subscription;
+  std::vector<std::shared_ptr<detail::SubscriptionBase>> control_subscriptions;
+
+  template <class T, class Encode>
+  void forward_topic(const std::string& topic, Kind kind, Encode encode_message) {
+    auto subscription = context.topics().subscribe<T>(
+        topic,
+        [this, topic, kind, encode_message](const T& message) {
+          if (!connected.load() || stopping.load()) {
+            return;
+          }
+          Writer writer;
+          encode_message(writer, message);
+          auto frame = make_frame(kFramePublish, topic, kind, writer.data);
+          {
+            std::lock_guard<std::mutex> lock(queue_mutex);
+            if (queue.size() >= kMaxQueue) {
+              queue.pop_front();
+            }
+            queue.push_back(std::move(frame));
+          }
+          queue_cv.notify_one();
+        },
+        QOS_DEFAULT);
+    control_subscriptions.push_back(subscription.base());
+  }
 
   void close_socket() {
     const int current = fd.exchange(-1);
@@ -1071,6 +1175,30 @@ struct Client::Impl {
         }
         break;
       }
+      case Kind::Pose: {
+        Reader reader(payload);
+        if (auto message = decode_pose_stamped(reader)) {
+          context.topics().publish(topic, std::move(*message), qos_for_topic(topic));
+        }
+        break;
+      }
+      case Kind::PoseCov: {
+        Reader reader(payload);
+        if (auto message = decode_pose_covariance(reader)) {
+          context.topics().publish(topic, std::move(*message), qos_for_topic(topic));
+        }
+        break;
+      }
+      case Kind::Empty:
+        context.topics().publish(topic, msgs::Empty{}, qos_for_topic(topic));
+        break;
+      case Kind::Bool: {
+        Reader reader(payload);
+        if (auto message = decode_bool(reader)) {
+          context.topics().publish(topic, std::move(*message), qos_for_topic(topic));
+        }
+        break;
+      }
       case Kind::Twist:
         break;
     }
@@ -1169,6 +1297,12 @@ struct Client::Impl {
       command_subscription->cancel();
       command_subscription.reset();
     }
+    for (auto& subscription : control_subscriptions) {
+      if (subscription) {
+        subscription->cancel();
+      }
+    }
+    control_subscriptions.clear();
   }
 };
 
@@ -1194,6 +1328,37 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
       },
       QOS_COMMAND);
   impl_->command_subscription = command_subscription.base();
+  impl_->forward_topic<msgs::PoseWithCovarianceStamped>(
+      "initialpose", Kind::PoseCov,
+      [](Writer& writer, const msgs::PoseWithCovarianceStamped& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::PoseStamped>(
+      "goal_pose", Kind::Pose,
+      [](Writer& writer, const msgs::PoseStamped& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::PoseStamped>(
+      "preview_goal", Kind::Pose,
+      [](Writer& writer, const msgs::PoseStamped& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Path>(
+      "goal_poses", Kind::Path,
+      [](Writer& writer, const msgs::Path& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Path>(
+      "preview_goals", Kind::Path,
+      [](Writer& writer, const msgs::Path& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "map_change", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "map_save", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "slam_mode", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Empty>(
+      "cancel_goal", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
+  impl_->forward_topic<msgs::Empty>(
+      "map_unload", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
+  impl_->forward_topic<msgs::Bool>(
+      "collision_set_enabled", Kind::Bool,
+      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
   impl_->reader_thread = std::thread([impl = impl_.get()] { impl->reader_loop(); });
   impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
 }

@@ -60,6 +60,14 @@ Cartographer::Cartographer(Context& context, std::string name, std::map<std::str
       [](const std::string& value) { return value == "idle" || value == "mapping" || value == "localization"; },
       [this](const std::string& value) { set_mode(value); });
   set_mode(mode_.value());
+  subscribe<msgs::String>(
+      "slam_mode",
+      [this](const msgs::String& message) {
+        if (message.data == "idle" || message.data == "mapping" || message.data == "localization") {
+          mode_.set(message.data);
+        }
+      },
+      QOS_LATCHED);
   logger().info("Cartographer: map=%s odom=%s scan=%s resolution=%.2f",
                 map_frame_.value().c_str(), odom_frame_.value().c_str(), scan_topic_.value().c_str(),
                 resolution_.value());
@@ -95,23 +103,31 @@ cartographer::Pose2 Cartographer::map_to_odom() const {
   return map_to_odom_;
 }
 
-void Cartographer::set_mode(const std::string& mode) {
+std::string Cartographer::slam_status() const {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (mode == mode_str_) {
-    return;
-  }
-  mode_str_ = mode;
-  has_last_inserted_ = false;
-  tf_published_valid_ = false;
-  dirty_ = false;
-  if (mode == "mapping") {
-    grid_ = std::make_unique<cartographer::ProbabilityGrid>(resolution_.value());
-  } else if (mode == "localization") {
-    grid_ = external_map_ ? std::make_unique<cartographer::ProbabilityGrid>(
-                                cartographer::ProbabilityGrid::from_message(*external_map_))
-                          : std::make_unique<cartographer::ProbabilityGrid>(resolution_.value());
+  return mode_str_;
+}
+
+void Cartographer::set_mode(const std::string& mode) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (mode == mode_str_) {
+      return;
+    }
+    mode_str_ = mode;
+    has_last_inserted_ = false;
+    tf_published_valid_ = false;
+    dirty_ = false;
+    if (mode == "mapping") {
+      grid_ = std::make_unique<cartographer::ProbabilityGrid>(resolution_.value());
+    } else if (mode == "localization") {
+      grid_ = external_map_ ? std::make_unique<cartographer::ProbabilityGrid>(
+                                  cartographer::ProbabilityGrid::from_message(*external_map_))
+                            : std::make_unique<cartographer::ProbabilityGrid>(resolution_.value());
+    }
   }
   logger().info("Cartographer mode: %s", mode.c_str());
+  publish("slam_status", msgs::String{mode}, QOS_LATCHED);
 }
 
 void Cartographer::on_scan(const msgs::LaserScan& scan) {

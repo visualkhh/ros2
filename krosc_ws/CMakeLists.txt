@@ -27,6 +27,7 @@ target_include_directories(krosc_real PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(krosc_real PRIVATE krosc::core)
 target_compile_definitions(krosc_real PRIVATE
   KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
+  KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../kos_ws/artifacts/maps"
 )
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(krosc_real PRIVATE -Wno-psabi)

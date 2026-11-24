@@ -36,6 +36,7 @@ class Cartographer final : public Node {
   [[nodiscard]] bool localized() const;
   [[nodiscard]] std::size_t map_cells() const;
   [[nodiscard]] cartographer::Pose2 map_to_odom() const;
+  [[nodiscard]] std::string slam_status() const;
 
  private:
   void on_scan(const msgs::LaserScan& scan);

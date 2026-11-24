@@ -21,6 +21,9 @@ VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_,
   subscribe_latest<msgs::Path>("local_plan", local_plan_, QOS_SENSOR_DATA);
   subscribe_latest<msgs::DiagnosticArray>("diagnostics", diagnostics_, QOS_DEFAULT);
   subscribe_latest<msgs::String>(ROBOT_DESCRIPTION_TOPIC_NAME, robot_description_, QOS_LATCHED);
+  subscribe_latest<msgs::String>("map_list", map_list_, QOS_LATCHED);
+  subscribe_latest<msgs::String>("map_status", map_status_, QOS_LATCHED);
+  subscribe_latest<msgs::String>("slam_status", slam_status_, QOS_LATCHED);
   subscribe_stats_only(TF_TOPIC_NAME, "tf2_msgs/TFMessage", QOS_TF);
   subscribe_stats_only(TF_STATIC_TOPIC_NAME, "tf2_msgs/TFMessage", QOS_TF_STATIC);
   subscribe_stats_only(kRosoutTopic, "rcl_interfaces/Log", QOS_DEFAULT);
@@ -140,6 +143,21 @@ std::shared_ptr<const msgs::DiagnosticArray> VizModel::diagnostics() const {
 std::shared_ptr<const msgs::String> VizModel::robot_description() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return robot_description_;
+}
+
+std::shared_ptr<const msgs::String> VizModel::map_list() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return map_list_;
+}
+
+std::shared_ptr<const msgs::String> VizModel::map_status() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return map_status_;
+}
+
+std::shared_ptr<const msgs::String> VizModel::slam_status() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return slam_status_;
 }
 
 std::vector<msgs::Log> VizModel::logs() const {
