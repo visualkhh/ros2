@@ -28,11 +28,16 @@ class MapView2D final : public QWidget {
   void fit_map();
   void set_tool(const std::string& tool);
   void set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints);
+  void set_show_tf(bool show);
+  void set_show_odom(bool show);
+  void set_show_filtered(bool show);
   [[nodiscard]] std::string tool() const { return tool_; }
 
  signals:
   void tool_changed(QString tool);
   void tool_pose(double x, double y, double yaw);
+  void teleop_key(int key, bool pressed);
+  void teleop_focus_lost();
 
  protected:
   void paintEvent(QPaintEvent* event) override;
@@ -41,6 +46,9 @@ class MapView2D final : public QWidget {
   void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
+  void keyPressEvent(QKeyEvent* event) override;
+  void keyReleaseEvent(QKeyEvent* event) override;
+  void focusOutEvent(QFocusEvent* event) override;
 
  private:
   void rebuild_image();
@@ -66,6 +74,9 @@ class MapView2D final : public QWidget {
   QPointF tool_start_map_;
   QPointF tool_current_map_;
   std::vector<std::tuple<double, double, double>> waypoints_;
+  bool show_tf_ = false;
+  bool show_odom_ = false;
+  bool show_filtered_ = false;
   std::deque<std::pair<double, double>> trail_;
   QPushButton* fit_button_ = nullptr;
 };

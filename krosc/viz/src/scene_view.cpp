@@ -1147,6 +1147,16 @@ void SceneView::leaveEvent(QEvent* event) {
   (void)event;
 }
 
+void SceneView::set_teleop_key(int key, bool pressed) {
+  if (pressed) {
+    keys_.insert(key);
+  } else {
+    keys_.remove(key);
+  }
+}
+
+void SceneView::clear_teleop_keys() { keys_.clear(); }
+
 void SceneView::publish_teleop() {
   const auto held = [this](std::initializer_list<int> keys) {
     return std::any_of(keys.begin(), keys.end(), [this](int key) { return keys_.contains(key); });

@@ -21,9 +21,11 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 #include "krosc/math.hpp"
 #include "krosc/viz/map_view.hpp"
@@ -143,6 +145,27 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   connect(map_view_, &MapView2D::tool_changed, this, [this](const QString&) { update_tool_buttons(); });
   connect(map_view_, &MapView2D::tool_pose, this,
           [this](double x, double y, double yaw) { handle_tool_pose(active_tool_, x, y, yaw, true); });
+  connect(map_view_, &MapView2D::teleop_key, this,
+          [this](int key, bool pressed) {
+            if (scene_ != nullptr) {
+              scene_->set_teleop_key(key, pressed);
+            }
+          });
+  connect(map_view_, &MapView2D::teleop_focus_lost, this, [this] {
+    if (scene_ != nullptr) {
+      scene_->clear_teleop_keys();
+    }
+  });
+  connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) {
+    if (scene_ != nullptr) {
+      scene_->clear_teleop_keys();
+    }
+    if (index == 1 && map_view_ != nullptr) {
+      map_view_->setFocus(Qt::OtherFocusReason);
+    } else if (index == 0 && scene_ != nullptr) {
+      scene_->setFocus(Qt::OtherFocusReason);
+    }
+  });
   connect(scene_, &SceneView::teleop_scale_changed, this, [this](double scale) {
     if (teleop_slider_ != nullptr) {
       const QSignalBlocker blocker(teleop_slider_);
@@ -213,8 +236,27 @@ void VizWindow::build_panel(QWidget* panel) {
   for (const auto& spec : kToggles) {
     auto* box = new QCheckBox(spec.label, panel);
     box->setChecked(scene_->enabled(spec.key));
+    if (map_view_ != nullptr) {
+      const std::string key = spec.key;
+      if (key == "tf") {
+        map_view_->set_show_tf(box->isChecked());
+      } else if (key == "odom") {
+        map_view_->set_show_odom(box->isChecked());
+      } else if (key == "filtered") {
+        map_view_->set_show_filtered(box->isChecked());
+      }
+    }
     connect(box, &QCheckBox::toggled, this, [this, key = std::string(spec.key)](bool checked) {
       scene_->set_enabled(key, checked);
+      if (map_view_ != nullptr) {
+        if (key == "tf") {
+          map_view_->set_show_tf(checked);
+        } else if (key == "odom") {
+          map_view_->set_show_odom(checked);
+        } else if (key == "filtered") {
+          map_view_->set_show_filtered(checked);
+        }
+      }
     });
     toggles_[spec.key] = box;
     grid->addWidget(box, row, column);
@@ -224,6 +266,12 @@ void VizWindow::build_panel(QWidget* panel) {
     }
   }
   layout->addLayout(grid);
+
+  tf_label_ = new QLabel("TF: -", panel);
+  tf_label_->setObjectName("Subtitle");
+  tf_label_->setWordWrap(true);
+  tf_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  layout->addWidget(tf_label_);
 
   auto* topics = new QLabel("Topics", panel);
   topics->setObjectName("Section");
@@ -674,6 +722,38 @@ void VizWindow::refresh_topics() {
                             .arg(rows.size())
                             .arg(live)
                             .arg(model_.node().context().node_names().size()));
+
+  if (tf_label_ != nullptr) {
+    const auto& buffer = model_.tf_buffer();
+    const std::vector<std::string> all = buffer.all_frames();
+    QString chain_text;
+    const auto contains = [&](const std::string& frame) {
+      return std::find(all.begin(), all.end(), frame) != all.end();
+    };
+    std::string frame;
+    if (contains("base_link")) {
+      frame = "base_link";
+    } else if (contains("base_footprint")) {
+      frame = "base_footprint";
+    }
+    if (!frame.empty()) {
+      std::vector<std::string> chain;
+      for (int depth = 0; depth < 16; ++depth) {
+        chain.push_back(frame);
+        const auto parent = buffer.parent_of(frame);
+        if (!parent || *parent == frame) {
+          break;
+        }
+        frame = *parent;
+      }
+      QStringList names;
+      for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        names << QString::fromStdString(*it);
+      }
+      chain_text = QString(" | %1").arg(names.join(" → "));
+    }
+    tf_label_->setText(QString("TF: %1 frames%2").arg(all.size()).arg(chain_text));
+  }
 }
 
 void VizWindow::set_tab(int index) {

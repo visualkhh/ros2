@@ -1,5 +1,7 @@
 #include "krosc/viz/map_view.hpp"
 
+#include <QFocusEvent>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPolygonF>
 #include <QPainter>
@@ -23,6 +25,7 @@ namespace krosc::viz {
 MapView2D::MapView2D(VizModel& model, QWidget* parent) : QWidget(parent), model_(model) {
   setMinimumSize(240, 200);
   setMouseTracking(true);
+  setFocusPolicy(Qt::StrongFocus);
   fit_button_ = new QPushButton("Fit map", this);
   fit_button_->setStyleSheet(
       "QPushButton { background:#171c26; border:1px solid #2a3242; border-radius:4px; padding:4px 10px; color:#d7dde8; }"
@@ -56,6 +59,21 @@ void MapView2D::set_tool(const std::string& tool) {
 
 void MapView2D::set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints) {
   waypoints_ = waypoints;
+  update();
+}
+
+void MapView2D::set_show_tf(bool show) {
+  show_tf_ = show;
+  update();
+}
+
+void MapView2D::set_show_odom(bool show) {
+  show_odom_ = show;
+  update();
+}
+
+void MapView2D::set_show_filtered(bool show) {
+  show_filtered_ = show;
   update();
 }
 
@@ -177,6 +195,38 @@ void MapView2D::paintEvent(QPaintEvent* event) {
     }
   };
 
+  // TF 프레임 축 (map 기준, RViz TF display처럼)
+  if (show_tf_) {
+    painter.save();
+    QFont tf_font("Menlo");
+    tf_font.setPixelSize(10);
+    painter.setFont(tf_font);
+    for (const auto& frame : model_.tf_buffer().all_frames()) {
+      const auto transform = tf("map", frame);
+      if (!transform) {
+        continue;
+      }
+      const double x = transform->transform.translation.x;
+      const double y = transform->transform.translation.y;
+      const double yaw = tfmath::yaw_of(transform->transform.rotation);
+      const QPointF origin = to_screen(x, y);
+      if (origin.x() < -20.0 || origin.y() < -20.0 || origin.x() > width() + 20.0 || origin.y() > height() + 20.0) {
+        continue;
+      }
+      const double length = 0.16;
+      painter.setPen(QPen(QColor(255, 90, 90, 220), 1.6));
+      painter.drawLine(origin, to_screen(x + std::cos(yaw) * length, y + std::sin(yaw) * length));
+      painter.setPen(QPen(QColor(90, 235, 120, 220), 1.6));
+      painter.drawLine(origin, to_screen(x + std::cos(yaw + 1.5707963) * length,
+                                        y + std::sin(yaw + 1.5707963) * length));
+      if (frame == "map" || frame == "odom" || frame == "base_footprint" || frame == "base_link") {
+        painter.setPen(QColor(190, 200, 215, 200));
+        painter.drawText(origin + QPointF(7.0, -7.0), QString::fromStdString(frame));
+      }
+    }
+    painter.restore();
+  }
+
   // 계획 경로들 (map 좌표)
   const auto draw_path = [&](const std::shared_ptr<const msgs::Path>& path, const QColor& color) {
     if (!path || path->poses.empty()) {
@@ -297,6 +347,40 @@ void MapView2D::paintEvent(QPaintEvent* event) {
     }
   }
 
+  // /odom, EKF filtered 궤적 화살표 (map 기준)
+  const auto draw_odom_arrow = [&](const std::shared_ptr<const msgs::Odometry>& message, const QColor& color,
+                                   const char* name) {
+    if (!message) {
+      return;
+    }
+    const auto frame_transform = tf("map", message->header.frame_id);
+    if (!frame_transform) {
+      return;
+    }
+    const msgs::Transform local{{message->pose.pose.position.x, message->pose.pose.position.y,
+                                 message->pose.pose.position.z},
+                                message->pose.pose.orientation};
+    const msgs::Transform composed = tfmath::compose(frame_transform->transform, local);
+    const double x = composed.translation.x;
+    const double y = composed.translation.y;
+    const double yaw = tfmath::yaw_of(composed.rotation);
+    const QPointF origin = to_screen(x, y);
+    const QPointF end = to_screen(x + std::cos(yaw) * 0.36, y + std::sin(yaw) * 0.36);
+    painter.setPen(QPen(color, 2.0));
+    painter.drawLine(origin, end);
+    const double head = 0.05 * zoom_;
+    painter.drawLine(end, QPointF(end.x() - std::cos(yaw - 0.5) * head, end.y() + std::sin(yaw - 0.5) * head));
+    painter.drawLine(end, QPointF(end.x() - std::cos(yaw + 0.5) * head, end.y() + std::sin(yaw + 0.5) * head));
+    painter.setPen(QColor(color.red(), color.green(), color.blue(), 210));
+    painter.drawText(origin + QPointF(7.0, 10.0), QString::fromUtf8(name));
+  };
+  if (show_odom_) {
+    draw_odom_arrow(model_.odom(), QColor(255, 95, 210, 230), "wheel odom");
+  }
+  if (show_filtered_) {
+    draw_odom_arrow(model_.filtered(), QColor(80, 220, 255, 230), "EKF filtered");
+  }
+
   // 로봇 (base_footprint)
   if (const auto robot = tf("map", "base_footprint")) {
     const double yaw = tfmath::yaw_of(robot->transform.rotation);
@@ -356,6 +440,7 @@ void MapView2D::paintEvent(QPaintEvent* event) {
 }
 
 void MapView2D::mousePressEvent(QMouseEvent* event) {
+  setFocus(Qt::MouseFocusReason);
   if (event->button() == Qt::LeftButton && !tool_.empty()) {
     tool_dragging_ = true;
     tool_start_map_ = to_map(event->position());
@@ -402,6 +487,57 @@ void MapView2D::mouseReleaseEvent(QMouseEvent* event) {
   }
   dragging_ = false;
   unsetCursor();
+}
+
+void MapView2D::keyPressEvent(QKeyEvent* event) {
+  if (event->isAutoRepeat()) {
+    event->accept();
+    return;
+  }
+  switch (event->key()) {
+    case Qt::Key_W:
+    case Qt::Key_A:
+    case Qt::Key_S:
+    case Qt::Key_D:
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+      emit teleop_key(event->key(), true);
+      event->accept();
+      return;
+    default:
+      QWidget::keyPressEvent(event);
+      return;
+  }
+}
+
+void MapView2D::keyReleaseEvent(QKeyEvent* event) {
+  if (event->isAutoRepeat()) {
+    event->accept();
+    return;
+  }
+  switch (event->key()) {
+    case Qt::Key_W:
+    case Qt::Key_A:
+    case Qt::Key_S:
+    case Qt::Key_D:
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+      emit teleop_key(event->key(), false);
+      event->accept();
+      return;
+    default:
+      QWidget::keyReleaseEvent(event);
+      return;
+  }
+}
+
+void MapView2D::focusOutEvent(QFocusEvent* event) {
+  (void)event;
+  emit teleop_focus_lost();
 }
 
 void MapView2D::wheelEvent(QWheelEvent* event) {

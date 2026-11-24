@@ -43,6 +43,8 @@ class SceneView : public QWidget {
   [[nodiscard]] bool follow() const { return follow_; }
   void set_camera_distance(double distance);
   void set_teleop_scale(double scale);
+  void set_teleop_key(int key, bool pressed);
+  void clear_teleop_keys();
   [[nodiscard]] double teleop_scale() const { return teleop_scale_; }
   void set_tool(const std::string& tool);
   void set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints);
