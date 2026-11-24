@@ -252,21 +252,25 @@ void MapView2D::paintEvent(QPaintEvent* event) {
       points.push_back(to_screen(p.x, p.y));
       world.emplace_back(p.x, p.y, tfmath::yaw_of(pose.pose.orientation) + yaw_offset);
     }
-    painter.setPen(QPen(color, 2.0));
+    painter.setPen(QPen(color, 1.5));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolyline(points.data(), static_cast<int>(points.size()));
-    double accumulated = 1e9;  // 첫 점에도 화살표
+    double accumulated = 1e9;  // 첫 웨이포인트도 표시
     const QColor arrow_color(color.red(), color.green(), color.blue(), 210);
     for (std::size_t index = 0; index < world.size(); ++index) {
       if (index > 0) {
         accumulated += std::hypot(std::get<0>(world[index]) - std::get<0>(world[index - 1]),
                                   std::get<1>(world[index]) - std::get<1>(world[index - 1]));
       }
-      if (accumulated >= 0.8 || index + 1 == world.size()) {
+      if (accumulated >= 0.5 || index + 1 == world.size()) {
         accumulated = 0.0;
-        const double length = (index + 1 == world.size()) ? 0.42 * zoom_ : 0.25 * zoom_;
-        draw_arrow(painter, to_screen(std::get<0>(world[index]), std::get<1>(world[index])),
-                   std::get<2>(world[index]), length, arrow_color);
+        const QPointF point = to_screen(std::get<0>(world[index]), std::get<1>(world[index]));
+        painter.setPen(QPen(color, 1.5));
+        painter.setBrush(arrow_color);
+        painter.drawEllipse(point, 2.4, 2.4);  // 웨이포인트 점
+        painter.setBrush(Qt::NoBrush);
+        const double length = (index + 1 == world.size() ? 0.22 : 0.16) * zoom_;
+        draw_arrow(painter, point, std::get<2>(world[index]), length, arrow_color);
       }
     }
   };
@@ -284,7 +288,7 @@ void MapView2D::paintEvent(QPaintEvent* event) {
     painter.setBrush(QColor(255, 205, 60, 220));
     painter.drawEllipse(point, 4.0, 4.0);
     painter.setBrush(Qt::NoBrush);
-    draw_arrow(painter, point, yaw, 0.42 * zoom_, QColor(255, 205, 70, 230));
+    draw_arrow(painter, point, yaw, 0.20 * zoom_, QColor(255, 205, 70, 230));
     painter.setPen(QColor(255, 235, 150));
     painter.drawText(point + QPointF(8.0, -8.0), QString("#%1").arg(index + 1));
   }
@@ -340,8 +344,11 @@ void MapView2D::paintEvent(QPaintEvent* event) {
           accumulated = 0.0;
           const double angle = std::atan2(trail_[index].second - trail_[index - 1].second,
                                           trail_[index].first - trail_[index - 1].first);
-          draw_arrow(painter, to_screen(trail_[index].first, trail_[index].second), angle, 0.22 * zoom_,
-                     QColor(140, 185, 255, 210));
+          const QPointF point = to_screen(trail_[index].first, trail_[index].second);
+          painter.setBrush(QColor(140, 185, 255, 210));
+          painter.drawEllipse(point, 2.0, 2.0);
+          painter.setBrush(Qt::NoBrush);
+          draw_arrow(painter, point, angle, 0.12 * zoom_, QColor(140, 185, 255, 210));
         }
       }
     }

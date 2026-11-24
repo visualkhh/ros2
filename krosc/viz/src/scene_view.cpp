@@ -924,7 +924,7 @@ void SceneView::draw_path(QPainter& painter, const std::shared_ptr<const msgs::P
     points.push_back(point);
     headings.push_back(tfmath::yaw_of(composed.rotation));
   }
-  painter.setPen(QPen(color, 2.2));
+  painter.setPen(QPen(color, 1.5));
   painter.setBrush(Qt::NoBrush);
   painter.drawPolyline(polyline);
   double accumulated = 1e9;
@@ -933,19 +933,25 @@ void SceneView::draw_path(QPainter& painter, const std::shared_ptr<const msgs::P
       accumulated += std::hypot(static_cast<double>(points[index].x() - points[index - 1].x()),
                                 static_cast<double>(points[index].y() - points[index - 1].y()));
     }
-    if (accumulated >= 0.8 || index + 1 == points.size()) {
+    if (accumulated >= 0.5 || index + 1 == points.size()) {
       accumulated = 0.0;
-      const double length = (index + 1 == points.size()) ? 0.4 : 0.22;
+      const double length = (index + 1 == points.size()) ? 0.22 : 0.16;
       const double yaw = headings[index];
+      const Projected origin = project(points[index]);
+      if (origin.visible) {
+        painter.setBrush(color);
+        painter.drawEllipse(origin.point, 2.0, 2.0);
+        painter.setBrush(Qt::NoBrush);
+      }
       const QVector3D end(points[index].x() + static_cast<float>(std::cos(yaw) * length),
                           points[index].y() + static_cast<float>(std::sin(yaw) * length), 0.035F);
-      const QVector3D left(points[index].x() + static_cast<float>(std::cos(yaw + 2.56) * 0.04),
-                           points[index].y() + static_cast<float>(std::sin(yaw + 2.56) * 0.04), 0.035F);
-      const QVector3D right(points[index].x() + static_cast<float>(std::cos(yaw - 2.56) * 0.04),
-                            points[index].y() + static_cast<float>(std::sin(yaw - 2.56) * 0.04), 0.035F);
-      draw_line(painter, points[index], end, color, 2.0);
-      draw_line(painter, end, left, color, 2.0);
-      draw_line(painter, end, right, color, 2.0);
+      const QVector3D left(points[index].x() + static_cast<float>(std::cos(yaw + 2.56) * 0.03),
+                           points[index].y() + static_cast<float>(std::sin(yaw + 2.56) * 0.03), 0.035F);
+      const QVector3D right(points[index].x() + static_cast<float>(std::cos(yaw - 2.56) * 0.03),
+                            points[index].y() + static_cast<float>(std::sin(yaw - 2.56) * 0.03), 0.035F);
+      draw_line(painter, points[index], end, color, 1.4);
+      draw_line(painter, end, left, color, 1.4);
+      draw_line(painter, end, right, color, 1.4);
     }
   }
 }
@@ -981,8 +987,31 @@ void SceneView::draw_trail(QPainter& painter) {
       polyline << projected.point;
     }
   }
-  painter.setPen(QPen(QColor(80, 220, 255, 130), 1.8));
+  painter.setPen(QPen(QColor(80, 220, 255, 130), 1.5));
   painter.drawPolyline(polyline);
+  double accumulated = 0.0;
+  for (std::size_t index = 1; index < trail_.size(); ++index) {
+    accumulated += static_cast<double>((trail_[index] - trail_[index - 1]).length());
+    if (accumulated >= 1.0 && index + 1 < trail_.size()) {
+      accumulated = 0.0;
+      const Projected projected = project(trail_[index]);
+      if (!projected.visible) continue;
+      const double yaw = std::atan2(static_cast<double>(trail_[index].y() - trail_[index - 1].y()),
+                                    static_cast<double>(trail_[index].x() - trail_[index - 1].x()));
+      painter.setBrush(QColor(80, 220, 255, 170));
+      painter.drawEllipse(projected.point, 2.0, 2.0);
+      painter.setBrush(Qt::NoBrush);
+      const QVector3D end(trail_[index].x() + static_cast<float>(std::cos(yaw) * 0.12),
+                          trail_[index].y() + static_cast<float>(std::sin(yaw) * 0.12), 0.01F);
+      const QVector3D left(trail_[index].x() + static_cast<float>(std::cos(yaw + 2.56) * 0.03),
+                           trail_[index].y() + static_cast<float>(std::sin(yaw + 2.56) * 0.03), 0.01F);
+      const QVector3D right(trail_[index].x() + static_cast<float>(std::cos(yaw - 2.56) * 0.03),
+                            trail_[index].y() + static_cast<float>(std::sin(yaw - 2.56) * 0.03), 0.01F);
+      draw_line(painter, trail_[index], end, QColor(80, 220, 255, 170), 1.4);
+      draw_line(painter, end, left, QColor(80, 220, 255, 170), 1.4);
+      draw_line(painter, end, right, QColor(80, 220, 255, 170), 1.4);
+    }
+  }
 }
 
 void SceneView::draw_logs(QPainter& painter) const {
@@ -1139,15 +1168,21 @@ void SceneView::draw_waypoints(QPainter& painter) const {
     }
     const double yaw = wyaw + offset;
     const QVector3D origin(static_cast<float>(point.x), static_cast<float>(point.y), 0.04F);
-    const QVector3D end(static_cast<float>(point.x + std::cos(yaw) * 0.42),
-                        static_cast<float>(point.y + std::sin(yaw) * 0.42), 0.04F);
-    const QVector3D left(static_cast<float>(point.x + std::cos(yaw + 2.55) * 0.04),
-                         static_cast<float>(point.y + std::sin(yaw + 2.55) * 0.04), 0.04F);
-    const QVector3D right(static_cast<float>(point.x + std::cos(yaw - 2.55) * 0.04),
-                          static_cast<float>(point.y + std::sin(yaw - 2.55) * 0.04), 0.04F);
-    draw_line(painter, origin, end, QColor(255, 205, 70, 230), 2.0);
-    draw_line(painter, end, left, QColor(255, 205, 70, 230), 2.0);
-    draw_line(painter, end, right, QColor(255, 205, 70, 230), 2.0);
+    const QVector3D end(static_cast<float>(point.x + std::cos(yaw) * 0.20),
+                        static_cast<float>(point.y + std::sin(yaw) * 0.20), 0.04F);
+    const QVector3D left(static_cast<float>(point.x + std::cos(yaw + 2.55) * 0.03),
+                         static_cast<float>(point.y + std::sin(yaw + 2.55) * 0.03), 0.04F);
+    const QVector3D right(static_cast<float>(point.x + std::cos(yaw - 2.55) * 0.03),
+                          static_cast<float>(point.y + std::sin(yaw - 2.55) * 0.03), 0.04F);
+    const Projected marker = project(origin);
+    if (marker.visible) {
+      painter.setBrush(QColor(255, 205, 70, 230));
+      painter.drawEllipse(marker.point, 3.0, 3.0);
+      painter.setBrush(Qt::NoBrush);
+    }
+    draw_line(painter, origin, end, QColor(255, 205, 70, 230), 1.6);
+    draw_line(painter, end, left, QColor(255, 205, 70, 230), 1.6);
+    draw_line(painter, end, right, QColor(255, 205, 70, 230), 1.6);
     draw_label(painter, origin, QString("#%1").arg(index + 1), QColor(255, 235, 150));
   }
 }
