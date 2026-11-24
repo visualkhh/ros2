@@ -29,11 +29,31 @@ ls -l /dev/opencr /dev/tb3_lidar
 
 필요: `g++`(C++20), `cmake`, `make`/`ninja`. Qt는 Pi에 필요 없다.
 
+## 스크립트
+
+```bash
+cd ~/ros2/krosc_ws
+
+./build.sh          # krosc(core/sim/viz) + krosc_ws를 한 번에 빌드
+./run.sh            # 실기: 빌드 후 idle/텔레옵 실행 (TCP 9000)
+./run-slam.sh       # 실기: 빌드 후 SLAM(mapping) 실행
+./run-tests.sh      # krosc + krosc_ws 테스트 빌드/실행
+
+# PC에서 (Qt6 필요)
+./run-viz.sh        # 빌드 후 pak.local:9000 C++ Viz (fixed frame map)
+KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
+./run-sim.sh        # 시뮬레이터(진실) + Viz 데모
+```
+
+`run-viz.sh`는 `KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME` 환경 변수를 따른다.
+추가 인자는 그대로 viz에 넘긴다: `./run-viz.sh --screenshot /tmp/viz.png --duration 3`.
+
 ## 실행 (라즈베리파이)
 
 ```bash
 cd ~/ros2
 ./krosc_ws/run.sh                                      # 빌드 + 실행, TCP 9000
+./krosc_ws/run-slam.sh                                 # 빌드 + SLAM(mapping)
 KROSC_SERVER_PORT=0 ./krosc_ws/run.sh                  # 네트워크 없이
 OPENCR_PORT=/dev/opencr LIDAR_PORT=/dev/tb3_lidar ./krosc_ws/run.sh
 ```
