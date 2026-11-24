@@ -12,7 +12,7 @@
 
 namespace krosc_ws {
 
-// OpenCR 펌웨어(firmware/opencr/tb3_wheels)의 S 줄.
+// OpenCR 펌웨어(krosc_ws/firmware/opencr/turtlebot_opencr)의 S 줄.
 struct BoardStatus {
   double left_position = std::numeric_limits<double>::quiet_NaN();
   double left_velocity = std::numeric_limits<double>::quiet_NaN();

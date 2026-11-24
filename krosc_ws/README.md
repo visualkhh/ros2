@@ -101,7 +101,7 @@ cmake --build build -j
 
 - URDF: `robot/description/urdf/turtlebot3_real.urdf` (공식 visual STL + collision 근사, C++ Viz는 visual STL을 12mm 격자로 간소화해 렌더)
 - 장착: 3층 판 맨 앞 중앙, `base_link` 기준 `x=+0.047985, y=-0.000230, z=+0.130175`
-- OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`arm_config.h`)
+- OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`firmware/opencr/turtlebot_opencr/arm_config.h`)
 - 토픽: `joint_states`에 팔 관절 포함, 명령은 `arm_joint_command` (`sensor_msgs/JointState`)
 - 손목 roll 관절은 없다. ID 16은 사용하지 않는다.
 
@@ -109,16 +109,22 @@ cmake --build build -j
 
 ```
 krosc_ws/
-├── main.cpp                     # 50Hz 실시간 루프, 노드 조립, TCP 서버
-├── robot/
-│   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
-│   └── description/urdf/turtlebot3_real.urdf
-├── hardwares/
-│   ├── serial.cpp/.hpp          # POSIX termios
-│   ├── opencr_protocol.cpp/.hpp # C/S/I/E 파서 (순수 함수)
-│   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 20Hz C 명령
-│   └── lds03.cpp/.hpp           # LDS-03 패킷 파서 + 시리얼 + 몸통 필터
-├── robot_bridge.cpp/.hpp        # cmd_vel, scan/imu/joint_states/diagnostics
+├── src/
+│   ├── main.cpp                 # 50Hz 실시간 루프, 노드 조립, TCP 서버
+│   ├── robot_bridge.cpp/.hpp    # cmd_vel, scan/imu/joint_states/diagnostics
+│   ├── robot/real_turtlebot3.cpp/.hpp  # 이 로봇의 치수/장착 위치/시리얼 조립
+│   └── hardwares/
+│       ├── serial.cpp/.hpp          # POSIX termios
+│       ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
+│       ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 20Hz C/A 명령
+│       └── lds03.cpp/.hpp           # LDS-03 패킷 파서 + 시리얼 + 몸통 필터
+├── robot/description/urdf/turtlebot3_real.urdf
+├── firmware/opencr/             # 이 프로젝트 전용 OpenCR 펌웨어 사본
+│   ├── turtlebot_opencr/turtlebot_opencr.ino
+│   ├── turtlebot_opencr/arm_config.h
+│   ├── compile.sh · upload.sh · test-firmware
+│   └── README.md
+├── artifacts/maps/
 └── tests/                       # 프로토콜/파서 + PTY 시리얼 왕복
 ```
 
@@ -128,7 +134,20 @@ krosc_ws/
 - 두 모터 모두 `+속도 = 뒤` → 앱 안에서 `left_dir = right_dir = -1`로 뒤집는다
 - LDS-03: 230400, 360칸, 0.05~12 m, `reverse=True`, base_link 기준 x=0.060, z=0.022
 - 라이다 몸통 필터: base_link 기준 x -0.21~0.075, y ±0.17 안의 점 제거
-- EKF: odom(vx, vyaw) + imu(vyaw), 20Hz, `odom -> base_footprint` TF
+- EKF: odom pose(yaw)/vx/vyaw, 20Hz, `odom -> base_footprint` TF (IMU yaw는 bias 때문에 제외)
+
+## 펌웨어 (이 프로젝트 전용 사본)
+
+원본 공용 `firmware/`와 별개로, `krosc_ws`는 자기 펌웨어를 `firmware/opencr`에 둔다.
+
+```bash
+cd ~/ros2/krosc_ws/firmware/opencr
+./compile.sh
+./upload.sh
+./test-firmware
+```
+
+스케치 이름은 폴더와 같아야 한다: `turtlebot_opencr/turtlebot_opencr.ino`.
 
 ## 테스트
 
