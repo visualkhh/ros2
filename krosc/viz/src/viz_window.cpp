@@ -295,6 +295,7 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
 
   map_combo_ = new QComboBox(group);
   map_combo_->addItem("(select map)");
+  map_combo_->setMinimumWidth(200);
   grid->addWidget(new QLabel("map", group), 1, 0);
   grid->addWidget(map_combo_, 1, 1, 1, 2);
   auto* load = new QPushButton("load", group);
@@ -335,17 +336,18 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   });
   current_map_label_ = new QLabel("current: (none)", group);
   current_map_label_->setToolTip("");
-  grid->addWidget(current_map_label_, 3, 2, 1, 2);
+  current_map_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  grid->addWidget(current_map_label_, 4, 0, 1, 4);
 
   slam_status_label_ = new QLabel("", group);
   slam_status_label_->setWordWrap(true);
   slam_status_label_->setMinimumHeight(30);
-  grid->addWidget(slam_status_label_, 4, 0, 1, 4);
+  grid->addWidget(slam_status_label_, 5, 0, 1, 4);
 
   pose_button_ = new QPushButton("2D Pose Estimate", group);
   goal_button_ = new QPushButton("2D Goal Pose", group);
-  grid->addWidget(pose_button_, 5, 0, 1, 2);
-  grid->addWidget(goal_button_, 5, 2, 1, 2);
+  grid->addWidget(pose_button_, 6, 0, 1, 2);
+  grid->addWidget(goal_button_, 6, 2, 1, 2);
   connect(pose_button_, &QPushButton::clicked, this,
           [this] { scene_->set_tool(scene_->tool() == "initialpose" ? "" : "initialpose"); });
   connect(goal_button_, &QPushButton::clicked, this,
@@ -355,10 +357,10 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   auto* send = new QPushButton("Send", group);
   auto* clear = new QPushButton("Clear", group);
   auto* cancel = new QPushButton("Cancel", group);
-  grid->addWidget(multi_button_, 6, 0);
-  grid->addWidget(send, 6, 1);
-  grid->addWidget(clear, 6, 2);
-  grid->addWidget(cancel, 6, 3);
+  grid->addWidget(multi_button_, 7, 0);
+  grid->addWidget(send, 7, 1);
+  grid->addWidget(clear, 7, 2);
+  grid->addWidget(cancel, 7, 3);
   connect(multi_button_, &QPushButton::clicked, this,
           [this] { scene_->set_tool(scene_->tool() == "multi" ? "" : "multi"); });
   connect(send, &QPushButton::clicked, this, [this] { publish_multi(preview_mode_); });
@@ -374,8 +376,8 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   preview_button_ = new QPushButton("Preview OFF", group);
   preview_button_->setCheckable(true);
   auto* go = new QPushButton("Go", group);
-  grid->addWidget(preview_button_, 7, 0);
-  grid->addWidget(go, 7, 1);
+  grid->addWidget(preview_button_, 8, 0, 1, 2);
+  grid->addWidget(go, 8, 2);
   connect(preview_button_, &QPushButton::toggled, this, [this](bool checked) {
     preview_mode_ = checked;
     preview_button_->setText(checked ? "Preview ON" : "Preview OFF");
@@ -386,8 +388,8 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   teleop_slider_ = new QSlider(Qt::Horizontal, group);
   teleop_slider_->setRange(25, 150);
   teleop_slider_->setValue(100);
-  grid->addWidget(teleop_label_, 8, 0, 1, 2);
-  grid->addWidget(teleop_slider_, 8, 2, 1, 2);
+  grid->addWidget(teleop_label_, 9, 0, 1, 2);
+  grid->addWidget(teleop_slider_, 9, 2, 1, 2);
   connect(teleop_slider_, &QSlider::valueChanged, this, [this](int value) {
     scene_->set_teleop_scale(static_cast<double>(value) / 100.0);
     teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * static_cast<double>(value) / 100.0, 0, 'f', 2));
