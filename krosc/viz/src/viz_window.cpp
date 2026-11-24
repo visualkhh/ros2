@@ -118,6 +118,22 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   setCentralWidget(central);
   build_manual_docks();
   qApp->installEventFilter(this);
+  connect(qApp, &QApplication::focusChanged, this, [this](QWidget* old_focus, QWidget* new_focus) {
+    if (teleop_dock_ == nullptr) {
+      return;
+    }
+    const bool old_in_teleop =
+        old_focus != nullptr && (old_focus == teleop_dock_ || teleop_dock_->isAncestorOf(old_focus));
+    const bool new_in_teleop =
+        new_focus != nullptr && (new_focus == teleop_dock_ || teleop_dock_->isAncestorOf(new_focus));
+    if (old_in_teleop && !new_in_teleop) {
+      if (scene_ != nullptr) {
+        scene_->clear_teleop_keys();
+      }
+      teleop_direction_ = 0;
+      publish_teleop_pad();
+    }
+  });
 
   statusBar()->showMessage(scene_->help_text());
 
