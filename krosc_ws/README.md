@@ -148,15 +148,20 @@ krosc_ws/
 │   ├── CMakeLists.txt
 │   └── plugins/
 │       └── project_panel.cpp # 프로젝트 플러그인 예제 ("Project" 탭)
+
+krosc/viz/
+├── app/main.cpp              # 공통/최소 Viz 앱
+├── core/                     # VizWindow, SceneView, MapView2D, VizModel
+├── plugins/                  # 코어 플러그인 (SLAM/Nav/Teleop/...)
+└── include/krosc/viz/        # IVizPlugin, VizHost, VizPlugin, ...
 ```
 
 코어 API는 `krosc/viz/include/krosc/viz/viz_plugin.hpp`에 있다.
 
 ```cpp
-class MyPlugin final : public krosc::viz::IVizPlugin {
-  krosc::viz::VizPluginInfo info() const override {
-    return {"my_plugin", "My Plugin", "1.0", {}};
-  }
+class MyPlugin final : public krosc::viz::VizPlugin {
+ public:
+  MyPlugin() : VizPlugin({"my_plugin", "My Plugin", "1.0", {}}) {}
   void initialize(krosc::viz::VizHost& host) override {
     auto* page = new QWidget(&host.window());
     // ...

@@ -1514,6 +1514,12 @@ void VizWindow::add_tab(QWidget* tab, const QString& title, bool make_current) {
   }
 }
 
+void VizWindow::show_tab(QWidget* tab) {
+  if (tabs_ != nullptr && tab != nullptr) {
+    tabs_->setCurrentWidget(tab);
+  }
+}
+
 void VizWindow::load_plugins(VizPluginRegistry& registry, const std::vector<std::string>& ids) {
   for (const auto& id : ids) {
     auto plugin = registry.create(id);

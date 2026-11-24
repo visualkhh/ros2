@@ -46,6 +46,7 @@ class VizWindow : public QMainWindow, public VizHost {
   [[nodiscard]] QMainWindow& window() override { return *this; }
   void add_dock(QDockWidget* dock, Qt::DockWidgetArea area) override;
   void add_tab(QWidget* tab, const QString& title, bool make_current = false) override;
+  void show_tab(QWidget* tab) override;
   void load_plugins(VizPluginRegistry& registry, const std::vector<std::string>& ids);
 
   void set_fixed_frame(const std::string& frame);

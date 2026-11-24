@@ -20,10 +20,10 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 add_library(krosc_viz STATIC
-  src/viz_model.cpp
-  src/viz_window.cpp
-  src/map_view.cpp
-  src/scene_view.cpp
+  core/viz_model.cpp
+  core/viz_window.cpp
+  core/map_view.cpp
+  core/scene_view.cpp
   include/krosc/viz/viz_model.hpp
   include/krosc/viz/viz_window.hpp
   include/krosc/viz/map_view.hpp
@@ -51,7 +51,7 @@ target_link_libraries(krosc_viz
 target_compile_options(krosc_viz PRIVATE -Wall -Wextra -Wpedantic)
 
 # viz 패키지 단독 실행기: 빈 그리드와 패널을 띄워 viz 자체를 시험한다.
-add_executable(krosc_viz_app src/main.cpp)
+add_executable(krosc_viz_app app/main.cpp)
 target_link_libraries(krosc_viz_app PRIVATE krosc::viz)
 
 # 프로젝트별 Viz 플러그인/앱 (예: krosc_ws/viz). 프로젝트가 자기 viz-main을 가진다.

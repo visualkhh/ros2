@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 class QDockWidget;
@@ -39,6 +40,7 @@ class VizHost {
 
   virtual void add_dock(QDockWidget* dock, Qt::DockWidgetArea area) = 0;
   virtual void add_tab(QWidget* tab, const QString& title, bool make_current = false) = 0;
+  virtual void show_tab(QWidget* tab) = 0;
 };
 
 class IVizPlugin {
@@ -47,6 +49,16 @@ class IVizPlugin {
   [[nodiscard]] virtual VizPluginInfo info() const = 0;
   virtual void initialize(VizHost& host) = 0;
   virtual void shutdown() {}
+};
+
+// 편의 베이스: info()/기본 shutdown()을 구현해 두고, 플러그인은 initialize()만 구현하면 된다.
+class VizPlugin : public IVizPlugin {
+ public:
+  explicit VizPlugin(VizPluginInfo info) : info_(std::move(info)) {}
+  [[nodiscard]] VizPluginInfo info() const final { return info_; }
+
+ private:
+  VizPluginInfo info_;
 };
 
 using VizPluginFactory = std::function<std::unique_ptr<IVizPlugin>()>;
