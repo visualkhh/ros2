@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
       manipulator_panel = false;
       moveit_panel = false;
     } else if (argument == "--help") {
-      std::printf("usage: krosc_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map] [--manual|--teleop|--manipulator|--moveit|--no-manual] [--no-moveit] [--distance M] [--screenshot PATH] [--duration SEC]\n");
+      std::printf("usage: krosc_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map|moveit] [--manual|--teleop|--manipulator|--moveit|--no-manual] [--no-moveit] [--distance M] [--screenshot PATH] [--duration SEC]\n");
       return 0;
     }
   }
@@ -95,8 +95,8 @@ int main(int argc, char** argv) {
   }
   krosc::viz::VizWindow window(context);
   window.set_fixed_frame(fixed_frame);
-  window.set_tab(tab == "map" ? 1 : 0);
   window.set_manual_panels(teleop_panel, manipulator_panel, moveit_panel);
+  window.set_tab(tab == "map" ? 1 : (tab == "moveit" ? 2 : 0));
   if (distance > 0.0) {
     window.set_camera_distance(distance);
   }

@@ -29,10 +29,7 @@ std::int8_t occupancy_value(std::uint8_t cost) {
   if (cost == 254) {
     return 100;
   }
-  if (cost == 253) {
-    return 50;
-  }
-  return 0;
+  return static_cast<std::int8_t>(std::min<int>(cost, 99));
 }
 
 struct QueueEntry {
@@ -114,7 +111,9 @@ bool Navigator::build_grid(const msgs::OccupancyGrid& map) {
       grid.cost[index] = 254;
     }
   }
-  const int reach = static_cast<int>(std::ceil(inflation_.value() / grid.resolution));
+  // RViz costmap처럼 lethal 주변을 거리 기반 1..99 가중치로 채운다.
+  // 99 = inscribed(로봇 반경), 1 = inflation 끝. A*도 이 값을 약한 패널티로 쓴다.
+  const int reach = std::max(1, static_cast<int>(std::ceil(inflation_.value() / grid.resolution)));
   for (int y = 0; y < grid.height; ++y) {
     for (int x = 0; x < grid.width; ++x) {
       if (grid.cost[static_cast<std::size_t>(y) * grid.width + x] != 254) {
@@ -122,7 +121,8 @@ bool Navigator::build_grid(const msgs::OccupancyGrid& map) {
       }
       for (int dy = -reach; dy <= reach; ++dy) {
         for (int dx = -reach; dx <= reach; ++dx) {
-          if (dx * dx + dy * dy > reach * reach) {
+          const double distance = std::hypot(static_cast<double>(dx), static_cast<double>(dy));
+          if (distance > static_cast<double>(reach)) {
             continue;
           }
           const int nx = x + dx;
@@ -131,8 +131,13 @@ bool Navigator::build_grid(const msgs::OccupancyGrid& map) {
             continue;
           }
           auto& cost = grid.cost[static_cast<std::size_t>(ny) * grid.width + nx];
-          if (cost < 200) {
-            cost = 253;
+          if (cost >= 200) {
+            continue;
+          }
+          const double normalized = reach <= 1 ? 0.0 : std::clamp((distance - 1.0) / (reach - 1.0), 0.0, 1.0);
+          const int value = std::clamp(static_cast<int>(std::lround(99.0 * (1.0 - normalized))), 1, 99);
+          if (value > cost) {
+            cost = static_cast<std::uint8_t>(value);
           }
         }
       }
@@ -291,7 +296,8 @@ bool Navigator::plan(const Grid& grid, const msgs::Pose2D& start, const msgs::Po
         }
       }
       const float step = direction >= 4 ? 1.4142F : 1.0F;
-      const float score = best[static_cast<std::size_t>(current.cell)] + step;
+      const float inflation_penalty = 0.01F * static_cast<float>(grid.cost[static_cast<std::size_t>(index)]);
+      const float score = best[static_cast<std::size_t>(current.cell)] + step + inflation_penalty;
       if (score >= best[static_cast<std::size_t>(index)]) {
         continue;
       }

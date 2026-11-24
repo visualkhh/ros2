@@ -63,6 +63,8 @@ class SceneView : public QWidget {
   void fixed_frame_changed();
   void set_arm_preview(ArmPreview preview);
   void clear_arm_preview();
+  void set_moveit_interactive(bool enabled) { moveit_interactive_ = enabled; }
+  void set_teleop_enabled(bool enabled);
   [[nodiscard]] QString help_text() const;
 
  signals:
@@ -70,6 +72,8 @@ class SceneView : public QWidget {
   void teleop_scale_changed(double scale);
   void tool_changed(QString tool);
   void tool_pose(double x, double y, double yaw);
+  void moveit_target_dragged(double x, double y, double z);
+  void moveit_drag_finished();
 
  protected:
   void paintEvent(QPaintEvent* event) override;
@@ -98,6 +102,7 @@ class SceneView : public QWidget {
   void publish_teleop();
   void compute_matrix();
   [[nodiscard]] Projected project(const QVector3D& point) const;
+  [[nodiscard]] std::optional<QVector3D> screen_to_plane(const QPoint& point, float z) const;
   [[nodiscard]] std::optional<QVector3D> screen_to_ground(const QPoint& point) const;
   [[nodiscard]] std::optional<msgs::PoseStamped> robot_pose() const;
   [[nodiscard]] std::optional<QVector3D> robot_position() const;
@@ -165,6 +170,9 @@ class SceneView : public QWidget {
   std::string tool_;
   std::vector<std::tuple<double, double, double>> waypoints_;
   ArmPreview arm_preview_;
+  bool moveit_interactive_ = false;
+  bool moveit_dragging_ = false;
+  bool teleop_enabled_ = true;
   bool tool_dragging_ = false;
   QPoint tool_start_;
   std::optional<QVector3D> tool_start_ground_;

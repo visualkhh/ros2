@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "krosc/math.hpp"
+#include "krosc/viz/costmap_color.hpp"
 #include "krosc/viz/key_bindings.hpp"
 #include "krosc/tf.hpp"
 
@@ -176,16 +177,8 @@ void MapView2D::draw_costmap(QPainter& painter, const std::shared_ptr<const msgs
       for (int x = 0; x < width; ++x) {
         const int value = grid->data[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
                                      static_cast<std::size_t>(x)];
-        if (value < 0) {
-          continue;
-        }
-        QColor color;
-        if (value >= 100) {
-          color = QColor(235, 55, 55, 190);
-        } else if (value > 0) {
-          const int t = std::min(value, 99);
-          color = QColor(235, 120 + t / 2, 45, 70 + t);
-        } else {
+        const QColor color = costmap_color(value);
+        if (color.alpha() == 0) {
           continue;
         }
         image.setPixelColor(x, height - 1 - y, color);

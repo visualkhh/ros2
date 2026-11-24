@@ -153,6 +153,27 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   map_view_ = new MapView2D(model_, tabs);
   tabs->addTab(scene_, "3D");
   tabs->addTab(map_view_, "Map");
+  moveit_view_ = new SceneView(model_, tabs);
+  moveit_view_->setObjectName("moveitView");
+  moveit_view_->set_moveit_interactive(true);
+  moveit_view_->set_teleop_enabled(false);
+  moveit_view_->set_camera_distance(1.25);
+  for (const char* layer : {"map", "global_costmap", "local_costmap", "scan", "imu", "odom", "filtered",
+                            "plan", "local_plan", "trail", "logs", "tf"}) {
+    moveit_view_->set_enabled(layer, false);
+  }
+  tabs->addTab(moveit_view_, "MoveIt");
+  moveit_tab_index_ = tabs->indexOf(moveit_view_);
+  tabs->setTabVisible(moveit_tab_index_, false);
+  moveit_drag_timer_ = new QTimer(this);
+  moveit_drag_timer_->setInterval(80);
+  connect(moveit_drag_timer_, &QTimer::timeout, this, [this] {
+    if (moveit_dragging_ && !moveit_updating_) {
+      publish_moveit_target();
+    }
+  });
+  connect(moveit_view_, &SceneView::moveit_target_dragged, this, &VizWindow::on_moveit_target_dragged);
+  connect(moveit_view_, &SceneView::moveit_drag_finished, this, &VizWindow::on_moveit_drag_finished);
 
   auto* panel = new QWidget(splitter);
   panel->setMinimumWidth(300);
@@ -944,6 +965,10 @@ void VizWindow::build_moveit_dock() {
   moveit_cartesian_->setChecked(true);
   grid->addWidget(moveit_cartesian_, 2, 2, 1, 2);
   layout->addLayout(grid);
+  auto* hint = new QLabel("MoveIt 탭에서 TCP 마커를 드래그 / Shift+드래그: Z", panel);
+  hint->setWordWrap(true);
+  hint->setStyleSheet("color:#7f899b;");
+  layout->addWidget(hint);
 
   auto* buttons = new QHBoxLayout();
   moveit_current_button_ = new QPushButton("Current", panel);
@@ -1158,6 +1183,9 @@ void VizWindow::update_moveit_preview() {
   const auto target = model_.moveit_target_pose();
   if (!arm && !target) {
     scene_->clear_arm_preview();
+    if (moveit_view_ != nullptr) {
+      moveit_view_->clear_arm_preview();
+    }
     return;
   }
   ArmPreview preview;
@@ -1181,7 +1209,17 @@ void VizWindow::update_moveit_preview() {
     preview.target = msgs::Transform{{target->pose.position.x, target->pose.position.y, target->pose.position.z},
                                      target->pose.orientation};
   }
-  scene_->set_arm_preview(std::move(preview));
+  if (moveit_dragging_ && moveit_x_ != nullptr) {
+    msgs::Quaternion rotation{};
+    if (preview.target) {
+      rotation = preview.target->rotation;
+    }
+    preview.target = msgs::Transform{{moveit_x_->value(), moveit_y_->value(), moveit_z_->value()}, rotation};
+  }
+  scene_->set_arm_preview(preview);
+  if (moveit_view_ != nullptr) {
+    moveit_view_->set_arm_preview(std::move(preview));
+  }
 }
 
 void VizWindow::moveit_set_target_from_current() {
@@ -1232,12 +1270,18 @@ void VizWindow::moveit_set_target_from_current() {
   }
   moveit_updating_ = false;
   moveit_target_initialized_ = true;
+  if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
+    tabs_->setCurrentIndex(moveit_tab_index_);
+  }
   publish_moveit_target();
 }
 
 void VizWindow::moveit_plan() {
   if (moveit_executing_) {
     return;
+  }
+  if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
+    tabs_->setCurrentIndex(moveit_tab_index_);
   }
   publish_moveit_target();
   if (moveit_status_label_ != nullptr) {
@@ -1249,6 +1293,9 @@ void VizWindow::moveit_execute() {
   if (moveit_executing_) {
     return;
   }
+  if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
+    tabs_->setCurrentIndex(moveit_tab_index_);
+  }
   model_.node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
   if (moveit_status_label_ != nullptr) {
     moveit_status_label_->setText("Execute 요청...");
@@ -1259,6 +1306,31 @@ void VizWindow::moveit_stop() {
   model_.node().publish("moveit_cancel", msgs::Empty{}, QOS_DEFAULT);
   if (moveit_status_label_ != nullptr) {
     moveit_status_label_->setText("Cancel 요청...");
+  }
+}
+
+void VizWindow::on_moveit_target_dragged(double x, double y, double z) {
+  if (moveit_updating_ || moveit_executing_ || moveit_x_ == nullptr) {
+    return;
+  }
+  moveit_updating_ = true;
+  moveit_x_->setValue(x);
+  moveit_y_->setValue(y);
+  moveit_z_->setValue(z);
+  moveit_updating_ = false;
+  moveit_dragging_ = true;
+  if (moveit_drag_timer_ != nullptr && !moveit_drag_timer_->isActive()) {
+    moveit_drag_timer_->start();
+  }
+}
+
+void VizWindow::on_moveit_drag_finished() {
+  moveit_dragging_ = false;
+  if (moveit_drag_timer_ != nullptr) {
+    moveit_drag_timer_->stop();
+  }
+  if (!moveit_updating_) {
+    publish_moveit_target();
   }
 }
 
@@ -1437,6 +1509,12 @@ void VizWindow::set_manual_panels(bool teleop, bool manipulator, bool moveit) {
   }
   if (!docks.isEmpty()) {
     resizeDocks(docks, sizes, Qt::Vertical);
+  }
+  if (tabs_ != nullptr && moveit_tab_index_ >= 0) {
+    tabs_->setTabVisible(moveit_tab_index_, moveit);
+    if (!moveit && tabs_->currentIndex() == moveit_tab_index_) {
+      tabs_->setCurrentIndex(0);
+    }
   }
 }
 
@@ -1745,7 +1823,7 @@ void VizWindow::refresh_topics() {
 
 void VizWindow::set_tab(int index) {
   if (tabs_ != nullptr) {
-    tabs_->setCurrentIndex(index == 1 ? 1 : 0);
+    tabs_->setCurrentIndex(std::clamp(index, 0, tabs_->count() - 1));
   }
 }
 

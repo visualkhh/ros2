@@ -1,5 +1,6 @@
 #include "krosc/viz/scene_view.hpp"
 
+#include "krosc/viz/costmap_color.hpp"
 #include "krosc/viz/key_bindings.hpp"
 
 #include <QFocusEvent>
@@ -52,15 +53,8 @@ QImage build_grid_image(const msgs::OccupancyGrid& grid, bool costmap) {
       const int value = grid.data[static_cast<std::size_t>(y * width + x)];
       QColor color;
       if (costmap) {
-        if (value < 0) {
-          continue;
-        }
-        if (value >= 100) {
-          color = QColor(235, 55, 55, 230);
-        } else if (value > 0) {
-          const int t = std::min(value, 99);
-          color = QColor(235, 90 + t, 45, 35 + t * 2);
-        } else {
+        color = costmap_color(value);
+        if (color.alpha() == 0) {
           continue;
         }
       } else {
@@ -160,6 +154,20 @@ void SceneView::set_teleop_scale(double scale) {
   update();
 }
 
+void SceneView::set_teleop_enabled(bool enabled) {
+  teleop_enabled_ = enabled;
+  if (!enabled) {
+    keys_.clear();
+    key_codes_.clear();
+    if (last_linear_ != 0.0 || last_angular_ != 0.0) {
+      model_.publish_cmd_vel(0.0, 0.0);
+      last_linear_ = 0.0;
+      last_angular_ = 0.0;
+    }
+  }
+  update();
+}
+
 void SceneView::set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints) {
   waypoints_ = waypoints;
   update();
@@ -223,7 +231,7 @@ void SceneView::compute_matrix() {
   matrix_ = projection * view;
 }
 
-std::optional<QVector3D> SceneView::screen_to_ground(const QPoint& point) const {
+std::optional<QVector3D> SceneView::screen_to_plane(const QPoint& point, float plane_z) const {
   if (view_width_ <= 0 || view_height_ <= 0) {
     return std::nullopt;
   }
@@ -246,11 +254,15 @@ std::optional<QVector3D> SceneView::screen_to_ground(const QPoint& point) const 
   if (std::abs(direction.z()) < 1e-6F) {
     return std::nullopt;
   }
-  const float t = -near->z() / direction.z();
+  const float t = (plane_z - near->z()) / direction.z();
   if (t < 0.0F) {
     return std::nullopt;
   }
   return *near + direction * t;
+}
+
+std::optional<QVector3D> SceneView::screen_to_ground(const QPoint& point) const {
+  return screen_to_plane(point, 0.0F);
 }
 
 SceneView::Projected SceneView::project(const QVector3D& point) const {
@@ -1317,6 +1329,22 @@ void SceneView::draw_tool_preview(QPainter& painter) const {
 void SceneView::mousePressEvent(QMouseEvent* event) {
   setFocus(Qt::MouseFocusReason);
   last_mouse_ = event->position().toPoint();
+  if (event->button() == Qt::LeftButton && moveit_interactive_ && arm_preview_.target) {
+    const auto base = model_.transform_in_fixed("base_link");
+    if (base) {
+      const msgs::Vector3 fixed = tfmath::apply(base->transform, arm_preview_.target->translation);
+      const Projected projected = project(QVector3D(static_cast<float>(fixed.x), static_cast<float>(fixed.y),
+                                                    static_cast<float>(fixed.z)));
+      if (projected.visible) {
+        const double distance = std::hypot(projected.point.x() - event->position().x(),
+                                           projected.point.y() - event->position().y());
+        if (distance <= 30.0) {
+          moveit_dragging_ = true;
+          return;
+        }
+      }
+    }
+  }
   if (event->button() == Qt::LeftButton && !tool_.empty()) {
     tool_dragging_ = true;
     tool_start_ = last_mouse_;
@@ -1335,6 +1363,29 @@ void SceneView::mouseMoveEvent(QMouseEvent* event) {
   const QPoint current = event->position().toPoint();
   const QPoint delta = current - last_mouse_;
   last_mouse_ = current;
+  if (moveit_dragging_ && arm_preview_.target) {
+    const auto base = model_.transform_in_fixed("base_link");
+    if (!base) {
+      return;
+    }
+    msgs::Vector3 fixed = tfmath::apply(base->transform, arm_preview_.target->translation);
+    if ((event->modifiers() & Qt::ShiftModifier) != 0) {
+      fixed.z += -static_cast<double>(delta.y()) * camera_.distance * 0.0015;
+    } else {
+      const auto point = screen_to_plane(current, static_cast<float>(fixed.z));
+      if (!point) {
+        return;
+      }
+      fixed.x = point->x();
+      fixed.y = point->y();
+    }
+    msgs::Vector3 target = tfmath::apply(tfmath::inverse(base->transform), fixed);
+    target.z = std::clamp(target.z, -0.15, 0.85);
+    arm_preview_.target->translation = target;
+    update();
+    emit moveit_target_dragged(target.x, target.y, target.z);
+    return;
+  }
   if (tool_dragging_) {
     tool_current_ground_ = screen_to_ground(current);
     update();
@@ -1359,6 +1410,11 @@ void SceneView::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void SceneView::mouseReleaseEvent(QMouseEvent* event) {
+  if (moveit_dragging_ && event->button() == Qt::LeftButton) {
+    moveit_dragging_ = false;
+    emit moveit_drag_finished();
+    return;
+  }
   if (tool_dragging_) {
     tool_dragging_ = false;
     const auto end_ground = screen_to_ground(event->position().toPoint());
@@ -1388,6 +1444,10 @@ void SceneView::wheelEvent(QWheelEvent* event) {
 
 void SceneView::keyPressEvent(QKeyEvent* event) {
   const int code = qwerty_key(event);
+  if (!teleop_enabled_ && is_move_key(code)) {
+    event->accept();
+    return;
+  }
   if (event->isAutoRepeat()) {
     if (is_move_key(code)) {
       keys_.insert(code);
@@ -1446,6 +1506,10 @@ void SceneView::focusOutEvent(QFocusEvent* event) {
   (void)event;
   keys_.clear();
   key_codes_.clear();
+  if (moveit_dragging_) {
+    moveit_dragging_ = false;
+    emit moveit_drag_finished();
+  }
   orbiting_ = false;
   panning_ = false;
 }
@@ -1465,6 +1529,9 @@ void SceneView::set_teleop_key(int key, bool pressed) {
 void SceneView::clear_teleop_keys() { keys_.clear(); }
 
 void SceneView::publish_teleop() {
+  if (!teleop_enabled_) {
+    return;
+  }
   const auto held = [this](std::initializer_list<int> keys) {
     return std::any_of(keys.begin(), keys.end(), [this](int key) { return keys_.contains(key); });
   };

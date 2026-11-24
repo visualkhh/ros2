@@ -29,6 +29,7 @@ add_library(krosc_viz STATIC
   include/krosc/viz/map_view.hpp
   include/krosc/viz/scene_view.hpp
   include/krosc/viz/key_bindings.hpp
+  include/krosc/viz/costmap_color.hpp
 )
 
 add_library(krosc::viz ALIAS krosc_viz)

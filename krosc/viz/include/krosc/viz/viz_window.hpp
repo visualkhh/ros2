@@ -72,6 +72,8 @@ class VizWindow : public QMainWindow {
   void moveit_plan();
   void moveit_execute();
   void moveit_stop();
+  void on_moveit_target_dragged(double x, double y, double z);
+  void on_moveit_drag_finished();
   void reset_arm();
   [[nodiscard]] QString arm_error_summary() const;
   void set_arm_slider_values(const std::array<double, 5>& positions);
@@ -88,6 +90,8 @@ class VizWindow : public QMainWindow {
 
   VizModel model_;
   SceneView* scene_ = nullptr;
+  SceneView* moveit_view_ = nullptr;
+  int moveit_tab_index_ = -1;
   QTabWidget* tabs_ = nullptr;
   MapView2D* map_view_ = nullptr;
   QComboBox* fixed_frame_ = nullptr;
@@ -135,6 +139,8 @@ class VizWindow : public QMainWindow {
   QLabel* moveit_current_label_ = nullptr;
   QLabel* moveit_status_label_ = nullptr;
   QSlider* moveit_scrub_ = nullptr;
+  QTimer* moveit_drag_timer_ = nullptr;
+  bool moveit_dragging_ = false;
   bool moveit_executing_ = false;
   bool moveit_updating_ = false;
   bool moveit_target_initialized_ = false;

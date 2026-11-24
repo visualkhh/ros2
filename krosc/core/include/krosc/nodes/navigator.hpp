@@ -39,7 +39,7 @@ class Navigator final : public Node {
     double resolution = 0.05;
     double origin_x = 0.0;
     double origin_y = 0.0;
-    std::vector<std::uint8_t> cost;  // 0 free, 255 unknown, 254 lethal, 253 inflated
+    std::vector<std::uint8_t> cost;  // 0 free, 1..99 inflation, 255 unknown, 254 lethal
     [[nodiscard]] bool valid() const {
       return width > 0 && height > 0 && cost.size() == static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
     }
