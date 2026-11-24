@@ -48,7 +48,9 @@ class VizWindow : public QMainWindow {
   void refresh_topics();
   void refresh_slam();
   void update_tool_buttons();
-  void publish_pose(const std::string& topic, double x, double y, double yaw);
+  void set_tool(const std::string& tool);
+  void handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map);
+  void publish_pose(const std::string& topic, double x, double y, double yaw, bool from_map);
   void publish_multi(bool preview);
   void send_pending();
   [[nodiscard]] std::string map_status_text() const;
@@ -78,6 +80,7 @@ class VizWindow : public QMainWindow {
   std::optional<std::tuple<double, double, double>> last_single_goal_;
   bool preview_mode_ = false;
   std::string last_map_status_;
+  std::string active_tool_;
   QTimer* paint_timer_ = nullptr;
   QTimer* refresh_timer_ = nullptr;
   QTimer* slam_timer_ = nullptr;

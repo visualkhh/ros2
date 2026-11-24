@@ -47,6 +47,13 @@ void MapView2D::resizeEvent(QResizeEvent* event) {
   }
 }
 
+void MapView2D::set_tool(const std::string& tool) {
+  tool_ = (tool == "initialpose" || tool == "goal" || tool == "multi") ? tool : std::string{};
+  tool_dragging_ = false;
+  emit tool_changed(QString::fromStdString(tool_));
+  update();
+}
+
 void MapView2D::fit_map() {
   const auto map = model_.map();
   if (!map || map->info.width == 0 || map->info.height == 0 || map->info.resolution <= 0.0) {
@@ -107,6 +114,10 @@ void MapView2D::rebuild_image() {
 
 QPointF MapView2D::to_screen(double x, double y) const {
   return {offset_x_ + (x - origin_x_) * zoom_, offset_y_ - (y - origin_y_) * zoom_};
+}
+
+QPointF MapView2D::to_map(const QPointF& screen) const {
+  return {origin_x_ + (screen.x() - offset_x_) / zoom_, origin_y_ + (offset_y_ - screen.y()) / zoom_};
 }
 
 void MapView2D::paintEvent(QPaintEvent* event) {
@@ -220,6 +231,32 @@ void MapView2D::paintEvent(QPaintEvent* event) {
     painter.drawEllipse(point(0.0, 0.0), 3.0, 3.0);
   }
 
+  // 도구 드래그 미리보기 (2D Pose Estimate / Goal / Multi)
+  if (tool_dragging_) {
+    QColor color(80, 235, 145, 240);
+    if (tool_ == "goal") {
+      color = QColor(255, 95, 205, 240);
+    } else if (tool_ == "multi") {
+      color = QColor(255, 210, 70, 240);
+    }
+    const double dx = tool_current_map_.x() - tool_start_map_.x();
+    const double dy = tool_current_map_.y() - tool_start_map_.y();
+    const double distance = std::hypot(dx, dy);
+    const double yaw = distance > 0.03 ? std::atan2(dy, dx) : 0.0;
+    const double length = std::max(0.6, distance);
+    const QPointF start = to_screen(tool_start_map_.x(), tool_start_map_.y());
+    const QPointF end = to_screen(tool_start_map_.x() + std::cos(yaw) * length,
+                                  tool_start_map_.y() + std::sin(yaw) * length);
+    painter.setPen(QPen(color, 3.0));
+    painter.drawLine(start, end);
+    const double head = 0.22 * zoom_;
+    painter.drawLine(end, QPointF(end.x() - std::cos(yaw - 0.5) * head, end.y() + std::sin(yaw - 0.5) * head));
+    painter.drawLine(end, QPointF(end.x() - std::cos(yaw + 0.5) * head, end.y() + std::sin(yaw + 0.5) * head));
+    painter.setBrush(QColor(color.red(), color.green(), color.blue(), 60));
+    painter.drawEllipse(start, 6.0, 6.0);
+    painter.setBrush(Qt::NoBrush);
+  }
+
   // HUD
   painter.setPen(QColor(220, 228, 240));
   QFont font("Menlo");
@@ -236,6 +273,13 @@ void MapView2D::paintEvent(QPaintEvent* event) {
 }
 
 void MapView2D::mousePressEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton && !tool_.empty()) {
+    tool_dragging_ = true;
+    tool_start_map_ = to_map(event->position());
+    tool_current_map_ = tool_start_map_;
+    update();
+    return;
+  }
   if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton) {
     dragging_ = true;
     last_mouse_ = event->position().toPoint();
@@ -244,6 +288,11 @@ void MapView2D::mousePressEvent(QMouseEvent* event) {
 }
 
 void MapView2D::mouseMoveEvent(QMouseEvent* event) {
+  if (tool_dragging_) {
+    tool_current_map_ = to_map(event->position());
+    update();
+    return;
+  }
   if (!dragging_) {
     return;
   }
@@ -255,7 +304,19 @@ void MapView2D::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void MapView2D::mouseReleaseEvent(QMouseEvent* event) {
-  (void)event;
+  if (tool_dragging_) {
+    tool_dragging_ = false;
+    tool_current_map_ = to_map(event->position());
+    const double dx = tool_current_map_.x() - tool_start_map_.x();
+    const double dy = tool_current_map_.y() - tool_start_map_.y();
+    const double yaw = (dx * dx + dy * dy > 1e-4) ? std::atan2(dy, dx) : 0.0;
+    emit tool_pose(tool_start_map_.x(), tool_start_map_.y(), yaw);
+    if (tool_ != "multi") {
+      set_tool("");
+    }
+    update();
+    return;
+  }
   dragging_ = false;
   unsetCursor();
 }

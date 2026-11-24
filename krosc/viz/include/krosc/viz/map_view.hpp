@@ -22,6 +22,12 @@ class MapView2D final : public QWidget {
   explicit MapView2D(VizModel& model, QWidget* parent = nullptr);
 
   void fit_map();
+  void set_tool(const std::string& tool);
+  [[nodiscard]] std::string tool() const { return tool_; }
+
+ signals:
+  void tool_changed(QString tool);
+  void tool_pose(double x, double y, double yaw);
 
  protected:
   void paintEvent(QPaintEvent* event) override;
@@ -35,7 +41,7 @@ class MapView2D final : public QWidget {
   void rebuild_image();
   void place_fit_button();
   [[nodiscard]] QPointF to_screen(double x, double y) const;
-  [[nodiscard]] QPointF scan_point_to_map(double x, double y, double yaw, double px, double py) const;
+  [[nodiscard]] QPointF to_map(const QPointF& screen) const;
 
   VizModel& model_;
   std::shared_ptr<const msgs::OccupancyGrid> map_cache_;
@@ -49,6 +55,10 @@ class MapView2D final : public QWidget {
   bool dragging_ = false;
   bool fitted_once_ = false;
   QPoint last_mouse_;
+  std::string tool_;
+  bool tool_dragging_ = false;
+  QPointF tool_start_map_;
+  QPointF tool_current_map_;
   QPushButton* fit_button_ = nullptr;
 };
 

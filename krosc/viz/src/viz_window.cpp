@@ -131,23 +131,11 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   connect(slam_timer_, &QTimer::timeout, this, &VizWindow::refresh_slam);
   slam_timer_->start(300);
   connect(scene_, &SceneView::tool_changed, this, [this](const QString&) { update_tool_buttons(); });
-  connect(scene_, &SceneView::tool_pose, this, [this](double x, double y, double yaw) {
-    const std::string tool = scene_->tool();
-    if (tool == "multi") {
-      multi_goals_.emplace_back(x, y, yaw);
-      if (slam_status_label_ != nullptr) {
-        slam_status_label_->setText(QString("multi goals: %1 (Send로 전송)").arg(multi_goals_.size()));
-      }
-      update_tool_buttons();
-      return;
-    }
-    if (tool == "initialpose") {
-      publish_pose("initialpose", x, y, yaw);
-    } else if (tool == "goal") {
-      last_single_goal_ = std::make_tuple(x, y, yaw);
-      publish_pose(preview_mode_ ? "preview_goal" : "goal_pose", x, y, yaw);
-    }
-  });
+  connect(scene_, &SceneView::tool_pose, this,
+          [this](double x, double y, double yaw) { handle_tool_pose(scene_->tool(), x, y, yaw, false); });
+  connect(map_view_, &MapView2D::tool_changed, this, [this](const QString&) { update_tool_buttons(); });
+  connect(map_view_, &MapView2D::tool_pose, this,
+          [this](double x, double y, double yaw) { handle_tool_pose(map_view_->tool(), x, y, yaw, true); });
   connect(scene_, &SceneView::teleop_scale_changed, this, [this](double scale) {
     if (teleop_slider_ != nullptr) {
       const QSignalBlocker blocker(teleop_slider_);
@@ -356,9 +344,9 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   grid->addWidget(pose_button_, 5, 0, 1, 2);
   grid->addWidget(goal_button_, 5, 2, 1, 2);
   connect(pose_button_, &QPushButton::clicked, this,
-          [this] { scene_->set_tool(scene_->tool() == "initialpose" ? "" : "initialpose"); });
+          [this] { set_tool(active_tool_ == "initialpose" ? "" : "initialpose"); });
   connect(goal_button_, &QPushButton::clicked, this,
-          [this] { scene_->set_tool(scene_->tool() == "goal" ? "" : "goal"); });
+          [this] { set_tool(active_tool_ == "goal" ? "" : "goal"); });
 
   multi_button_ = new QPushButton("Multi Goal", group);
   auto* send = new QPushButton("Send", group);
@@ -369,7 +357,7 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   grid->addWidget(clear, 6, 2);
   grid->addWidget(cancel, 6, 3);
   connect(multi_button_, &QPushButton::clicked, this,
-          [this] { scene_->set_tool(scene_->tool() == "multi" ? "" : "multi"); });
+          [this] { set_tool(active_tool_ == "multi" ? "" : "multi"); });
   connect(send, &QPushButton::clicked, this, [this] { publish_multi(preview_mode_); });
   connect(clear, &QPushButton::clicked, this, [this] {
     multi_goals_.clear();
@@ -486,7 +474,7 @@ void VizWindow::update_tool_buttons() {
   if (pose_button_ == nullptr) {
     return;
   }
-  const std::string tool = scene_->tool();
+  const std::string tool = active_tool_;
   const auto style = [](QPushButton* button, const QString& text, bool active) {
     button->setText(text + (active ? " *" : ""));
     button->setStyleSheet(active ? "background:#8a5a1a;" : "");
@@ -497,10 +485,51 @@ void VizWindow::update_tool_buttons() {
   preview_button_->setText(preview_mode_ ? "Preview ON" : "Preview OFF");
 }
 
-void VizWindow::publish_pose(const std::string& topic, double x, double y, double yaw) {
-  if (model_.fixed_frame() != "map") {
-    slam_status_label_->setText("switch fixed frame to map");
+void VizWindow::set_tool(const std::string& tool) {
+  active_tool_ = (tool == "initialpose" || tool == "goal" || tool == "multi") ? tool : std::string{};
+  if (scene_ != nullptr) {
+    scene_->set_tool(active_tool_);
+  }
+  if (map_view_ != nullptr) {
+    map_view_->set_tool(active_tool_);
+  }
+  update_tool_buttons();
+}
+
+void VizWindow::handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map) {
+  if (tool == "multi") {
+    multi_goals_.emplace_back(x, y, yaw);
+    if (slam_status_label_ != nullptr) {
+      slam_status_label_->setText(QString("multi goals: %1 (Send로 전송)").arg(multi_goals_.size()));
+    }
+    update_tool_buttons();
     return;
+  }
+  if (tool == "initialpose") {
+    publish_pose("initialpose", x, y, yaw, from_map);
+  } else if (tool == "goal") {
+    last_single_goal_ = std::make_tuple(x, y, yaw);
+    publish_pose(preview_mode_ ? "preview_goal" : "goal_pose", x, y, yaw, from_map);
+  }
+  set_tool("");
+}
+
+void VizWindow::publish_pose(const std::string& topic, double x, double y, double yaw, bool from_map) {
+  if (!from_map && model_.fixed_frame() != "map") {
+    try {
+      const msgs::TransformStamped transform = model_.tf_buffer().lookup_transform("map", model_.fixed_frame());
+      const double offset = tfmath::yaw_of(transform.transform.rotation);
+      const double c = std::cos(offset);
+      const double s = std::sin(offset);
+      const double px = x;
+      const double py = y;
+      x = transform.transform.translation.x + c * px - s * py;
+      y = transform.transform.translation.y + s * px + c * py;
+      yaw = std::atan2(std::sin(offset + yaw), std::cos(offset + yaw));
+    } catch (const TransformException&) {
+      slam_status_label_->setText("no map TF (2D Pose Estimate first)");
+      return;
+    }
   }
   if (topic != "initialpose" && slam_status_text() != "localization") {
     slam_status_label_->setText("load a map first (localization)");
@@ -556,7 +585,7 @@ void VizWindow::publish_multi(bool preview) {
 void VizWindow::send_pending() {
   if (last_single_goal_) {
     publish_pose("goal_pose", std::get<0>(*last_single_goal_), std::get<1>(*last_single_goal_),
-                 std::get<2>(*last_single_goal_));
+                 std::get<2>(*last_single_goal_), true);
   }
   if (!multi_goals_.empty()) {
     publish_multi(false);
