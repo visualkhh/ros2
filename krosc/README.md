@@ -275,7 +275,7 @@ engine/include/krosc/nodes/nav2/
 ├── planners/      global_planner.hpp, navfn/theta*/smac2d/smac_hybrid 플러그인
 ├── costmap/       costmap.hpp, costmap_2d_ros.hpp
 ├── controller_server.hpp, planner_server.hpp, behavior_server.hpp, bt_navigator.hpp
-engine/include/krosc/moveit/
+engine/include/krosc/nodes/moveit/
 ├── kinematics/    kinematics_base.hpp, arm_chain_kinematics.hpp
 ├── planners/      planner_manager.hpp, cartesian/joint_space 플러그인
 └── controllers/   controller_manager.hpp, simple_controller_manager.hpp
@@ -284,7 +284,7 @@ engine/include/krosc/nodes/moveit/
 ```
 
 소스도 같은 구조다 (`engine/core/nodes/nav2/controllers`, `planners`, `costmap`,
-`engine/core/nodes/moveit/move_group.cpp`, `engine/core/moveit/kinematics`, `planners`, `controllers`).
+`engine/core/nodes/moveit/move_group.cpp`, `engine/core/nodes/moveit/kinematics`, `planners`, `controllers`).
 
 ROS 2와 맞춘 노드 이름:
 

@@ -49,15 +49,15 @@ add_library(krosc_core STATIC
   core/ros2_control/forward_command_controller.cpp
   core/ros2_control/joint_state_broadcaster.cpp
   core/ros2_control/joint_trajectory_controller.cpp
-  core/moveit/kinematics/arm_chain_kinematics.cpp
-  core/moveit/planners/cartesian_planner.cpp
-  core/moveit/controllers/controller_manager_plugins.cpp
-  core/moveit/planners/joint_space_planner.cpp
-  core/moveit/kinematics/kinematics_plugins.cpp
+  core/nodes/moveit/kinematics/arm_chain_kinematics.cpp
+  core/nodes/moveit/planners/cartesian_planner.cpp
+  core/nodes/moveit/controllers/controller_manager_plugins.cpp
+  core/nodes/moveit/planners/joint_space_planner.cpp
+  core/nodes/moveit/kinematics/kinematics_plugins.cpp
   core/nodes/moveit/move_group.cpp
-  core/moveit/planners/planner_manager.cpp
-  core/moveit/planners/planner_plugins.cpp
-  core/moveit/controllers/simple_controller_manager.cpp
+  core/nodes/moveit/planners/planner_manager.cpp
+  core/nodes/moveit/planners/planner_plugins.cpp
+  core/nodes/moveit/controllers/simple_controller_manager.cpp
 )
 
 add_library(krosc::core ALIAS krosc_core)

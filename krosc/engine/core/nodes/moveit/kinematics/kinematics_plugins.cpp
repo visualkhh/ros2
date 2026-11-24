@@ -1,7 +1,7 @@
 #include <memory>
 
-#include "krosc/moveit/kinematics/arm_chain_kinematics.hpp"
-#include "krosc/moveit/kinematics/kinematics_base.hpp"
+#include "krosc/nodes/moveit/kinematics/arm_chain_kinematics.hpp"
+#include "krosc/nodes/moveit/kinematics/kinematics_base.hpp"
 
 namespace krosc::moveit {
 

@@ -1,4 +1,4 @@
-#include "krosc/moveit/kinematics/arm_chain_kinematics.hpp"
+#include "krosc/nodes/moveit/kinematics/arm_chain_kinematics.hpp"
 
 namespace krosc::moveit {
 

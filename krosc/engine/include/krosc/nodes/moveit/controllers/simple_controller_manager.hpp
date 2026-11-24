@@ -1,7 +1,7 @@
 #pragma once
 
 #include "krosc/action.hpp"
-#include "krosc/moveit/controllers/controller_manager.hpp"
+#include "krosc/nodes/moveit/controllers/controller_manager.hpp"
 #include "krosc/msgs/control_msgs.hpp"
 
 namespace krosc::moveit {

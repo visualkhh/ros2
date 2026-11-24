@@ -1,6 +1,6 @@
 #pragma once
 
-#include "krosc/moveit/kinematics/kinematics_base.hpp"
+#include "krosc/nodes/moveit/kinematics/kinematics_base.hpp"
 
 namespace krosc::moveit {
 

@@ -1,7 +1,7 @@
 #include <memory>
 
-#include "krosc/moveit/controllers/controller_manager.hpp"
-#include "krosc/moveit/controllers/simple_controller_manager.hpp"
+#include "krosc/nodes/moveit/controllers/controller_manager.hpp"
+#include "krosc/nodes/moveit/controllers/simple_controller_manager.hpp"
 
 namespace krosc::moveit {
 

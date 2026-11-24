@@ -1,8 +1,8 @@
 #include <memory>
 
-#include "krosc/moveit/planners/cartesian_planner.hpp"
-#include "krosc/moveit/planners/joint_space_planner.hpp"
-#include "krosc/moveit/planners/planner_manager.hpp"
+#include "krosc/nodes/moveit/planners/cartesian_planner.hpp"
+#include "krosc/nodes/moveit/planners/joint_space_planner.hpp"
+#include "krosc/nodes/moveit/planners/planner_manager.hpp"
 
 namespace krosc::moveit {
 

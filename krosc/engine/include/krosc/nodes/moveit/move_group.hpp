@@ -11,9 +11,9 @@
 
 #include "krosc/action.hpp"
 #include "krosc/manipulation/arm_chain.hpp"
-#include "krosc/moveit/controllers/controller_manager.hpp"
-#include "krosc/moveit/kinematics/kinematics_base.hpp"
-#include "krosc/moveit/planners/planner_manager.hpp"
+#include "krosc/nodes/moveit/controllers/controller_manager.hpp"
+#include "krosc/nodes/moveit/kinematics/kinematics_base.hpp"
+#include "krosc/nodes/moveit/planners/planner_manager.hpp"
 #include "krosc/msgs/control_msgs.hpp"
 #include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/node.hpp"

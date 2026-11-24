@@ -1,4 +1,4 @@
-#include "krosc/moveit/planners/cartesian_planner.hpp"
+#include "krosc/nodes/moveit/planners/cartesian_planner.hpp"
 
 namespace krosc::moveit {
 

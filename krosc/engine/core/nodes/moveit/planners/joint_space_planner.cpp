@@ -1,4 +1,4 @@
-#include "krosc/moveit/planners/joint_space_planner.hpp"
+#include "krosc/nodes/moveit/planners/joint_space_planner.hpp"
 
 namespace krosc::moveit {
 

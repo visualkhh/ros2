@@ -1,4 +1,4 @@
-#include "krosc/moveit/planners/planner_manager.hpp"
+#include "krosc/nodes/moveit/planners/planner_manager.hpp"
 
 namespace krosc::moveit {
 
