@@ -1,15 +1,16 @@
 #pragma once
-// 팔 설정 — OpenMANIPULATOR-X(RM-X52-TNM) 5축 + 그리퍼. 값은 Lv2_bee_Assignment/lv2_module6/firmware/beebot_opencr/config.h 에서 가져옴.
-//   참고 문서: https://docs.robotis.com/docs/systems/turtlebot3/manipulation/
+// 팔 설정 — ROBOTIS OpenMANIPULATOR-X 정식 4축 + 그리퍼 (손목 roll 없음).
+//   참고 문서: https://docs.robotis.com/docs/systems/openmanipulator_x/overview/
 #include <stddef.h>
 #include <stdint.h>
 
-// 모터 ID — DYNAMIXEL Wizard로 미리 설정 (바퀴는 1·2). OM-X 기본은 그리퍼가 15인데, 손목 roll을 끼우며 16으로 옮김
-constexpr uint8_t ARM_IDS[] = {11, 12, 13, 14, 15, 16};   // joint1~5, 그리퍼(마지막)
+// 모터 ID — DYNAMIXEL Wizard로 미리 설정 (바퀴는 1·2).
+// OpenMANIPULATOR-X 정식: joint1~4 = 11~14, gripper = 15.
+constexpr uint8_t ARM_IDS[] = {11, 12, 13, 14, 15};   // joint1~4, 그리퍼(마지막)
 constexpr size_t ARM_N = sizeof(ARM_IDS) / sizeof(ARM_IDS[0]);
 constexpr size_t ARM_GRIPPER = ARM_N - 1;
 // 관절 부호 (0 rad = 서보 중앙 2048). TODO: 실기에서 관절마다 확인 — 영점 오프셋은 SBC URDF 쪽
-constexpr float ARM_DIR[ARM_GRIPPER] = {1, 1, 1, 1, 1};
+constexpr float ARM_DIR[ARM_GRIPPER] = {1, 1, 1, 1};
 
 // 그리퍼 — 프로토콜 값은 손가락 하나 [m] (0 = 닫힘, + = 열림). 링크 구조라 서보각과 비선형 → 실측표 구간별 직선 (Lv2 2026-10-24 실측)
 constexpr size_t GRIPPER_TABLE = 5;

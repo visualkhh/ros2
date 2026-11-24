@@ -78,14 +78,13 @@ void RobotBridge::poll() {
 }
 
 void RobotBridge::on_arm_command(const krosc::msgs::JointState& message) {
-  std::array<double, 6> target{std::numeric_limits<double>::quiet_NaN(),
-                               std::numeric_limits<double>::quiet_NaN(),
+  std::array<double, 5> target{std::numeric_limits<double>::quiet_NaN(),
                                std::numeric_limits<double>::quiet_NaN(),
                                std::numeric_limits<double>::quiet_NaN(),
                                std::numeric_limits<double>::quiet_NaN(),
                                std::numeric_limits<double>::quiet_NaN()};
   if (message.name.empty()) {
-    const std::size_t count = std::min<std::size_t>(6, message.position.size());
+    const std::size_t count = std::min<std::size_t>(5, message.position.size());
     for (std::size_t i = 0; i < count; ++i) {
       target[i] = message.position[i];
     }
@@ -101,10 +100,8 @@ void RobotBridge::on_arm_command(const krosc::msgs::JointState& message) {
         target[2] = message.position[i];
       } else if (name == "joint4") {
         target[3] = message.position[i];
-      } else if (name == "joint5") {
-        target[4] = message.position[i];
       } else if (name == "gripper" || name == "gripper_left_joint" || name == "gripper_right_joint") {
-        target[5] = message.position[i];
+        target[4] = message.position[i];
       }
     }
   }

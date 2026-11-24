@@ -35,7 +35,7 @@
 #include "robot_bridge.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
-#define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real_arm.urdf"
+#define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"
 #endif
 #ifndef KROSC_WS_MAPS_DIR
 #define KROSC_WS_MAPS_DIR "maps"

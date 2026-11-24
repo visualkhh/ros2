@@ -32,14 +32,14 @@ std::map<std::string, double> RealTurtleBot3::joint_positions() const {
                                        {"wheel_right_joint", opencr_.right_position()}};
   const ArmStatus arm = opencr_.arm_status();
   if (arm.present) {
-    for (std::size_t i = 0; i < 5; ++i) {
+    for (std::size_t i = 0; i < 4; ++i) {
       if (std::isfinite(arm.position[i])) {
         joints["joint" + std::to_string(i + 1)] = arm.position[i];
       }
     }
-    if (std::isfinite(arm.position[5])) {
-      joints["gripper_left_joint"] = arm.position[5];
-      joints["gripper_right_joint"] = arm.position[5];
+    if (std::isfinite(arm.position[4])) {
+      joints["gripper_left_joint"] = arm.position[4];
+      joints["gripper_right_joint"] = arm.position[4];
     }
   }
   return joints;

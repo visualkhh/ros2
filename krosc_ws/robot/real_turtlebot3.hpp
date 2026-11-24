@@ -10,7 +10,7 @@
 #include "hardwares/opencr_serial.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
-#define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real_arm.urdf"
+#define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"
 #endif
 
 namespace krosc_ws {

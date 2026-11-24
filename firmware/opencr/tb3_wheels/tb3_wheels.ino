@@ -28,12 +28,12 @@
 //
 // Safety: no C command for CMD_TIMEOUT_MS -> wheels stop (0, 0).
 //
-// Arm (OpenMANIPULATOR-X, IDs 11~15 + gripper 16; additive — wheel lines above are unchanged, arm absent = wheels still work):
-//   SBC -> OpenCR : A,<j1>,<j2>,<j3>,<j4>,<j5 rad>,<gripper m>[,<gripper A>]   (empty = keep)
+// Arm (OpenMANIPULATOR-X, IDs 11~14 + gripper 15; additive — wheel lines above are unchanged, arm absent = wheels still work):
+//   SBC -> OpenCR : A,<j1>,<j2>,<j3>,<j4 rad>,<gripper m>[,<gripper A>]   (empty = keep)
 //   SBC -> OpenCR : AT,0 | AT,1 | AT,<6 fields 0/1>     (arm torque off/on; empty = keep)
 //   SBC -> OpenCR : AR,1 | AR,<6 fields 0/1>            (reboot arm DYNAMIXELs, clears hardware error)
-//   OpenCR -> SBC : M,<6 x (pos rad|m, vel, current A)>,<6 temps C>   (nan = not read yet, temp -1 = unknown)
-//   OpenCR -> SBC : F,<6 hardware errors>               (like E: on change, then every ERR_REPEAT_MS while non-zero; -1 = no response)
+//   OpenCR -> SBC : M,<5 x (pos rad|m, vel, current A)>,<5 temps C>   (nan = not read yet, temp -1 = unknown)
+//   OpenCR -> SBC : F,<5 hardware errors>               (like E: on change, then every ERR_REPEAT_MS while non-zero; -1 = no response)
 //   Arm: no A for ARM_CMD_TIMEOUT_MS -> hold current pose. Details: arm_config.h, firmware/opencr/README.md
 #include <DynamixelSDK.h>
 #include <IMU.h>
@@ -227,7 +227,7 @@ static bool arm_setup_all() {
     if (!arm_set_up[i]) arm_set_up[i] = arm_setup_one(i, false);
     if (i < ARM_GRIPPER) joints_ok = arm_set_up[i] && joints_ok;
   }
-  // 그리퍼(ID16)는 없어도 5축은 움직일 수 있게 한다. 있으면 나중에 붙는다.
+  // 그리퍼(ID15)는 없어도 4축은 움직일 수 있게 한다. 있으면 나중에 붙는다.
   return joints_ok;
 }
 
@@ -384,7 +384,7 @@ static void arm_check() {
     }
     arm_wd_tripped = true;
   }
-  // 팔이 5축으로 먼저 떠도, 그리퍼가 나중에 연결되면 5초마다 다시 찾는다
+  // 팔이 4축으로 먼저 떠도, 그리퍼가 나중에 연결되면 5초마다 다시 찾는다
   if (!arm_set_up[ARM_GRIPPER] && now - arm_try_ms >= ARM_RETRY_MS) {
     arm_try_ms = now;
     arm_set_up[ARM_GRIPPER] = arm_setup_one(ARM_GRIPPER, false);

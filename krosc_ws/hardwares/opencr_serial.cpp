@@ -72,7 +72,7 @@ void OpenCrSerial::stop() {
   }
 }
 
-void OpenCrSerial::write_arm(const std::array<double, 6>& position) {
+void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
   std::string line = "A";
   char buffer[32];
   for (double value : position) {
@@ -254,30 +254,30 @@ void OpenCrSerial::on_line(const std::string& line) {
     std::lock_guard<std::mutex> lock(imu_mutex_);
     pending_imu_ = *imu;
   } else if (kind == "M") {
-    if (values.size() < 18) {
+    if (values.size() < 15) {
       bad_lines_.fetch_add(1);
       return;
     }
     std::lock_guard<std::mutex> lock(arm_mutex_);
-    for (std::size_t i = 0; i < 6; ++i) {
+    for (std::size_t i = 0; i < 5; ++i) {
       arm_status_.position[i] = values[i * 3];
       arm_status_.velocity[i] = values[i * 3 + 1];
       arm_status_.current[i] = values[i * 3 + 2];
-      if (18 + i < values.size()) {
-        arm_status_.temperature[i] = values[18 + i];
+      if (15 + i < values.size()) {
+        arm_status_.temperature[i] = values[15 + i];
       }
     }
     arm_status_.present = false;
-    for (std::size_t i = 0; i < 5; ++i) {
+    for (std::size_t i = 0; i < 4; ++i) {
       arm_status_.present = arm_status_.present || std::isfinite(arm_status_.position[i]);
     }
   } else if (kind == "F") {
-    if (values.size() < 6) {
+    if (values.size() < 5) {
       bad_lines_.fetch_add(1);
       return;
     }
     std::lock_guard<std::mutex> lock(arm_mutex_);
-    for (std::size_t i = 0; i < 6; ++i) {
+    for (std::size_t i = 0; i < 5; ++i) {
       arm_status_.error[i] = std::isfinite(values[i]) ? static_cast<int>(values[i]) : -1;
     }
   } else if (kind == "E") {

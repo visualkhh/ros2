@@ -1,7 +1,7 @@
 # OpenCR 2륜 펌웨어 (tb3_wheels)
 
 TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, **ID 2 = 왼쪽 · ID 1 = 오른쪽**) 속도제어 + 상태 송신.
-바퀴 + (선택) 매니퓰레이터 팔 5축·그리퍼 + 내장 IMU(`I` 줄). 팔이 없어도(뽑음·12V 꺼짐) 바퀴는 그대로 동작하고, 5초마다 팔을 다시 찾는다.
+바퀴 + (선택) ROBOTIS OpenMANIPULATOR-X 4축·그리퍼 + 내장 IMU(`I` 줄). 팔이 없어도(뽑음·12V 꺼짐) 바퀴는 그대로 동작하고, 5초마다 팔을 다시 찾는다.
 팔 쪽은 Lv2 `beebot_opencr`를 참고해 **기존 줄은 그대로 두고 줄을 추가**했다 (Pi 드라이버는 모르는 줄을 무시 — 드라이버 수정 없이 올릴 수 있음).
 기준 문서: <https://docs.robotis.com/docs/systems/turtlebot3/manipulation/>
 
@@ -23,14 +23,14 @@ TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, 
 
 ### 팔 줄 (추가)
 
-모터: joint1~5 = ID 11~15, 그리퍼 = ID 16 (DYNAMIXEL Wizard로 미리 설정, 1 Mbps, Protocol 2.0). 0 rad = 서보 중앙(2048). 그리퍼는 손가락 하나 m (0 = 닫힘).
+모터: joint1~4 = ID 11~14, 그리퍼 = ID 15 (DYNAMIXEL Wizard로 미리 설정, 1 Mbps, Protocol 2.0). 0 rad = 서보 중앙(2048). 그리퍼는 손가락 하나 m (0 = 닫힘).
 
 | 방향 | 형식 | 비고 |
 |---|---|---|
-| SBC → OpenCR | `A,<j1>,<j2>,<j3>,<j4>,<j5 rad>,<그리퍼 m>[,<그리퍼 전류 A>]` | 빈칸 = 유지. 한 패킷으로 동시 반영. 그리퍼 전류 = 쥐는 힘 한계 |
-| SBC → OpenCR | `AT,0` · `AT,1` · `AT,<6칸 0/1>` | 팔 토크. 켤 때 지금 자세가 목표 |
-| SBC → OpenCR | `AR,1` · `AR,<6칸 0/1>` | 팔 모터 재부팅 (Hardware Error 해제) |
-| OpenCR → SBC | `M,<6 × (pos, vel, 전류 A)>,<6 온도 ℃>` | 20Hz, `I` 뒤. 못 읽은 값 `nan` · 온도 −1 |
+| SBC → OpenCR | `A,<j1>,<j2>,<j3>,<j4 rad>,<그리퍼 m>[,<그리퍼 전류 A>]` | 빈칸 = 유지. 한 패킷으로 동시 반영. 그리퍼 전류 = 쥐는 힘 한계 |
+| SBC → OpenCR | `AT,0` · `AT,1` · `AT,<5칸 0/1>` | 팔 토크. 켤 때 지금 자세가 목표 |
+| SBC → OpenCR | `AR,1` · `AR,<5칸 0/1>` | 팔 모터 재부팅 (Hardware Error 해제) |
+| OpenCR → SBC | `M,<5 × (pos, vel, 전류 A)>,<5 온도 ℃>` | 20Hz, `I` 뒤. 못 읽은 값 `nan` · 온도 −1 |
 | OpenCR → SBC | `F,<6 에러>` | `E`와 같음 (변화 시 + 에러 중 1Hz) |
 
 안전: 500ms 동안 `A`가 없으면 현재 자세 유지. 12V를 껐다 켜 토크가 풀린 모터는 0.5초 안에 다시 켜고 느린 속도로 복귀. 관절 부호(`ARM_DIR`)와 그리퍼 쥐는 전류는 아직 **실측 전** (Lv2 값 그대로).

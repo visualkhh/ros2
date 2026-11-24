@@ -16,18 +16,17 @@
 
 namespace krosc_ws {
 
-// OpenCR M/F 줄의 팔 상태. position[0..4] = joint1..5, position[5] = gripper [m].
+// OpenCR M/F 줄의 팔 상태. position[0..3] = joint1..4, position[4] = gripper [m].
 struct ArmStatus {
-  std::array<double, 6> position{std::numeric_limits<double>::quiet_NaN(),
-                                 std::numeric_limits<double>::quiet_NaN(),
+  std::array<double, 5> position{std::numeric_limits<double>::quiet_NaN(),
                                  std::numeric_limits<double>::quiet_NaN(),
                                  std::numeric_limits<double>::quiet_NaN(),
                                  std::numeric_limits<double>::quiet_NaN(),
                                  std::numeric_limits<double>::quiet_NaN()};
-  std::array<double, 6> velocity{};
-  std::array<double, 6> current{};
-  std::array<double, 6> temperature{};
-  std::array<int, 6> error{-1, -1, -1, -1, -1, -1};
+  std::array<double, 5> velocity{};
+  std::array<double, 5> current{};
+  std::array<double, 5> temperature{};
+  std::array<int, 5> error{-1, -1, -1, -1, -1};
   bool present = false;
 };
 
@@ -49,7 +48,7 @@ class OpenCrSerial {
   void stop();
 
   void write(const krosc::msgs::Twist& command);
-  void write_arm(const std::array<double, 6>& position);  // NaN = 그 관절 유지
+  void write_arm(const std::array<double, 5>& position);  // NaN = 그 관절 유지
   void tick();
 
   [[nodiscard]] bool connected() const { return connected_.load(); }
