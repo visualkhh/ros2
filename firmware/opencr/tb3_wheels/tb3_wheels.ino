@@ -343,12 +343,32 @@ static void arm_reboot_line(char *text) {
   arm_cmd_ms = millis();
 }
 
+// 팔이 안 잡힐 때 어느 ID가 응답하는지 보여준다 (D,11:model,12:model,... / x=무응답)
+static void arm_scan_ids() {
+  Serial.print("D");
+  for (size_t i = 0; i < ARM_N; ++i) {
+    uint8_t err = 0;
+    uint16_t model = 0;
+    const bool ok = packetHandler->ping(portHandler, ARM_IDS[i], &model, &err) == COMM_SUCCESS;
+    Serial.print(",");
+    Serial.print(ARM_IDS[i]);
+    Serial.print(":");
+    if (ok) {
+      Serial.print(model);
+    } else {
+      Serial.print("x");
+    }
+  }
+  Serial.println();
+}
+
 // 100 ms마다가 아니라 0.5 s마다: 에러·온도 읽기, 속도 한계 해제, 12V를 껐다 켜 풀린 토크 복구, 팔이 없으면 5 s마다 찾기
 static void arm_check() {
   const uint32_t now = millis();
   if (!arm_ready) {
     if (now - arm_try_ms < ARM_RETRY_MS) return;
     arm_try_ms = now;
+    arm_scan_ids();
     uint8_t err = 0;
     uint16_t model = 0;
     if (packetHandler->ping(portHandler, ARM_IDS[0], &model, &err) == COMM_SUCCESS)   // joint1만 먼저 (없는 모터마다 응답 대기가 붙음)
