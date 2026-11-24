@@ -98,6 +98,8 @@ class SceneView : public QWidget {
   void draw_costmap(QPainter& painter, const std::shared_ptr<const msgs::OccupancyGrid>& grid, QImage& image,
                     std::shared_ptr<const msgs::OccupancyGrid>& cache, const char* label) const;
   void draw_robot(QPainter& painter);
+  [[nodiscard]] std::optional<std::string> resolve_mesh_path(const std::string& filename) const;
+  const std::vector<std::array<QVector3D, 3>>* load_mesh(const UrdfGeometry& geometry);
   void draw_scan(QPainter& painter) const;
   void draw_imu(QPainter& painter) const;
   void draw_odometry_arrows(QPainter& painter) const;
@@ -135,6 +137,7 @@ class SceneView : public QWidget {
   std::deque<QVector3D> trail_;
   std::unique_ptr<UrdfRobot> robot_;
   std::string robot_source_;
+  std::map<std::string, std::vector<std::array<QVector3D, 3>>> mesh_cache_;
   mutable QImage map_image_;
   mutable QImage global_costmap_image_;
   mutable QImage local_costmap_image_;

@@ -15,9 +15,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <limits>
+#include <set>
 #include <utility>
 
 #include "krosc/math.hpp"
@@ -594,6 +598,85 @@ void SceneView::draw_costmap(QPainter& painter, const std::shared_ptr<const msgs
   draw_grid_image(painter, *grid, image);
 }
 
+std::optional<std::string> SceneView::resolve_mesh_path(const std::string& filename) const {
+  constexpr const char* kPrefix = "package://open_manipulator_description/";
+  if (filename.rfind(kPrefix, 0) != 0) {
+    return std::nullopt;  // turtlebot3 base/wheel 메시는 기존 collision 도형으로 그린다
+  }
+  const std::string relative = filename.substr(std::char_traits<char>::length(kPrefix));
+  for (const char* root : {"krosc_ws/robot/description/", "robot/description/",
+                           "../krosc_ws/robot/description/", "../../krosc_ws/robot/description/"}) {
+    const std::string candidate = std::string(root) + relative;
+    if (std::filesystem::is_regular_file(candidate)) {
+      return candidate;
+    }
+  }
+  return std::nullopt;
+}
+
+const std::vector<std::array<QVector3D, 3>>* SceneView::load_mesh(const UrdfGeometry& geometry) {
+  auto cached = mesh_cache_.find(geometry.filename);
+  if (cached != mesh_cache_.end()) {
+    return &cached->second;
+  }
+  auto& triangles = mesh_cache_[geometry.filename];
+  const auto path = resolve_mesh_path(geometry.filename);
+  if (!path) {
+    return &triangles;
+  }
+  std::ifstream file(*path, std::ios::binary);
+  if (!file) {
+    return &triangles;
+  }
+  char header[80] = {};
+  std::uint32_t count = 0;
+  file.read(header, sizeof(header));
+  file.read(reinterpret_cast<char*>(&count), sizeof(count));
+  if (!file || count == 0 || count > 500000) {
+    return &triangles;
+  }
+  constexpr float kGrid = 0.012F;  // 12mm 격자로 간소화 (QPainter 실시간 렌더)
+  std::map<std::array<int, 3>, QVector3D> points;
+  std::set<std::array<int, 9>> seen;
+  for (std::uint32_t i = 0; i < count; ++i) {
+    float record[12] = {};  // normal[3] + vertex[9]
+    std::uint16_t attribute = 0;
+    file.read(reinterpret_cast<char*>(record), sizeof(record));
+    file.read(reinterpret_cast<char*>(&attribute), sizeof(attribute));
+    if (!file) {
+      break;
+    }
+    std::array<std::array<int, 3>, 3> keys{};
+    for (int vertex = 0; vertex < 3; ++vertex) {
+      const float x = record[3 + vertex * 3] * static_cast<float>(geometry.scale[0]);
+      const float y = record[4 + vertex * 3] * static_cast<float>(geometry.scale[1]);
+      const float z = record[5 + vertex * 3] * static_cast<float>(geometry.scale[2]);
+      keys[static_cast<std::size_t>(vertex)] = {static_cast<int>(std::lround(x / kGrid)),
+                                                static_cast<int>(std::lround(y / kGrid)),
+                                                static_cast<int>(std::lround(z / kGrid))};
+      if (points.find(keys[static_cast<std::size_t>(vertex)]) == points.end()) {
+        points.emplace(keys[static_cast<std::size_t>(vertex)],
+                       QVector3D(static_cast<float>(keys[static_cast<std::size_t>(vertex)][0]) * kGrid,
+                                 static_cast<float>(keys[static_cast<std::size_t>(vertex)][1]) * kGrid,
+                                 static_cast<float>(keys[static_cast<std::size_t>(vertex)][2]) * kGrid));
+      }
+    }
+    if (keys[0] == keys[1] || keys[1] == keys[2] || keys[0] == keys[2]) {
+      continue;
+    }
+    auto sorted = keys;
+    std::sort(sorted.begin(), sorted.end());
+    const std::array<int, 9> triangle_key{sorted[0][0], sorted[0][1], sorted[0][2],
+                                          sorted[1][0], sorted[1][1], sorted[1][2],
+                                          sorted[2][0], sorted[2][1], sorted[2][2]};
+    if (!seen.insert(triangle_key).second) {
+      continue;
+    }
+    triangles.push_back({points[keys[0]], points[keys[1]], points[keys[2]]});
+  }
+  return &triangles;
+}
+
 void SceneView::draw_robot(QPainter& painter) {
   const auto description = model_.robot_description();
   if (description) {
@@ -601,11 +684,21 @@ void SceneView::draw_robot(QPainter& painter) {
       robot_source_ = description->data;
       try {
         robot_ = std::make_unique<UrdfRobot>(parse_urdf(robot_source_));
+        mesh_cache_.clear();
       } catch (const UrdfError&) {
         robot_.reset();
       }
     }
   }
+
+  struct MeshFace {
+    float depth = 0.0F;
+    QPolygonF polygon;
+    QColor color;
+  };
+  std::vector<MeshFace> mesh_faces;
+  const QVector3D light = QVector3D(0.35F, -0.45F, 0.82F).normalized();
+
   bool drew = false;
   if (robot_) {
     for (const auto& link : robot_->links) {
@@ -613,28 +706,111 @@ void SceneView::draw_robot(QPainter& painter) {
       if (!link_tf) {
         continue;
       }
-      const auto& geometries = !link.collisions.empty() ? link.collisions : link.visuals;
-      for (const auto& geometry : geometries) {
-        if (geometry.geometry.type == UrdfGeometryType::None || geometry.geometry.type == UrdfGeometryType::Mesh) {
+      bool drew_link = false;
+      for (const auto& geometry : link.visuals) {
+        if (geometry.geometry.type == UrdfGeometryType::None) {
           continue;
         }
-        const msgs::Transform t = tfmath::compose(link_tf->transform, origin_transform(geometry));
+        if (geometry.geometry.type == UrdfGeometryType::Mesh) {
+          const auto* triangles = load_mesh(geometry.geometry);
+          if (triangles == nullptr || triangles->empty()) {
+            continue;
+          }
+          const msgs::Transform transform = tfmath::compose(link_tf->transform, origin_transform(geometry));
+          QColor base = link_color(link.name);
+          if (!geometry.material.empty()) {
+            const auto material = robot_->materials.find(geometry.material);
+            if (material != robot_->materials.end()) {
+              base = QColor::fromRgbF(static_cast<float>(material->second[0]),
+                                      static_cast<float>(material->second[1]),
+                                      static_cast<float>(material->second[2]),
+                                      static_cast<float>(material->second[3]));
+            }
+          }
+          base = base.lighter(165);
+          for (const auto& triangle : *triangles) {
+            std::array<QVector3D, 3> world{};
+            QPolygonF polygon;
+            bool visible = true;
+            for (int i = 0; i < 3; ++i) {
+              const msgs::Vector3 point =
+                  tfmath::apply(transform, msgs::Vector3{triangle[static_cast<std::size_t>(i)].x(),
+                                                         triangle[static_cast<std::size_t>(i)].y(),
+                                                         triangle[static_cast<std::size_t>(i)].z()});
+              world[static_cast<std::size_t>(i)] =
+                  QVector3D(static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z));
+              const Projected projected = project(world[static_cast<std::size_t>(i)]);
+              if (!projected.visible) {
+                visible = false;
+                break;
+              }
+              polygon << projected.point;
+            }
+            if (!visible) {
+              continue;
+            }
+            const QVector3D normal = QVector3D::crossProduct(world[1] - world[0], world[2] - world[0]).normalized();
+            const float shade = 0.42F + 0.58F * std::abs(QVector3D::dotProduct(normal, light));
+            const QVector4D clip = matrix_ * QVector4D((world[0] + world[1] + world[2]) / 3.0F, 1.0F);
+            const float depth = clip.z() / std::max(clip.w(), 1e-6F);
+            QColor color = base;
+            color.setRedF(std::clamp(color.redF() * shade, 0.0F, 1.0F));
+            color.setGreenF(std::clamp(color.greenF() * shade, 0.0F, 1.0F));
+            color.setBlueF(std::clamp(color.blueF() * shade, 0.0F, 1.0F));
+            color.setAlpha(235);
+            mesh_faces.push_back(MeshFace{depth, polygon, color});
+          }
+          drew_link = true;
+          continue;
+        }
+        const msgs::Transform transform = tfmath::compose(link_tf->transform, origin_transform(geometry));
         const QColor base = link_color(link.name);
         const QColor fill = with_alpha(base, 150);
         const QColor outline = with_alpha(base.lighter(140), 230);
         if (geometry.geometry.type == UrdfGeometryType::Box) {
-          draw_box(painter, t, geometry.geometry.size, fill, outline);
+          draw_box(painter, transform, geometry.geometry.size, fill, outline);
         } else if (geometry.geometry.type == UrdfGeometryType::Cylinder) {
-          draw_cylinder(painter, t, geometry.geometry.radius, geometry.geometry.length, fill, outline);
+          draw_cylinder(painter, transform, geometry.geometry.radius, geometry.geometry.length, fill, outline);
         } else if (geometry.geometry.type == UrdfGeometryType::Sphere) {
-          draw_box(painter, t, {geometry.geometry.radius * 2.0, geometry.geometry.radius * 2.0,
-                                geometry.geometry.radius * 2.0},
+          draw_box(painter, transform,
+                   {geometry.geometry.radius * 2.0, geometry.geometry.radius * 2.0, geometry.geometry.radius * 2.0},
                    fill, outline);
         }
-        drew = true;
+        drew_link = true;
       }
+      if (!drew_link) {
+        const auto& geometries = !link.collisions.empty() ? link.collisions : link.visuals;
+        for (const auto& geometry : geometries) {
+          if (geometry.geometry.type == UrdfGeometryType::None || geometry.geometry.type == UrdfGeometryType::Mesh) {
+            continue;
+          }
+          const msgs::Transform transform = tfmath::compose(link_tf->transform, origin_transform(geometry));
+          const QColor base = link_color(link.name);
+          const QColor fill = with_alpha(base, 150);
+          const QColor outline = with_alpha(base.lighter(140), 230);
+          if (geometry.geometry.type == UrdfGeometryType::Box) {
+            draw_box(painter, transform, geometry.geometry.size, fill, outline);
+          } else if (geometry.geometry.type == UrdfGeometryType::Cylinder) {
+            draw_cylinder(painter, transform, geometry.geometry.radius, geometry.geometry.length, fill, outline);
+          } else if (geometry.geometry.type == UrdfGeometryType::Sphere) {
+            draw_box(painter, transform,
+                     {geometry.geometry.radius * 2.0, geometry.geometry.radius * 2.0, geometry.geometry.radius * 2.0},
+                     fill, outline);
+          }
+          drew = true;
+        }
+      }
+      drew = drew || drew_link;
     }
   }
+  std::sort(mesh_faces.begin(), mesh_faces.end(),
+            [](const MeshFace& a, const MeshFace& b) { return a.depth > b.depth; });
+  painter.setPen(Qt::NoPen);
+  for (const auto& face : mesh_faces) {
+    painter.setBrush(face.color);
+    painter.drawPolygon(face.polygon);
+  }
+  painter.setBrush(Qt::NoBrush);
   if (!drew) {
     const auto pose = robot_pose();
     if (pose) {

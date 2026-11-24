@@ -99,7 +99,7 @@ cmake --build build -j
 
 ## 매니퓰레이터 (OpenMANIPULATOR-X 4축 + 그리퍼)
 
-- URDF: `robot/description/urdf/turtlebot3_real.urdf` (공식 visual STL + C++ Viz용 collision 근사)
+- URDF: `robot/description/urdf/turtlebot3_real.urdf` (공식 visual STL + collision 근사, C++ Viz는 visual STL을 12mm 격자로 간소화해 렌더)
 - 장착: 3층 판 맨 앞 중앙, `base_link` 기준 `x=+0.047985, y=-0.000230, z=+0.130175`
 - OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`arm_config.h`)
 - 토픽: `joint_states`에 팔 관절 포함, 명령은 `arm_joint_command` (`sensor_msgs/JointState`)
