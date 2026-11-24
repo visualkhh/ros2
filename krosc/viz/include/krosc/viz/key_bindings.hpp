@@ -90,6 +90,47 @@ inline int qwerty_key(const QKeyEvent* event) {
     default:
       break;
   }
+  // 한글 IME가 자모를 완성형 음절로 커밋한 경우(예: "자") 초성으로 되돌린다.
+  if (code >= 0xAC00 && code <= 0xD7A3) {
+    const int initial = (code - 0xAC00) / (21 * 28);
+    switch (initial) {
+      case 0:   // ㄱ
+      case 1:   // ㄲ
+        return Qt::Key_R;
+      case 2:   // ㄴ
+        return Qt::Key_S;
+      case 3:   // ㄷ
+      case 4:   // ㄸ
+        return Qt::Key_E;
+      case 5:   // ㄹ
+        return Qt::Key_F;
+      case 6:   // ㅁ
+        return Qt::Key_A;
+      case 7:   // ㅂ
+      case 8:   // ㅃ
+        return Qt::Key_Q;
+      case 9:   // ㅅ
+      case 10:  // ㅆ
+        return Qt::Key_T;
+      case 11:  // ㅇ
+        return Qt::Key_D;
+      case 12:  // ㅈ
+      case 13:  // ㅉ
+        return Qt::Key_W;
+      case 14:  // ㅊ
+        return Qt::Key_C;
+      case 15:  // ㅋ
+        return Qt::Key_Z;
+      case 16:  // ㅌ
+        return Qt::Key_X;
+      case 17:  // ㅍ
+        return Qt::Key_V;
+      case 18:  // ㅎ
+        return Qt::Key_G;
+      default:
+        break;
+    }
+  }
   if (code >= 'a' && code <= 'z') {
     return Qt::Key_A + (code - 'a');
   }
