@@ -85,6 +85,10 @@ void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
   (void)write_command(line);
 }
 
+void OpenCrSerial::set_arm_torque(bool enabled) {
+  (void)write_command(enabled ? "AT,1" : "AT,0");
+}
+
 ArmStatus OpenCrSerial::arm_status() const {
   std::lock_guard<std::mutex> lock(arm_mutex_);
   return arm_status_;

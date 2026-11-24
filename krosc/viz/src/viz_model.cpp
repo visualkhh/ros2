@@ -25,6 +25,7 @@ VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_,
   subscribe_latest<msgs::String>("map_status", map_status_, QOS_LATCHED);
   subscribe_latest<msgs::String>("goal_status", goal_status_, QOS_LATCHED);
   subscribe_latest<msgs::String>("collision_status", collision_status_, QOS_LATCHED);
+  subscribe_latest<msgs::JointState>("joint_states", joint_states_, QOS_DEFAULT);
   subscribe_latest<msgs::String>("slam_status", slam_status_, QOS_LATCHED);
   subscribe_stats_only(TF_TOPIC_NAME, "tf2_msgs/TFMessage", QOS_TF);
   subscribe_stats_only(TF_STATIC_TOPIC_NAME, "tf2_msgs/TFMessage", QOS_TF_STATIC);
@@ -165,6 +166,11 @@ std::shared_ptr<const msgs::String> VizModel::goal_status() const {
 std::shared_ptr<const msgs::String> VizModel::collision_status() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return collision_status_;
+}
+
+std::shared_ptr<const msgs::JointState> VizModel::joint_states() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return joint_states_;
 }
 
 std::shared_ptr<const msgs::String> VizModel::slam_status() const {

@@ -49,6 +49,7 @@ class OpenCrSerial {
 
   void write(const krosc::msgs::Twist& command);
   void write_arm(const std::array<double, 5>& position);  // NaN = 그 관절 유지
+  void set_arm_torque(bool enabled);
   void tick();
 
   [[nodiscard]] bool connected() const { return connected_.load(); }

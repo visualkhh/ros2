@@ -3,6 +3,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDockWidget>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLineEdit>
@@ -22,7 +23,9 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -110,6 +113,7 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   splitter->setSizes({390, 1050});
   layout->addWidget(splitter, 1);
   setCentralWidget(central);
+  build_manual_docks();
 
   statusBar()->showMessage(scene_->help_text());
 
@@ -172,7 +176,7 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
       teleop_slider_->setValue(static_cast<int>(std::lround(scale * 100.0)));
     }
     if (teleop_label_ != nullptr) {
-      teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * scale, 0, 'f', 2));
+      teleop_label_->setText(QString("teleop %1 m/s").arg(0.26 * scale, 0, 'f', 2));
     }
   });
   refresh_slam();
@@ -452,16 +456,6 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   });
   connect(go, &QPushButton::clicked, this, [this] { send_pending(); });
 
-  teleop_label_ = new QLabel("teleop 0.20 m/s", group);
-  teleop_slider_ = new QSlider(Qt::Horizontal, group);
-  teleop_slider_->setRange(25, 150);
-  teleop_slider_->setValue(100);
-  grid->addWidget(teleop_label_, 9, 0, 1, 2);
-  grid->addWidget(teleop_slider_, 9, 2, 1, 2);
-  connect(teleop_slider_, &QSlider::valueChanged, this, [this](int value) {
-    scene_->set_teleop_scale(static_cast<double>(value) / 100.0);
-    teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * static_cast<double>(value) / 100.0, 0, 'f', 2));
-  });
 
   layout->addWidget(group);
   update_tool_buttons();
@@ -550,7 +544,9 @@ void VizWindow::refresh_slam() {
     }
   }
   slam_status_label_->setText(status);
-  teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * scene_->teleop_scale(), 0, 'f', 2));
+  if (teleop_label_ != nullptr) {
+    teleop_label_->setText(QString("teleop %1 m/s").arg(0.26 * scene_->teleop_scale(), 0, 'f', 2));
+  }
   update_tool_buttons();
 }
 
@@ -575,6 +571,306 @@ void VizWindow::update_collision_button() {
   }
   collision_button_->setText(collision_enabled_ ? "collision ON" : "collision OFF");
   collision_button_->setStyleSheet(collision_enabled_ ? "background:#1f6b43;" : "background:#7a2a2a;");
+}
+
+
+void VizWindow::build_manual_docks() {
+  build_teleop_dock();
+  build_manipulator_dock();
+  teleop_dock_->hide();
+  manipulator_dock_->hide();
+}
+
+void VizWindow::build_teleop_dock() {
+  teleop_dock_ = new QDockWidget("Teleop", this);
+  teleop_dock_->setObjectName("teleopDock");
+  teleop_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+  teleop_dock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable |
+                            QDockWidget::DockWidgetClosable);
+  auto* panel = new QWidget(teleop_dock_);
+  auto* layout = new QVBoxLayout(panel);
+  layout->setContentsMargins(8, 8, 8, 8);
+  layout->setSpacing(6);
+
+  auto* pad = new QGridLayout();
+  auto* forward = new QPushButton("↑", panel);
+  auto* backward = new QPushButton("↓", panel);
+  auto* left = new QPushButton("←", panel);
+  auto* right = new QPushButton("→", panel);
+  auto* stop = new QPushButton("STOP", panel);
+  const auto bind = [this](QPushButton* button, int bit) {
+    button->setMinimumSize(46, 34);
+    connect(button, &QPushButton::pressed, this, [this, bit] { teleop_direction_ |= bit; });
+    connect(button, &QPushButton::released, this, [this, bit] { teleop_direction_ &= ~bit; });
+  };
+  bind(forward, 1);
+  bind(backward, 2);
+  bind(left, 4);
+  bind(right, 8);
+  pad->addWidget(forward, 0, 1);
+  pad->addWidget(left, 1, 0);
+  pad->addWidget(stop, 1, 1);
+  pad->addWidget(right, 1, 2);
+  pad->addWidget(backward, 2, 1);
+  layout->addLayout(pad);
+  connect(stop, &QPushButton::clicked, this, [this] {
+    teleop_direction_ = 0;
+    publish_teleop_pad();
+  });
+
+  auto* speed_row = new QHBoxLayout();
+  speed_row->addWidget(new QLabel("speed", panel));
+  teleop_slider_ = new QSlider(Qt::Horizontal, panel);
+  teleop_slider_->setRange(25, 150);
+  teleop_slider_->setValue(100);
+  teleop_label_ = new QLabel("0.26 m/s", panel);
+  speed_row->addWidget(teleop_slider_, 1);
+  speed_row->addWidget(teleop_label_);
+  layout->addLayout(speed_row);
+  connect(teleop_slider_, &QSlider::valueChanged, this, [this](int value) {
+    const double scale = static_cast<double>(value) / 100.0;
+    scene_->set_teleop_scale(scale);
+    teleop_label_->setText(QString("%1 m/s").arg(0.26 * scale, 0, 'f', 2));
+  });
+  teleop_dock_->setWidget(panel);
+  addDockWidget(Qt::RightDockWidgetArea, teleop_dock_);
+  connect(teleop_dock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+    if (!visible) {
+      teleop_direction_ = 0;
+      publish_teleop_pad();
+    }
+  });
+  teleop_pad_timer_ = new QTimer(this);
+  connect(teleop_pad_timer_, &QTimer::timeout, this, &VizWindow::publish_teleop_pad);
+  teleop_pad_timer_->start(50);
+}
+
+void VizWindow::build_manipulator_dock() {
+  manipulator_dock_ = new QDockWidget("Manipulator", this);
+  manipulator_dock_->setObjectName("manipulatorDock");
+  manipulator_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+  manipulator_dock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable |
+                                QDockWidget::DockWidgetClosable);
+  auto* panel = new QWidget(manipulator_dock_);
+  auto* layout = new QVBoxLayout(panel);
+  layout->setContentsMargins(8, 8, 8, 8);
+  layout->setSpacing(5);
+
+  auto* buttons = new QHBoxLayout();
+  arm_torque_button_ = new QPushButton("Torque ON", panel);
+  auto* stow = new QPushButton("STOW", panel);
+  auto* home = new QPushButton("HOME", panel);
+  auto* estop = new QPushButton("E-STOP", panel);
+  for (auto* button : {arm_torque_button_, stow, home, estop}) {
+    buttons->addWidget(button);
+  }
+  layout->addLayout(buttons);
+  auto set_torque_button = [this] {
+    arm_torque_button_->setText(arm_torque_on_ ? "Torque ON" : "Torque OFF");
+    arm_torque_button_->setStyleSheet(arm_torque_on_ ? "background:#1f6b43;" : "background:#7a2a2a;");
+  };
+  connect(arm_torque_button_, &QPushButton::clicked, this, [this, set_torque_button] {
+    arm_torque_on_ = !arm_torque_on_;
+    model_.node().publish("arm_torque", msgs::Bool{arm_torque_on_}, QOS_DEFAULT);
+    set_torque_button();
+    arm_status_label_->setText(arm_torque_on_ ? "torque ON" : "torque OFF (arm relaxed)");
+  });
+  set_torque_button();
+
+  const std::array<std::pair<int, int>, 4> ranges{{{ -180, 180 }, { -110, 110 }, { -90, 80 }, { -97, 113 }}};
+  for (int i = 0; i < 4; ++i) {
+    auto* row = new QHBoxLayout();
+    auto* name = new QLabel(QString("joint%1").arg(i + 1), panel);
+    name->setMinimumWidth(46);
+    auto* slider = new QSlider(Qt::Horizontal, panel);
+    slider->setRange(ranges[static_cast<std::size_t>(i)].first, ranges[static_cast<std::size_t>(i)].second);
+    slider->setValue(0);
+    auto* value = new QLabel("0.0°", panel);
+    value->setMinimumWidth(52);
+    value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    row->addWidget(name);
+    row->addWidget(slider, 1);
+    row->addWidget(value);
+    layout->addLayout(row);
+    arm_sliders_[static_cast<std::size_t>(i)] = slider;
+    arm_value_labels_[static_cast<std::size_t>(i)] = value;
+    connect(slider, &QSlider::valueChanged, this, [this, i, value](int degrees) {
+      value->setText(QString::number(degrees, 'f', 1) + "°");
+      if (!arm_updating_) {
+        arm_dirty_ = true;
+      }
+    });
+  }
+  auto* gripper_row = new QHBoxLayout();
+  auto* gripper_name = new QLabel("gripper", panel);
+  gripper_name->setMinimumWidth(46);
+  gripper_slider_ = new QSlider(Qt::Horizontal, panel);
+  gripper_slider_->setRange(0, 27);
+  gripper_slider_->setValue(0);
+  gripper_value_label_ = new QLabel("0.0 mm", panel);
+  gripper_value_label_->setMinimumWidth(52);
+  gripper_value_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  gripper_row->addWidget(gripper_name);
+  gripper_row->addWidget(gripper_slider_, 1);
+  gripper_row->addWidget(gripper_value_label_);
+  layout->addLayout(gripper_row);
+  connect(gripper_slider_, &QSlider::valueChanged, this, [this](int mm) {
+    gripper_value_label_->setText(QString::number(mm, 'f', 1) + " mm");
+    if (!arm_updating_) {
+      arm_dirty_ = true;
+    }
+  });
+
+  arm_status_label_ = new QLabel("arm: waiting for joint_states", panel);
+  arm_status_label_->setWordWrap(true);
+  arm_status_label_->setMinimumHeight(36);
+  layout->addWidget(arm_status_label_);
+
+  const auto set_preset = [this](const std::array<double, 5>& positions) {
+    arm_updating_ = true;
+    for (int i = 0; i < 4; ++i) {
+      arm_sliders_[static_cast<std::size_t>(i)]->setValue(
+          static_cast<int>(std::lround(positions[static_cast<std::size_t>(i)] * 180.0 / 3.141592653589793)));
+    }
+    if (std::isfinite(positions[4])) {
+      gripper_slider_->setValue(static_cast<int>(std::lround(positions[4] * 1000.0)));
+    }
+    arm_updating_ = false;
+    arm_dirty_ = true;
+  };
+  connect(stow, &QPushButton::clicked, this, [this, set_preset] {
+    set_preset({0.0, -1.9024, 1.3440, 0.9023, 0.0});
+    arm_status_label_->setText("STOW target");
+  });
+  connect(home, &QPushButton::clicked, this, [this, set_preset] {
+    set_preset({0.0, 0.0, 0.0, 0.0, 0.0});
+    arm_status_label_->setText("HOME target");
+  });
+  connect(estop, &QPushButton::clicked, this, [this] {
+    model_.node().publish("arm_stop", msgs::Empty{}, QOS_DEFAULT);
+    arm_dirty_ = false;
+    arm_status_label_->setText("E-STOP: hold current pose");
+  });
+
+  manipulator_dock_->setWidget(panel);
+  addDockWidget(Qt::RightDockWidgetArea, manipulator_dock_);
+  splitDockWidget(teleop_dock_, manipulator_dock_, Qt::Vertical);
+  arm_send_timer_ = new QTimer(this);
+  connect(arm_send_timer_, &QTimer::timeout, this, &VizWindow::send_arm_target);
+  arm_send_timer_->start(50);
+  manual_refresh_timer_ = new QTimer(this);
+  connect(manual_refresh_timer_, &QTimer::timeout, this, &VizWindow::refresh_manual);
+  manual_refresh_timer_->start(100);
+}
+
+void VizWindow::publish_teleop_pad() {
+  const double scale = scene_ == nullptr ? 1.0 : scene_->teleop_scale();
+  const double linear = 0.26 * scale * (((teleop_direction_ & 1) != 0 ? 1.0 : 0.0) -
+                                         ((teleop_direction_ & 2) != 0 ? 1.0 : 0.0));
+  const double angular = 1.5 * scale * (((teleop_direction_ & 4) != 0 ? 1.0 : 0.0) -
+                                        ((teleop_direction_ & 8) != 0 ? 1.0 : 0.0));
+  if (linear != teleop_last_linear_ || angular != teleop_last_angular_) {
+    model_.publish_cmd_vel(linear, angular);
+    teleop_last_linear_ = linear;
+    teleop_last_angular_ = angular;
+  }
+}
+
+void VizWindow::send_arm_target() {
+  if (!arm_dirty_) {
+    return;
+  }
+  arm_dirty_ = false;
+  msgs::JointState command;
+  for (int i = 0; i < 4; ++i) {
+    command.name.push_back("joint" + std::to_string(i + 1));
+    command.position.push_back(static_cast<double>(arm_sliders_[static_cast<std::size_t>(i)]->value()) *
+                               3.141592653589793 / 180.0);
+  }
+  command.name.push_back("gripper_left_joint");
+  command.position.push_back(static_cast<double>(gripper_slider_->value()) / 1000.0);
+  model_.node().publish("arm_joint_command", command, QOS_DEFAULT);
+}
+
+void VizWindow::set_arm_slider_values(const std::array<double, 5>& positions) {
+  if (arm_sliders_[0] == nullptr) {
+    return;
+  }
+  for (int i = 0; i < 4; ++i) {
+    if (arm_sliders_[static_cast<std::size_t>(i)]->isSliderDown()) {
+      return;
+    }
+  }
+  if (gripper_slider_ != nullptr && gripper_slider_->isSliderDown()) {
+    return;
+  }
+  arm_updating_ = true;
+  for (int i = 0; i < 4; ++i) {
+    if (!std::isfinite(positions[static_cast<std::size_t>(i)])) {
+      continue;
+    }
+    const int degrees =
+        static_cast<int>(std::lround(positions[static_cast<std::size_t>(i)] * 180.0 / 3.141592653589793));
+    arm_sliders_[static_cast<std::size_t>(i)]->setValue(degrees);
+    arm_value_labels_[static_cast<std::size_t>(i)]->setText(QString::number(degrees, 'f', 1) + "°");
+  }
+  if (gripper_slider_ != nullptr && std::isfinite(positions[4])) {
+    const int mm = static_cast<int>(std::lround(positions[4] * 1000.0));
+    gripper_slider_->setValue(mm);
+    gripper_value_label_->setText(QString::number(mm, 'f', 1) + " mm");
+  }
+  arm_updating_ = false;
+}
+
+void VizWindow::refresh_manual() {
+  if (arm_status_label_ == nullptr) {
+    return;
+  }
+  const auto states = model_.joint_states();
+  if (!states) {
+    arm_status_label_->setText("arm: no joint_states");
+    return;
+  }
+  std::map<std::string, double> values;
+  for (std::size_t i = 0; i < states->name.size() && i < states->position.size(); ++i) {
+    values[states->name[i]] = states->position[i];
+  }
+  std::array<double, 5> positions{};
+  positions.fill(std::numeric_limits<double>::quiet_NaN());
+  for (int i = 0; i < 4; ++i) {
+    const auto it = values.find("joint" + std::to_string(i + 1));
+    if (it != values.end()) {
+      positions[static_cast<std::size_t>(i)] = it->second;
+    }
+  }
+  const auto gripper = values.find("gripper_left_joint");
+  if (gripper != values.end()) {
+    positions[4] = gripper->second;
+  }
+  set_arm_slider_values(positions);
+  QString status = QString("j1 %1°  j2 %2°  j3 %3°  j4 %4°  grip %5 mm")
+                       .arg(std::isfinite(positions[0]) ? positions[0] * 180.0 / 3.141592653589793 : 0.0, 0, 'f', 0)
+                       .arg(std::isfinite(positions[1]) ? positions[1] * 180.0 / 3.141592653589793 : 0.0, 0, 'f', 0)
+                       .arg(std::isfinite(positions[2]) ? positions[2] * 180.0 / 3.141592653589793 : 0.0, 0, 'f', 0)
+                       .arg(std::isfinite(positions[3]) ? positions[3] * 180.0 / 3.141592653589793 : 0.0, 0, 'f', 0)
+                       .arg(std::isfinite(positions[4]) ? positions[4] * 1000.0 : 0.0, 0, 'f', 1);
+  if (const auto collision = model_.collision_status()) {
+    status += "  | " + QString::fromStdString(collision->data);
+  }
+  arm_status_label_->setText(status);
+}
+
+void VizWindow::set_manual_panels(bool teleop, bool manipulator) {
+  if (teleop_dock_ != nullptr) {
+    teleop_dock_->setVisible(teleop);
+  }
+  if (manipulator_dock_ != nullptr) {
+    manipulator_dock_->setVisible(manipulator);
+  }
+  if (teleop && manipulator && teleop_dock_ != nullptr && manipulator_dock_ != nullptr) {
+    splitDockWidget(teleop_dock_, manipulator_dock_, Qt::Vertical);
+    resizeDocks({teleop_dock_, manipulator_dock_}, {210, 430}, Qt::Vertical);
+  }
 }
 
 void VizWindow::set_tool(const std::string& tool) {
@@ -795,6 +1091,7 @@ void VizWindow::set_camera_distance(double distance) {
     scene_->set_camera_distance(distance);
   }
 }
+
 
 void VizWindow::set_connection_status(bool connected, const std::string& endpoint) {
   if (connection_label_ == nullptr) {

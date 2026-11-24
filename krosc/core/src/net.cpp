@@ -861,6 +861,13 @@ struct Server::Impl {
         if (auto message = decode_bool(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
         }
+      } else if (topic == "arm_torque" && kind == Kind::Bool) {
+        Reader reader(payload);
+        if (auto message = decode_bool(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if (topic == "arm_stop" && kind == Kind::Empty) {
+        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
       }
     }
     close_client(connection);
@@ -1450,6 +1457,11 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
   impl_->forward_topic<msgs::JointState>(
       "arm_joint_command", Kind::JointState,
       [](Writer& writer, const msgs::JointState& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Bool>(
+      "arm_torque", Kind::Bool,
+      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Empty>(
+      "arm_stop", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
   impl_->reader_thread = std::thread([impl = impl_.get()] { impl->reader_loop(); });
   impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
 }

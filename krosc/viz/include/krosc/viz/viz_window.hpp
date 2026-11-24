@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
@@ -14,6 +15,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QDockWidget;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -41,6 +43,7 @@ class VizWindow : public QMainWindow {
   void set_connection_status(bool connected, const std::string& endpoint);
   void set_tab(int index);
   void set_camera_distance(double distance);
+  void set_manual_panels(bool teleop, bool manipulator);
   [[nodiscard]] bool save_screenshot(const QString& path);
 
  private:
@@ -50,6 +53,13 @@ class VizWindow : public QMainWindow {
   void refresh_slam();
   void update_tool_buttons();
   void update_collision_button();
+  void build_manual_docks();
+  void build_teleop_dock();
+  void build_manipulator_dock();
+  void publish_teleop_pad();
+  void send_arm_target();
+  void refresh_manual();
+  void set_arm_slider_values(const std::array<double, 5>& positions);
   void set_tool(const std::string& tool);
   void sync_waypoints();
   void handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map);
@@ -91,6 +101,24 @@ class VizWindow : public QMainWindow {
   QTimer* paint_timer_ = nullptr;
   QTimer* refresh_timer_ = nullptr;
   QTimer* slam_timer_ = nullptr;
+
+  QDockWidget* teleop_dock_ = nullptr;
+  QDockWidget* manipulator_dock_ = nullptr;
+  std::array<QSlider*, 4> arm_sliders_{};
+  std::array<QLabel*, 4> arm_value_labels_{};
+  QSlider* gripper_slider_ = nullptr;
+  QLabel* gripper_value_label_ = nullptr;
+  QLabel* arm_status_label_ = nullptr;
+  QPushButton* arm_torque_button_ = nullptr;
+  QTimer* teleop_pad_timer_ = nullptr;
+  QTimer* arm_send_timer_ = nullptr;
+  QTimer* manual_refresh_timer_ = nullptr;
+  int teleop_direction_ = 0;
+  double teleop_last_linear_ = 0.0;
+  double teleop_last_angular_ = 0.0;
+  bool arm_dirty_ = false;
+  bool arm_updating_ = false;
+  bool arm_torque_on_ = true;
 };
 
 }  // namespace krosc::viz

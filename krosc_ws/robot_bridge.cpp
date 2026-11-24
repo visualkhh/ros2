@@ -52,6 +52,18 @@ RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
       "arm_joint_command",
       [this](const krosc::msgs::JointState& message) { on_arm_command(message); },
       krosc::QOS_DEFAULT);
+  arm_torque_subscription_ = subscribe<krosc::msgs::Bool>(
+      "arm_torque", [this](const krosc::msgs::Bool& message) { robot_.opencr().set_arm_torque(message.data); },
+      krosc::QOS_DEFAULT);
+  arm_stop_subscription_ = subscribe<krosc::msgs::Empty>(
+      "arm_stop",
+      [this](const krosc::msgs::Empty&) {
+        const ArmStatus arm = robot_.opencr().arm_status();
+        if (arm.present) {
+          robot_.opencr().write_arm(arm.position);
+        }
+      },
+      krosc::QOS_DEFAULT);
   logger().info("로봇 %s: OpenCR=%s, LDS-03=%s", robot_.name().c_str(),
                 robot_.opencr().port().c_str(), robot_.has_lidar() ? robot_.lidar()->port().c_str() : "없음");
   logger().info("OpenCR IMU는 켠 뒤 2초 동안 가만히 둬야 자이로 편향을 잡는다");

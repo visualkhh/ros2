@@ -41,6 +41,8 @@ int main(int argc, char** argv) {
   std::string tab = "3d";
   double duration = 2.0;
   double distance = 0.0;
+  bool teleop_panel = false;
+  bool manipulator_panel = false;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--screenshot" && i + 1 < argc) {
@@ -55,8 +57,20 @@ int main(int argc, char** argv) {
       tab = argv[++i];
     } else if (argument == "--distance" && i + 1 < argc) {
       distance = std::stod(argv[++i]);
+    } else if (argument == "--manual") {
+      teleop_panel = true;
+      manipulator_panel = true;
+    } else if (argument == "--teleop") {
+      teleop_panel = true;
+      manipulator_panel = false;
+    } else if (argument == "--manipulator") {
+      teleop_panel = false;
+      manipulator_panel = true;
+    } else if (argument == "--no-manual") {
+      teleop_panel = false;
+      manipulator_panel = false;
     } else if (argument == "--help") {
-      std::printf("usage: krosc_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map] [--screenshot PATH] [--duration SEC]\n");
+      std::printf("usage: krosc_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map] [--manual|--teleop|--manipulator|--no-manual] [--distance M] [--screenshot PATH] [--duration SEC]\n");
       return 0;
     }
   }
@@ -73,6 +87,7 @@ int main(int argc, char** argv) {
   krosc::viz::VizWindow window(context);
   window.set_fixed_frame(fixed_frame);
   window.set_tab(tab == "map" ? 1 : 0);
+  window.set_manual_panels(teleop_panel, manipulator_panel);
   if (distance > 0.0) {
     window.set_camera_distance(distance);
   }

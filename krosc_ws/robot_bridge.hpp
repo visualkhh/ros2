@@ -34,6 +34,8 @@ class RobotBridge final : public krosc::Node {
   double last_diagnostics_ = 0.0;
   krosc::Subscription<krosc::msgs::Twist> command_subscription_;
   krosc::Subscription<krosc::msgs::JointState> arm_command_subscription_;
+  krosc::Subscription<krosc::msgs::Bool> arm_torque_subscription_;
+  krosc::Subscription<krosc::msgs::Empty> arm_stop_subscription_;
 };
 
 }  // namespace krosc_ws
