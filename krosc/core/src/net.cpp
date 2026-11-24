@@ -44,6 +44,7 @@ constexpr std::uint8_t kFrameTopic = 1;
 constexpr std::uint8_t kFramePublish = 2;
 constexpr std::uint32_t kMaxFrame = 4u * 1024u * 1024u;
 constexpr std::size_t kMaxQueue = 512;
+constexpr std::size_t kMaxClients = 8;
 
 enum class Kind : std::uint8_t {
   Twist = 1,
@@ -693,20 +694,34 @@ struct Server::Impl {
   explicit Impl(Context& context_value, std::uint16_t port_value) : context(context_value), requested_port(port_value) {}
   ~Impl() { shutdown(); }
 
+  // 클라이언트마다 송신 큐와 writer 스레드를 둔다. 느린 클라이언트가 다른 클라이언트의
+  // 센서 스트림을 막지 않고, 새 클라이언트가 붙어도 기존 연결을 끊지 않는다.
+  struct Connection {
+    int fd = -1;
+    std::string peer;
+    std::atomic<bool> closed{false};
+    std::mutex lifecycle_mutex;  // reader/writer 스레드가 모두 붙기 전에 close하지 않게 한다
+    std::mutex send_mutex;
+    std::mutex queue_mutex;
+    std::condition_variable queue_cv;
+    std::deque<std::vector<std::uint8_t>> queue;
+    std::thread reader;
+    std::thread writer;
+  };
+
   Context& context;
   std::uint16_t requested_port = 9000;
   std::uint16_t bound_port = 0;
   std::atomic<bool> stopping{false};
+  std::atomic<bool> reaper_stop{false};
   std::atomic<int> listen_fd{-1};
-  std::atomic<int> client_fd{-1};
   std::thread accept_thread;
-  std::thread writer_thread;
-  std::thread reader_thread;
-  std::mutex client_mutex;
-  std::mutex send_mutex;
-  std::mutex queue_mutex;
-  std::condition_variable queue_cv;
-  std::deque<std::vector<std::uint8_t>> queue;
+  std::thread reaper_thread;
+  std::mutex clients_mutex;
+  std::vector<std::shared_ptr<Connection>> clients;
+  std::mutex retired_mutex;
+  std::condition_variable retired_cv;
+  std::deque<std::shared_ptr<Connection>> retired;
   std::mutex latched_mutex;
   std::unordered_map<std::string, std::deque<std::vector<std::uint8_t>>> latched;
   std::vector<std::shared_ptr<detail::SubscriptionBase>> subscriptions;
@@ -726,7 +741,11 @@ struct Server::Impl {
             std::lock_guard<std::mutex> lock(latched_mutex);
             auto& history = latched[name];
             history.push_back(frame);
-            while (history.size() > 100) {  // tf_static은 메시지가 여러 개다 (RSP 고정 관절 + map->odom ...)
+            // tf_static은 RSP 고정 관절 + map->odom처럼 여러 메시지가 필요하다.
+            // 나머지 래치 토픽은 최신 한 개만 있으면 되고, plan 같은 과거 기록을
+            // 새 클라이언트에 100개씩 재생하지 않도록 한다.
+            const std::size_t limit = name == "tf_static" ? 100 : 1;
+            while (history.size() > limit) {
               history.pop_front();
             }
           }
@@ -736,48 +755,63 @@ struct Server::Impl {
     subscriptions.push_back(subscription.base());
   }
 
-  void enqueue(const std::vector<std::uint8_t>& frame) {
-    if (client_fd.load() < 0 || stopping.load()) {
+  void enqueue_to(const std::shared_ptr<Connection>& connection, const std::vector<std::uint8_t>& frame) {
+    if (connection->closed.load()) {
       return;
     }
     {
-      std::lock_guard<std::mutex> lock(queue_mutex);
-      if (queue.size() >= kMaxQueue) {
-        queue.pop_front();
+      std::lock_guard<std::mutex> lock(connection->queue_mutex);
+      if (connection->queue.size() >= kMaxQueue) {
+        connection->queue.pop_front();
       }
-      queue.push_back(frame);
+      connection->queue.push_back(frame);
     }
-    queue_cv.notify_one();
+    connection->queue_cv.notify_one();
   }
 
-  void mark_disconnected(int fd) {
-    std::lock_guard<std::mutex> lock(send_mutex);
-    if (client_fd.load() == fd) {
-      client_fd.store(-1);
-      close_socket(fd);
+  void enqueue(const std::vector<std::uint8_t>& frame) {
+    if (stopping.load()) {
+      return;
     }
-    queue_cv.notify_all();
+    std::vector<std::shared_ptr<Connection>> snapshot;
+    {
+      std::lock_guard<std::mutex> lock(clients_mutex);
+      snapshot = clients;
+    }
+    for (const auto& connection : snapshot) {
+      enqueue_to(connection, frame);
+    }
   }
 
-  void close_client() {
-    std::lock_guard<std::mutex> life(client_mutex);
-    const int fd = client_fd.exchange(-1);
-    if (fd >= 0) {
-      std::lock_guard<std::mutex> lock(send_mutex);
-      close_socket(fd);
-    }
-    if (reader_thread.joinable()) {
-      reader_thread.join();
+  void close_client(const std::shared_ptr<Connection>& connection) {
+    std::lock_guard<std::mutex> lifecycle(connection->lifecycle_mutex);
+    if (connection->closed.exchange(true)) {
+      return;
     }
     {
-      std::lock_guard<std::mutex> lock(queue_mutex);
-      queue.clear();
+      std::lock_guard<std::mutex> lock(connection->send_mutex);
+      if (connection->fd >= 0) {
+        close_socket(connection->fd);
+        connection->fd = -1;
+      }
     }
-    queue_cv.notify_all();
+    connection->queue_cv.notify_all();
+    {
+      std::lock_guard<std::mutex> lock(clients_mutex);
+      clients.erase(std::remove(clients.begin(), clients.end(), connection), clients.end());
+    }
+    std::printf("[krosc/net] client disconnected: %s\n", connection->peer.c_str());
+    std::fflush(stdout);
+    {
+      std::lock_guard<std::mutex> lock(retired_mutex);
+      retired.push_back(connection);
+    }
+    retired_cv.notify_one();
   }
 
-  void reader_loop(int fd) {
-    while (!stopping.load()) {
+  void reader_loop(const std::shared_ptr<Connection>& connection) {
+    const int fd = connection->fd;
+    while (!stopping.load() && !connection->closed.load()) {
       std::uint8_t type = 0;
       std::string topic;
       Kind kind = Kind::Twist;
@@ -823,38 +857,61 @@ struct Server::Impl {
         }
       }
     }
-    mark_disconnected(fd);
+    close_client(connection);
   }
 
-  void writer_loop() {
-    while (!stopping.load()) {
+  void writer_loop(const std::shared_ptr<Connection>& connection) {
+    while (!stopping.load() && !connection->closed.load()) {
       std::vector<std::uint8_t> frame;
       {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        queue_cv.wait(lock, [this] {
-          return stopping.load() || (!queue.empty() && client_fd.load() >= 0);
+        std::unique_lock<std::mutex> lock(connection->queue_mutex);
+        connection->queue_cv.wait(lock, [this, &connection] {
+          return stopping.load() || connection->closed.load() || !connection->queue.empty();
         });
-        if (stopping.load()) {
+        if (stopping.load() || connection->closed.load()) {
           return;
         }
-        if (queue.empty() || client_fd.load() < 0) {
+        if (connection->queue.empty()) {
           continue;
         }
-        frame = std::move(queue.front());
-        queue.pop_front();
+        frame = std::move(connection->queue.front());
+        connection->queue.pop_front();
       }
-      const int fd = client_fd.load();
-      if (fd < 0) {
-        continue;
+      bool failed = false;
+      {
+        std::lock_guard<std::mutex> lock(connection->send_mutex);
+        if (connection->closed.load()) {
+          return;
+        }
+        failed = !send_all(connection->fd, frame);
       }
-      std::lock_guard<std::mutex> lock(send_mutex);
-      if (client_fd.load() != fd) {
-        continue;
+      if (failed) {
+        close_client(connection);
+        return;
       }
-      if (!send_all(fd, frame)) {
-        client_fd.store(-1);
-        close_socket(fd);
-        queue_cv.notify_all();
+    }
+  }
+
+  void reaper_loop() {
+    while (true) {
+      std::shared_ptr<Connection> connection;
+      {
+        std::unique_lock<std::mutex> lock(retired_mutex);
+        retired_cv.wait(lock, [this] { return reaper_stop.load() || !retired.empty(); });
+        if (retired.empty()) {
+          if (reaper_stop.load()) {
+            return;
+          }
+          continue;
+        }
+        connection = retired.front();
+        retired.pop_front();
+      }
+      if (connection->reader.joinable()) {
+        connection->reader.join();
+      }
+      if (connection->writer.joinable()) {
+        connection->writer.join();
       }
     }
   }
@@ -874,31 +931,41 @@ struct Server::Impl {
         close_socket(fd);
         return;
       }
-      configure_socket(fd);
-      close_client();
-      std::printf("[krosc/net] client connected: %s\n", ::inet_ntoa(address.sin_addr));
-      std::fflush(stdout);
       {
-        std::lock_guard<std::mutex> lock(send_mutex);
-        client_fd.store(fd);
+        std::lock_guard<std::mutex> lock(clients_mutex);
+        if (clients.size() >= kMaxClients) {
+          close_socket(fd);
+          std::printf("[krosc/net] client rejected (max %zu clients)\n", kMaxClients);
+          std::fflush(stdout);
+          continue;
+        }
+      }
+      configure_socket(fd);
+      auto connection = std::make_shared<Connection>();
+      connection->fd = fd;
+      connection->peer = ::inet_ntoa(address.sin_addr);
+      std::lock_guard<std::mutex> lifecycle(connection->lifecycle_mutex);
+      // 스레드를 먼저 띄우고 lifecycle 락을 잡은 채 clients에 등록한다. reader가
+      // 즉시 끊겨도 close_client가 스레드 생성 중간에 join하지 않는다.
+      connection->reader = std::thread([this, connection] { reader_loop(connection); });
+      connection->writer = std::thread([this, connection] { writer_loop(connection); });
+      std::size_t count = 0;
+      {
+        std::lock_guard<std::mutex> lock(clients_mutex);
+        clients.push_back(connection);
+        count = clients.size();
       }
       {
         std::lock_guard<std::mutex> lock(latched_mutex);
         for (const auto& [name, history] : latched) {
           (void)name;
           for (const auto& frame : history) {
-            enqueue(frame);
+            enqueue_to(connection, frame);
           }
         }
       }
-      {
-        std::lock_guard<std::mutex> life(client_mutex);
-        if (reader_thread.joinable()) {
-          reader_thread.join();
-        }
-        reader_thread = std::thread([this, fd] { reader_loop(fd); });
-      }
-      queue_cv.notify_all();
+      std::printf("[krosc/net] client connected: %s (%zu clients)\n", connection->peer.c_str(), count);
+      std::fflush(stdout);
     }
   }
 
@@ -913,10 +980,22 @@ struct Server::Impl {
     if (accept_thread.joinable()) {
       accept_thread.join();
     }
-    close_client();
-    queue_cv.notify_all();
-    if (writer_thread.joinable()) {
-      writer_thread.join();
+    std::vector<std::shared_ptr<Connection>> snapshot;
+    {
+      std::lock_guard<std::mutex> lock(clients_mutex);
+      snapshot = clients;
+      clients.clear();
+    }
+    for (const auto& connection : snapshot) {
+      close_client(connection);
+    }
+    {
+      std::lock_guard<std::mutex> lock(retired_mutex);
+      reaper_stop.store(true);
+    }
+    retired_cv.notify_all();
+    if (reaper_thread.joinable()) {
+      reaper_thread.join();
     }
     for (auto& subscription : subscriptions) {
       subscription->cancel();
@@ -993,7 +1072,7 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
     close_socket(fd);
     throw std::runtime_error("net::Server: bind failed (port " + std::to_string(port) + ")");
   }
-  if (::listen(fd, 2) != 0) {
+  if (::listen(fd, 16) != 0) {
     close_socket(fd);
     throw std::runtime_error("net::Server: listen failed");
   }
@@ -1004,7 +1083,7 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
     impl_->bound_port = port;
   }
   impl_->listen_fd.store(fd);
-  impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
+  impl_->reaper_thread = std::thread([impl = impl_.get()] { impl->reaper_loop(); });
   impl_->accept_thread = std::thread([impl = impl_.get()] { impl->accept_loop(); });
 }
 
