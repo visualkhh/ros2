@@ -124,13 +124,21 @@ cmake --build build -j
 
 ## 주행 / Multi Goal
 
-- `goal_pose`(단일), `goal_poses`(multi): Navigtor가 A*로 경로를 만들고 `plan`으로 발행
-- Multi Goal은 각 웨이포인트에 **위치 + yaw**를 저장한다. 중간 웨이포인트에 도착하면
-  그 yaw로 제자리 회전해 방향을 맞춘 뒤 다음 구간으로 진행한다.
-- `global_costmap/costmap`: A*용 inflated grid (2D/3D Viz에 표시)
-- `local_costmap/costmap`: 로봇 주변 `local_costmap_size`(기본 4m) 창 (2D/3D Viz에 표시)
+- nav2와 같은 노드 구조: `global_costmap`/`local_costmap`(`Costmap2DROS`) → `planner_server`
+  (`NavfnPlanner` 등) → `controller_server`(`RegulatedPurePursuitController` 등) → `bt_navigator`.
+- `goal_pose`(단일), `goal_poses`(multi): `bt_navigator`가 `compute_path_to_pose` 액션으로 계획하고
+  `follow_path` 액션으로 따라간다. `replanning_period`마다 다시 계획하고, 실패하면
+  `behavior_server`(spin → backup → wait)로 회복한다.
+- Multi Goal은 각 웨이포인트에 **위치 + yaw**를 저장하고, 구간별 경로를 하나로 이어
+  `follow_path` 한 번으로 보낸다 (nav2 `navigate_through_poses`와 같은 방식). 마지막 웨이포인트의
+  yaw까지 controller의 goal checker가 맞춘다.
+- `global_costmap/costmap`: static_layer + inflation_layer (2D/3D Viz에 표시)
+- `local_costmap/costmap`: 로봇 주변 4m rolling window, obstacle_layer + inflation_layer (2D/3D Viz에 표시)
 - 색은 RViz `costmap` 스킴: 1~98 blue→red, 99 cyan(inscribed), 100 purple(lethal), -1 blue-green-gray
-- A*는 inflation cost를 약한 패널티로 사용한다.
+- 플러그인은 nav2와 같은 이름으로 고른다: `nav2_navfn_planner::NavfnPlanner`,
+  `nav2_theta_star_planner::ThetaStarPlanner`, `nav2_smac_planner::SmacPlanner2D`,
+  `nav2_smac_planner::SmacPlannerHybrid`, `nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController`,
+  `dwb_core::DWBLocalPlanner`, `nav2_mppi_controller::MPPIController`.
 
 ### Multi-client
 
@@ -203,12 +211,12 @@ Isaac `rl_maze` 정책(52관측 → 2행동, 20Hz)을 Pi에서 ONNX Runtime으�
 ```text
 teleop   priority 100
 rl       priority  90   cmd_vel_rl
-nav      priority  10   cmd_vel_nav (기존 Navigator: A* + pure pursuit)
+nav      priority  10   cmd_vel_nav (bt_navigator + planner/controller server)
 ```
 
 fallback:
 
-- `pursuit` — RL이 꺼지거나 실패하면 기존 Navigator가 주행
+- `pursuit` — RL이 꺼지거나 실패하면 nav2 스택(bt_navigator)이 주행
 - `stop` — `cmd_vel_rl=0`으로 정지
 
 RL이 켜져도 scan/odom/plan/TF가 없거나 추론이 실패하면 자동으로 fallback한다.

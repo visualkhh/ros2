@@ -28,6 +28,14 @@ add_library(krosc_core STATIC
   core/nodes/robot_state_publisher.cpp
   core/nodes/tf_echo.cpp
   core/nodes/twist_mux.cpp
+  core/nodes/nav2/behavior_server.cpp
+  core/nodes/nav2/bt_navigator.cpp
+  core/nodes/nav2/controller_plugins.cpp
+  core/nodes/nav2/controller_server.cpp
+  core/nodes/nav2/costmap.cpp
+  core/nodes/nav2/costmap_2d_ros.cpp
+  core/nodes/nav2/planner_plugins.cpp
+  core/nodes/nav2/planner_server.cpp
 )
 
 add_library(krosc::core ALIAS krosc_core)
@@ -54,6 +62,7 @@ if(KROSC_BUILD_TESTS)
     tests/test_cartographer.cpp
     tests/test_map_io.cpp
     tests/test_net.cpp
+    tests/test_nav2.cpp
   )
   target_link_libraries(krosc_core_tests PRIVATE krosc::core)
   target_compile_options(krosc_core_tests PRIVATE -Wall -Wextra -Wpedantic)

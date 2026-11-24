@@ -473,14 +473,14 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
     multi_goals_.clear();
     sync_waypoints();
     if (multi_label_ != nullptr) multi_label_->setText("multi goals: 0");
-    model_.node().publish("cancel_goal", msgs::Empty{}, QOS_DEFAULT);
+    model_.node().publish("cancel_goal", msgs::Bool{true}, QOS_DEFAULT);
     slam_status_label_->setText("goals cleared");
   });
   connect(cancel, &QPushButton::clicked, this, [this] {
     multi_goals_.clear();
     sync_waypoints();
     if (multi_label_ != nullptr) multi_label_->setText("multi goals: 0");
-    model_.node().publish("cancel_goal", msgs::Empty{}, QOS_DEFAULT);
+    model_.node().publish("cancel_goal", msgs::Bool{true}, QOS_DEFAULT);
     slam_status_label_->setText("cancel requested");
   });
 

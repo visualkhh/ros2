@@ -854,9 +854,9 @@ struct Server::Impl {
         if (auto message = decode_string(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
         }
-      } else if ((topic == "cancel_goal" || topic == "map_unload") && kind == Kind::Empty) {
+      } else if (topic == "map_unload" && kind == Kind::Empty) {
         context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
-      } else if (topic == "collision_set_enabled" && kind == Kind::Bool) {
+      } else if ((topic == "cancel_goal" || topic == "collision_set_enabled") && kind == Kind::Bool) {
         Reader reader(payload);
         if (auto message = decode_bool(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
@@ -1493,8 +1493,9 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
   impl_->forward_topic<msgs::String>(
       "slam_mode", Kind::String,
       [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Empty>(
-      "cancel_goal", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
+  impl_->forward_topic<msgs::Bool>(
+      "cancel_goal", Kind::Bool,
+      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
   impl_->forward_topic<msgs::Empty>(
       "map_unload", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
   impl_->forward_topic<msgs::Bool>(

@@ -27,7 +27,11 @@
 #include "krosc/nodes/map_catalog.hpp"
 #include "krosc/nodes/moveit_lite.hpp"
 #include "krosc/nodes/velocity_smoother.hpp"
-#include "krosc/nodes/navigator.hpp"
+#include "krosc/nodes/nav2/behavior_server.hpp"
+#include "krosc/nodes/nav2/bt_navigator.hpp"
+#include "krosc/nodes/nav2/controller_server.hpp"
+#include "krosc/nodes/nav2/costmap_2d_ros.hpp"
+#include "krosc/nodes/nav2/planner_server.hpp"
 #include "krosc/nodes/twist_mux.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
@@ -232,15 +236,65 @@ int main(int argc, char** argv) {
                                 {{"maps_directory", maps_dir},
                                  {"map_frame", std::string("map")},
                                  {"list_period", 1.0}});
-  krosc::nodes::Navigator navigator(context, "navigator",
-                                    {{"map_topic", std::string("map")},
-                                     {"cmd_vel_topic", std::string("cmd_vel_nav")},
-                                     {"vx_max", 0.20},
-                                     {"wz_max", 1.0},
-                                     {"lookahead", 0.35},
-                                     {"inflation", 0.24},
-                                     {"xy_tolerance", 0.20},
-                                     {"yaw_tolerance", 0.35}});
+  // nav2처럼 내비게이션을 노드로 나눈다: costmap_2d -> planner_server -> controller_server -> bt_navigator.
+  // 토픽 이름(plan, local_plan, global/local_costmap/costmap, goal_pose(s), preview_goal(s),
+  // cancel_goal, goal_status, cmd_vel_nav)은 기존 Viz/RL과 같게 유지한다.
+  krosc::nodes::nav2::Costmap2DROS global_costmap(
+      context, "global_costmap",
+      {{"global_frame", std::string("map")},
+       {"robot_base_frame", std::string("base_footprint")},
+       {"map_topic", std::string("map")},
+       {"plugins", std::vector<std::string>{"static_layer", "inflation_layer"}},
+       {"track_unknown_space", true},
+       {"robot_radius", 0.22},
+       {"inflation_radius", 0.55},
+       {"cost_scaling_factor", 3.0}});
+  krosc::nodes::nav2::Costmap2DROS local_costmap(
+      context, "local_costmap",
+      {{"global_frame", std::string("odom")},
+       {"robot_base_frame", std::string("base_footprint")},
+       {"plugins", std::vector<std::string>{"obstacle_layer", "inflation_layer"}},
+       {"rolling_window", true},
+       {"width", 4.0},
+       {"height", 4.0},
+       {"resolution", 0.05},
+       {"update_frequency", 5.0},
+       {"observation_sources", std::vector<std::string>{"scan"}},
+       {"scan.topic", std::string("scan")},
+       {"obstacle_max_range", 2.5},
+       {"raytrace_max_range", 3.0},
+       {"robot_radius", 0.22},
+       {"inflation_radius", 0.55},
+       {"cost_scaling_factor", 3.0}});
+  krosc::nodes::nav2::PlannerServer planner_server(
+      context, global_costmap, "planner_server",
+      {{"planner_plugins", std::vector<std::string>{"GridBased"}},
+       {"GridBased.plugin", std::string("nav2_navfn_planner::NavfnPlanner")},
+       {"GridBased.tolerance", 0.5},
+       {"GridBased.use_astar", true},
+       {"GridBased.allow_unknown", false}});
+  krosc::nodes::nav2::ControllerServer controller_server(
+      context, local_costmap, "controller_server",
+      {{"controller_plugins", std::vector<std::string>{"FollowPath"}},
+       {"FollowPath.plugin",
+        std::string("nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController")},
+       {"FollowPath.desired_linear_vel", 0.20},
+       {"FollowPath.lookahead_dist", 0.35},
+       {"FollowPath.use_collision_detection", true},
+       {"FollowPath.rotate_to_heading_min_angle", 0.35},
+       {"cmd_vel_topic", std::string("cmd_vel_nav")},
+       {"controller_frequency", 20.0},
+       {"general_goal_checker.xy_goal_tolerance", 0.20},
+       {"general_goal_checker.yaw_goal_tolerance", 0.35},
+       {"max_linear_accel", 0.0},
+       {"max_angular_accel", 0.0}});
+  krosc::nodes::nav2::BehaviorServer behavior_server(
+      context, "behavior_server", {{"cmd_vel_topic", std::string("cmd_vel_nav")}});
+  krosc::nodes::nav2::BtNavigator bt_navigator(
+      context, "bt_navigator",
+      {{"replanning_period", 1.0},
+       {"number_of_recoveries", std::int64_t{3}},
+       {"recovery_backup", true}});
 #ifdef KROSC_WS_ENABLE_RL_NAV
   krosc_ws::RlNavController rl_nav(context, "rl_nav_controller",
                                    {{"enable", false}, {"fallback", std::string("pursuit")}});

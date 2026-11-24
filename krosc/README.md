@@ -236,10 +236,11 @@ lidar 360 rays      :  60-70 us/scan (20개 벽)
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 28 + sim 3 = 31 tests, 2 executables
+# core 38 + sim 3 = 41 tests, 2 executables
 ```
 
-- core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, RSP, odometry, twist_mux
+- core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux
+- nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
 - ASan/UBSan으로 core/sim 테스트와 데모 실행 검증 완료 (오류/누수 없음)
 
@@ -263,14 +264,14 @@ ctest --test-dir build --output-on-failure
 
 **다음 후보** (파이썬 kros에 이미 있는 것)
 
-- [ ] 액션 (`ActionServer`/`ActionClient`)
+- [x] 액션 (`ActionServer`/`ActionClient`)
 - [ ] `DiagnosticUpdater`/`DiagnosticAggregator`
 - [ ] MapServer/MapSaver (yaml + pgm), Cartographer 스타일 SLAM
-- [ ] nav2: costmap, planner, controller, bt_navigator
+- [x] nav2: costmap(`Costmap2DROS`), planner/controller 플러그인, `planner_server`/`controller_server`, `bt_navigator`, `behavior_server`
 - [ ] 진짜 하드웨어: OpenCR 시리얼, LDS-03 시리얼
 - [ ] 네트워크 심화: 파라미터/서비스/액션, 다중 클라이언트, 보안, rosbag 기록/재생
 - [ ] viz: 2D Goal Pose/초기 자세 추정, 마우스로 지도 편집, STL 메시 렌더링
-- [ ] `krosc_ws`: Cartographer SLAM, nav2/Smac/MPPI, collision_monitor, 지도 저장/불러오기
+- [x] `krosc_ws`: Cartographer SLAM, nav2 스택(Navfn/RPP 기본, Smac/MPPI는 파라미터 교체), collision_monitor, 지도 저장/불러오기
 
 ## 메모
 
