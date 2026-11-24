@@ -145,11 +145,11 @@ void Cartographer::on_scan(const msgs::LaserScan& scan) {
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (mode == "localization" && localized_ && has_last_match_ && !relocalize_ &&
+    if ((mode == "localization" || mode == "mapping") && localized_ && has_last_match_ && !relocalize_ &&
         std::hypot(sensor_in_odom[0] - last_match_odom_[0], sensor_in_odom[1] - last_match_odom_[1]) <
             kMatchMinLinear &&
         std::abs(cartographer::wrap_angle(sensor_in_odom[2] - last_match_odom_[2])) < kMatchMinAngular) {
-      return;  // 서 있는 동안은 지난 보정을 그대로 쓴다 (CPU)
+      return;  // 서 있는 동안은 지난 보정을 그대로 쓴다 (매핑도 지도가 안 변한다: CPU/거절 방지)
     }
     last_match_odom_ = sensor_in_odom;
     has_last_match_ = true;
