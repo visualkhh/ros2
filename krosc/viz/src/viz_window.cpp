@@ -1,6 +1,8 @@
 #include "krosc/viz/viz_window.hpp"
 
 #include <QAbstractItemView>
+#include <QAbstractSlider>
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
@@ -9,6 +11,7 @@
 #include <QLineEdit>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -114,6 +117,7 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   layout->addWidget(splitter, 1);
   setCentralWidget(central);
   build_manual_docks();
+  qApp->installEventFilter(this);
 
   statusBar()->showMessage(scene_->help_text());
 
@@ -184,6 +188,7 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
 }
 
 VizWindow::~VizWindow() {
+  qApp->removeEventFilter(this);
   model_.node().shutdown();
   if (scene_ != nullptr) {
     scene_->setParent(nullptr);
@@ -671,6 +676,9 @@ void VizWindow::build_manipulator_dock() {
   };
   connect(arm_torque_button_, &QPushButton::clicked, this, [this, set_torque_button] {
     arm_torque_on_ = !arm_torque_on_;
+    if (!arm_torque_on_) {
+      arm_moving_ = false;
+    }
     model_.node().publish("arm_torque", msgs::Bool{arm_torque_on_}, QOS_DEFAULT);
     set_torque_button();
     arm_status_label_->setText(arm_torque_on_ ? "torque ON" : "torque OFF (arm relaxed)");
@@ -697,7 +705,8 @@ void VizWindow::build_manipulator_dock() {
     connect(slider, &QSlider::valueChanged, this, [this, i, value](int degrees) {
       value->setText(QString::number(degrees, 'f', 1) + "°");
       if (!arm_updating_) {
-        arm_dirty_ = true;
+        arm_target_[static_cast<std::size_t>(i)] = static_cast<double>(degrees) * 3.141592653589793 / 180.0;
+        arm_moving_ = true;
       }
     });
   }
@@ -717,8 +726,26 @@ void VizWindow::build_manipulator_dock() {
   connect(gripper_slider_, &QSlider::valueChanged, this, [this](int mm) {
     gripper_value_label_->setText(QString::number(mm, 'f', 1) + " mm");
     if (!arm_updating_) {
-      arm_dirty_ = true;
+      arm_target_[4] = static_cast<double>(mm) / 1000.0;
+      arm_moving_ = true;
     }
+  });
+  auto* arm_speed_row = new QHBoxLayout();
+  auto* arm_speed_name = new QLabel("speed", panel);
+  arm_speed_name->setMinimumWidth(46);
+  arm_speed_slider_ = new QSlider(Qt::Horizontal, panel);
+  arm_speed_slider_->setRange(10, 80);
+  arm_speed_slider_->setValue(35);
+  arm_speed_label_ = new QLabel("0.35 rad/s", panel);
+  arm_speed_label_->setMinimumWidth(72);
+  arm_speed_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  arm_speed_row->addWidget(arm_speed_name);
+  arm_speed_row->addWidget(arm_speed_slider_, 1);
+  arm_speed_row->addWidget(arm_speed_label_);
+  layout->addLayout(arm_speed_row);
+  connect(arm_speed_slider_, &QSlider::valueChanged, this, [this](int value) {
+    arm_speed_ = static_cast<double>(value) / 100.0;
+    arm_speed_label_->setText(QString("%1 rad/s").arg(arm_speed_, 0, 'f', 2));
   });
 
   arm_status_label_ = new QLabel("arm: waiting for joint_states", panel);
@@ -736,7 +763,8 @@ void VizWindow::build_manipulator_dock() {
       gripper_slider_->setValue(static_cast<int>(std::lround(positions[4] * 1000.0)));
     }
     arm_updating_ = false;
-    arm_dirty_ = true;
+    arm_target_ = positions;
+    arm_moving_ = true;
   };
   connect(stow, &QPushButton::clicked, this, [this, set_preset] {
     set_preset({0.0, -1.9024, 1.3440, 0.9023, 0.0});
@@ -748,7 +776,7 @@ void VizWindow::build_manipulator_dock() {
   });
   connect(estop, &QPushButton::clicked, this, [this] {
     model_.node().publish("arm_stop", msgs::Empty{}, QOS_DEFAULT);
-    arm_dirty_ = false;
+    arm_moving_ = false;
     arm_status_label_->setText("E-STOP: hold current pose");
   });
 
@@ -777,23 +805,47 @@ void VizWindow::publish_teleop_pad() {
 }
 
 void VizWindow::send_arm_target() {
-  if (!arm_dirty_) {
+  if (!arm_initialized_ || !arm_moving_) {
     return;
   }
-  arm_dirty_ = false;
+  constexpr double dt = 0.05;
+  bool moved = false;
+  for (int i = 0; i < 4; ++i) {
+    double delta = arm_target_[static_cast<std::size_t>(i)] - arm_output_[static_cast<std::size_t>(i)];
+    const double step = arm_speed_ * dt;
+    if (std::abs(delta) > step) {
+      delta = std::copysign(step, delta);
+    }
+    if (std::abs(delta) > 1e-6) {
+      arm_output_[static_cast<std::size_t>(i)] += delta;
+      moved = true;
+    }
+  }
+  double gripper_delta = arm_target_[4] - arm_output_[4];
+  const double gripper_step = 0.016 * dt;  // 16 mm/s
+  if (std::abs(gripper_delta) > gripper_step) {
+    gripper_delta = std::copysign(gripper_step, gripper_delta);
+  }
+  if (std::abs(gripper_delta) > 1e-6) {
+    arm_output_[4] += gripper_delta;
+    moved = true;
+  }
+  if (!moved) {
+    arm_output_ = arm_target_;
+    arm_moving_ = false;
+  }
   msgs::JointState command;
   for (int i = 0; i < 4; ++i) {
     command.name.push_back("joint" + std::to_string(i + 1));
-    command.position.push_back(static_cast<double>(arm_sliders_[static_cast<std::size_t>(i)]->value()) *
-                               3.141592653589793 / 180.0);
+    command.position.push_back(arm_output_[static_cast<std::size_t>(i)]);
   }
   command.name.push_back("gripper_left_joint");
-  command.position.push_back(static_cast<double>(gripper_slider_->value()) / 1000.0);
+  command.position.push_back(arm_output_[4]);
   model_.node().publish("arm_joint_command", command, QOS_DEFAULT);
 }
 
 void VizWindow::set_arm_slider_values(const std::array<double, 5>& positions) {
-  if (arm_sliders_[0] == nullptr) {
+  if (arm_sliders_[0] == nullptr || arm_moving_) {
     return;
   }
   for (int i = 0; i < 4; ++i) {
@@ -804,6 +856,8 @@ void VizWindow::set_arm_slider_values(const std::array<double, 5>& positions) {
   if (gripper_slider_ != nullptr && gripper_slider_->isSliderDown()) {
     return;
   }
+  arm_target_ = positions;
+  arm_output_ = positions;
   arm_updating_ = true;
   for (int i = 0; i < 4; ++i) {
     if (!std::isfinite(positions[static_cast<std::size_t>(i)])) {
@@ -847,6 +901,11 @@ void VizWindow::refresh_manual() {
   if (gripper != values.end()) {
     positions[4] = gripper->second;
   }
+  if (!arm_initialized_ && std::isfinite(positions[0])) {
+    arm_output_ = positions;
+    arm_target_ = positions;
+    arm_initialized_ = true;
+  }
   set_arm_slider_values(positions);
   QString status = QString("j1 %1°  j2 %2°  j3 %3°  j4 %4°  grip %5 mm")
                        .arg(std::isfinite(positions[0]) ? positions[0] * 180.0 / 3.141592653589793 : 0.0, 0, 'f', 0)
@@ -871,6 +930,53 @@ void VizWindow::set_manual_panels(bool teleop, bool manipulator) {
     splitDockWidget(teleop_dock_, manipulator_dock_, Qt::Vertical);
     resizeDocks({teleop_dock_, manipulator_dock_}, {210, 430}, Qt::Vertical);
   }
+}
+
+
+bool VizWindow::eventFilter(QObject* watched, QEvent* event) {
+  if ((event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) && teleop_dock_ != nullptr) {
+    QWidget* focus = QApplication::focusWidget();
+    if (focus != nullptr && (focus == teleop_dock_ || teleop_dock_->isAncestorOf(focus))) {
+      auto* key = static_cast<QKeyEvent*>(event);
+      const int code = key->key();
+      const bool press = event->type() == QEvent::KeyPress;
+      const bool teleop_key = code == Qt::Key_W || code == Qt::Key_A || code == Qt::Key_S || code == Qt::Key_D ||
+                              code == Qt::Key_Up || code == Qt::Key_Down || code == Qt::Key_Left ||
+                              code == Qt::Key_Right;
+      if (teleop_key) {
+        if (qobject_cast<QAbstractSlider*>(focus) != nullptr &&
+            (code == Qt::Key_Up || code == Qt::Key_Down || code == Qt::Key_Left || code == Qt::Key_Right)) {
+          return false;  // 속도 슬라이더의 화살표 조정은 슬라이더에 맡긴다
+        }
+        if (key->isAutoRepeat()) {
+          return true;
+        }
+        if (scene_ != nullptr) {
+          scene_->set_teleop_key(code, press);
+        }
+        return true;
+      }
+      if (press) {
+        if (code == Qt::Key_Q) {
+          scene_->set_teleop_scale(scene_->teleop_scale() * 1.25);
+          return true;
+        }
+        if (code == Qt::Key_Z) {
+          scene_->set_teleop_scale(scene_->teleop_scale() / 1.25);
+          return true;
+        }
+        if (code == Qt::Key_F) {
+          scene_->set_follow(!scene_->follow());
+          return true;
+        }
+        if (code == Qt::Key_C || code == Qt::Key_R) {
+          scene_->reset_camera();
+          return true;
+        }
+      }
+    }
+  }
+  return QMainWindow::eventFilter(watched, event);
 }
 
 void VizWindow::set_tool(const std::string& tool) {

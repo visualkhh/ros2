@@ -105,6 +105,9 @@ class OpenCrSerial {
 
   mutable std::mutex arm_mutex_;
   ArmStatus arm_status_;
+  std::mutex arm_command_mutex_;
+  std::array<double, 5> last_arm_target_{};
+  bool has_arm_target_ = false;
 
   std::mutex command_mutex_;
   double target_left_ = 0.0;

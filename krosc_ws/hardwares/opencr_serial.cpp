@@ -73,6 +73,22 @@ void OpenCrSerial::stop() {
 }
 
 void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
+  {
+    std::lock_guard<std::mutex> lock(arm_command_mutex_);
+    bool same = has_arm_target_;
+    for (std::size_t i = 0; i < position.size() && same; ++i) {
+      if (!std::isfinite(position[i])) {
+        continue;  // NaN = 유지, 비교하지 않는다
+      }
+      same = std::isfinite(last_arm_target_[i]) &&
+             std::abs(position[i] - last_arm_target_[i]) <= (i == 4 ? 0.0005 : 0.001);
+    }
+    if (same) {
+      return;  // 같은 목표는 다시 보내지 않는다
+    }
+    last_arm_target_ = position;
+    has_arm_target_ = true;
+  }
   std::string line = "A";
   char buffer[32];
   for (double value : position) {

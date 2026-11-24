@@ -217,6 +217,12 @@ static bool arm_setup_one(size_t i, bool recover) {
   if (!mode_ok || !delay_ok) packetHandler->write1ByteTxRx(portHandler, id, ADDR_TORQUE_ENABLE, 0, &err);
   if (!mode_ok) packetHandler->write1ByteTxRx(portHandler, id, ADDR_OPERATING_MODE, mode, &err);
   if (!delay_ok) packetHandler->write1ByteTxRx(portHandler, id, ADDR_RETURN_DELAY, 0, &err);  // 기본 250 µs가 응답마다 붙음
+  // 같은 목표를 반복해도 서보가 떨지 않게 속도/가속도/PID를 제한한다 (RAM 값, EEPROM 아님).
+  packetHandler->write2ByteTxRx(portHandler, id, ADDR_POSITION_P_GAIN, ARM_POSITION_P_GAIN, &err);
+  packetHandler->write2ByteTxRx(portHandler, id, ADDR_POSITION_I_GAIN, ARM_POSITION_I_GAIN, &err);
+  packetHandler->write2ByteTxRx(portHandler, id, ADDR_POSITION_D_GAIN, ARM_POSITION_D_GAIN, &err);
+  packetHandler->write4ByteTxRx(portHandler, id, ADDR_PROFILE_ACCELERATION, ARM_PROFILE_ACCELERATION, &err);
+  packetHandler->write4ByteTxRx(portHandler, id, ADDR_PROFILE_VELOCITY, ARM_PROFILE_VELOCITY, &err);
   arm_enable(i, recover);
   return true;
 }
@@ -400,7 +406,7 @@ static void arm_check() {
     if (arm_recover_since[i]) {
       const bool near = labs(arm_present[i].position - arm_goal[i]) < (long)(0.05f * RAW_PER_RAD);
       if (near || now - arm_recover_since[i] > 10000) {
-        packetHandler->write4ByteTxRx(portHandler, id, ADDR_PROFILE_VELOCITY, 0, &err);   // 0 = 무제한
+        packetHandler->write4ByteTxRx(portHandler, id, ADDR_PROFILE_VELOCITY, ARM_PROFILE_VELOCITY, &err);
         arm_recover_since[i] = 0;
       }
     }

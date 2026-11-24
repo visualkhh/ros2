@@ -46,6 +46,9 @@ class VizWindow : public QMainWindow {
   void set_manual_panels(bool teleop, bool manipulator);
   [[nodiscard]] bool save_screenshot(const QString& path);
 
+ protected:
+  bool eventFilter(QObject* watched, QEvent* event) override;
+
  private:
   void build_panel(QWidget* panel);
   void build_slam_panel(QWidget* panel, QVBoxLayout* layout);
@@ -116,9 +119,15 @@ class VizWindow : public QMainWindow {
   int teleop_direction_ = 0;
   double teleop_last_linear_ = 0.0;
   double teleop_last_angular_ = 0.0;
-  bool arm_dirty_ = false;
+  std::array<double, 5> arm_target_{};
+  std::array<double, 5> arm_output_{};
+  bool arm_moving_ = false;
+  bool arm_initialized_ = false;
   bool arm_updating_ = false;
   bool arm_torque_on_ = true;
+  double arm_speed_ = 0.35;
+  QSlider* arm_speed_slider_ = nullptr;
+  QLabel* arm_speed_label_ = nullptr;
 };
 
 }  // namespace krosc::viz

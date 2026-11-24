@@ -24,11 +24,22 @@ constexpr uint32_t ARM_CHECK_MS = 500;              // 에러·온도·토크 �
 constexpr uint32_t ARM_RETRY_MS = 5000;             // 팔이 없을 때 다시 찾는 간격 (ping이 loop를 잠깐 막으니 드물게)
 constexpr uint32_t ARM_CMD_TIMEOUT_MS = 500;        // 마지막 A 후 이 시간이 지나면 현재 자세 유지
 constexpr uint32_t ARM_RECOVER_PROFILE_VELOCITY = 20;   // 토크 복구 후 명령 자세로 돌아갈 때 속도 한계 (×0.229 rpm)
-constexpr float ARM_GOAL_HYSTERESIS_RAW = 0.8f;     // 목표를 바꾸는 최소 변화 [tick] — 반올림 경계 떨림 방지
+// 같은 목표가 계속 들어와도 서보를 흔들지 않는다: 이보다 작은 변화는 무시한다.
+constexpr float ARM_GOAL_HYSTERESIS_RAW = 2.0f;     // [tick] (약 0.003 rad = 0.17°)
+// 서보 자체의 속도/가속도 램프 + 위치 PID. 기본 P=800은 팔 무게에서 미세 진동이 날 수 있어 낮춘다.
+constexpr uint32_t ARM_PROFILE_VELOCITY = 30;       // 0.229 rpm/unit → 약 0.72 rad/s
+constexpr uint32_t ARM_PROFILE_ACCELERATION = 20;   // 약 7.5 rad/s²
+constexpr uint16_t ARM_POSITION_P_GAIN = 500;
+constexpr uint16_t ARM_POSITION_I_GAIN = 0;
+constexpr uint16_t ARM_POSITION_D_GAIN = 0;
 
 // XM430 컨트롤 테이블 (바퀴와 겹치는 주소는 tb3_wheels.ino에 이미 있음)
 constexpr uint16_t ADDR_RETURN_DELAY = 9;
+constexpr uint16_t ADDR_POSITION_D_GAIN = 80;
+constexpr uint16_t ADDR_POSITION_I_GAIN = 82;
+constexpr uint16_t ADDR_POSITION_P_GAIN = 84;
 constexpr uint16_t ADDR_GOAL_CURRENT = 102;
+constexpr uint16_t ADDR_PROFILE_ACCELERATION = 108;
 constexpr uint16_t ADDR_PROFILE_VELOCITY = 112;
 constexpr uint16_t ADDR_GOAL_POSITION = 116;
 constexpr uint8_t OP_POSITION = 3;
