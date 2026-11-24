@@ -49,6 +49,7 @@ class VizWindow : public QMainWindow {
   void refresh_topics();
   void refresh_slam();
   void update_tool_buttons();
+  void update_collision_button();
   void set_tool(const std::string& tool);
   void sync_waypoints();
   void handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map);
@@ -78,6 +79,8 @@ class VizWindow : public QMainWindow {
   QPushButton* pose_button_ = nullptr;
   QPushButton* goal_button_ = nullptr;
   QPushButton* multi_button_ = nullptr;
+  QPushButton* collision_button_ = nullptr;
+  bool collision_enabled_ = true;
   QPushButton* preview_button_ = nullptr;
   QSlider* teleop_slider_ = nullptr;
   std::vector<std::tuple<double, double, double>> multi_goals_;

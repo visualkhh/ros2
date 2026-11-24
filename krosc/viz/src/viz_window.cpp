@@ -381,6 +381,15 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   auto* remove = new QPushButton("delete", group);
   grid->addWidget(unload, 3, 0);
   grid->addWidget(remove, 3, 1);
+  collision_button_ = new QPushButton("collision ON", group);
+  grid->addWidget(collision_button_, 3, 2, 1, 2);
+  connect(collision_button_, &QPushButton::clicked, this, [this] {
+    collision_enabled_ = !collision_enabled_;
+    const msgs::Bool message{collision_enabled_};
+    model_.node().publish("collision_set_enabled", message, QOS_DEFAULT);
+    update_collision_button();
+  });
+  update_collision_button();
   connect(unload, &QPushButton::clicked, this, [this] {
     model_.node().publish("map_unload", msgs::Empty{}, QOS_DEFAULT);
     slam_status_label_->setText("unloading ...");
@@ -529,6 +538,17 @@ void VizWindow::refresh_slam() {
   if (const auto goal = model_.goal_status()) {
     status += QString(" | goal: %1").arg(QString::fromStdString(goal->data));
   }
+  if (const auto collision = model_.collision_status()) {
+    const std::string text = collision->data;
+    const bool enabled = text.rfind("disabled", 0) != 0;
+    if (enabled != collision_enabled_) {
+      collision_enabled_ = enabled;
+      update_collision_button();
+    }
+    if (collision_button_ != nullptr) {
+      collision_button_->setToolTip(QString::fromStdString(text));
+    }
+  }
   slam_status_label_->setText(status);
   teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * scene_->teleop_scale(), 0, 'f', 2));
   update_tool_buttons();
@@ -547,6 +567,14 @@ void VizWindow::update_tool_buttons() {
   style(goal_button_, "2D Goal Pose", tool == "goal");
   style(multi_button_, "Multi Goal", tool == "multi");
   preview_button_->setText(preview_mode_ ? "Preview ON" : "Preview OFF");
+}
+
+void VizWindow::update_collision_button() {
+  if (collision_button_ == nullptr) {
+    return;
+  }
+  collision_button_->setText(collision_enabled_ ? "collision ON" : "collision OFF");
+  collision_button_->setStyleSheet(collision_enabled_ ? "background:#1f6b43;" : "background:#7a2a2a;");
 }
 
 void VizWindow::set_tool(const std::string& tool) {

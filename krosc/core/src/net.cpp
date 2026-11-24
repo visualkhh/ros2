@@ -674,7 +674,8 @@ QoS qos_for_topic(const std::string& topic) {
   }
   if (topic == "robot_description" || topic == "map" || topic == "global_costmap/costmap" ||
       topic == "local_costmap/costmap" || topic == "plan" || topic == "map_list" ||
-      topic == "map_status" || topic == "slam_status" || topic == "goal_status") {
+      topic == "map_status" || topic == "slam_status" || topic == "goal_status" ||
+      topic == "collision_status") {
     return QOS_LATCHED;
   }
   if (topic == "scan" || topic == "imu" || topic == "odom" || topic == "odometry/filtered" ||
@@ -1061,6 +1062,9 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
       "goal_status", Kind::String, QOS_LATCHED, true,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "collision_status", Kind::String, QOS_LATCHED, true,
       [](Writer& w, const msgs::String& message) { encode(w, message); });
 
   const int fd = ::socket(AF_INET, SOCK_STREAM, 0);

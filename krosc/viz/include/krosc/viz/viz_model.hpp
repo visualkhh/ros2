@@ -56,6 +56,7 @@ class VizModel {
   [[nodiscard]] std::shared_ptr<const msgs::String> map_list() const;
   [[nodiscard]] std::shared_ptr<const msgs::String> map_status() const;
   [[nodiscard]] std::shared_ptr<const msgs::String> goal_status() const;
+  [[nodiscard]] std::shared_ptr<const msgs::String> collision_status() const;
   [[nodiscard]] std::shared_ptr<const msgs::String> slam_status() const;
   [[nodiscard]] std::vector<msgs::Log> logs() const;
 
@@ -124,6 +125,7 @@ class VizModel {
   std::shared_ptr<const msgs::String> map_list_;
   std::shared_ptr<const msgs::String> map_status_;
   std::shared_ptr<const msgs::String> goal_status_;
+  std::shared_ptr<const msgs::String> collision_status_;
   std::shared_ptr<const msgs::String> slam_status_;
   std::deque<msgs::Log> logs_;
   std::string fixed_frame_ = "map";

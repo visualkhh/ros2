@@ -23,6 +23,7 @@
 #include "krosc/context.hpp"
 #include "krosc/net.hpp"
 #include "krosc/nodes/cartographer.hpp"
+#include "krosc/nodes/collision_monitor.hpp"
 #include "krosc/nodes/map_catalog.hpp"
 #include "krosc/nodes/navigator.hpp"
 #include "krosc/nodes/twist_mux.hpp"
@@ -222,7 +223,13 @@ int main(int argc, char** argv) {
                                      {"inflation", 0.24},
                                      {"xy_tolerance", 0.20},
                                      {"yaw_tolerance", 0.35}});
-  krosc::nodes::TwistMux mux(context, "twist_mux", {{"cmd_vel_out", std::string("cmd_vel")}});
+  krosc::nodes::TwistMux mux(context, "twist_mux", {{"cmd_vel_out", std::string("cmd_vel_mux")}});
+  krosc::nodes::CollisionMonitor collision_monitor(
+      context, "collision_monitor",
+      {{"cmd_vel_in_topic", std::string("cmd_vel_mux")},
+       {"cmd_vel_out_topic", std::string("cmd_vel")},
+       {"PolygonSlow.slowdown_ratio", 0.6},
+       {"ignore_collision_during_teleop", true}});
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
   std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
 
