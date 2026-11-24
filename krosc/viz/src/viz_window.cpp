@@ -171,6 +171,7 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   moveit_tab_index_ = tabs->indexOf(moveit_view_);
   tabs->setTabVisible(moveit_tab_index_, false);
   connect(moveit_view_, &SceneView::moveit_target_dragged, this, &VizWindow::on_moveit_target_dragged);
+  connect(moveit_view_, &SceneView::moveit_pitch_dragged, this, &VizWindow::on_moveit_pitch_dragged);
   connect(moveit_view_, &SceneView::moveit_drag_finished, this, &VizWindow::on_moveit_drag_finished);
 
   auto* panel = new QWidget(splitter);
@@ -965,7 +966,7 @@ void VizWindow::build_moveit_dock() {
   moveit_cartesian_->setChecked(true);
   grid->addWidget(moveit_cartesian_, 2, 2, 1, 2);
   layout->addLayout(grid);
-  auto* hint = new QLabel("MoveIt 탭에서 TCP 마커를 드래그 / Shift+드래그: Z", panel);
+  auto* hint = new QLabel("MoveIt 탭: 드래그 X/Y · Shift+드래그 Z · Ctrl+드래그 Pitch", panel);
   hint->setWordWrap(true);
   hint->setStyleSheet("color:#7f899b;");
   layout->addWidget(hint);
@@ -1211,11 +1212,10 @@ void VizWindow::update_moveit_preview() {
                                      target->pose.orientation};
   }
   if (moveit_dragging_ && moveit_x_ != nullptr) {
-    msgs::Quaternion rotation{};
-    if (preview.target) {
-      rotation = preview.target->rotation;
-    }
-    preview.target = msgs::Transform{{moveit_x_->value(), moveit_y_->value(), moveit_z_->value()}, rotation};
+    const double pitch = moveit_pitch_->value() * 3.141592653589793 / 180.0;
+    const double yaw = std::atan2(moveit_y_->value() + 0.000230, moveit_x_->value() - 0.059985);
+    preview.target = msgs::Transform{{moveit_x_->value(), moveit_y_->value(), moveit_z_->value()},
+                                     tfmath::from_rpy(0.0, pitch, yaw)};
   }
   scene_->set_arm_preview(preview);
   if (moveit_view_ != nullptr) {
@@ -1318,6 +1318,21 @@ void VizWindow::on_moveit_target_dragged(double x, double y, double z) {
   moveit_x_->setValue(x);
   moveit_y_->setValue(y);
   moveit_z_->setValue(z);
+  moveit_updating_ = false;
+  moveit_dragging_ = true;
+  const double current = steady_seconds();
+  if (current - moveit_last_drag_publish_ >= 0.12) {
+    publish_moveit_target(true);
+    moveit_last_drag_publish_ = current;
+  }
+}
+
+void VizWindow::on_moveit_pitch_dragged(double degrees) {
+  if (moveit_updating_ || moveit_executing_ || moveit_pitch_ == nullptr) {
+    return;
+  }
+  moveit_updating_ = true;
+  moveit_pitch_->setValue(std::clamp(degrees, -90.0, 90.0));
   moveit_updating_ = false;
   moveit_dragging_ = true;
   const double current = steady_seconds();

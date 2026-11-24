@@ -56,7 +56,7 @@ Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 - `W/A/S/D` 또는 방향키: 텔레옵, `Q/Z`: 속도, `F`: follow, `C`: overview
 - `Backspace`: Multi Goal 모드에서 마지막 웨이포인트 삭제
 - MoveIt `Plan`/`Execute`/`Cancel`은 `moveit_lite` 노드에 토픽으로 요청한다
-- 중앙 **MoveIt 탭**에서 TCP 마커를 드래그(X/Y), `Shift+드래그`로 Z 이동
+- 중앙 **MoveIt 탭**에서 TCP 마커를 드래그(X/Y), `Shift+드래그`로 Z, `Ctrl+드래그`로 Pitch 조정
 
 ### 지도 폴더
 

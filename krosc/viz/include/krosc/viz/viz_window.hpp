@@ -73,6 +73,7 @@ class VizWindow : public QMainWindow {
   void moveit_execute();
   void moveit_stop();
   void on_moveit_target_dragged(double x, double y, double z);
+  void on_moveit_pitch_dragged(double degrees);
   void on_moveit_drag_finished();
   void reset_arm();
   [[nodiscard]] QString arm_error_summary() const;

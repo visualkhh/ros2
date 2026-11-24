@@ -73,6 +73,7 @@ class SceneView : public QWidget {
   void tool_changed(QString tool);
   void tool_pose(double x, double y, double yaw);
   void moveit_target_dragged(double x, double y, double z);
+  void moveit_pitch_dragged(double degrees);
   void moveit_drag_finished();
 
  protected:

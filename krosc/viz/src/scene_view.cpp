@@ -1381,6 +1381,17 @@ void SceneView::mouseMoveEvent(QMouseEvent* event) {
       return;
     }
     msgs::Vector3 fixed = tfmath::apply(base->transform, arm_preview_.target->translation);
+    if ((event->modifiers() & Qt::ControlModifier) != 0) {
+      // Ctrl+상하 드래그: 그리퍼 접근 pitch
+      const msgs::Vector3 tool = tfmath::rotate(arm_preview_.target->rotation, {1.0, 0.0, 0.0});
+      const double current_pitch = -std::asin(std::clamp(tool.z, -1.0, 1.0));
+      const double pitch = std::clamp(current_pitch + static_cast<double>(delta.y()) * 0.004, -1.55, 1.55);
+      const double yaw = tfmath::yaw_of(arm_preview_.target->rotation);
+      arm_preview_.target->rotation = tfmath::from_rpy(0.0, pitch, yaw);
+      update();
+      emit moveit_pitch_dragged(pitch * 180.0 / kPi);
+      return;
+    }
     if ((event->modifiers() & Qt::ShiftModifier) != 0) {
       fixed.z += -static_cast<double>(delta.y()) * camera_.distance * 0.0015;
     } else {
