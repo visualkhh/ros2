@@ -1287,6 +1287,18 @@ void SceneView::draw_arm_preview(QPainter& painter) const {
               QColor(255, 220, 90, 250), 2.0);
     draw_line(painter, origin - QVector3D(0.0F, 0.0F, 0.012F), origin + QVector3D(0.0F, 0.0F, 0.012F),
               QColor(255, 220, 90, 250), 2.0);
+    // 인터랙티브 마커처럼 잡기 쉬운 링
+    const QColor ring_color(255, 220, 90, 180);
+    std::optional<QVector3D> ring_previous;
+    for (int segment = 0; segment <= 28; ++segment) {
+      const double angle = 2.0 * kPi * static_cast<double>(segment) / 28.0;
+      const msgs::Vector3 local{0.042 * std::cos(angle), 0.042 * std::sin(angle), 0.0};
+      const QVector3D point = to_fixed(tfmath::apply(target, local));
+      if (ring_previous) {
+        draw_line(painter, *ring_previous, point, ring_color, 1.6);
+      }
+      ring_previous = point;
+    }
     draw_label(painter, origin + QVector3D(0.0F, 0.0F, 0.035F), "TCP target", QColor(255, 225, 120));
   }
 }
