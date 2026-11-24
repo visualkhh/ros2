@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QImage>
 #include <deque>
 #include <QPoint>
@@ -31,6 +32,8 @@ class MapView2D final : public QWidget {
   void set_show_tf(bool show);
   void set_show_odom(bool show);
   void set_show_filtered(bool show);
+  void set_show_global_costmap(bool show);
+  void set_show_local_costmap(bool show);
   [[nodiscard]] std::string tool() const { return tool_; }
 
  signals:
@@ -52,6 +55,8 @@ class MapView2D final : public QWidget {
 
  private:
   void rebuild_image();
+  void draw_costmap(QPainter& painter, const std::shared_ptr<const msgs::OccupancyGrid>& grid,
+                    QImage& image, std::shared_ptr<const msgs::OccupancyGrid>& cache);
   void place_fit_button();
   [[nodiscard]] QPointF to_screen(double x, double y) const;
   [[nodiscard]] QPointF to_map(const QPointF& screen) const;
@@ -59,7 +64,11 @@ class MapView2D final : public QWidget {
 
   VizModel& model_;
   std::shared_ptr<const msgs::OccupancyGrid> map_cache_;
+  std::shared_ptr<const msgs::OccupancyGrid> global_costmap_cache_;
+  std::shared_ptr<const msgs::OccupancyGrid> local_costmap_cache_;
   QImage image_;
+  mutable QImage global_costmap_image_;
+  mutable QImage local_costmap_image_;
   double origin_x_ = 0.0;
   double origin_y_ = 0.0;
   double resolution_ = 0.05;
@@ -74,9 +83,12 @@ class MapView2D final : public QWidget {
   QPointF tool_start_map_;
   QPointF tool_current_map_;
   std::vector<std::tuple<double, double, double>> waypoints_;
+  QHash<int, int> key_codes_;
   bool show_tf_ = false;
   bool show_odom_ = false;
   bool show_filtered_ = false;
+  bool show_global_costmap_ = true;
+  bool show_local_costmap_ = true;
   std::deque<std::pair<double, double>> trail_;
   QPushButton* fit_button_ = nullptr;
 };

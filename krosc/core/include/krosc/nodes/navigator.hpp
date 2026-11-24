@@ -64,6 +64,9 @@ class Navigator final : public Node {
   void publish_plan(const std::vector<msgs::Pose2D>& path);
   void publish_command(double linear, double angular);
   void publish_status(const std::string& text);
+  void publish_global_costmap();
+  void publish_local_costmap();
+  void publish_empty_costmaps();
   void stop(const std::string& status);
 
   Parameter<std::string> map_topic_;
@@ -75,6 +78,8 @@ class Navigator final : public Node {
   Parameter<std::string> plan_topic_;
   Parameter<std::string> status_topic_;
   Parameter<std::string> cmd_vel_topic_;
+  Parameter<std::string> global_costmap_topic_;
+  Parameter<std::string> local_costmap_topic_;
   Parameter<std::string> map_frame_;
   Parameter<std::string> robot_frame_;
   Parameter<double> controller_frequency_;
@@ -84,14 +89,20 @@ class Navigator final : public Node {
   Parameter<double> inflation_;
   Parameter<double> xy_tolerance_;
   Parameter<double> yaw_tolerance_;
+  Parameter<double> local_costmap_size_;
+  Parameter<double> costmap_period_;
 
   Buffer buffer_;
   std::unique_ptr<TransformListener> listener_;
   mutable std::mutex mutex_;
   std::optional<Grid> grid_;
   std::vector<msgs::Pose2D> path_;
+  std::vector<msgs::Pose2D> waypoints_;
+  std::vector<std::size_t> waypoint_indices_;
+  std::size_t waypoint_index_ = 0;
   bool active_ = false;
   std::size_t path_index_ = 0;
+  double last_costmap_ = -1e18;
   std::string last_status_;
 };
 

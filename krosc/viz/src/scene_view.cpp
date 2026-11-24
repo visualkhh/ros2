@@ -193,7 +193,8 @@ void SceneView::fixed_frame_changed() {
 
 QString SceneView::help_text() const {
   return QStringLiteral(
-      "W/A/S/D: teleop   Q/Z: speed   F: follow   C: overview   drag: orbit   right drag: pan   wheel: zoom");
+      "W/A/S/D: teleop   Q/Z: speed   F: follow   C: overview   Backspace: 마지막 waypoint   "
+      "drag: orbit   right drag: pan   wheel: zoom");
 }
 
 void SceneView::update_camera() {

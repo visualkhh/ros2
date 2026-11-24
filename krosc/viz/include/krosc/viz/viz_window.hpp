@@ -77,6 +77,8 @@ class VizWindow : public QMainWindow {
   void set_arm_slider_values(const std::array<double, 5>& positions);
   void set_tool(const std::string& tool);
   void sync_waypoints();
+  void update_multi_label();
+  void remove_last_multi_goal();
   void handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map);
   void publish_pose(const std::string& topic, double x, double y, double yaw, bool from_map);
   void publish_multi(bool preview);

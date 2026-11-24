@@ -1,6 +1,7 @@
 #include "krosc/viz/viz_window.hpp"
 
 #include <QAbstractItemView>
+#include <QAbstractSpinBox>
 #include <QAbstractSlider>
 #include <QApplication>
 #include <QCheckBox>
@@ -318,6 +319,10 @@ void VizWindow::build_panel(QWidget* panel) {
         map_view_->set_show_odom(box->isChecked());
       } else if (key == "filtered") {
         map_view_->set_show_filtered(box->isChecked());
+      } else if (key == "global_costmap") {
+        map_view_->set_show_global_costmap(box->isChecked());
+      } else if (key == "local_costmap") {
+        map_view_->set_show_local_costmap(box->isChecked());
       }
     }
     connect(box, &QCheckBox::toggled, this, [this, key = std::string(spec.key)](bool checked) {
@@ -329,6 +334,10 @@ void VizWindow::build_panel(QWidget* panel) {
           map_view_->set_show_odom(checked);
         } else if (key == "filtered") {
           map_view_->set_show_filtered(checked);
+        } else if (key == "global_costmap") {
+          map_view_->set_show_global_costmap(checked);
+        } else if (key == "local_costmap") {
+          map_view_->set_show_local_costmap(checked);
         }
       }
     });
@@ -1433,6 +1442,18 @@ void VizWindow::set_manual_panels(bool teleop, bool manipulator, bool moveit) {
 
 
 bool VizWindow::eventFilter(QObject* watched, QEvent* event) {
+  if (event->type() == QEvent::KeyPress) {
+    auto* key = static_cast<QKeyEvent*>(event);
+    if (qwerty_key(key) == Qt::Key_Backspace) {
+      QWidget* focus = QApplication::focusWidget();
+      const bool text_input = qobject_cast<QLineEdit*>(focus) != nullptr ||
+                              qobject_cast<QAbstractSpinBox*>(focus) != nullptr;
+      if (!text_input && !multi_goals_.empty()) {
+        remove_last_multi_goal();
+        return true;
+      }
+    }
+  }
   if ((event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) && teleop_dock_ != nullptr) {
     QWidget* focus = QApplication::focusWidget();
     if (focus != nullptr && (focus == teleop_dock_ || teleop_dock_->isAncestorOf(focus))) {
@@ -1506,6 +1527,39 @@ void VizWindow::sync_waypoints() {
   }
 }
 
+void VizWindow::update_multi_label() {
+  if (multi_label_ == nullptr) {
+    return;
+  }
+  if (multi_goals_.empty()) {
+    multi_label_->setText("multi goals: 0");
+    return;
+  }
+  QStringList parts;
+  for (std::size_t index = 0; index < multi_goals_.size(); ++index) {
+    parts << QString("#%1 (%2, %3)")
+                 .arg(index + 1)
+                 .arg(std::get<0>(multi_goals_[index]), 0, 'f', 2)
+                 .arg(std::get<1>(multi_goals_[index]), 0, 'f', 2);
+  }
+  multi_label_->setText(QString("multi goals: %1  %2").arg(multi_goals_.size()).arg(parts.join("  ")));
+}
+
+void VizWindow::remove_last_multi_goal() {
+  if (multi_goals_.empty()) {
+    if (slam_status_label_ != nullptr) {
+      slam_status_label_->setText("multi goals: 0");
+    }
+    return;
+  }
+  multi_goals_.pop_back();
+  sync_waypoints();
+  update_multi_label();
+  if (preview_mode_) {
+    publish_multi(true);
+  }
+}
+
 void VizWindow::handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map) {
   if (!from_map && model_.fixed_frame() != "map") {
     try {
@@ -1527,16 +1581,7 @@ void VizWindow::handle_tool_pose(const std::string& tool, double x, double y, do
   if (tool == "multi") {
     multi_goals_.emplace_back(x, y, yaw);
     sync_waypoints();
-    if (multi_label_ != nullptr) {
-      QStringList parts;
-      for (std::size_t index = 0; index < multi_goals_.size(); ++index) {
-        parts << QString("#%1 (%2, %3)")
-                     .arg(index + 1)
-                     .arg(std::get<0>(multi_goals_[index]), 0, 'f', 2)
-                     .arg(std::get<1>(multi_goals_[index]), 0, 'f', 2);
-      }
-      multi_label_->setText(QString("multi goals: %1  %2").arg(multi_goals_.size()).arg(parts.join("  ")));
-    }
+    update_multi_label();
     update_tool_buttons();
     return;
   }
@@ -1593,6 +1638,11 @@ void VizWindow::publish_pose(const std::string& topic, double x, double y, doubl
 
 void VizWindow::publish_multi(bool preview) {
   if (multi_goals_.empty()) {
+    if (preview) {
+      msgs::Path empty;
+      empty.header = msgs::Header{model_.node().now(), "map"};
+      model_.node().publish("preview_goals", empty, QOS_DEFAULT);
+    }
     slam_status_label_->setText("multi goals: 0");
     return;
   }

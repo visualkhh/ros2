@@ -22,6 +22,19 @@ constexpr double kPi = 3.14159265358979323846;
 
 double wrap(double angle) { return std::atan2(std::sin(angle), std::cos(angle)); }
 
+std::int8_t occupancy_value(std::uint8_t cost) {
+  if (cost == 255) {
+    return -1;
+  }
+  if (cost == 254) {
+    return 100;
+  }
+  if (cost == 253) {
+    return 50;
+  }
+  return 0;
+}
+
 struct QueueEntry {
   float score = 0.0F;
   int cell = 0;
@@ -42,6 +55,8 @@ Navigator::Navigator(Context& context, std::string name, std::map<std::string, P
   plan_topic_ = declare_parameter<std::string>("plan_topic", std::string("plan"));
   status_topic_ = declare_parameter<std::string>("status_topic", std::string("goal_status"));
   cmd_vel_topic_ = declare_parameter<std::string>("cmd_vel_topic", std::string("cmd_vel_nav"));
+  global_costmap_topic_ = declare_parameter<std::string>("global_costmap_topic", std::string("global_costmap/costmap"));
+  local_costmap_topic_ = declare_parameter<std::string>("local_costmap_topic", std::string("local_costmap/costmap"));
   map_frame_ = declare_parameter<std::string>("map_frame", std::string("map"));
   robot_frame_ = declare_parameter<std::string>("robot_frame", std::string("base_footprint"));
   controller_frequency_ = declare_parameter<double>("controller_frequency", 20.0, positive);
@@ -51,6 +66,8 @@ Navigator::Navigator(Context& context, std::string name, std::map<std::string, P
   inflation_ = declare_parameter<double>("inflation", 0.24, positive);
   xy_tolerance_ = declare_parameter<double>("xy_tolerance", 0.20, positive);
   yaw_tolerance_ = declare_parameter<double>("yaw_tolerance", 0.35, positive);
+  local_costmap_size_ = declare_parameter<double>("local_costmap_size", 4.0, positive);
+  costmap_period_ = declare_parameter<double>("costmap_period", 0.5, positive);
 
   listener_ = std::make_unique<TransformListener>(buffer_, *this);
   subscribe<msgs::OccupancyGrid>(map_topic_.value(), [this](const msgs::OccupancyGrid& map) { on_map(map); }, QOS_LATCHED);
@@ -128,20 +145,26 @@ bool Navigator::build_grid(const msgs::OccupancyGrid& map) {
 void Navigator::on_map(const msgs::OccupancyGrid& map) {
   std::lock_guard<std::mutex> lock(mutex_);
   path_.clear();
+  waypoints_.clear();
+  waypoint_indices_.clear();
+  waypoint_index_ = 0;
   active_ = false;
   path_index_ = 0;
   if (map.info.width == 0 || map.info.height == 0) {
     grid_.reset();
+    publish_empty_costmaps();
     publish_status("map unloaded");
     publish_command(0.0, 0.0);
     return;
   }
   if (!build_grid(map)) {
     grid_.reset();
+    publish_empty_costmaps();
     publish_status("map invalid");
     publish_command(0.0, 0.0);
     return;
   }
+  publish_global_costmap();
   publish_status("map ready");
 }
 
@@ -330,6 +353,78 @@ void Navigator::publish_plan(const std::vector<msgs::Pose2D>& path) {
   publish(plan_topic_.value(), std::move(message), QOS_LATCHED);
 }
 
+void Navigator::publish_empty_costmaps() {
+  msgs::OccupancyGrid empty;
+  empty.header.stamp = now();
+  empty.header.frame_id = map_frame_.value();
+  publish(global_costmap_topic_.value(), empty, QOS_LATCHED);
+  publish(local_costmap_topic_.value(), empty, QOS_LATCHED);
+}
+
+void Navigator::publish_global_costmap() {
+  if (!grid_ || !grid_->valid()) {
+    publish_empty_costmaps();
+    return;
+  }
+  msgs::OccupancyGrid message;
+  message.header.stamp = now();
+  message.header.frame_id = map_frame_.value();
+  message.info.resolution = grid_->resolution;
+  message.info.width = static_cast<std::uint32_t>(grid_->width);
+  message.info.height = static_cast<std::uint32_t>(grid_->height);
+  message.info.origin.position = {grid_->origin_x, grid_->origin_y, 0.0};
+  message.info.origin.orientation = tfmath::from_yaw(0.0);
+  message.data.resize(grid_->cost.size());
+  for (std::size_t index = 0; index < grid_->cost.size(); ++index) {
+    message.data[index] = occupancy_value(grid_->cost[index]);
+  }
+  publish(global_costmap_topic_.value(), std::move(message), QOS_LATCHED);
+}
+
+void Navigator::publish_local_costmap() {
+  if (!grid_ || !grid_->valid()) {
+    return;
+  }
+  const auto pose = robot_pose();
+  if (!pose) {
+    return;
+  }
+  const double resolution = grid_->resolution;
+  const int half = std::max(2, static_cast<int>(std::lround(local_costmap_size_.value() / resolution / 2.0)));
+  const int width = half * 2;
+  const int height = half * 2;
+  const int center_x = static_cast<int>(std::floor((pose->x - grid_->origin_x) / resolution));
+  const int center_y = static_cast<int>(std::floor((pose->y - grid_->origin_y) / resolution));
+  const int start_x = center_x - half;
+  const int start_y = center_y - half;
+  msgs::OccupancyGrid message;
+  message.header.stamp = now();
+  message.header.frame_id = map_frame_.value();
+  message.info.resolution = resolution;
+  message.info.width = static_cast<std::uint32_t>(width);
+  message.info.height = static_cast<std::uint32_t>(height);
+  message.info.origin.position = {grid_->origin_x + static_cast<double>(start_x) * resolution,
+                                  grid_->origin_y + static_cast<double>(start_y) * resolution, 0.0};
+  message.info.origin.orientation = tfmath::from_yaw(0.0);
+  message.data.resize(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), -1);
+  for (int y = 0; y < height; ++y) {
+    const int grid_y = start_y + y;
+    if (grid_y < 0 || grid_y >= grid_->height) {
+      continue;
+    }
+    for (int x = 0; x < width; ++x) {
+      const int grid_x = start_x + x;
+      if (grid_x < 0 || grid_x >= grid_->width) {
+        continue;
+      }
+      message.data[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)] =
+          occupancy_value(grid_->cost[static_cast<std::size_t>(grid_y) * static_cast<std::size_t>(grid_->width) +
+                                      static_cast<std::size_t>(grid_x)]);
+    }
+  }
+  publish(local_costmap_topic_.value(), std::move(message), QOS_LATCHED);
+}
+
 void Navigator::publish_command(double linear, double angular) {
   msgs::Twist twist;
   twist.linear.x = linear;
@@ -351,6 +446,9 @@ void Navigator::stop(const std::string& status) {
     std::lock_guard<std::mutex> lock(mutex_);
     active_ = false;
     path_.clear();
+    waypoints_.clear();
+    waypoint_indices_.clear();
+    waypoint_index_ = 0;
     path_index_ = 0;
     publish_status(status);
   }
@@ -381,6 +479,9 @@ void Navigator::handle_goal(const msgs::PoseStamped& goal_message, bool preview)
   }
   path_ = planned;
   path_index_ = 0;
+  waypoints_ = {*goal};
+  waypoint_indices_ = {path_.size() - 1};
+  waypoint_index_ = 0;
   active_ = !preview;
   publish_plan(path_);
   publish_status(preview ? "preview" : "following");
@@ -388,6 +489,20 @@ void Navigator::handle_goal(const msgs::PoseStamped& goal_message, bool preview)
 
 void Navigator::handle_goals(const msgs::Path& goals, bool preview) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (goals.poses.empty()) {
+    path_.clear();
+    waypoints_.clear();
+    waypoint_indices_.clear();
+    waypoint_index_ = 0;
+    path_index_ = 0;
+    if (!preview) {
+      active_ = false;
+      publish_command(0.0, 0.0);
+    }
+    publish_plan({});
+    publish_status("no goals");
+    return;
+  }
   if (!grid_) {
     publish_status("no map (load a map first)");
     return;
@@ -398,6 +513,8 @@ void Navigator::handle_goals(const msgs::Path& goals, bool preview) {
     return;
   }
   std::vector<msgs::Pose2D> combined;
+  std::vector<msgs::Pose2D> waypoints;
+  std::vector<std::size_t> waypoint_indices;
   msgs::Pose2D current = *start;
   for (const auto& pose : goals.poses) {
     const auto goal = to_map(pose);
@@ -413,13 +530,18 @@ void Navigator::handle_goals(const msgs::Path& goals, bool preview) {
       segment.erase(segment.begin());
     }
     combined.insert(combined.end(), segment.begin(), segment.end());
+    waypoints.push_back(*goal);
+    waypoint_indices.push_back(combined.size() - 1);
     current = *goal;
   }
-  if (combined.size() < 2) {
+  if (combined.size() < 2 || waypoints.empty()) {
     publish_status("no goals");
     return;
   }
   path_ = std::move(combined);
+  waypoints_ = std::move(waypoints);
+  waypoint_indices_ = std::move(waypoint_indices);
+  waypoint_index_ = 0;
   path_index_ = 0;
   active_ = !preview;
   publish_plan(path_);
@@ -437,13 +559,21 @@ void Navigator::on_cancel(const msgs::Empty& message) {
 }
 
 void Navigator::tick() {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (now() - last_costmap_ >= costmap_period_.value()) {
+      publish_local_costmap();
+      last_costmap_ = now();
+    }
+  }
+
   double linear = 0.0;
   double angular = 0.0;
   bool publish = false;
   bool finished = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!active_ || path_.size() < 2) {
+    if (!active_ || path_.size() < 2 || waypoints_.empty() || waypoint_indices_.empty()) {
       return;
     }
     const auto pose = robot_pose();
@@ -451,35 +581,53 @@ void Navigator::tick() {
       publish_status("no map pose");
       return;
     }
-    const std::size_t count = path_.size();
-    std::size_t closest = std::min(path_index_, count - 1);
-    double best = std::numeric_limits<double>::infinity();
-    for (std::size_t index = closest; index < count; ++index) {
-      const double distance = std::hypot(path_[index].x - pose->x, path_[index].y - pose->y);
-      if (distance < best) {
-        best = distance;
-        closest = index;
-      }
+    if (waypoint_index_ >= waypoints_.size()) {
+      waypoint_index_ = waypoints_.size() - 1;
     }
-    path_index_ = closest;
-    const msgs::Pose2D& goal = path_.back();
-    const double goal_distance = std::hypot(goal.x - pose->x, goal.y - pose->y);
+    const msgs::Pose2D& waypoint = waypoints_[waypoint_index_];
+    const std::size_t segment_end = std::min(waypoint_indices_[waypoint_index_], path_.size() - 1);
+    const msgs::Pose2D& path_goal = path_[segment_end];
+    const double goal_distance = std::hypot(path_goal.x - pose->x, path_goal.y - pose->y);
+
     if (goal_distance <= xy_tolerance_.value()) {
-      const double yaw_error = wrap(goal.theta - pose->theta);
+      const double yaw_error = wrap(waypoint.theta - pose->theta);
       if (std::abs(yaw_error) <= yaw_tolerance_.value()) {
-        active_ = false;
-        path_.clear();
-        path_index_ = 0;
-        publish_status("reached");
-        finished = true;
+        if (waypoint_index_ + 1 < waypoints_.size()) {
+          ++waypoint_index_;
+          linear = 0.0;
+          angular = 0.0;
+          publish = true;
+          publish_status("waypoint reached");
+        } else {
+          active_ = false;
+          path_.clear();
+          waypoints_.clear();
+          waypoint_indices_.clear();
+          waypoint_index_ = 0;
+          path_index_ = 0;
+          publish_status("reached");
+          finished = true;
+        }
       } else {
+        // 중간 웨이포인트의 방향까지 맞춘 뒤 다음 구간으로 넘어간다.
         linear = 0.0;
         angular = std::clamp(1.5 * yaw_error, -wz_max_.value(), wz_max_.value());
         publish = true;
+        publish_status("aligning waypoint");
       }
     } else {
-      std::size_t target = count - 1;
-      for (std::size_t index = closest; index < count; ++index) {
+      std::size_t closest = std::min(path_index_, segment_end);
+      double best = std::numeric_limits<double>::infinity();
+      for (std::size_t index = closest; index <= segment_end; ++index) {
+        const double distance = std::hypot(path_[index].x - pose->x, path_[index].y - pose->y);
+        if (distance < best) {
+          best = distance;
+          closest = index;
+        }
+      }
+      path_index_ = closest;
+      std::size_t target = segment_end;
+      for (std::size_t index = closest; index <= segment_end; ++index) {
         if (std::hypot(path_[index].x - pose->x, path_[index].y - pose->y) >= lookahead_.value()) {
           target = index;
           break;

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "krosc/math.hpp"
+#include "krosc/viz/key_bindings.hpp"
 #include "krosc/tf.hpp"
 
 namespace krosc::viz {
@@ -26,6 +27,7 @@ MapView2D::MapView2D(VizModel& model, QWidget* parent) : QWidget(parent), model_
   setMinimumSize(240, 200);
   setMouseTracking(true);
   setFocusPolicy(Qt::StrongFocus);
+  setAttribute(Qt::WA_InputMethodEnabled, false);
   fit_button_ = new QPushButton("Fit map", this);
   fit_button_->setStyleSheet(
       "QPushButton { background:#171c26; border:1px solid #2a3242; border-radius:4px; padding:4px 10px; color:#d7dde8; }"
@@ -74,6 +76,16 @@ void MapView2D::set_show_odom(bool show) {
 
 void MapView2D::set_show_filtered(bool show) {
   show_filtered_ = show;
+  update();
+}
+
+void MapView2D::set_show_global_costmap(bool show) {
+  show_global_costmap_ = show;
+  update();
+}
+
+void MapView2D::set_show_local_costmap(bool show) {
+  show_local_costmap_ = show;
   update();
 }
 
@@ -146,6 +158,54 @@ void MapView2D::rebuild_image() {
   }
 }
 
+void MapView2D::draw_costmap(QPainter& painter, const std::shared_ptr<const msgs::OccupancyGrid>& grid,
+                             QImage& image, std::shared_ptr<const msgs::OccupancyGrid>& cache) {
+  if (!grid || grid->info.width == 0 || grid->info.height == 0 ||
+      grid->data.size() != static_cast<std::size_t>(grid->info.width) * grid->info.height) {
+    return;
+  }
+  if (!grid->header.frame_id.empty() && grid->header.frame_id != "map") {
+    return;
+  }
+  if (grid != cache) {
+    const int width = static_cast<int>(grid->info.width);
+    const int height = static_cast<int>(grid->info.height);
+    image = QImage(width, height, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        const int value = grid->data[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                                     static_cast<std::size_t>(x)];
+        if (value < 0) {
+          continue;
+        }
+        QColor color;
+        if (value >= 100) {
+          color = QColor(235, 55, 55, 190);
+        } else if (value > 0) {
+          const int t = std::min(value, 99);
+          color = QColor(235, 120 + t / 2, 45, 70 + t);
+        } else {
+          continue;
+        }
+        image.setPixelColor(x, height - 1 - y, color);
+      }
+    }
+    cache = grid;
+  }
+  if (image.isNull()) {
+    return;
+  }
+  const double x0 = grid->info.origin.position.x;
+  const double y0 = grid->info.origin.position.y;
+  const double x1 = x0 + static_cast<double>(grid->info.width) * grid->info.resolution;
+  const double y1 = y0 + static_cast<double>(grid->info.height) * grid->info.resolution;
+  const QPointF top_left = to_screen(x0, y1);
+  const QPointF bottom_right = to_screen(x1, y0);
+  painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+  painter.drawImage(QRectF(top_left, bottom_right), image);
+}
+
 QPointF MapView2D::to_screen(double x, double y) const {
   return {offset_x_ + (x - origin_x_) * zoom_, offset_y_ - (y - origin_y_) * zoom_};
 }
@@ -186,6 +246,13 @@ void MapView2D::paintEvent(QPaintEvent* event) {
   painter.setPen(QPen(QColor(0, 150, 230, 150), 1.0));
   painter.setBrush(Qt::NoBrush);
   painter.drawRect(target);
+
+  if (show_global_costmap_) {
+    draw_costmap(painter, model_.global_costmap(), global_costmap_image_, global_costmap_cache_);
+  }
+  if (show_local_costmap_) {
+    draw_costmap(painter, model_.local_costmap(), local_costmap_image_, local_costmap_cache_);
+  }
 
   const auto tf = [&](const std::string& target_frame, const std::string& source_frame) -> std::optional<msgs::TransformStamped> {
     try {
@@ -497,26 +564,18 @@ void MapView2D::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void MapView2D::keyPressEvent(QKeyEvent* event) {
+  const int code = qwerty_key(event);
   if (event->isAutoRepeat()) {
     event->accept();
     return;
   }
-  switch (event->key()) {
-    case Qt::Key_W:
-    case Qt::Key_A:
-    case Qt::Key_S:
-    case Qt::Key_D:
-    case Qt::Key_Up:
-    case Qt::Key_Down:
-    case Qt::Key_Left:
-    case Qt::Key_Right:
-      emit teleop_key(event->key(), true);
-      event->accept();
-      return;
-    default:
-      QWidget::keyPressEvent(event);
-      return;
+  if (is_move_key(code)) {
+    key_codes_[physical_key(event)] = code;
+    emit teleop_key(code, true);
+    event->accept();
+    return;
   }
+  QWidget::keyPressEvent(event);
 }
 
 void MapView2D::keyReleaseEvent(QKeyEvent* event) {
@@ -524,26 +583,26 @@ void MapView2D::keyReleaseEvent(QKeyEvent* event) {
     event->accept();
     return;
   }
-  switch (event->key()) {
-    case Qt::Key_W:
-    case Qt::Key_A:
-    case Qt::Key_S:
-    case Qt::Key_D:
-    case Qt::Key_Up:
-    case Qt::Key_Down:
-    case Qt::Key_Left:
-    case Qt::Key_Right:
-      emit teleop_key(event->key(), false);
-      event->accept();
-      return;
-    default:
-      QWidget::keyReleaseEvent(event);
-      return;
+  const auto found = key_codes_.find(physical_key(event));
+  if (found != key_codes_.end()) {
+    const int code = found.value();
+    key_codes_.erase(found);
+    emit teleop_key(code, false);
+    event->accept();
+    return;
   }
+  const int code = qwerty_key(event);
+  if (is_move_key(code)) {
+    emit teleop_key(code, false);
+    event->accept();
+    return;
+  }
+  QWidget::keyReleaseEvent(event);
 }
 
 void MapView2D::focusOutEvent(QFocusEvent* event) {
   (void)event;
+  key_codes_.clear();
   emit teleop_focus_lost();
 }
 
