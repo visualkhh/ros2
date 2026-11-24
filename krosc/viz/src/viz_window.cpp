@@ -425,9 +425,13 @@ void VizWindow::refresh_slam() {
     const int index = map_combo_->findText(chosen);
     map_combo_->setCurrentIndex(index >= 0 ? index : 0);
   }
-  if (const auto status = model_.map_status()) {
-    slam_status_label_->setText(QString::fromStdString(status->data));
+  QString status = model_.map_status() ? QString::fromStdString(model_.map_status()->data) : QString();
+  if (const auto map = model_.map()) {
+    status += QString(" | map %1x%2").arg(map->info.width).arg(map->info.height);
+  } else {
+    status += " | map -";
   }
+  slam_status_label_->setText(status);
   teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * scene_->teleop_scale(), 0, 'f', 2));
   update_tool_buttons();
 }

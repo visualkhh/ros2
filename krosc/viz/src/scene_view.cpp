@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstddef>
 #include <limits>
 #include <utility>
@@ -58,11 +59,11 @@ QImage build_grid_image(const msgs::OccupancyGrid& grid, bool costmap) {
         }
       } else {
         if (value < 0) {
-          color = QColor(105, 105, 120, 28);
+          color = QColor(85, 88, 105, 18);  // 모름: 아주 흐리게
         } else if (value >= 50) {
-          color = QColor(230, 232, 240, 210);
+          color = QColor(245, 246, 250, 255);  // 벽: 밝게
         } else {
-          color = QColor(120, 150, 190, 26 + value * 2);
+          color = QColor(62, 88, 125, 110 + value);  // 빈 곳: 배경과 구분되게
         }
       }
       image.setPixelColor(x, height - 1 - y, color);
@@ -452,9 +453,13 @@ void SceneView::draw_grid_image(QPainter& painter, const msgs::OccupancyGrid& gr
   if (image.isNull() || width <= 0 || height <= 0) {
     return;
   }
-  const auto frame_transform = model_.transform_in_fixed(grid.header.frame_id);
-  if (!frame_transform) {
-    return;
+  msgs::Transform frame_transform = tfmath::kIdentity;
+  if (grid.header.frame_id != model_.fixed_frame()) {
+    const auto transform = model_.transform_in_fixed(grid.header.frame_id);
+    if (!transform) {
+      return;
+    }
+    frame_transform = transform->transform;
   }
   const double resolution = grid.info.resolution;
   const double ox = grid.info.origin.position.x;
@@ -464,7 +469,7 @@ void SceneView::draw_grid_image(QPainter& painter, const msgs::OccupancyGrid& gr
   const msgs::Quaternion origin_rotation = grid.info.origin.orientation;
   const auto to_fixed = [&](double x, double y) {
     const msgs::Vector3 in_map = tfmath::apply(msgs::Transform{{ox, oy, 0.0}, origin_rotation}, msgs::Vector3{x, y, 0.0});
-    const msgs::Vector3 in_fixed = tfmath::apply(frame_transform->transform, in_map);
+    const msgs::Vector3 in_fixed = tfmath::apply(frame_transform, in_map);
     return QVector3D(static_cast<float>(in_fixed.x), static_cast<float>(in_fixed.y), 0.002F);
   };
   // 이미지 row 0이 y=height_m이 되도록 뒤집어 그린다.
@@ -477,26 +482,88 @@ void SceneView::draw_grid_image(QPainter& painter, const msgs::OccupancyGrid& gr
   if (!visible) {
     return;
   }
+  QPolygonF source;
+  source << QPointF(0.0, 0.0) << QPointF(width, 0.0) << QPointF(width, height) << QPointF(0.0, height);
   QTransform transform;
-  if (!QTransform::quadToQuad(QRectF(0, 0, width, height), QPolygonF() << tl << tr << br << bl, transform)) {
+  const bool ok = QTransform::quadToQuad(source, QPolygonF() << tl << tr << br << bl, transform);
+  if (!ok) {
     return;
   }
   painter.save();
   painter.setTransform(transform);
-  painter.drawImage(0, 0, image);
+  painter.drawImage(QPointF(0.0, 0.0), image);
   painter.restore();
 }
 
 void SceneView::draw_map(QPainter& painter) const {
   const auto grid = model_.map();
-  if (!grid || !enabled("map")) {
+  if (!grid || !enabled("map") || grid->info.width == 0 || grid->info.height == 0) {
     return;
   }
-  if (grid != map_cached_) {
-    map_image_ = build_grid_image(*grid, false);
-    map_cached_ = grid;
+  msgs::Transform frame_transform = tfmath::kIdentity;
+  if (grid->header.frame_id != model_.fixed_frame()) {
+    const auto transform = model_.transform_in_fixed(grid->header.frame_id);
+    if (!transform) {
+      return;
+    }
+    frame_transform = transform->transform;
   }
-  draw_grid_image(painter, *grid, map_image_);
+  const double resolution = grid->info.resolution;
+  const double ox = grid->info.origin.position.x;
+  const double oy = grid->info.origin.position.y;
+  const msgs::Quaternion origin_rotation = grid->info.origin.orientation;
+  const auto to_fixed = [&](double x, double y) {
+    const msgs::Vector3 in_map = tfmath::apply(msgs::Transform{{ox, oy, 0.0}, origin_rotation}, msgs::Vector3{x, y, 0.0});
+    const msgs::Vector3 in_fixed = tfmath::apply(frame_transform, in_map);
+    return project(QVector3D(static_cast<float>(in_fixed.x), static_cast<float>(in_fixed.y), 0.01F));
+  };
+  const double width_m = grid->info.width * resolution;
+  const double height_m = grid->info.height * resolution;
+  const auto corner = [&](double x, double y) { return to_fixed(x, y); };
+  const auto tl = corner(0.0, height_m);
+  const auto tr = corner(width_m, height_m);
+  const auto br = corner(width_m, 0.0);
+  const auto bl = corner(0.0, 0.0);
+  if (tl.visible && tr.visible && br.visible && bl.visible) {
+    painter.setPen(QPen(QColor(0, 150, 230, 160), 1.0));
+    painter.setBrush(QColor(0, 100, 180, 20));
+    painter.drawPolygon(QPolygonF() << tl.point << tr.point << br.point << bl.point);
+    painter.setBrush(Qt::NoBrush);
+  }
+  const std::uint32_t width = grid->info.width;
+  const std::uint32_t height = grid->info.height;
+  const std::size_t total = grid->data.size();
+  if (total == 0) {
+    return;
+  }
+  // 지도는 점으로 그린다: 원근 투영에서 큰 QImage 사각형 변환이 화면 밖으로 날아가 지도가 안 보이던 문제 회피.
+  const std::uint32_t step = total > 400000 ? 2U : 1U;
+  painter.setPen(QPen(QColor(70, 100, 140, 115), 1.0));
+  for (std::uint32_t y = 0; y < height; y += step) {
+    for (std::uint32_t x = 0; x < width; x += step) {
+      const std::int8_t value = grid->data[static_cast<std::size_t>(y) * width + x];
+      if (value < 0 || value >= 50) {
+        continue;
+      }
+      const auto projected = to_fixed((static_cast<double>(x) + 0.5) * resolution, (static_cast<double>(y) + 0.5) * resolution);
+      if (projected.visible) {
+        painter.drawPoint(projected.point);
+      }
+    }
+  }
+  painter.setPen(QPen(QColor(245, 246, 250, 235), 2.0));
+  for (std::uint32_t y = 0; y < height; y += step) {
+    for (std::uint32_t x = 0; x < width; x += step) {
+      const std::int8_t value = grid->data[static_cast<std::size_t>(y) * width + x];
+      if (value < 50) {
+        continue;
+      }
+      const auto projected = to_fixed((static_cast<double>(x) + 0.5) * resolution, (static_cast<double>(y) + 0.5) * resolution);
+      if (projected.visible) {
+        painter.drawPoint(projected.point);
+      }
+    }
+  }
 }
 
 void SceneView::draw_costmap(QPainter& painter, const std::shared_ptr<const msgs::OccupancyGrid>& grid, QImage& image,
@@ -766,6 +833,11 @@ void SceneView::draw_hud(QPainter& painter) const {
   lines << QString("nearest scan: %1 m   teleop x%2")
                .arg(std::isfinite(nearest) ? QString::number(nearest, 'f', 2) : QString("-"))
                .arg(teleop_scale_, 0, 'f', 2);
+  if (const auto map = model_.map()) {
+    lines << QString("map: %1 x %2").arg(map->info.width).arg(map->info.height);
+  } else {
+    lines << "map: -";
+  }
   QFont font("Menlo");
   font.setStyleHint(QFont::Monospace);
   font.setPixelSize(11);
