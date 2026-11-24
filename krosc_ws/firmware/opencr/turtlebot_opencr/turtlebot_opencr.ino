@@ -70,6 +70,7 @@
 #define ACCEL_FACTOR     0.000598550415f  // ADC -> m/s^2  (+-2 g)
 #define CMD_TIMEOUT_MS   500
 #define ERR_REPEAT_MS    1000       // E line repeat period while in error
+#define ARM_F_REFRESH_MS 5000       // 팔 에러가 0이어도 5초마다 F를 보내 앱이 상태를 알게 한다
 #define REBOOT_WAIT_MS   1000       // max wait for DYNAMIXEL to answer ping after reboot
 
 // ---------------- state ----------------
@@ -417,7 +418,8 @@ static void arm_check() {
   }
   bool changed = false, in_error = false;
   for (size_t i = 0; i < ARM_N; ++i) { changed |= arm_err[i] != arm_last_err[i]; in_error |= arm_err[i] != 0; }
-  if (!arm_err_reported || changed || (in_error && now - arm_err_ms >= ERR_REPEAT_MS)) {
+  const bool periodic = in_error ? (now - arm_err_ms >= ERR_REPEAT_MS) : (now - arm_err_ms >= ARM_F_REFRESH_MS);
+  if (!arm_err_reported || changed || periodic) {
     arm_err_reported = true;
     memcpy(arm_last_err, arm_err, sizeof(arm_err));
     arm_err_ms = now;
