@@ -18,8 +18,6 @@ namespace krosc::nodes {
 
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
-
 double wrap(double angle) { return std::atan2(std::sin(angle), std::cos(angle)); }
 
 std::int8_t occupancy_value(std::uint8_t cost) {

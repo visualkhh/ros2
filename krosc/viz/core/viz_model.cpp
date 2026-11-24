@@ -19,7 +19,14 @@ VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_,
   subscribe_latest<msgs::OccupancyGrid>("local_costmap/costmap", local_costmap_, QOS_LATCHED);
   subscribe_latest<msgs::Path>("plan", plan_, QOS_LATCHED);
   subscribe_latest<msgs::Path>("local_plan", local_plan_, QOS_SENSOR_DATA);
-  subscribe_latest<msgs::DiagnosticArray>("diagnostics", diagnostics_, QOS_DEFAULT);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    stats_["diagnostics"] =
+        Stat{std::string(msgs::message_type_name<msgs::DiagnosticArray>()), 0, 0.0, 0.0};
+  }
+  node_.subscribe<msgs::DiagnosticArray>(
+      "diagnostics", [this](const msgs::DiagnosticArray& message) { store_diagnostics(message); },
+      QOS_DEFAULT);
   subscribe_latest<msgs::String>(ROBOT_DESCRIPTION_TOPIC_NAME, robot_description_, QOS_LATCHED);
   subscribe_latest<msgs::String>("map_list", map_list_, QOS_LATCHED);
   subscribe_latest<msgs::String>("map_status", map_status_, QOS_LATCHED);
@@ -100,6 +107,34 @@ void VizModel::store_log(const msgs::Log& log) {
   while (logs_.size() > 50) {
     logs_.pop_front();
   }
+}
+
+void VizModel::store_diagnostics(const msgs::DiagnosticArray& message) {
+  const double now = monotonic_now();
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto merged = diagnostics_ ? std::make_shared<msgs::DiagnosticArray>(*diagnostics_)
+                             : std::make_shared<msgs::DiagnosticArray>();
+  merged->header = message.header;
+  for (const auto& status : message.status) {
+    bool replaced = false;
+    for (auto& existing : merged->status) {
+      if (existing.name == status.name) {
+        existing = status;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      merged->status.push_back(status);
+    }
+  }
+  diagnostics_ = std::move(merged);
+  auto& stat = stats_["diagnostics"];
+  ++stat.count;
+  if (stat.count == 1) {
+    stat.first = now;
+  }
+  stat.last = now;
 }
 
 double VizModel::monotonic_now() {

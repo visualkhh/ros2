@@ -14,7 +14,7 @@
 #include <thread>
 #include <vector>
 
-#include "hardwares/opencr_serial.hpp"
+#include "hardwares/opencr/opencr_serial.hpp"
 
 #include "test_framework.hpp"
 

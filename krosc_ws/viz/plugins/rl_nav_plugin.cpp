@@ -91,7 +91,7 @@ void RlNavPlugin::initialize(krosc::viz::VizHost& host) {
   auto* fallback_row = new QHBoxLayout();
   fallback_row->addWidget(new QLabel("fallback", panel));
   fallback_ = new QComboBox(panel);
-  fallback_->addItems({"pursuit", "stop"});
+  fallback_->addItems({"rpp", "mppi", "dwb"});
   fallback_row->addWidget(fallback_, 1);
   layout->addLayout(fallback_row);
   QObject::connect(fallback_, qOverload<int>(&QComboBox::currentIndexChanged), dock_, [this](int) {
@@ -224,7 +224,14 @@ void RlNavPlugin::refresh() {
   const bool scan = get(values, "scan", "0") == "1";
   const bool active = get(values, "active", "0") == "1";
   const int reason = std::atoi(get(values, "reason", "0").c_str());
-  const QString fallback = QString::fromStdString(get(values, "fallback", "pursuit"));
+  const QString fallback = QString::fromStdString(get(values, "fallback", "rpp"));
+  const bool onnxruntime = get(values, "onnxruntime", "0") == "1";
+  const QString provider = QString::fromStdString(get(values, "provider", "-"));
+  QString provider_short = provider;
+  provider_short.remove("ExecutionProvider");
+  if (provider_short.isEmpty() || provider_short == "-") {
+    provider_short = "no-ort";
+  }
 
   updating_ = true;
   if (enabled != enabled_) {
@@ -235,14 +242,20 @@ void RlNavPlugin::refresh() {
   fallback_->setCurrentText(fallback);
   updating_ = false;
 
-  status_->setText(QString("RL: %1  |  %2")
+  status_->setText(QString("RL: %1  |  %2  |  %3")
                        .arg(active ? "ACTIVE" : (enabled ? "READY" : "OFF"))
-                       .arg(reason_text(reason)));
+                       .arg(reason_text(reason))
+                       .arg(provider_short));
   status_->setStyleSheet(reason == 0 ? "color:#8fe3a8;" : "color:#ffb36b;");
   detail_->setText(
-      QString("policy %1 · scan %2 (age %3s, min %4m) · odom %5 · plan %6\n"
-              "v %7  w %8  |  a0 %9  a1 %10  |  infer %11 ms\n"
-              "model: %12  |  fallback: %13%14")
+      QString("ONNX Runtime %1 %2 · provider %3 · available %4\n"
+              "policy %5 · scan %6 (age %7s, min %8m) · odom %9 · plan %10\n"
+              "v %11  w %12  |  a0 %13  a1 %14  |  infer %15 ms\n"
+              "model: %16  |  fallback: %17%18")
+          .arg(onnxruntime ? "on" : "none")
+          .arg(QString::fromStdString(get(values, "ort_version", "-")))
+          .arg(provider)
+          .arg(QString::fromStdString(get(values, "providers", "-")))
           .arg(policy ? "loaded" : "none")
           .arg(scan ? "ok" : "no")
           .arg(QString::fromStdString(get(values, "scan_age")))

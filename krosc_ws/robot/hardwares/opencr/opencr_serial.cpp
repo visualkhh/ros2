@@ -13,12 +13,11 @@
 #include <thread>
 #include <utility>
 
-#include "serial.hpp"
+#include "../serial.hpp"
 
 namespace krosc_ws {
 
 namespace {
-constexpr double kRetrySeconds = 1.0;
 
 std::pair<double, double> wheel_speeds(const krosc::msgs::Twist& command, double wheel_radius,
                                        double wheel_separation, double max_wheel) {

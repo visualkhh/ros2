@@ -111,6 +111,8 @@ class VizModel {
 
   void subscribe_stats_only(const std::string& topic, const std::string& type, QoS qos);
   void store_log(const msgs::Log& log);
+  // 여러 노드가 각자 diagnostics를 내므로 이름 기준으로 합친다 (diagnostic_aggregator 흉내).
+  void store_diagnostics(const msgs::DiagnosticArray& message);
   [[nodiscard]] static double monotonic_now();
 
   Node node_;

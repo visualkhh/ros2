@@ -84,9 +84,14 @@ inline std::vector<Pose2> simulate(const Pose2& pose, double linear, double angu
   return points;
 }
 
+class ControllerRegistry;
+
 class NavControllerPlugin {
  public:
   virtual ~NavControllerPlugin() = default;
+  // pluginlib 대신 정적 registry를 쓰므로, primary controller를 만드는 플러그인
+  // (rotation shim)이 서버의 registry를 볼 수 있게 넘긴다.
+  void set_registry(const ControllerRegistry* registry) { registry_ = registry; }
   virtual void configure(Node& node, const std::string& name) {
     node_ = &node;
     name_ = name;
@@ -102,6 +107,7 @@ class NavControllerPlugin {
   Node* node_ = nullptr;
   std::string name_;
   std::vector<Pose2> local_plan_;
+  const ControllerRegistry* registry_ = nullptr;
 };
 
 using ControllerFactory = std::function<std::unique_ptr<NavControllerPlugin>()>;
@@ -128,5 +134,11 @@ class ControllerRegistry {
 };
 
 ControllerRegistry builtin_controllers();
+
+// 서버 없이 플러그인만 직접 만들 때 쓰는 기본 registry (테스트/단독 사용).
+inline const ControllerRegistry& builtin_controller_registry() {
+  static const ControllerRegistry registry = builtin_controllers();
+  return registry;
+}
 
 }  // namespace krosc::nodes::nav2

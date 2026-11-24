@@ -40,7 +40,7 @@
 #include "krosc/ros2_control/controller_manager.hpp"
 #include "krosc/time.hpp"
 
-#include "hardware/opencr_system.hpp"
+#include "hardwares/opencr/opencr_system.hpp"
 #include "real_turtlebot3.hpp"
 #include "turtlebot3_driver.hpp"
 
@@ -321,11 +321,22 @@ int main(int argc, char** argv) {
        {"GridBased.tolerance", 0.5},
        {"GridBased.use_astar", true},
        {"GridBased.allow_unknown", false}});
+  krosc::nodes::nav2::ControllerRegistry controller_registry =
+      krosc::nodes::nav2::builtin_controllers();
+#ifdef KROSC_WS_ENABLE_RL_NAV
+  controller_registry.add("rl_nav_controller::RlNavController",
+                          [] { return std::make_unique<krosc_ws::RlNavController>(); });
+#endif
+  const std::string follow_plugin =
+#ifdef KROSC_WS_ENABLE_RL_NAV
+      "rl_nav_controller::RlNavController";
+#else
+      "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController";
+#endif
   krosc::nodes::nav2::ControllerServer controller_server(
       context, local_costmap, "controller_server",
       {{"controller_plugins", std::vector<std::string>{"FollowPath"}},
-       {"FollowPath.plugin",
-        std::string("nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController")},
+       {"FollowPath.plugin", follow_plugin},
        {"FollowPath.desired_linear_vel", 0.20},
        {"FollowPath.lookahead_dist", 0.35},
        {"FollowPath.use_collision_detection", true},
@@ -335,7 +346,8 @@ int main(int argc, char** argv) {
        {"general_goal_checker.xy_goal_tolerance", 0.20},
        {"general_goal_checker.yaw_goal_tolerance", 0.35},
        {"max_linear_accel", 0.0},
-       {"max_angular_accel", 0.0}});
+       {"max_angular_accel", 0.0}},
+      controller_registry);
   krosc::nodes::nav2::BehaviorServer behavior_server(
       context, "behavior_server", {{"cmd_vel_topic", std::string("cmd_vel_nav")}});
   krosc::nodes::nav2::BtNavigator bt_navigator(
@@ -343,20 +355,13 @@ int main(int argc, char** argv) {
       {{"replanning_period", 1.0},
        {"number_of_recoveries", std::int64_t{3}},
        {"recovery_backup", true}});
-#ifdef KROSC_WS_ENABLE_RL_NAV
-  krosc_ws::RlNavController rl_nav(context, "rl_nav_controller",
-                                   {{"enable", false}, {"fallback", std::string("pursuit")}});
-#endif
   krosc::nodes::TwistMux mux(
       context, "twist_mux",
       {{"cmd_vel_out", std::string("cmd_vel_mux")},
-       {"topics", std::vector<std::string>{"navigation", "rl", "teleop"}},
+       {"topics", std::vector<std::string>{"navigation", "teleop"}},
        {"navigation.topic", std::string("cmd_vel_nav")},
        {"navigation.priority", std::int64_t{10}},
        {"navigation.timeout", 0.3},
-       {"rl.topic", std::string("cmd_vel_rl")},
-       {"rl.priority", std::int64_t{90}},
-       {"rl.timeout", 0.2},
        {"teleop.topic", std::string("cmd_vel_teleop")},
        {"teleop.priority", std::int64_t{100}},
        {"teleop.timeout", 0.5}});

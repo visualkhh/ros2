@@ -6,8 +6,8 @@
 #include <string>
 
 #include "krosc/msgs.hpp"
-#include "hardwares/lds03.hpp"
-#include "hardwares/opencr_serial.hpp"
+#include "hardwares/lds03/lds03.hpp"
+#include "hardwares/opencr/opencr_serial.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
 #define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"

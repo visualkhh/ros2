@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
+#include "krosc/ros2_control/sensor_interface.hpp"
 
 namespace krosc_ws {
 
@@ -50,9 +51,9 @@ class LdsParser {
 
 // 실제 LDS-03 시리얼: 230400, 10Hz 스캔. USB2LDS는 DTR을 내려야 데이터를 보낸다.
 // 로봇 몸통(1층 판/바퀴/지지대)이 찍힌 점은 base_link 기준 상자 안이면 지운다.
-class Lds03 {
+class Lds03 : public krosc::ros2_control::SensorInterface {
  public:
-  explicit Lds03(std::string port, double mount_x = 0.060, double mount_height = 0.022,
+  explicit Lds03(std::string port, double mount_x = 0.060,
                  std::string frame_id = "base_scan", bool reverse = true, bool body_filter = true,
                  int baud = 230400);
   ~Lds03();
@@ -60,8 +61,11 @@ class Lds03 {
   Lds03(const Lds03&) = delete;
   Lds03& operator=(const Lds03&) = delete;
 
-  void start();
-  void stop();
+  // read-only 센서 하드웨어 수명주기 (ros2_control SensorInterface).
+  bool on_init(const krosc::ros2_control::HardwareInfo& info) override;
+  bool on_activate() override;
+  bool on_deactivate() override;
+  bool read(double time, double period) override;
 
   [[nodiscard]] std::optional<krosc::msgs::LaserScan> take_scan(double stamp);
   [[nodiscard]] bool connected() const { return connected_.load(); }
@@ -71,6 +75,8 @@ class Lds03 {
   [[nodiscard]] const std::string& port() const { return port_; }
 
  private:
+  void start();
+  void stop();
   void reader_loop();
   void close_fd();
   bool send_line(const std::uint8_t* data, std::size_t size);
@@ -79,7 +85,6 @@ class Lds03 {
 
   std::string port_;
   const double mount_x_;
-  const double mount_height_;
   const std::string frame_id_;
   const bool body_filter_;
   const int baud_;

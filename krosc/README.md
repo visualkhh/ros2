@@ -241,11 +241,11 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)와 `kros/benchmarks/nav2_ben
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 42 + sim 3 = 45 tests, 2 executables
+# core 43 + sim 3 = 46 tests, 2 executables
 ```
 
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
-- nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI, planner/controller/behavior server, bt_navigator (계획·주행·취소)
+- nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - ros2_control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + moveit_* 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
@@ -258,7 +258,7 @@ nav2/ros2_control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파�
 
 | 영역 | 베이스 | 구현 (파일 한 세트씩) |
 |---|---|---|
-| nav2 controller | `NavControllerPlugin` (`nodes/nav2/controllers/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController` |
+| nav2 controller | `NavControllerPlugin` (`nodes/nav2/controllers/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController`, `RotationShimController` |
 | nav2 planner | `NavPlannerPlugin` (`nodes/nav2/planners/global_planner.hpp`) | `NavfnPlanner`, `ThetaStarPlanner`, `SmacPlanner2D`, `SmacPlannerHybrid` |
 | ros2_control hardware | `SystemInterface` (`ros2_control/hardware_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
 | ros2_control controller | `ControllerInterface` (`ros2_control/controller_interface.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
@@ -271,7 +271,7 @@ nav2/ros2_control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파�
 
 ```text
 engine/include/krosc/nodes/nav2/
-├── controllers/   controller.hpp, rpp/dwb/mppi 플러그인, controller_plugins.hpp
+├── controllers/   controller.hpp, rpp/dwb/mppi/rotation_shim 플러그인, controller_plugins.hpp
 ├── planners/      global_planner.hpp, navfn/theta*/smac2d/smac_hybrid 플러그인
 ├── costmap/       costmap.hpp, costmap_2d_ros.hpp
 ├── controller_server.hpp, planner_server.hpp, behavior_server.hpp, bt_navigator.hpp

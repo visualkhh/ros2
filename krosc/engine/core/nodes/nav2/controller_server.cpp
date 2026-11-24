@@ -78,6 +78,7 @@ ControllerServer::ControllerServer(Context& context, Costmap2DROS& local_costmap
     if (!controller) {
       throw std::runtime_error("controller plugin not found: " + kind);
     }
+    controller->set_registry(&registry_);
     controller->configure(*this, id);
     controllers_[id] = std::move(controller);
     logger().info("controller %s: %s", id.c_str(), kind.c_str());

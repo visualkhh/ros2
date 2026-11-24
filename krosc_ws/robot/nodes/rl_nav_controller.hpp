@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -10,61 +9,68 @@
 
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
-#include "krosc/parameter.hpp"
+#include "krosc/nodes/nav2/controllers/controller.hpp"
 #include "krosc/tf.hpp"
 #include "krosc/tf_ros.hpp"
-#include "krosc/timer.hpp"
 #include "krosc/topic.hpp"
 
 #include "ml/onnx_policy.hpp"
 
 namespace krosc_ws {
 
-// Isaac rl_maze 정책(policy.onnx)을 20Hz로 실행해 cmd_vel_rl을 만든다.
-// RL OFF/실패 시 cmd_vel_rl을 멈추고 기존 Navigator(pure pursuit, cmd_vel_nav)가 fallback이 된다.
-class RlNavController final : public krosc::Node {
+// nav2 controller 플러그인: ONNX 정책이 가능하면 cmd_vel_nav를 RL로 내고,
+// 꺼져 있거나 정책/스캔이 없으면 inner fallback(mppi/dwb/rpp)에 위임한다.
+// ROS 2/Python 예제의 rl_nav_controller와 같은 위치(ControllerServer 플러그인)다.
+class RlNavController final : public krosc::nodes::nav2::NavControllerPlugin {
  public:
-  explicit RlNavController(krosc::Context& context, std::string name = "rl_nav_controller",
-                           std::map<std::string, krosc::ParamValue> parameters = {});
+  using Pose2 = krosc::nodes::nav2::Pose2;
+  using Velocity = krosc::nodes::nav2::Velocity;
+  using Costmap = krosc::nodes::nav2::Costmap;
+
+  RlNavController();
+  ~RlNavController() override;
+
+  void configure(krosc::Node& node, const std::string& name) override;
+  Velocity compute_velocity_commands(const Pose2& pose, const Velocity& velocity,
+                                     const std::vector<Pose2>& path, const Costmap& costmap,
+                                     double dt) override;
+  [[nodiscard]] std::string type() const override {
+    return "rl_nav_controller::RlNavController";
+  }
 
  private:
-  struct Pose2D {
-    double x = 0.0;
-    double y = 0.0;
-    double yaw = 0.0;
-  };
-
   void on_scan(const krosc::msgs::LaserScan& message);
   void on_imu(const krosc::msgs::Imu& message);
-  void on_odom(const krosc::msgs::Odometry& message);
-  void on_plan(const krosc::msgs::Path& message);
   void on_enable(const krosc::msgs::Bool& message);
   void on_fallback(const krosc::msgs::String& message);
   void on_reload(const krosc::msgs::Empty& message);
   void on_model(const krosc::msgs::String& message);
-  void tick();
 
-  bool load_policy(const std::string& model, std::string& error);
+  bool set_fallback_locked(const std::string& kind);
+  bool load_policy_locked(const std::string& model, std::string& error);
   void refresh_models_locked();
   void publish_model_list_locked();
-  [[nodiscard]] std::optional<Pose2D> robot_pose() const;
-  [[nodiscard]] double laser_yaw(const std::string& scan_frame) const;
-  [[nodiscard]] std::vector<float> waypoints(const Pose2D& pose, const krosc::msgs::Path& plan) const;
-  [[nodiscard]] std::vector<float> scan_rays(const krosc::msgs::LaserScan& scan, double yaw,
-                                             double inflation) const;
-  void publish_status_locked(int reason, bool active, double v, double w, double a0, double a1,
-                             double inference_ms);
-  void publish_zero_locked();
+  void publish_status_locked(const Velocity& command, int reason, bool active, double inference_ms);
+  void publish_diagnostics_locked(const Velocity& command, int reason, bool active,
+                                  double inference_ms);
+  void cancel_subscriptions();
 
-  // parameters
-  krosc::Parameter<std::string> models_directory_;
+  [[nodiscard]] std::vector<float> waypoints(const Pose2& pose,
+                                             const std::vector<Pose2>& path) const;
+  [[nodiscard]] std::vector<float> scan_rays(const krosc::msgs::LaserScan& scan, double laser_yaw,
+                                             double inflation) const;
+  double laser_yaw();
+  [[nodiscard]] double scan_min() const;
+
+  // parameters ("<name>." 아래)
+  krosc::Parameter<bool> enable_;
   krosc::Parameter<std::string> model_path_;
+  krosc::Parameter<std::string> models_directory_;
   krosc::Parameter<std::string> model_;
-  krosc::Parameter<double> model_list_period_;
-  krosc::Parameter<std::string> model_list_topic_;
-  krosc::Parameter<std::string> model_topic_;
-  krosc::Parameter<bool> enable_default_;
-  krosc::Parameter<std::string> fallback_default_;
+  krosc::Parameter<std::string> fallback_controller_;
+  krosc::Parameter<double> max_lin_;
+  krosc::Parameter<double> max_ang_;
+  krosc::Parameter<double> v_min_ratio_;
   krosc::Parameter<std::int64_t> lookahead_;
   krosc::Parameter<double> wp_step_;
   krosc::Parameter<double> wp_scale_;
@@ -72,47 +78,36 @@ class RlNavController final : public krosc::Node {
   krosc::Parameter<double> lidar_max_;
   krosc::Parameter<double> lidar_inflation_;
   krosc::Parameter<double> inflation_scale_;
-  krosc::Parameter<double> max_lin_;
-  krosc::Parameter<double> max_ang_;
-  krosc::Parameter<double> v_min_ratio_;
-  krosc::Parameter<double> frequency_;
   krosc::Parameter<double> scan_timeout_;
-  krosc::Parameter<double> odom_timeout_;
-  krosc::Parameter<std::string> map_frame_;
-  krosc::Parameter<std::string> robot_frame_;
+  krosc::Parameter<std::string> base_frame_;
+  krosc::Parameter<std::string> scan_topic_;
+  krosc::Parameter<std::string> imu_topic_;
+  krosc::Parameter<double> diagnostics_period_;
 
   mutable std::mutex mutex_;
+  std::unique_ptr<krosc::nodes::nav2::NavControllerPlugin> fallback_;
   ml::OnnxPolicy policy_;
   std::string policy_error_;
   std::string current_model_;
   std::vector<std::string> model_names_;
-  bool enable_ = false;
-  std::string fallback_ = "pursuit";
-
   std::shared_ptr<const krosc::msgs::LaserScan> scan_;
-  std::shared_ptr<const krosc::msgs::Imu> imu_;
-  std::shared_ptr<const krosc::msgs::Odometry> odom_;
-  std::shared_ptr<const krosc::msgs::Path> plan_;
   double scan_time_ = -1e18;
-  double imu_time_ = -1e18;
-  double odom_time_ = -1e18;
-  double plan_time_ = -1e18;
+  std::optional<double> gyro_;
   std::array<float, 2> prev_action_{{0.0F, 0.0F}};
   bool active_last_ = false;
+  double last_status_ = -1e18;
+  double last_diagnostics_ = -1e18;
 
-  krosc::Buffer tf_buffer_;
-  std::unique_ptr<krosc::TransformListener> tf_listener_;
+  krosc::Buffer buffer_;
+  std::unique_ptr<krosc::TransformListener> listener_;
+  std::optional<double> laser_yaw_;
 
   krosc::Subscription<krosc::msgs::LaserScan> scan_subscription_;
   krosc::Subscription<krosc::msgs::Imu> imu_subscription_;
-  krosc::Subscription<krosc::msgs::Odometry> odom_subscription_;
-  krosc::Subscription<krosc::msgs::Path> plan_subscription_;
   krosc::Subscription<krosc::msgs::Bool> enable_subscription_;
   krosc::Subscription<krosc::msgs::String> fallback_subscription_;
   krosc::Subscription<krosc::msgs::Empty> reload_subscription_;
   krosc::Subscription<krosc::msgs::String> model_subscription_;
-  krosc::Timer timer_;
-  krosc::Timer model_timer_;
 };
 
 }  // namespace krosc_ws

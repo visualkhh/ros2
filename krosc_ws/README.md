@@ -155,7 +155,8 @@ cmake --build build -j
 - 플러그인은 nav2와 같은 이름으로 고른다: `nav2_navfn_planner::NavfnPlanner`,
   `nav2_theta_star_planner::ThetaStarPlanner`, `nav2_smac_planner::SmacPlanner2D`,
   `nav2_smac_planner::SmacPlannerHybrid`, `nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController`,
-  `dwb_core::DWBLocalPlanner`, `nav2_mppi_controller::MPPIController`.
+  `dwb_core::DWBLocalPlanner`, `nav2_mppi_controller::MPPIController`,
+  `nav2_rotation_shim_controller::RotationShimController`.
 
 ### Multi-client
 
@@ -226,8 +227,13 @@ Isaac `rl_maze` 정책(52관측 → 2행동, 20Hz)을 Pi에서 ONNX Runtime으�
 
 - 모델 폴더: `artifacts/models/rl_nav_controller/<name>/`에 `*.onnx` + `*.onnx.data`
   (기본 `rl_maze`: `policy.onnx` + `policy.onnx.data`)
-- 노드: `robot/nodes/rl_nav_controller.cpp`, 폴더 스캔은 `robot/ml/model_catalog.hpp`
-- Viz: `viz/plugins/rl_nav_plugin.cpp` — 모델 선택, RL ON/OFF, fallback, 상태
+- `RlNavController`는 독립 노드가 아니라 **`NavControllerPlugin` 구현**이다.
+  `controller_server`의 `FollowPath.plugin="rl_nav_controller::RlNavController"`로 선택된다.
+- ONNX Runtime 실행 장치는 **CUDA → CoreML → CPU** 순으로 고른다. GPU가 없거나
+  CUDA 세션 생성이 실패하면 CPUExecutionProvider로 내려간다.
+  ONNX Runtime 없이 빌드해도 플러그인은 있고, 정책 로드가 실패하면 fallback 컨트롤러가 주행한다.
+- 폴더 스캔: `robot/ml/model_catalog.hpp`
+- Viz: `viz/plugins/rl_nav_plugin.cpp` — 모델 선택, RL ON/OFF, fallback, 실행 장치/상태
 - 지도와 같은 방식으로 **모델 목록**을 고른다:
   - `rl_nav_model_list`(String, latch): 모델 이름들 (한 줄에 하나)
   - `rl_nav_model`(String): 선택한 모델 이름 → 그 자리에서 다시 로드
@@ -235,21 +241,29 @@ Isaac `rl_maze` 정책(52관측 → 2행동, 20Hz)을 Pi에서 ONNX Runtime으�
 - 기본은 **RL OFF**. Viz의 `RL Nav` 도크에서 모델을 고르고 켠다.
 
 ```text
-teleop   priority 100
-rl       priority  90   cmd_vel_rl
-nav      priority  10   cmd_vel_nav (bt_navigator + planner/controller server)
+teleop   priority 100   cmd_vel_teleop
+nav      priority  10   cmd_vel_nav (bt_navigator → controller_server → RL 또는 fallback)
 ```
 
-fallback:
+RL 플러그인은 `ControllerServer` 안에서 돈다. `cmd_vel_rl`/twist_mux rl 레인은 없어졌다.
 
-- `pursuit` — RL이 꺼지거나 실패하면 nav2 스택(bt_navigator)이 주행
-- `stop` — `cmd_vel_rl=0`으로 정지
+fallback (`FollowPath.fallback_controller` 또는 Viz의 `rl_nav_fallback`):
+
+- `rpp` — 기본 (nav2 기본과 같게). RL이 꺼지거나 정책/스캔이 없거나 추론이 실패하면 RPP가 주행
+- `mppi` — MPPI로 fallback
+- `dwb` — DWB로 fallback
 
 RL이 켜져도 scan/odom/plan/TF가 없거나 추론이 실패하면 자동으로 fallback한다.
-`infer_ms`, `scan_age`, `reason`은 `rl_nav_status`로 Viz에 표시된다.
+`infer_ms`, `scan_age`, `reason`, `provider`, `onnxruntime`은 `rl_nav_status`로 Viz에 표시된다.
 
-ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 사용하고,
-없으면 `KROSC_WS_BUILD_RL_NAV=OFF`로 RL만 제외할 수 있다.
+진단은 ROS 2처럼 `diagnostics`(`diagnostic_msgs/DiagnosticArray`)에 `controller_server: RL Navigation`
+상태를 낸다. 값: `onnxruntime`, `onnxruntime_version`, `provider`, `providers`,
+`model`, `policy`, `fallback`, `reason`, `infer_ms`, `scan_age`.
+Viz는 여러 노드의 diagnostics를 이름 기준으로 합쳐서 본다 (`viz/core/viz_model.cpp`).
+
+ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 우선 찾고,
+없으면 Homebrew prefix(`/opt/homebrew`)도 본다. 둘 다 없으면 RL은 fallback 전용으로 빌드된다.
+`KROSC_WS_BUILD_RL_NAV=OFF`면 플러그인/노드를 아예 빌드하지 않고 main이 RPP를 쓴다.
 
 ## MoveIt / ros2_control
 
@@ -286,7 +300,9 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, MoveIt 플러그인/노드는
 `krosc/engine/include/krosc/nodes/moveit/`와 `krosc/engine/core/nodes/moveit/move_group.cpp`에 있다.
 ros2_control 레이어는 `krosc/engine/include/krosc/ros2_control/`, 실기 하드웨어 플러그인은
-`krosc_ws/robot/hardware/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
+`krosc_ws/robot/hardwares/opencr/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
+LDS-03은 `SensorInterface`(on_init → on_activate → read → on_deactivate)를 따르며
+`krosc_ws/robot/hardwares/lds03/lds03.cpp`에 있다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
 ## 구성
@@ -297,15 +313,17 @@ krosc_ws/
 │   ├── main.cpp                 # 50Hz 실시간 루프, 노드 조립, TCP 서버
 │   ├── turtlebot3_driver.cpp/.hpp # scan/imu/arm_status/diagnostics, 팔 서비스
 │   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
-│   ├── hardware/opencr_system.cpp # ros2_control SystemInterface (바퀴+팔)
-│   ├── nodes/rl_nav_controller.cpp
-│   ├── ml/onnx_policy.cpp/.hpp
+│   ├── nodes/rl_nav_controller.cpp/.hpp # NavControllerPlugin (RL + fallback)
+│   ├── ml/onnx_policy.cpp/.hpp  # ONNX Runtime (CUDA/CoreML → CPU)
 │   ├── ml/model_catalog.hpp     # artifacts/models/rl_nav_controller 스캔
 │   ├── hardwares/
 │   │   ├── serial.cpp/.hpp          # POSIX termios
-│   │   ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
-│   │   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 20Hz C/A 명령
-│   │   └── lds03.cpp/.hpp           # LDS-03 패킷 파서 + 시리얼 + 몸통 필터
+│   │   ├── opencr/
+│   │   │   ├── opencr_system.cpp/.hpp   # ros2_control SystemInterface (바퀴+팔)
+│   │   │   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 20Hz C/A 명령
+│   │   │   └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
+│   │   └── lds03/
+│   │       └── lds03.cpp/.hpp       # SensorInterface(read-only) + 패킷 파서 + 몸통 필터
 │   └── description/urdf/turtlebot3_real.urdf
 ├── viz/                         # PC Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp

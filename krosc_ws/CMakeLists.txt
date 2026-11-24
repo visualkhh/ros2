@@ -17,32 +17,34 @@ set(KROSC_REAL_SOURCES
   robot/main.cpp
   robot/turtlebot3_driver.cpp
   robot/real_turtlebot3.cpp
-  robot/hardware/opencr_system.cpp
-  robot/hardwares/lds03.cpp
-  robot/hardwares/opencr_protocol.cpp
-  robot/hardwares/opencr_serial.cpp
+  robot/hardwares/opencr/opencr_system.cpp
+  robot/hardwares/lds03/lds03.cpp
+  robot/hardwares/opencr/opencr_protocol.cpp
+  robot/hardwares/opencr/opencr_serial.cpp
   robot/hardwares/serial.cpp
 )
 
-# RL nav: ONNX Runtime은 ROS 2 lyrical vendor를 우선 찾고, 없으면 RL만 제외한다.
+# RL nav: ONNX Runtime을 찾으면 GPU(CUDA/CoreML) → CPU 순으로 쓴다.
+# 못 찾아도 RL 컨트롤러 플러그인은 빌드한다. 정책 없이 fallback 컨트롤러로 주행하고
+# diagnostics에 onnxruntime=false를 남긴다.
 option(KROSC_WS_BUILD_RL_NAV "Build ONNX RL navigation controller" ON)
 set(KROSC_WS_ONNXRUNTIME_ROOT "/opt/ros/lyrical/opt/onnxruntime_vendor" CACHE PATH
     "ONNX Runtime vendor root (include/, lib/)")
 set(KROSC_WS_RL_NAV_FOUND OFF)
 if(KROSC_WS_BUILD_RL_NAV)
+  list(APPEND KROSC_REAL_SOURCES
+    robot/ml/onnx_policy.cpp
+    robot/nodes/rl_nav_controller.cpp)
   find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
-    HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT
-    PATH_SUFFIXES include)
+    HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT ENV HOMEBREW_PREFIX
+    PATH_SUFFIXES include include/onnxruntime)
   find_library(ONNXRUNTIME_LIBRARY onnxruntime
-    HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT
+    HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT ENV HOMEBREW_PREFIX
     PATH_SUFFIXES lib)
   if(ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIBRARY)
-    list(APPEND KROSC_REAL_SOURCES
-      robot/ml/onnx_policy.cpp
-      robot/nodes/rl_nav_controller.cpp)
     set(KROSC_WS_RL_NAV_FOUND ON)
   else()
-    message(STATUS "krosc_ws: ONNX Runtime을 찾지 못해 RL nav를 제외한다")
+    message(STATUS "krosc_ws: ONNX Runtime 없음 — RL은 CPU fallback 컨트롤러로만 동작한다")
   endif()
 endif()
 
@@ -57,14 +59,17 @@ target_compile_definitions(krosc_real PRIVATE
   KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"
   KROSC_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models"
 )
-if(KROSC_WS_RL_NAV_FOUND)
-  target_include_directories(krosc_real PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
-  target_link_libraries(krosc_real PRIVATE ${ONNXRUNTIME_LIBRARY})
+if(KROSC_WS_BUILD_RL_NAV)
   target_compile_definitions(krosc_real PRIVATE KROSC_WS_ENABLE_RL_NAV=1)
-  get_filename_component(ONNXRUNTIME_LIBRARY_DIR "${ONNXRUNTIME_LIBRARY}" DIRECTORY)
-  set_target_properties(krosc_real PROPERTIES
-    BUILD_RPATH "${ONNXRUNTIME_LIBRARY_DIR}"
-    INSTALL_RPATH "${ONNXRUNTIME_LIBRARY_DIR}")
+  if(KROSC_WS_RL_NAV_FOUND)
+    target_include_directories(krosc_real PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+    target_link_libraries(krosc_real PRIVATE ${ONNXRUNTIME_LIBRARY})
+    target_compile_definitions(krosc_real PRIVATE KROSC_WS_HAS_ONNXRUNTIME=1)
+    get_filename_component(ONNXRUNTIME_LIBRARY_DIR "${ONNXRUNTIME_LIBRARY}" DIRECTORY)
+    set_target_properties(krosc_real PROPERTIES
+      BUILD_RPATH "${ONNXRUNTIME_LIBRARY_DIR}"
+      INSTALL_RPATH "${ONNXRUNTIME_LIBRARY_DIR}")
+  endif()
 endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(krosc_real PRIVATE -Wno-psabi)
@@ -79,9 +84,12 @@ if(KROSC_WS_BUILD_TESTS)
     tests/test_serial.cpp
     tests/test_moveit_stack.cpp
     tests/test_models.cpp
-    robot/hardwares/lds03.cpp
-    robot/hardwares/opencr_protocol.cpp
-    robot/hardwares/opencr_serial.cpp
+    tests/test_rl_nav_plugin.cpp
+    robot/ml/onnx_policy.cpp
+    robot/nodes/rl_nav_controller.cpp
+    robot/hardwares/lds03/lds03.cpp
+    robot/hardwares/opencr/opencr_protocol.cpp
+    robot/hardwares/opencr/opencr_serial.cpp
     robot/hardwares/serial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests/test_main.cpp
   )
@@ -92,7 +100,13 @@ if(KROSC_WS_BUILD_TESTS)
   )
   target_link_libraries(krosc_ws_tests PRIVATE krosc::core)
   target_compile_definitions(krosc_ws_tests PRIVATE
-    KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf")
+    KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
+    KROSC_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models")
+  if(KROSC_WS_RL_NAV_FOUND)
+    target_include_directories(krosc_ws_tests PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+    target_link_libraries(krosc_ws_tests PRIVATE ${ONNXRUNTIME_LIBRARY})
+    target_compile_definitions(krosc_ws_tests PRIVATE KROSC_WS_HAS_ONNXRUNTIME=1)
+  endif()
   if(UNIX AND NOT APPLE)
     target_link_libraries(krosc_ws_tests PRIVATE util)
   endif()

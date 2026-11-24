@@ -15,6 +15,7 @@
 #include "krosc/nodes/nav2/behavior_server.hpp"
 #include "krosc/nodes/nav2/bt_navigator.hpp"
 #include "krosc/nodes/nav2/controllers/controller_plugins.hpp"
+#include "krosc/nodes/nav2/controllers/rotation_shim_controller.hpp"
 #include "krosc/nodes/nav2/controller_server.hpp"
 #include "krosc/nodes/nav2/costmap/costmap_2d_ros.hpp"
 #include "krosc/nodes/nav2/planner_server.hpp"
@@ -167,6 +168,40 @@ KROSC_TEST(nav2_controller_plugins_choose_motion) {
   CHECK(mppi_command.linear <= 0.22 + 1e-9);
   CHECK(std::abs(mppi_command.angular) <= 1.5 + 1e-9);
   CHECK(!mppi.local_plan().empty());
+}
+
+KROSC_TEST(nav2_rotation_shim_rotates_then_delegates) {
+  krosc::Context context;
+  krosc::Node node(context, "shim_host");
+  krosc::nodes::nav2::Costmap costmap(0.05, 100, 100, 0.0, 0.0);
+
+  constexpr double kPi = 3.14159265358979323846;
+  std::vector<krosc::nodes::nav2::Pose2> path;
+  for (int index = 0; index <= 10; ++index) {
+    path.push_back(krosc::nodes::nav2::Pose2{0.0, 0.1 * index, kPi / 2.0});
+  }
+
+  krosc::nodes::nav2::RotationShimController shim;
+  shim.configure(node, "FollowPath");
+  const auto rotate = shim.compute_velocity_commands(krosc::nodes::nav2::Pose2{0.0, 0.0, 0.0},
+                                                     krosc::nodes::nav2::Velocity{}, path, costmap, 0.05);
+  CHECK_NEAR(0.0, rotate.linear, 1e-12);
+  CHECK(rotate.angular > 0.0);
+  CHECK(rotate.angular <= 3.2 * 0.05 + 1e-9);
+
+  const auto delegated = shim.compute_velocity_commands(
+      krosc::nodes::nav2::Pose2{0.0, 0.0, kPi / 2.0}, krosc::nodes::nav2::Velocity{}, path,
+      costmap, 0.05);
+  CHECK(delegated.linear > 0.0);
+
+  // 회전에 들어간 뒤에는 angular_disengage_threshold(22.5도)까지만 기다린다.
+  shim.compute_velocity_commands(krosc::nodes::nav2::Pose2{0.0, 0.0, 0.0},
+                                 krosc::nodes::nav2::Velocity{}, path, costmap, 0.05);
+  const auto hysteresis = shim.compute_velocity_commands(
+      krosc::nodes::nav2::Pose2{0.0, 0.0, kPi / 2.0 - 0.5}, krosc::nodes::nav2::Velocity{}, path,
+      costmap, 0.05);
+  CHECK_NEAR(0.0, hysteresis.linear, 1e-12);
+  CHECK(hysteresis.angular > 0.0);
 }
 
 KROSC_TEST(nav2_bt_navigator_drives_and_cancels) {

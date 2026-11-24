@@ -36,6 +36,7 @@ add_library(krosc_core STATIC
   core/nodes/nav2/controllers/dwb_local_planner.cpp
   core/nodes/nav2/controllers/mppi_controller.cpp
   core/nodes/nav2/controllers/regulated_pure_pursuit_controller.cpp
+  core/nodes/nav2/controllers/rotation_shim_controller.cpp
   core/nodes/nav2/costmap/costmap.cpp
   core/nodes/nav2/costmap/costmap_2d_ros.cpp
   core/nodes/nav2/planners/navfn_planner.cpp
