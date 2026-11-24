@@ -31,8 +31,18 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
                    }},
       krosc::QOS_TF_STATIC);
 
+  krosc::msgs::OccupancyGrid map;
+  map.header = krosc::msgs::Header{0.0, "map"};
+  map.info.resolution = 0.05;
+  map.info.width = 2;
+  map.info.height = 2;
+  map.info.origin.orientation.w = 1.0;
+  map.data = {0, 100, -1, 50};
+  server_context.topics().publish("map", map, krosc::QOS_LATCHED);
+
   krosc::Context client_context;
   std::atomic<bool> got_description{false};
+  std::atomic<bool> got_map{false};
   std::atomic<bool> got_scan{false};
   std::mutex mutex;
   std::condition_variable cv;
@@ -41,6 +51,15 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
       [&](const krosc::msgs::String& message) {
         if (message.data.find("net_test") != std::string::npos) {
           got_description.store(true);
+        }
+        cv.notify_all();
+      },
+      krosc::QOS_LATCHED);
+  client_context.topics().subscribe<krosc::msgs::OccupancyGrid>(
+      "map",
+      [&](const krosc::msgs::OccupancyGrid& message) {
+        if (message.info.width == 2 && message.info.height == 2 && message.data.size() == 4 && message.data[1] == 100) {
+          got_map.store(true);
         }
         cv.notify_all();
       },
@@ -63,6 +82,7 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
   });
   CHECK(connected);
   CHECK(got_description.load());
+  CHECK(cv.wait_for(lock, 3s, [&] { return got_map.load(); }));
 
   krosc::msgs::LaserScan scan;
   scan.header.stamp = 1.0;
@@ -95,4 +115,68 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
   client->shutdown();
   client.reset();
   server.shutdown();
+}
+
+KROSC_TEST(net_large_latched_map_roundtrip) {
+  krosc::Context server_context;
+  krosc::net::Server server(server_context, 0);
+  krosc::msgs::OccupancyGrid map;
+  map.header = krosc::msgs::Header{2.0, "map"};
+  map.info.resolution = 0.05;
+  map.info.width = 163;
+  map.info.height = 262;
+  map.info.origin.orientation.w = 1.0;
+  map.data.assign(163U * 262U, static_cast<std::int8_t>(-1));
+  map.data[0] = 100;
+  map.data[163U * 262U - 1] = 50;
+  server_context.topics().publish("map", map, krosc::QOS_LATCHED);
+
+  krosc::Context client_context;
+  std::atomic<bool> got_map{false};
+  std::mutex mutex;
+  std::condition_variable cv;
+  client_context.topics().subscribe<krosc::msgs::OccupancyGrid>(
+      "map",
+      [&](const krosc::msgs::OccupancyGrid& message) {
+        if (message.info.width == 163 && message.info.height == 262 && message.data.size() == 163U * 262U) {
+          got_map.store(true);
+        }
+        cv.notify_all();
+      },
+      krosc::QOS_LATCHED);
+  auto client = std::make_unique<krosc::net::Client>(client_context, "127.0.0.1", server.port());
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 3s, [&] { return got_map.load(); }));
+}
+
+KROSC_TEST(net_latched_map_replays_for_late_subscriber) {
+  krosc::Context server_context;
+  krosc::net::Server server(server_context, 0);
+  krosc::msgs::OccupancyGrid map;
+  map.header = krosc::msgs::Header{3.0, "map"};
+  map.info.resolution = 0.05;
+  map.info.width = 4;
+  map.info.height = 4;
+  map.info.origin.orientation.w = 1.0;
+  map.data.assign(16, static_cast<std::int8_t>(0));
+  map.data[0] = 100;
+  server_context.topics().publish("map", map, krosc::QOS_LATCHED);
+
+  krosc::Context client_context;
+  auto client = std::make_unique<krosc::net::Client>(client_context, "127.0.0.1", server.port());
+  std::this_thread::sleep_for(500ms);  // viz처럼 연결이 먼저 되고 구독은 나중에
+  std::atomic<bool> got_map{false};
+  std::mutex mutex;
+  std::condition_variable cv;
+  client_context.topics().subscribe<krosc::msgs::OccupancyGrid>(
+      "map",
+      [&](const krosc::msgs::OccupancyGrid& message) {
+        if (message.info.width == 4 && message.info.height == 4 && message.data.size() == 16) {
+          got_map.store(true);
+        }
+        cv.notify_all();
+      },
+      krosc::QOS_LATCHED);
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 2s, [&] { return got_map.load(); }));
 }
