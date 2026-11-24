@@ -222,12 +222,13 @@ static bool arm_setup_one(size_t i, bool recover) {
 }
 
 static bool arm_setup_all() {
-  bool ok = true;
+  bool joints_ok = true;
   for (size_t i = 0; i < ARM_N; ++i) {
     if (!arm_set_up[i]) arm_set_up[i] = arm_setup_one(i, false);
-    ok = arm_set_up[i] && ok;
+    if (i < ARM_GRIPPER) joints_ok = arm_set_up[i] && joints_ok;
   }
-  return ok;
+  // 그리퍼(ID16)는 없어도 5축은 움직일 수 있게 한다. 있으면 나중에 붙는다.
+  return joints_ok;
 }
 
 // "a,b,,c" → out[] (빈칸·모자란 뒷칸 = NAN = 유지). 너무 많거나 숫자가 아니면 false
@@ -270,7 +271,7 @@ static void arm_command(char *text) {
   }
   bool any = false;
   for (size_t i = 0; i < ARM_N; ++i) {
-    if (isnan(v[i]) || !arm_torque[i]) continue;
+    if (isnan(v[i]) || !arm_torque[i] || !arm_set_up[i]) continue;
     const float f = i == ARM_GRIPPER ? rad_to_raw_f(gripper_m_to_rad(v[i]), 1.0f) : rad_to_raw_f(v[i], ARM_DIR[i]);
     if (fabsf(f - (float)arm_goal[i]) < ARM_GOAL_HYSTERESIS_RAW) continue;   // 같은 목표를 계속 쓰면 1 tick 떨림
     arm_goal[i] = lroundf(f);
@@ -293,7 +294,7 @@ static void arm_torque_line(char *text) {
   if (whole && isnan(v[0])) return;
   for (size_t i = 0; i < ARM_N; ++i) {
     const float x = whole ? v[0] : v[i];
-    if (isnan(x)) continue;
+    if (isnan(x) || !arm_set_up[i]) continue;
     if (x != 0.0f) {
       arm_enable(i, true);
     } else {
@@ -382,6 +383,11 @@ static void arm_check() {
       packetHandler->write4ByteTxRx(portHandler, ARM_IDS[i], ADDR_GOAL_POSITION, (uint32_t)arm_goal[i], &err);
     }
     arm_wd_tripped = true;
+  }
+  // 팔이 5축으로 먼저 떠도, 그리퍼가 나중에 연결되면 5초마다 다시 찾는다
+  if (!arm_set_up[ARM_GRIPPER] && now - arm_try_ms >= ARM_RETRY_MS) {
+    arm_try_ms = now;
+    arm_set_up[ARM_GRIPPER] = arm_setup_one(ARM_GRIPPER, false);
   }
   if (now - arm_check_ms < ARM_CHECK_MS) return;
   arm_check_ms = now;
