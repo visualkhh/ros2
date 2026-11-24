@@ -1265,6 +1265,9 @@ void VizWindow::moveit_plan() {
     moveit_scrub_->setValue(last);
   }
   moveit_update_preview(last);
+  if (tabs_ != nullptr) {
+    tabs_->setCurrentIndex(0);  // 계획 결과(ghost/path)를 3D에서 바로 보여준다
+  }
   moveit_execute_button_->setEnabled(true);
   moveit_cancel_button_->setEnabled(false);
   if (moveit_status_label_ != nullptr) {
