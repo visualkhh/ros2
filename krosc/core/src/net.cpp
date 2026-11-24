@@ -1443,6 +1443,9 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
   impl_->forward_topic<msgs::Bool>(
       "collision_set_enabled", Kind::Bool,
       [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::JointState>(
+      "arm_joint_command", Kind::JointState,
+      [](Writer& writer, const msgs::JointState& message) { encode(writer, message); });
   impl_->reader_thread = std::thread([impl = impl_.get()] { impl->reader_loop(); });
   impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
 }
