@@ -1444,6 +1444,9 @@ void VizWindow::refresh_moveit() {
   moveit_executing_ = executing != 0;
   moveit_has_plan_ = has_plan != 0 && points > 0;
   moveit_points_ = points;
+  if (moveit_view_ != nullptr) {
+    moveit_view_->set_moveit_interactive(!moveit_executing_);
+  }
 
   if (moveit_scrub_ != nullptr) {
     const QSignalBlocker blocker(moveit_scrub_);
