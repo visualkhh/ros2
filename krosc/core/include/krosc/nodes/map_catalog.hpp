@@ -37,9 +37,11 @@ class MapCatalog final : public Node {
   void on_map_change(const msgs::String& message);
   void on_map_save(const msgs::String& message);
   void on_map_unload(const msgs::Empty& message);
+  void on_slam_status(const msgs::String& message);
   void publish_status(const std::string& text);
   void publish_list();
   void publish_slam_mode(const std::string& mode);
+  void publish_current_map(const std::string& name);
   [[nodiscard]] std::filesystem::path directory() const;
   [[nodiscard]] std::filesystem::path map_path(const std::string& name) const;
   [[nodiscard]] static bool safe_name(const std::string& name);
@@ -54,12 +56,16 @@ class MapCatalog final : public Node {
   Parameter<std::string> map_list_topic_;
   Parameter<std::string> map_status_topic_;
   Parameter<std::string> slam_mode_topic_;
+  Parameter<std::string> slam_status_topic_;
+  Parameter<std::string> current_map_topic_;
 
   mutable std::mutex mutex_;
   std::optional<msgs::OccupancyGrid> map_;
   std::string loaded_name_;
   std::vector<std::string> names_;
   std::string status_ = "no map loaded";
+  std::string slam_status_ = "idle";
+  std::string current_map_;
 };
 
 }  // namespace krosc::nodes

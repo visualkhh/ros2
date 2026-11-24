@@ -101,6 +101,7 @@ class SceneView : public QWidget {
   void draw_trail(QPainter& painter);
   void draw_logs(QPainter& painter) const;
   void draw_hud(QPainter& painter) const;
+  void draw_tool_preview(QPainter& painter) const;
 
   void draw_line(QPainter& painter, const QVector3D& a, const QVector3D& b, const QColor& color,
                  double width = 1.0) const;
@@ -143,6 +144,7 @@ class SceneView : public QWidget {
   bool tool_dragging_ = false;
   QPoint tool_start_;
   std::optional<QVector3D> tool_start_ground_;
+  std::optional<QVector3D> tool_current_ground_;
   double last_linear_ = 0.0;
   double last_angular_ = 0.0;
   QTimer* teleop_timer_ = nullptr;

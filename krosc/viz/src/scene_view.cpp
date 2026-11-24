@@ -156,6 +156,7 @@ void SceneView::set_tool(const std::string& tool) {
   tool_ = (tool == "initialpose" || tool == "goal" || tool == "multi") ? tool : std::string{};
   tool_dragging_ = false;
   tool_start_ground_.reset();
+  tool_current_ground_.reset();
   emit tool_changed(QString::fromStdString(tool_));
   update();
 }
@@ -886,6 +887,7 @@ void SceneView::paintEvent(QPaintEvent* event) {
     draw_imu(painter);
   }
   draw_odometry_arrows(painter);
+  draw_tool_preview(painter);
   draw_logs(painter);
 
   ++frame_count_;
@@ -898,6 +900,41 @@ void SceneView::paintEvent(QPaintEvent* event) {
   draw_hud(painter);
 }
 
+void SceneView::draw_tool_preview(QPainter& painter) const {
+  if (!tool_dragging_ || !tool_start_ground_ || !tool_current_ground_ || tool_.empty()) {
+    return;
+  }
+  QColor color(80, 235, 145, 240);
+  if (tool_ == "goal") {
+    color = QColor(255, 95, 205, 240);
+  } else if (tool_ == "multi") {
+    color = QColor(255, 210, 70, 240);
+  }
+  const QVector3D start = *tool_start_ground_;
+  const double dx = static_cast<double>(tool_current_ground_->x() - start.x());
+  const double dy = static_cast<double>(tool_current_ground_->y() - start.y());
+  const double distance = std::hypot(dx, dy);
+  const double yaw = distance > 0.03 ? std::atan2(dy, dx) : 0.0;
+  const double length = std::max(0.6, distance);
+  const QVector3D end(start.x() + static_cast<float>(std::cos(yaw) * length),
+                      start.y() + static_cast<float>(std::sin(yaw) * length), 0.03F);
+  draw_line(painter, start, end, color, 4.0);
+  constexpr double kHead = 0.22;
+  const QVector3D head_left(start.x() + static_cast<float>(std::cos(yaw + 2.55) * kHead),
+                            start.y() + static_cast<float>(std::sin(yaw + 2.55) * kHead), 0.03F);
+  const QVector3D head_right(start.x() + static_cast<float>(std::cos(yaw - 2.55) * kHead),
+                             start.y() + static_cast<float>(std::sin(yaw - 2.55) * kHead), 0.03F);
+  draw_line(painter, end, head_left, color, 4.0);
+  draw_line(painter, end, head_right, color, 4.0);
+  const Projected center = project(QVector3D(start.x(), start.y(), 0.03F));
+  if (center.visible) {
+    painter.setPen(QPen(color, 2.0));
+    painter.setBrush(QColor(color.red(), color.green(), color.blue(), 55));
+    painter.drawEllipse(center.point, 7.0, 7.0);
+    painter.setBrush(Qt::NoBrush);
+  }
+}
+
 void SceneView::mousePressEvent(QMouseEvent* event) {
   setFocus(Qt::MouseFocusReason);
   last_mouse_ = event->position().toPoint();
@@ -905,6 +942,7 @@ void SceneView::mousePressEvent(QMouseEvent* event) {
     tool_dragging_ = true;
     tool_start_ = last_mouse_;
     tool_start_ground_ = screen_to_ground(tool_start_);
+    tool_current_ground_ = tool_start_ground_;
     return;
   }
   if (event->button() == Qt::LeftButton) {
@@ -919,6 +957,7 @@ void SceneView::mouseMoveEvent(QMouseEvent* event) {
   const QPoint delta = current - last_mouse_;
   last_mouse_ = current;
   if (tool_dragging_) {
+    tool_current_ground_ = screen_to_ground(current);
     update();
     return;
   }
@@ -950,6 +989,7 @@ void SceneView::mouseReleaseEvent(QMouseEvent* event) {
       const double yaw = (dx * dx + dy * dy > 1e-4) ? std::atan2(dy, dx) : 0.0;
       emit tool_pose(static_cast<double>(tool_start_ground_->x()), static_cast<double>(tool_start_ground_->y()), yaw);
     }
+    tool_current_ground_.reset();
     if (tool_ != "multi") {
       set_tool("");
     } else {

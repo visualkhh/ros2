@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QSplitter>
 #include <QStringList>
 #include <QStatusBar>
 #include <QTableWidget>
@@ -82,15 +83,23 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
 
-  // 패널이 scene_에 연결하므로 scene을 먼저 만든다. 레이아웃에는 패널 다음에 넣는다.
-  scene_ = new SceneView(model_, central);
+  // 패널이 scene_에 연결하므로 scene을 먼저 만든다. 폭은 QSplitter로 조절한다.
+  auto* splitter = new QSplitter(Qt::Horizontal, central);
+  splitter->setChildrenCollapsible(false);
+  splitter->setHandleWidth(5);
+  scene_ = new SceneView(model_, splitter);
   scene_->setObjectName("scene");
 
-  auto* panel = new QWidget(central);
-  panel->setFixedWidth(370);
+  auto* panel = new QWidget(splitter);
+  panel->setMinimumWidth(300);
+  panel->setMaximumWidth(760);
   build_panel(panel);
-  layout->addWidget(panel);
-  layout->addWidget(scene_, 1);
+  splitter->addWidget(panel);
+  splitter->addWidget(scene_);
+  splitter->setStretchFactor(0, 0);
+  splitter->setStretchFactor(1, 1);
+  splitter->setSizes({390, 1050});
+  layout->addWidget(splitter, 1);
   setCentralWidget(central);
 
   statusBar()->showMessage(scene_->help_text());
@@ -324,6 +333,9 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
     model_.node().publish("map_change", msgs::String{""}, QOS_DEFAULT);
     slam_status_label_->setText("deleting loaded map ...");
   });
+  current_map_label_ = new QLabel("current: (none)", group);
+  current_map_label_->setToolTip("");
+  grid->addWidget(current_map_label_, 3, 2, 1, 2);
 
   slam_status_label_ = new QLabel("", group);
   slam_status_label_->setWordWrap(true);
@@ -432,6 +444,23 @@ void VizWindow::refresh_slam() {
     status += " | map -";
   }
   slam_status_label_->setText(status);
+
+  const std::string current = model_.current_map() ? model_.current_map()->data : std::string{};
+  current_map_label_->setText(QString("current: %1").arg(current.empty() ? "(none)" : QString::fromStdString(current)));
+  current_map_label_->setToolTip(QString::fromStdString(current));
+  if (current != last_current_map_) {
+    if (current.empty()) {
+      const QSignalBlocker blocker(map_combo_);
+      map_combo_->setCurrentIndex(0);
+    } else if (current != "SLAM (unsaved)") {
+      const int index = map_combo_->findText(QString::fromStdString(current));
+      if (index >= 0) {
+        const QSignalBlocker blocker(map_combo_);
+        map_combo_->setCurrentIndex(index);
+      }
+    }
+    last_current_map_ = current;
+  }
   teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * scene_->teleop_scale(), 0, 'f', 2));
   update_tool_buttons();
 }
