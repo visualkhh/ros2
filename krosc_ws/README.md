@@ -97,6 +97,14 @@ cmake --build build -j
 원격 토픽: `tf`, `tf_static`, `robot_description`, `scan`, `imu`, `odom`, `odometry/filtered`,
 `joint_states`, `diagnostics`, `rosout` (+ `cmd_vel` 역방향).
 
+## 매니퓰레이터 (OpenMANIPULATOR-X 4축 + 그리퍼)
+
+- URDF: `robot/description/urdf/turtlebot3_real.urdf` (공식 visual STL + C++ Viz용 collision 근사)
+- 장착: 3층 판 맨 앞 중앙, `base_link` 기준 `x=+0.047985, y=-0.000230, z=+0.130175`
+- OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`arm_config.h`)
+- 토픽: `joint_states`에 팔 관절 포함, 명령은 `arm_joint_command` (`sensor_msgs/JointState`)
+- 손목 roll 관절은 없다. ID 16은 사용하지 않는다.
+
 ## 구성
 
 ```
