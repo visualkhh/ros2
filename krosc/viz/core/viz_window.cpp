@@ -80,55 +80,6 @@ struct ToggleSpec {
   const char* label;
 };
 
-double steady_seconds() {
-  using namespace std::chrono;
-  return duration<double>(steady_clock::now().time_since_epoch()).count();
-}
-
-std::map<std::string, std::string> parse_state_fields(const std::string& text) {
-  std::map<std::string, std::string> fields;
-  std::stringstream stream(text);
-  std::string item;
-  while (std::getline(stream, item, ';')) {
-    const std::size_t equals = item.find('=');
-    if (equals == std::string::npos) {
-      continue;
-    }
-    fields[item.substr(0, equals)] = item.substr(equals + 1);
-  }
-  return fields;
-}
-
-bool parse_field_double(const std::map<std::string, std::string>& fields, const std::string& key, double& value) {
-  const auto found = fields.find(key);
-  if (found == fields.end()) {
-    return false;
-  }
-  try {
-    const double parsed = std::stod(found->second);
-    if (!std::isfinite(parsed)) {
-      return false;
-    }
-    value = parsed;
-    return true;
-  } catch (...) {
-    return false;
-  }
-}
-
-bool parse_field_int(const std::map<std::string, std::string>& fields, const std::string& key, int& value) {
-  const auto found = fields.find(key);
-  if (found == fields.end()) {
-    return false;
-  }
-  try {
-    value = std::stoi(found->second);
-    return true;
-  } catch (...) {
-    return false;
-  }
-}
-
 constexpr ToggleSpec kToggles[] = {
     {"grid", "Grid"},          {"tf", "TF axes"},        {"model", "Robot model"}, {"scan", "Laser scan"},
     {"imu", "IMU"},            {"odom", "Wheel odom"},   {"filtered", "EKF filtered"}, {"map", "Map"},
@@ -159,22 +110,6 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   map_view_ = new MapView2D(model_, tabs);
   tabs->addTab(scene_, "3D");
   tabs->addTab(map_view_, "Map");
-  moveit_view_ = new SceneView(model_, tabs);
-  moveit_view_->setObjectName("moveitView");
-  moveit_view_->set_moveit_interactive(true);
-  moveit_view_->set_teleop_enabled(false);
-  moveit_view_->set_camera_distance(1.25);
-  for (const char* layer : {"map", "global_costmap", "local_costmap", "scan", "imu", "odom", "filtered",
-                            "plan", "local_plan", "trail", "logs", "tf"}) {
-    moveit_view_->set_enabled(layer, false);
-  }
-  tabs->addTab(moveit_view_, "MoveIt");
-  moveit_tab_index_ = tabs->indexOf(moveit_view_);
-  tabs->setTabVisible(moveit_tab_index_, false);
-  connect(moveit_view_, &SceneView::moveit_target_dragged, this, &VizWindow::on_moveit_target_dragged);
-  connect(moveit_view_, &SceneView::moveit_pitch_dragged, this, &VizWindow::on_moveit_pitch_dragged);
-  connect(moveit_view_, &SceneView::moveit_drag_finished, this, &VizWindow::on_moveit_drag_finished);
-
   auto* panel = new QWidget(splitter);
   panel->setMinimumWidth(300);
   panel->setMaximumWidth(760);
@@ -681,10 +616,8 @@ void VizWindow::update_collision_button() {
 void VizWindow::build_manual_docks() {
   build_teleop_dock();
   build_manipulator_dock();
-  build_moveit_dock();
   teleop_dock_->hide();
   manipulator_dock_->hide();
-  moveit_dock_->hide();
 }
 
 void VizWindow::build_teleop_dock() {
@@ -824,9 +757,7 @@ void VizWindow::build_manipulator_dock() {
       if (arm_updating_) {
         return;  // joint_states를 UI에 반영하는 중 — MoveIt 실행을 취소하면 안 된다
       }
-      if (moveit_executing_) {
-        moveit_stop();
-      }
+      cancel_moveit_if_executing();
       arm_target_[static_cast<std::size_t>(i)] = static_cast<double>(degrees) * 3.141592653589793 / 180.0;
       arm_moving_ = true;
     });
@@ -849,9 +780,7 @@ void VizWindow::build_manipulator_dock() {
     if (arm_updating_) {
       return;
     }
-    if (moveit_executing_) {
-      moveit_stop();
-    }
+    cancel_moveit_if_executing();
     arm_target_[4] = static_cast<double>(mm) / 1000.0;
     arm_moving_ = true;
   });
@@ -892,23 +821,17 @@ void VizWindow::build_manipulator_dock() {
     arm_moving_ = true;
   };
   connect(stow, &QPushButton::clicked, this, [this, set_preset] {
-    if (moveit_executing_) {
-      moveit_stop();
-    }
+    cancel_moveit_if_executing();
     set_preset({0.0, -1.9024, 1.3440, 0.9023, 0.0});
     arm_status_label_->setText("STOW target");
   });
   connect(home, &QPushButton::clicked, this, [this, set_preset] {
-    if (moveit_executing_) {
-      moveit_stop();
-    }
+    cancel_moveit_if_executing();
     set_preset({0.0, 0.0, 0.0, 0.0, 0.0});
     arm_status_label_->setText("HOME target");
   });
   connect(estop, &QPushButton::clicked, this, [this] {
-    if (moveit_executing_) {
-      moveit_stop();
-    }
+    cancel_moveit_if_executing();
     model_.node().publish("arm_stop", msgs::Empty{}, QOS_DEFAULT);
     arm_moving_ = false;
     arm_status_label_->setText("E-STOP: hold current pose");
@@ -924,109 +847,6 @@ void VizWindow::build_manipulator_dock() {
   manual_refresh_timer_ = new QTimer(this);
   connect(manual_refresh_timer_, &QTimer::timeout, this, &VizWindow::refresh_manual);
   manual_refresh_timer_->start(100);
-}
-
-void VizWindow::build_moveit_dock() {
-  moveit_dock_ = new QDockWidget("MoveIt", this);
-  moveit_dock_->setObjectName("moveitDock");
-  moveit_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-  moveit_dock_->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable |
-                            QDockWidget::DockWidgetClosable);
-  auto* panel = new QWidget(moveit_dock_);
-  auto* layout = new QVBoxLayout(panel);
-  layout->setContentsMargins(8, 8, 8, 8);
-  layout->setSpacing(6);
-
-  auto* title = new QLabel("TCP target (base_link)", panel);
-  title->setObjectName("Section");
-  layout->addWidget(title);
-
-  const auto make_spin = [&](double minimum, double maximum, double step, int decimals,
-                             const QString& suffix) {
-    auto* spin = new QDoubleSpinBox(panel);
-    spin->setRange(minimum, maximum);
-    spin->setSingleStep(step);
-    spin->setDecimals(decimals);
-    spin->setSuffix(suffix);
-    spin->setKeyboardTracking(false);
-    return spin;
-  };
-  moveit_x_ = make_spin(-0.8, 0.8, 0.005, 3, " m");
-  moveit_y_ = make_spin(-0.8, 0.8, 0.005, 3, " m");
-  moveit_z_ = make_spin(-0.2, 1.0, 0.005, 3, " m");
-  moveit_pitch_ = make_spin(-90.0, 90.0, 1.0, 1, QString::fromUtf8("°"));
-  moveit_gripper_ = make_spin(0.0, 27.0, 0.5, 1, " mm");
-  auto* grid = new QGridLayout();
-  grid->addWidget(new QLabel("X", panel), 0, 0);
-  grid->addWidget(moveit_x_, 0, 1);
-  grid->addWidget(new QLabel("Y", panel), 0, 2);
-  grid->addWidget(moveit_y_, 0, 3);
-  grid->addWidget(new QLabel("Z", panel), 1, 0);
-  grid->addWidget(moveit_z_, 1, 1);
-  grid->addWidget(new QLabel("Pitch", panel), 1, 2);
-  grid->addWidget(moveit_pitch_, 1, 3);
-  grid->addWidget(new QLabel("Grip", panel), 2, 0);
-  grid->addWidget(moveit_gripper_, 2, 1);
-  moveit_cartesian_ = new QCheckBox("Cartesian", panel);
-  moveit_cartesian_->setChecked(true);
-  grid->addWidget(moveit_cartesian_, 2, 2, 1, 2);
-  layout->addLayout(grid);
-  auto* hint = new QLabel("MoveIt 탭: 드래그 X/Y · Shift+드래그 Z · Ctrl+드래그 Pitch", panel);
-  hint->setWordWrap(true);
-  hint->setStyleSheet("color:#7f899b;");
-  layout->addWidget(hint);
-
-  auto* buttons = new QHBoxLayout();
-  moveit_current_button_ = new QPushButton("Current", panel);
-  moveit_plan_button_ = new QPushButton("Plan", panel);
-  moveit_execute_button_ = new QPushButton("Execute", panel);
-  moveit_cancel_button_ = new QPushButton("Cancel", panel);
-  for (auto* button : {moveit_current_button_, moveit_plan_button_, moveit_execute_button_,
-                       moveit_cancel_button_}) {
-    buttons->addWidget(button);
-  }
-  layout->addLayout(buttons);
-  moveit_execute_button_->setEnabled(false);
-  moveit_cancel_button_->setEnabled(false);
-
-  layout->addWidget(new QLabel("trajectory", panel));
-  moveit_scrub_ = new QSlider(Qt::Horizontal, panel);
-  moveit_scrub_->setRange(0, 0);
-  layout->addWidget(moveit_scrub_);
-  moveit_current_label_ = new QLabel("now: waiting for joint_states", panel);
-  moveit_current_label_->setWordWrap(true);
-  moveit_status_label_ = new QLabel("MoveIt: waiting for robot_description", panel);
-  moveit_status_label_->setWordWrap(true);
-  moveit_status_label_->setMinimumHeight(44);
-  layout->addWidget(moveit_current_label_);
-  layout->addWidget(moveit_status_label_);
-  layout->addStretch(1);
-
-  const auto target_changed = [this] {
-    if (moveit_updating_) {
-      return;
-    }
-    publish_moveit_target(true);
-  };
-  for (auto* spin : {moveit_x_, moveit_y_, moveit_z_, moveit_pitch_, moveit_gripper_}) {
-    connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-            [target_changed](double) { target_changed(); });
-  }
-  connect(moveit_cartesian_, &QCheckBox::toggled, this, [target_changed](bool) { target_changed(); });
-  connect(moveit_current_button_, &QPushButton::clicked, this, &VizWindow::moveit_set_target_from_current);
-  connect(moveit_plan_button_, &QPushButton::clicked, this, &VizWindow::moveit_plan);
-  connect(moveit_execute_button_, &QPushButton::clicked, this, &VizWindow::moveit_execute);
-  connect(moveit_cancel_button_, &QPushButton::clicked, this, &VizWindow::moveit_stop);
-  connect(moveit_scrub_, &QSlider::valueChanged, this, [this](int index) {
-    if (moveit_executing_ || moveit_updating_) {
-      return;
-    }
-    model_.node().publish("moveit_scrub", msgs::String{std::to_string(index)}, QOS_DEFAULT);
-  });
-
-  moveit_dock_->setWidget(panel);
-  addDockWidget(Qt::RightDockWidgetArea, moveit_dock_);
-  splitDockWidget(manipulator_dock_, moveit_dock_, Qt::Vertical);
 }
 
 void VizWindow::publish_teleop_pad() {
@@ -1162,195 +982,15 @@ void VizWindow::refresh_manual() {
     arm_status_label_->setStyleSheet("");
   }
   arm_status_label_->setText(status);
-  refresh_moveit();
 }
 
-void VizWindow::publish_moveit_target(bool preview) {
-  if (moveit_updating_ || moveit_x_ == nullptr) {
-    return;
-  }
-  const QString text =
-      QString("%1,%2,%3,%4,%5,%6,%7")
-          .arg(moveit_x_->value(), 0, 'f', 4)
-          .arg(moveit_y_->value(), 0, 'f', 4)
-          .arg(moveit_z_->value(), 0, 'f', 4)
-          .arg(moveit_pitch_->value(), 0, 'f', 2)
-          .arg(moveit_gripper_->value(), 0, 'f', 2)
-          .arg(moveit_cartesian_->isChecked() ? 1 : 0)
-          .arg(preview ? 1 : 0);
-  model_.node().publish("moveit_target", msgs::String{text.toStdString()}, QOS_DEFAULT);
-}
-
-void VizWindow::update_moveit_preview() {
-  if (scene_ == nullptr) {
-    return;
-  }
-  const auto arm = model_.moveit_arm();
-  const auto path = model_.moveit_path();
-  const auto target = model_.moveit_target_pose();
-  if (!arm && !target) {
-    scene_->clear_arm_preview();
-    if (moveit_view_ != nullptr) {
-      moveit_view_->clear_arm_preview();
-    }
-    return;
-  }
-  ArmPreview preview;
-  preview.active = true;
-  if (arm && !arm->poses.empty()) {
-    preview.links.reserve(arm->poses.size());
-    for (const auto& pose : arm->poses) {
-      preview.links.push_back(msgs::Transform{{pose.pose.position.x, pose.pose.position.y, pose.pose.position.z},
-                                              pose.pose.orientation});
-    }
-    const auto& last = arm->poses.back().pose.position;
-    preview.tcp = {last.x, last.y, last.z};
-  }
-  if (path && !path->poses.empty()) {
-    preview.tcp_path.reserve(path->poses.size());
-    for (const auto& pose : path->poses) {
-      preview.tcp_path.push_back({pose.pose.position.x, pose.pose.position.y, pose.pose.position.z});
-    }
-  }
-  if (target) {
-    preview.target = msgs::Transform{{target->pose.position.x, target->pose.position.y, target->pose.position.z},
-                                     target->pose.orientation};
-  }
-  if (moveit_dragging_ && moveit_x_ != nullptr) {
-    const double pitch = moveit_pitch_->value() * 3.141592653589793 / 180.0;
-    const double yaw = std::atan2(moveit_y_->value() + 0.000230, moveit_x_->value() - 0.059985);
-    preview.target = msgs::Transform{{moveit_x_->value(), moveit_y_->value(), moveit_z_->value()},
-                                     tfmath::from_rpy(0.0, pitch, yaw)};
-  }
-  scene_->set_arm_preview(preview);
-  if (moveit_view_ != nullptr) {
-    moveit_view_->set_arm_preview(std::move(preview));
-  }
-}
-
-void VizWindow::moveit_set_target_from_current() {
+void VizWindow::cancel_moveit_if_executing() {
   const auto state = model_.moveit_state();
-  if (!state) {
-    if (moveit_status_label_ != nullptr) {
-      moveit_status_label_->setText("moveit_state 대기 중 (노드 연결 확인)");
-    }
+  if (state == nullptr) {
     return;
   }
-  if (moveit_executing_) {
-    return;
-  }
-  const auto fields = parse_state_fields(state->data);
-  const auto tcp = fields.find("tcp");
-  if (tcp == fields.end()) {
-    return;
-  }
-  double x = 0.0;
-  double y = 0.0;
-  double z = 0.0;
-  double pitch = 0.0;
-  double grip = 0.0;
-  {
-    std::stringstream stream(tcp->second);
-    std::string item;
-    if (!std::getline(stream, item, ',') || !parse_field_double({{"v", item}}, "v", x)) {
-      return;
-    }
-    if (!std::getline(stream, item, ',') || !parse_field_double({{"v", item}}, "v", y)) {
-      return;
-    }
-    if (!std::getline(stream, item, ',') || !parse_field_double({{"v", item}}, "v", z)) {
-      return;
-    }
-  }
-  if (!parse_field_double(fields, "pitch", pitch)) {
-    return;
-  }
-  (void)parse_field_double(fields, "grip", grip);
-  moveit_updating_ = true;
-  moveit_x_->setValue(x);
-  moveit_y_->setValue(y);
-  moveit_z_->setValue(z);
-  moveit_pitch_->setValue(pitch);
-  if (std::isfinite(grip)) {
-    moveit_gripper_->setValue(grip);
-  }
-  moveit_updating_ = false;
-  moveit_target_initialized_ = true;
-  if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
-    tabs_->setCurrentIndex(moveit_tab_index_);
-  }
-  publish_moveit_target(true);
-}
-
-void VizWindow::moveit_plan() {
-  if (moveit_executing_) {
-    return;
-  }
-  if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
-    tabs_->setCurrentIndex(moveit_tab_index_);
-  }
-  publish_moveit_target(false);
-  if (moveit_status_label_ != nullptr) {
-    moveit_status_label_->setText("Plan 요청...");
-  }
-}
-
-void VizWindow::moveit_execute() {
-  if (moveit_executing_) {
-    return;
-  }
-  if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
-    tabs_->setCurrentIndex(moveit_tab_index_);
-  }
-  model_.node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
-  if (moveit_status_label_ != nullptr) {
-    moveit_status_label_->setText("Execute 요청...");
-  }
-}
-
-void VizWindow::moveit_stop() {
-  model_.node().publish("moveit_cancel", msgs::Empty{}, QOS_DEFAULT);
-  if (moveit_status_label_ != nullptr) {
-    moveit_status_label_->setText("Cancel 요청...");
-  }
-}
-
-void VizWindow::on_moveit_target_dragged(double x, double y, double z) {
-  if (moveit_updating_ || moveit_executing_ || moveit_x_ == nullptr) {
-    return;
-  }
-  moveit_updating_ = true;
-  moveit_x_->setValue(x);
-  moveit_y_->setValue(y);
-  moveit_z_->setValue(z);
-  moveit_updating_ = false;
-  moveit_dragging_ = true;
-  const double current = steady_seconds();
-  if (current - moveit_last_drag_publish_ >= 0.12) {
-    publish_moveit_target(true);
-    moveit_last_drag_publish_ = current;
-  }
-}
-
-void VizWindow::on_moveit_pitch_dragged(double degrees) {
-  if (moveit_updating_ || moveit_executing_ || moveit_pitch_ == nullptr) {
-    return;
-  }
-  moveit_updating_ = true;
-  moveit_pitch_->setValue(std::clamp(degrees, -90.0, 90.0));
-  moveit_updating_ = false;
-  moveit_dragging_ = true;
-  const double current = steady_seconds();
-  if (current - moveit_last_drag_publish_ >= 0.12) {
-    publish_moveit_target(true);
-    moveit_last_drag_publish_ = current;
-  }
-}
-
-void VizWindow::on_moveit_drag_finished() {
-  moveit_dragging_ = false;
-  if (!moveit_updating_) {
-    publish_moveit_target(true);
+  if (state->data.find("executing=1") != std::string::npos) {
+    model_.node().publish("moveit_cancel", msgs::Empty{}, QOS_DEFAULT);
   }
 }
 
@@ -1359,9 +999,7 @@ void VizWindow::reset_arm() {
     return;
   }
   const QString target = arm_reset_target_->currentText();
-  if (moveit_executing_) {
-    moveit_stop();
-  }
+  cancel_moveit_if_executing();
   arm_moving_ = false;
   model_.node().publish("arm_reset", msgs::String{target.toStdString()}, QOS_DEFAULT);
   if (arm_status_label_ != nullptr) {
@@ -1398,104 +1036,6 @@ QString VizWindow::arm_error_summary() const {
     errors << name + "=" + values[i];
   }
   return errors.join(" ");
-}
-
-void VizWindow::refresh_moveit() {
-  if (moveit_dock_ == nullptr || moveit_current_label_ == nullptr) {
-    return;
-  }
-  const auto state_message = model_.moveit_state();
-  if (!state_message) {
-    moveit_current_label_->setText("now: moveit_lite 노드 대기 중");
-    return;
-  }
-  const auto fields = parse_state_fields(state_message->data);
-  double x = 0.0;
-  double y = 0.0;
-  double z = 0.0;
-  double pitch = 0.0;
-  double grip = 0.0;
-  bool have_tcp = false;
-  const auto tcp = fields.find("tcp");
-  if (tcp != fields.end()) {
-    std::stringstream stream(tcp->second);
-    std::string item;
-    if (std::getline(stream, item, ',') && parse_field_double({{"v", item}}, "v", x) &&
-        std::getline(stream, item, ',') && parse_field_double({{"v", item}}, "v", y) &&
-        std::getline(stream, item, ',') && parse_field_double({{"v", item}}, "v", z)) {
-      have_tcp = true;
-    }
-  }
-  if (have_tcp && parse_field_double(fields, "pitch", pitch)) {
-    (void)parse_field_double(fields, "grip", grip);
-    moveit_current_label_->setText(QString("now TCP  x %1  y %2  z %3  pitch %4°  grip %5 mm")
-                                       .arg(x, 0, 'f', 3)
-                                       .arg(y, 0, 'f', 3)
-                                       .arg(z, 0, 'f', 3)
-                                       .arg(pitch, 0, 'f', 1)
-                                       .arg(grip, 0, 'f', 1));
-    if (!moveit_target_initialized_ && !moveit_executing_) {
-      moveit_updating_ = true;
-      moveit_x_->setValue(x);
-      moveit_y_->setValue(y);
-      moveit_z_->setValue(z);
-      moveit_pitch_->setValue(pitch);
-      if (std::isfinite(grip)) {
-        moveit_gripper_->setValue(grip);
-      }
-      moveit_updating_ = false;
-      moveit_target_initialized_ = true;
-      publish_moveit_target(true);
-    }
-  } else {
-    moveit_current_label_->setText("now: moveit_lite TCP 계산 대기");
-  }
-
-  int points = 0;
-  int index = 0;
-  int executing = 0;
-  int has_plan = 0;
-  int error = 0;
-  (void)parse_field_int(fields, "points", points);
-  (void)parse_field_int(fields, "index", index);
-  (void)parse_field_int(fields, "executing", executing);
-  (void)parse_field_int(fields, "has_plan", has_plan);
-  (void)parse_field_int(fields, "err", error);
-  moveit_executing_ = executing != 0;
-  moveit_has_plan_ = has_plan != 0 && points > 0;
-  moveit_points_ = points;
-  if (moveit_view_ != nullptr) {
-    moveit_view_->set_moveit_interactive(!moveit_executing_);
-  }
-
-  if (moveit_scrub_ != nullptr) {
-    const QSignalBlocker blocker(moveit_scrub_);
-    const int last = std::max(0, points - 1);
-    if (moveit_scrub_->maximum() != last) {
-      moveit_scrub_->setRange(0, last);
-    }
-    if (!moveit_scrub_->isSliderDown()) {
-      moveit_scrub_->setValue(std::clamp(index, 0, last));
-    }
-    moveit_scrub_->setEnabled(!moveit_executing_ && moveit_has_plan_);
-  }
-  if (moveit_plan_button_ != nullptr) {
-    moveit_plan_button_->setEnabled(!moveit_executing_);
-    moveit_current_button_->setEnabled(!moveit_executing_);
-    moveit_execute_button_->setEnabled(!moveit_executing_ && moveit_has_plan_);
-    moveit_cancel_button_->setEnabled(moveit_executing_);
-    for (auto* spin : {moveit_x_, moveit_y_, moveit_z_, moveit_pitch_, moveit_gripper_}) {
-      spin->setEnabled(!moveit_executing_);
-    }
-    moveit_cartesian_->setEnabled(!moveit_executing_);
-  }
-  if (moveit_status_label_ != nullptr) {
-    if (const auto status = model_.moveit_status(); status && !status->data.empty()) {
-      moveit_status_label_->setText(QString::fromStdString(status->data));
-    }
-    moveit_status_label_->setStyleSheet(error != 0 ? "color:#ff7070;" : "");
-  }
-  update_moveit_preview();
 }
 
 void VizWindow::add_dock(QDockWidget* dock, Qt::DockWidgetArea area) {
@@ -1535,46 +1075,28 @@ void VizWindow::load_plugins(VizPluginRegistry& registry, const std::vector<std:
   }
 }
 
-void VizWindow::set_manual_panels(bool teleop, bool manipulator, bool moveit) {
+void VizWindow::set_manual_panels(bool teleop, bool manipulator) {
   if (teleop_dock_ != nullptr) {
     teleop_dock_->setVisible(teleop);
   }
   if (manipulator_dock_ != nullptr) {
     manipulator_dock_->setVisible(manipulator);
   }
-  if (moveit_dock_ != nullptr) {
-    moveit_dock_->setVisible(moveit);
-  }
   if (teleop && manipulator && teleop_dock_ != nullptr && manipulator_dock_ != nullptr) {
     splitDockWidget(teleop_dock_, manipulator_dock_, Qt::Vertical);
-  }
-  if (moveit && manipulator && manipulator_dock_ != nullptr && moveit_dock_ != nullptr) {
-    splitDockWidget(manipulator_dock_, moveit_dock_, Qt::Vertical);
-  } else if (moveit && teleop && teleop_dock_ != nullptr && moveit_dock_ != nullptr) {
-    splitDockWidget(teleop_dock_, moveit_dock_, Qt::Vertical);
   }
   QList<QDockWidget*> docks;
   QList<int> sizes;
   if (teleop && teleop_dock_ != nullptr) {
     docks.push_back(teleop_dock_);
-    sizes.push_back(170);
+    sizes.push_back(210);
   }
   if (manipulator && manipulator_dock_ != nullptr) {
     docks.push_back(manipulator_dock_);
-    sizes.push_back(330);
-  }
-  if (moveit && moveit_dock_ != nullptr) {
-    docks.push_back(moveit_dock_);
     sizes.push_back(430);
   }
   if (!docks.isEmpty()) {
     resizeDocks(docks, sizes, Qt::Vertical);
-  }
-  if (tabs_ != nullptr && moveit_tab_index_ >= 0) {
-    tabs_->setTabVisible(moveit_tab_index_, moveit);
-    if (!moveit && tabs_->currentIndex() == moveit_tab_index_) {
-      tabs_->setCurrentIndex(0);
-    }
   }
 }
 

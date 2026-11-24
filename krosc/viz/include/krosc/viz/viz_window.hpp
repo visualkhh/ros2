@@ -54,7 +54,7 @@ class VizWindow : public QMainWindow, public VizHost {
   void set_tab(int index);
   void set_tab(const std::string& name);
   void set_camera_distance(double distance);
-  void set_manual_panels(bool teleop, bool manipulator, bool moveit);
+  void set_manual_panels(bool teleop, bool manipulator);
   [[nodiscard]] bool save_screenshot(const QString& path);
 
  protected:
@@ -70,20 +70,10 @@ class VizWindow : public QMainWindow, public VizHost {
   void build_manual_docks();
   void build_teleop_dock();
   void build_manipulator_dock();
-  void build_moveit_dock();
   void publish_teleop_pad();
   void send_arm_target();
   void refresh_manual();
-  void refresh_moveit();
-  void publish_moveit_target(bool preview = false);
-  void update_moveit_preview();
-  void moveit_set_target_from_current();
-  void moveit_plan();
-  void moveit_execute();
-  void moveit_stop();
-  void on_moveit_target_dragged(double x, double y, double z);
-  void on_moveit_pitch_dragged(double degrees);
-  void on_moveit_drag_finished();
+  void cancel_moveit_if_executing();
   void reset_arm();
   [[nodiscard]] QString arm_error_summary() const;
   void set_arm_slider_values(const std::array<double, 5>& positions);
@@ -101,8 +91,6 @@ class VizWindow : public QMainWindow, public VizHost {
   VizModel model_;
   std::vector<std::unique_ptr<IVizPlugin>> plugins_;
   SceneView* scene_ = nullptr;
-  SceneView* moveit_view_ = nullptr;
-  int moveit_tab_index_ = -1;
   QTabWidget* tabs_ = nullptr;
   MapView2D* map_view_ = nullptr;
   QComboBox* fixed_frame_ = nullptr;
@@ -136,27 +124,6 @@ class VizWindow : public QMainWindow, public VizHost {
 
   QDockWidget* teleop_dock_ = nullptr;
   QDockWidget* manipulator_dock_ = nullptr;
-  QDockWidget* moveit_dock_ = nullptr;
-  QDoubleSpinBox* moveit_x_ = nullptr;
-  QDoubleSpinBox* moveit_y_ = nullptr;
-  QDoubleSpinBox* moveit_z_ = nullptr;
-  QDoubleSpinBox* moveit_pitch_ = nullptr;
-  QDoubleSpinBox* moveit_gripper_ = nullptr;
-  QCheckBox* moveit_cartesian_ = nullptr;
-  QPushButton* moveit_plan_button_ = nullptr;
-  QPushButton* moveit_execute_button_ = nullptr;
-  QPushButton* moveit_cancel_button_ = nullptr;
-  QPushButton* moveit_current_button_ = nullptr;
-  QLabel* moveit_current_label_ = nullptr;
-  QLabel* moveit_status_label_ = nullptr;
-  QSlider* moveit_scrub_ = nullptr;
-  bool moveit_dragging_ = false;
-  double moveit_last_drag_publish_ = 0.0;
-  bool moveit_executing_ = false;
-  bool moveit_updating_ = false;
-  bool moveit_target_initialized_ = false;
-  bool moveit_has_plan_ = false;
-  int moveit_points_ = 0;
   std::array<QSlider*, 4> arm_sliders_{};
   std::array<QLabel*, 4> arm_value_labels_{};
   QSlider* gripper_slider_ = nullptr;

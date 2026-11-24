@@ -4,6 +4,7 @@
 
 add_library(krosc_ws_viz_plugins STATIC
   plugins/project_panel.cpp
+  plugins/moveit_plugin.cpp
 )
 target_include_directories(krosc_ws_viz_plugins PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(krosc_ws_viz_plugins PUBLIC krosc::viz)

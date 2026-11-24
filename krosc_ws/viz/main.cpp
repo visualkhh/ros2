@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QTimer>
 
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 #include <sstream>
@@ -13,6 +14,7 @@
 #include "krosc/viz/viz_plugin.hpp"
 #include "krosc/viz/viz_window.hpp"
 
+#include "plugins/moveit_plugin.hpp"
 #include "plugins/project_panel.hpp"
 
 namespace {
@@ -60,12 +62,13 @@ int main(int argc, char** argv) {
   std::string server_text;
   std::string fixed_frame = "map";
   std::string tab = "3d";
-  std::string plugins_text = "project_panel";
+  std::string plugins_text = "project_panel,moveit";
   double duration = 2.0;
   double distance = 0.0;
   bool teleop_panel = false;
   bool manipulator_panel = false;
-  bool moveit_panel = false;
+  bool moveit_plugin = true;
+  bool moveit_override = false;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--screenshot" && i + 1 < argc) {
@@ -85,25 +88,25 @@ int main(int argc, char** argv) {
     } else if (argument == "--manual") {
       teleop_panel = true;
       manipulator_panel = true;
-      moveit_panel = true;
     } else if (argument == "--teleop") {
       teleop_panel = true;
       manipulator_panel = false;
-      moveit_panel = false;
     } else if (argument == "--manipulator") {
       teleop_panel = false;
       manipulator_panel = true;
-      moveit_panel = false;
     } else if (argument == "--moveit") {
-      moveit_panel = true;
+      moveit_plugin = true;
+      moveit_override = true;
     } else if (argument == "--no-moveit") {
-      moveit_panel = false;
+      moveit_plugin = false;
+      moveit_override = true;
     } else if (argument == "--no-manual") {
       teleop_panel = false;
       manipulator_panel = false;
-      moveit_panel = false;
     } else if (argument == "--no-plugins") {
       plugins_text.clear();
+      moveit_plugin = false;
+      moveit_override = true;
     } else if (argument == "--help") {
       std::printf(
           "usage: krosc_ws_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map|moveit]\n"
@@ -125,12 +128,24 @@ int main(int argc, char** argv) {
 
   krosc::viz::VizPluginRegistry registry;
   registry.add("project_panel", [] { return std::make_unique<krosc_ws::viz::ProjectPanelPlugin>(); });
+  registry.add("moveit", [] { return std::make_unique<krosc_ws::viz::MoveItPlugin>(); });
+
+  std::vector<std::string> plugins = split_list(plugins_text);
+  if (moveit_override) {
+    if (moveit_plugin) {
+      if (std::find(plugins.begin(), plugins.end(), "moveit") == plugins.end()) {
+        plugins.push_back("moveit");
+      }
+    } else {
+      plugins.erase(std::remove(plugins.begin(), plugins.end(), "moveit"), plugins.end());
+    }
+  }
 
   krosc::viz::VizWindow window(context);
   window.set_fixed_frame(fixed_frame);
-  window.set_manual_panels(teleop_panel, manipulator_panel, moveit_panel);
+  window.set_manual_panels(teleop_panel, manipulator_panel);
+  window.load_plugins(registry, plugins);
   window.set_tab(tab);
-  window.load_plugins(registry, split_list(plugins_text));
   if (distance > 0.0) {
     window.set_camera_distance(distance);
   }

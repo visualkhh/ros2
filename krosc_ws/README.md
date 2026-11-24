@@ -53,6 +53,8 @@ KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 Teleop/Manipulator/MoveIt 도킹 패널을 함께 띄운다. 추가 인자는 그대로 viz에 넘긴다:
 `./run-viz.sh --screenshot /tmp/viz.png --duration 3`, `./run-viz.sh --no-moveit`.
 
+기본 플러그인은 `project_panel,moveit`이며 `KROSC_VIZ_PLUGINS`로 바꿀 수 있다.
+
 Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 
 - `W/A/S/D` 또는 방향키: 텔레옵, `Q/Z`: 속도, `F`: follow, `C`: overview
@@ -147,7 +149,8 @@ krosc_ws/
 │   ├── main.cpp              # 프로젝트 Viz 엔드포인트
 │   ├── CMakeLists.txt
 │   └── plugins/
-│       └── project_panel.cpp # 프로젝트 플러그인 예제 ("Project" 탭)
+│       ├── project_panel.cpp # 프로젝트 플러그인 예제 ("Project" 탭)
+│       └── moveit_plugin.cpp # MoveIt 도크 + MoveIt 탭
 
 krosc/viz/
 ├── main.cpp                  # 공통/최소 Viz 앱
@@ -185,11 +188,13 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 
 - 플러그인은 프로젝트 안에서 자유롭게 작성/빌드한다.
 - 코어 `krosc_viz_app`은 공통/최소 앱으로 남아 있고, `run-viz.sh`는 프로젝트 앱을 사용한다.
-- 프로필(YAML) 기반 자동 로딩과 MoveIt/SLAM/Nav의 플러그인 이동은 다음 단계다.
+- MoveIt은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 프로젝트 플러그인으로 분리되어 있다.
+- 다음 단계는 Teleop/Manipulator, SLAM/Navigation/Displays의 코어 플러그인 이동과 프로필(YAML) 로딩이다.
 
 ## MoveIt-lite
 
-Viz의 **MoveIt** 도킹 패널은 ROS 2 MoveIt 없이 URDF 체인으로 계획한다.
+Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 플러그인이다.
+코어 `krosc/viz`에는 MoveIt이 없고, 프로젝트 Viz 앱에서만 로드한다.
 계산은 Pi의 `krosc::nodes::MoveItLite` 노드가 하고, Viz는 토픽 클라이언트로만 동작한다.
 
 - 그룹: `base_link` → `end_effector_link`, 관절 `joint1`~`joint4`
@@ -203,6 +208,7 @@ Viz의 **MoveIt** 도킹 패널은 ROS 2 MoveIt 없이 URDF 체인으로 계획�
 
 핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, 노드는
 `krosc/engine/core/nodes/moveit_lite.cpp`에 있고 `krosc_ws/robot/main.cpp`에서 조립한다.
+Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
 ## 구성
 

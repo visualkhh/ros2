@@ -10,6 +10,6 @@
 - `navigation` — Goal/Multi Goal/Preview/Cancel
 - `teleop` — 키보드/패드, 속도
 - `manipulator` — 관절 슬라이더, Torque, Reset
-- `moveit` — MoveIt 패널/탭 (프로젝트 플러그인으로 이동 예정)
+- MoveIt은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 프로젝트 플러그인으로 이동 완료
 
 플러그인은 `krosc::viz::VizPlugin`을 상속하고 `initialize(VizHost&)`만 구현하면 된다.
