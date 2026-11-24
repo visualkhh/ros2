@@ -796,7 +796,7 @@ void VizWindow::build_manipulator_dock() {
   });
   set_torque_button();
 
-  const std::array<std::pair<int, int>, 4> ranges{{{ -180, 180 }, { -110, 110 }, { -90, 80 }, { -97, 113 }}};
+  const std::array<std::pair<int, int>, 4> ranges{{{ -180, 180 }, { -126, 126 }, { -114, 114 }, { -114, 126 }}};
   for (int i = 0; i < 4; ++i) {
     auto* row = new QHBoxLayout();
     auto* name = new QLabel(QString("joint%1").arg(i + 1), panel);
@@ -815,13 +815,14 @@ void VizWindow::build_manipulator_dock() {
     arm_value_labels_[static_cast<std::size_t>(i)] = value;
     connect(slider, &QSlider::valueChanged, this, [this, i, value](int degrees) {
       value->setText(QString::number(degrees, 'f', 1) + "°");
+      if (arm_updating_) {
+        return;  // joint_states를 UI에 반영하는 중 — MoveIt 실행을 취소하면 안 된다
+      }
       if (moveit_executing_) {
         moveit_stop();
       }
-      if (!arm_updating_) {
-        arm_target_[static_cast<std::size_t>(i)] = static_cast<double>(degrees) * 3.141592653589793 / 180.0;
-        arm_moving_ = true;
-      }
+      arm_target_[static_cast<std::size_t>(i)] = static_cast<double>(degrees) * 3.141592653589793 / 180.0;
+      arm_moving_ = true;
     });
   }
   auto* gripper_row = new QHBoxLayout();
@@ -839,13 +840,14 @@ void VizWindow::build_manipulator_dock() {
   layout->addLayout(gripper_row);
   connect(gripper_slider_, &QSlider::valueChanged, this, [this](int mm) {
     gripper_value_label_->setText(QString::number(mm, 'f', 1) + " mm");
+    if (arm_updating_) {
+      return;
+    }
     if (moveit_executing_) {
       moveit_stop();
     }
-    if (!arm_updating_) {
-      arm_target_[4] = static_cast<double>(mm) / 1000.0;
-      arm_moving_ = true;
-    }
+    arm_target_[4] = static_cast<double>(mm) / 1000.0;
+    arm_moving_ = true;
   });
   auto* arm_speed_row = new QHBoxLayout();
   auto* arm_speed_name = new QLabel("speed", panel);
