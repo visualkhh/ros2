@@ -763,10 +763,10 @@ void SceneView::draw_path(QPainter& painter, const std::shared_ptr<const msgs::P
       const double yaw = headings[index];
       const QVector3D end(points[index].x() + static_cast<float>(std::cos(yaw) * length),
                           points[index].y() + static_cast<float>(std::sin(yaw) * length), 0.035F);
-      const QVector3D left(points[index].x() + static_cast<float>(std::cos(yaw + 2.56) * 0.06),
-                           points[index].y() + static_cast<float>(std::sin(yaw + 2.56) * 0.06), 0.035F);
-      const QVector3D right(points[index].x() + static_cast<float>(std::cos(yaw - 2.56) * 0.06),
-                            points[index].y() + static_cast<float>(std::sin(yaw - 2.56) * 0.06), 0.035F);
+      const QVector3D left(points[index].x() + static_cast<float>(std::cos(yaw + 2.56) * 0.04),
+                           points[index].y() + static_cast<float>(std::sin(yaw + 2.56) * 0.04), 0.035F);
+      const QVector3D right(points[index].x() + static_cast<float>(std::cos(yaw - 2.56) * 0.04),
+                            points[index].y() + static_cast<float>(std::sin(yaw - 2.56) * 0.04), 0.035F);
       draw_line(painter, points[index], end, color, 2.0);
       draw_line(painter, end, left, color, 2.0);
       draw_line(painter, end, right, color, 2.0);
@@ -965,9 +965,9 @@ void SceneView::draw_waypoints(QPainter& painter) const {
     const QVector3D origin(static_cast<float>(point.x), static_cast<float>(point.y), 0.04F);
     const QVector3D end(static_cast<float>(point.x + std::cos(yaw) * 0.42),
                         static_cast<float>(point.y + std::sin(yaw) * 0.42), 0.04F);
-    const QVector3D left(static_cast<float>(point.x + std::cos(yaw + 2.55) * 0.06),
+    const QVector3D left(static_cast<float>(point.x + std::cos(yaw + 2.55) * 0.04),
                          static_cast<float>(point.y + std::sin(yaw + 2.55) * 0.12), 0.04F);
-    const QVector3D right(static_cast<float>(point.x + std::cos(yaw - 2.55) * 0.06),
+    const QVector3D right(static_cast<float>(point.x + std::cos(yaw - 2.55) * 0.04),
                           static_cast<float>(point.y + std::sin(yaw - 2.55) * 0.12), 0.04F);
     draw_line(painter, origin, end, QColor(255, 205, 70, 230), 2.0);
     draw_line(painter, end, left, QColor(255, 205, 70, 230), 2.0);
@@ -995,7 +995,7 @@ void SceneView::draw_tool_preview(QPainter& painter) const {
   const QVector3D end(start.x() + static_cast<float>(std::cos(yaw) * length),
                       start.y() + static_cast<float>(std::sin(yaw) * length), 0.03F);
   draw_line(painter, start, end, color, 4.0);
-  const double kHead = std::min(0.06, 0.10 * length);
+  const double kHead = std::min(0.04, 0.08 * length);
   const QVector3D head_left(start.x() + static_cast<float>(std::cos(yaw + 2.55) * kHead),
                             start.y() + static_cast<float>(std::sin(yaw + 2.55) * kHead), 0.03F);
   const QVector3D head_right(start.x() + static_cast<float>(std::cos(yaw - 2.55) * kHead),

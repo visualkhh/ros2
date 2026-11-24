@@ -1,6 +1,8 @@
 #include "krosc/viz/viz_window.hpp"
 
 #include <QAbstractItemView>
+#include <QApplication>
+#include <QMouseEvent>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QGridLayout>
@@ -22,6 +24,8 @@
 #include <QWidget>
 
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <sstream>
 #include <utility>
 
@@ -139,10 +143,10 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   slam_timer_->start(300);
   connect(scene_, &SceneView::tool_changed, this, [this](const QString&) { update_tool_buttons(); });
   connect(scene_, &SceneView::tool_pose, this,
-          [this](double x, double y, double yaw) { handle_tool_pose(scene_->tool(), x, y, yaw, false); });
+          [this](double x, double y, double yaw) { handle_tool_pose(active_tool_, x, y, yaw, false); });
   connect(map_view_, &MapView2D::tool_changed, this, [this](const QString&) { update_tool_buttons(); });
   connect(map_view_, &MapView2D::tool_pose, this,
-          [this](double x, double y, double yaw) { handle_tool_pose(map_view_->tool(), x, y, yaw, true); });
+          [this](double x, double y, double yaw) { handle_tool_pose(active_tool_, x, y, yaw, true); });
   connect(scene_, &SceneView::teleop_scale_changed, this, [this](double scale) {
     if (teleop_slider_ != nullptr) {
       const QSignalBlocker blocker(teleop_slider_);
@@ -154,6 +158,22 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   });
   refresh_slam();
   set_fixed_frame(model_.fixed_frame());
+  if (std::getenv("KROSC_VIZ_TEST_CLICK") != nullptr) {
+    QTimer::singleShot(1500, this, [this] {
+      if (map_view_ == nullptr) {
+        return;
+      }
+      set_tool("multi");
+      const QPointF local(map_view_->width() * 0.5, map_view_->height() * 0.5);
+      const QPointF global = map_view_->mapToGlobal(local.toPoint());
+      QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+      QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+      std::fprintf(stderr, "[viz] test click size=%dx%d tool=%s\n", map_view_->width(), map_view_->height(), map_view_->tool().c_str());
+      QApplication::sendEvent(map_view_, &press);
+      QApplication::sendEvent(map_view_, &release);
+      std::fprintf(stderr, "[viz] test click done ways=%zu\n", multi_goals_.size());
+    });
+  }
 }
 
 VizWindow::~VizWindow() {
@@ -513,6 +533,7 @@ void VizWindow::set_tool(const std::string& tool) {
 }
 
 void VizWindow::sync_waypoints() {
+  std::fprintf(stderr, "[viz] sync waypoints=%zu\n", multi_goals_.size());
   if (scene_ != nullptr) {
     scene_->set_waypoints(multi_goals_);
   }
@@ -522,6 +543,7 @@ void VizWindow::sync_waypoints() {
 }
 
 void VizWindow::handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map) {
+  std::fprintf(stderr, "[viz] handle tool=%s x=%.2f y=%.2f from_map=%d\n", tool.c_str(), x, y, from_map ? 1 : 0);
   if (!from_map && model_.fixed_frame() != "map") {
     try {
       const msgs::TransformStamped transform = model_.tf_buffer().lookup_transform("map", model_.fixed_frame());

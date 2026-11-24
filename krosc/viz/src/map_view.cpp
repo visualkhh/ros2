@@ -63,7 +63,7 @@ void MapView2D::draw_arrow(QPainter& painter, const QPointF& start, double angle
   const QPointF end(start.x() + std::cos(angle) * length, start.y() - std::sin(angle) * length);
   painter.setPen(QPen(color, 2.0));
   painter.drawLine(start, end);
-  const double head = std::min(0.06 * zoom_, 0.22 * length);
+  const double head = std::min(0.04 * zoom_, 0.18 * length);
   const double a1 = angle + 2.6;
   const double a2 = angle - 2.6;
   painter.drawLine(end, QPointF(end.x() + std::cos(a1) * head, end.y() - std::sin(a1) * head));
@@ -332,7 +332,7 @@ void MapView2D::paintEvent(QPaintEvent* event) {
                                   tool_start_map_.y() + std::sin(yaw) * length);
     painter.setPen(QPen(color, 3.0));
     painter.drawLine(start, end);
-    const double head = std::min(0.06 * zoom_, 0.18 * length * zoom_);
+    const double head = std::min(0.04 * zoom_, 0.15 * length * zoom_);
     painter.drawLine(end, QPointF(end.x() - std::cos(yaw - 0.5) * head, end.y() + std::sin(yaw - 0.5) * head));
     painter.drawLine(end, QPointF(end.x() - std::cos(yaw + 0.5) * head, end.y() + std::sin(yaw + 0.5) * head));
     painter.setBrush(QColor(color.red(), color.green(), color.blue(), 60));
