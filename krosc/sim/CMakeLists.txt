@@ -2,11 +2,11 @@ find_package(Threads REQUIRED)
 
 # 물리/월드/로봇: Qt 없이도 빌드된다 (표준 라이브러리 + core 메시지 타입).
 add_library(krosc_sim STATIC
-  src/world.cpp
-  src/maze_world.cpp
-  src/turtlebot3.cpp
-  src/runner.cpp
-  src/snapshot.cpp
+  core/world.cpp
+  core/maze_world.cpp
+  core/turtlebot3.cpp
+  core/runner.cpp
+  core/snapshot.cpp
 )
 
 add_library(krosc::sim ALIAS krosc_sim)
@@ -34,7 +34,7 @@ if(Qt6_FOUND)
   endif()
   set(CMAKE_AUTOMOC ON)
   add_library(krosc_sim_qt STATIC
-    src/view_window.cpp
+    core/view_window.cpp
     include/krosc/sim/view_window.hpp
   )
   add_library(krosc::sim_qt ALIAS krosc_sim_qt)
@@ -52,9 +52,9 @@ endif()
 if(KROSC_BUILD_TESTS)
   add_executable(krosc_sim_tests
     tests/test_sim.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../core/tests/test_main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../engine/tests/test_main.cpp
   )
-  target_include_directories(krosc_sim_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../core/tests)
+  target_include_directories(krosc_sim_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../engine/tests)
   target_link_libraries(krosc_sim_tests PRIVATE krosc::sim)
   target_compile_options(krosc_sim_tests PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME krosc_sim_tests COMMAND krosc_sim_tests)

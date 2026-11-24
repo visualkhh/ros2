@@ -99,7 +99,7 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
   std::atomic<bool> got_command{false};
   std::atomic<double> command_linear{0.0};
   server_context.topics().subscribe<krosc::msgs::Twist>(
-      "cmd_vel",
+      "cmd_vel_teleop",
       [&](const krosc::msgs::Twist& twist) {
         command_linear.store(twist.linear.x);
         got_command.store(true);

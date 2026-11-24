@@ -11,7 +11,7 @@ set(KROSC_BUILD_TESTS OFF)
 set(KROSC_BUILD_BENCH OFF)
 set(KROSC_BUILD_VIZ OFF)
 set(KROSC_BUILD_EXAMPLES OFF)
-add_subdirectory(../krosc/core core_build)
+add_subdirectory(../krosc/engine engine_build)
 
 add_executable(krosc_real
   robot/main.cpp
@@ -46,12 +46,12 @@ if(KROSC_WS_BUILD_TESTS)
     robot/hardwares/opencr_protocol.cpp
     robot/hardwares/opencr_serial.cpp
     robot/hardwares/serial.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/core/tests/test_main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests/test_main.cpp
   )
   target_include_directories(krosc_ws_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/robot
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/core/tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests
   )
   target_link_libraries(krosc_ws_tests PRIVATE krosc::core)
   if(UNIX AND NOT APPLE)

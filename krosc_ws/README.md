@@ -201,8 +201,8 @@ Viz의 **MoveIt** 도킹 패널은 ROS 2 MoveIt 없이 URDF 체인으로 계획�
 - 토픽: `moveit_target`(String CSV), `moveit_plan`, `moveit_execute`, `moveit_cancel`, `moveit_scrub`
 - 상태: `moveit_status`, `moveit_state`, `moveit_target_pose`, `moveit_arm`, `moveit_path`
 
-핵심 계산은 `krosc/core/src/manipulation/arm_chain.cpp`, 노드는
-`krosc/core/src/nodes/moveit_lite.cpp`에 있고 `krosc_ws/robot/main.cpp`에서 조립한다.
+핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, 노드는
+`krosc/engine/core/nodes/moveit_lite.cpp`에 있고 `krosc_ws/robot/main.cpp`에서 조립한다.
 
 ## 구성
 

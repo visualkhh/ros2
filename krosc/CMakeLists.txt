@@ -19,7 +19,7 @@ option(KROSC_BUILD_EXAMPLES "Build krosc examples" ON)
 
 include(CTest)
 
-add_subdirectory(core)
+add_subdirectory(engine)
 add_subdirectory(sim)
 if(TARGET krosc_bench)
   target_link_libraries(krosc_bench PRIVATE krosc::sim)

@@ -107,23 +107,25 @@ MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed
 
 ```
 krosc/
-├── CMakeLists.txt                 # 최상위 (core, sim, viz, examples)
-├── core/                          # krosc_core (표준 라이브러리만)
+├── CMakeLists.txt                 # 최상위 (engine, sim, viz, examples)
+├── engine/                        # krosc_core (표준 라이브러리만)
 │   ├── CMakeLists.txt
 │   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/msgs/urdf/log
 │   │   └── nodes/                 # DiffDriveOdometry, Ekf, RobotStatePublisher, TfEcho, TwistMux
-│   ├── src/
+│   ├── core/                      # 라이브러리 소스
 │   ├── tests/                     # core 29 tests (net 포함)
 │   └── benchmarks/bench.cpp
 ├── sim/                           # krosc_sim (+ krosc_sim_qt)
 │   ├── CMakeLists.txt
 │   ├── include/krosc/sim/         # world, maze_world, turtlebot3, runner, snapshot, view_window
-│   ├── src/
+│   ├── core/                      # 라이브러리 소스
 │   └── tests/                     # sim 3 tests
 ├── viz/                           # krosc_viz (Qt6 Widgets)
 │   ├── CMakeLists.txt
-│   ├── include/krosc/viz/         # VizModel, SceneView, VizWindow
-│   └── src/
+│   ├── include/krosc/viz/         # VizModel, SceneView, VizWindow, plugin API
+│   ├── core/                      # Viz shell/렌더 소스
+│   ├── app/                       # krosc_viz_app main
+│   └── plugins/                   # 코어 Viz 플러그인
 ├── examples/turtlebot3/           # krosc_turtlebot3
 └── docs/                          # 검증 스크린샷 (vnc.png, screenshot.png, simulation.png)
 ```
@@ -221,7 +223,7 @@ runner.start();
 7. **라이다** — AABB slab 교차를 C++로 직접 계산 (360광선 x 20벽 ~60–70µs).
 8. **스냅샷 경계** — 시뮬레이션 스레드는 `SnapshotStore`에 불변 스냅샷만 넣고, Qt 스레드는 그것만 읽는다 (락 경합 최소).
 
-측정값 (`./build/core/krosc_bench`, Ubuntu 26.04 컨테이너, 대략값):
+측정값 (`./build/engine/krosc_bench`, Ubuntu 26.04 컨테이너, 대략값):
 
 ```
 pub/sub inline      :   ~200 ns/op   (콜백 포함, 100만 회)
