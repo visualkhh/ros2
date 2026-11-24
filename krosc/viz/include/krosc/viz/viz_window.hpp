@@ -49,6 +49,7 @@ class VizWindow : public QMainWindow {
   void refresh_slam();
   void update_tool_buttons();
   void set_tool(const std::string& tool);
+  void sync_waypoints();
   void handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map);
   void publish_pose(const std::string& topic, double x, double y, double yaw, bool from_map);
   void publish_multi(bool preview);

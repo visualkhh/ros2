@@ -152,6 +152,11 @@ void SceneView::set_teleop_scale(double scale) {
   update();
 }
 
+void SceneView::set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints) {
+  waypoints_ = waypoints;
+  update();
+}
+
 void SceneView::set_tool(const std::string& tool) {
   tool_ = (tool == "initialpose" || tool == "goal" || tool == "multi") ? tool : std::string{};
   tool_dragging_ = false;
@@ -896,6 +901,7 @@ void SceneView::paintEvent(QPaintEvent* event) {
     draw_imu(painter);
   }
   draw_odometry_arrows(painter);
+  draw_waypoints(painter);
   draw_tool_preview(painter);
   draw_logs(painter);
 
@@ -907,6 +913,40 @@ void SceneView::paintEvent(QPaintEvent* event) {
     fps_clock_.restart();
   }
   draw_hud(painter);
+}
+
+void SceneView::draw_waypoints(QPainter& painter) const {
+  if (waypoints_.empty()) {
+    return;
+  }
+  const bool fixed_is_map = model_.fixed_frame() == "map";
+  std::optional<msgs::TransformStamped> transform;
+  if (!fixed_is_map) {
+    transform = model_.transform_in_fixed("map");
+    if (!transform) {
+      return;
+    }
+  }
+  const double offset = transform ? tfmath::yaw_of(transform->transform.rotation) : 0.0;
+  for (std::size_t index = 0; index < waypoints_.size(); ++index) {
+    const auto& [wx, wy, wyaw] = waypoints_[index];
+    msgs::Vector3 point{wx, wy, 0.04};
+    if (transform) {
+      point = tfmath::apply(transform->transform, point);
+    }
+    const double yaw = wyaw + offset;
+    const QVector3D origin(static_cast<float>(point.x), static_cast<float>(point.y), 0.04F);
+    const QVector3D end(static_cast<float>(point.x + std::cos(yaw) * 0.6),
+                        static_cast<float>(point.y + std::sin(yaw) * 0.6), 0.04F);
+    const QVector3D left(static_cast<float>(point.x + std::cos(yaw + 2.55) * 0.12),
+                         static_cast<float>(point.y + std::sin(yaw + 2.55) * 0.12), 0.04F);
+    const QVector3D right(static_cast<float>(point.x + std::cos(yaw - 2.55) * 0.12),
+                          static_cast<float>(point.y + std::sin(yaw - 2.55) * 0.12), 0.04F);
+    draw_line(painter, origin, end, QColor(255, 205, 70, 230), 2.0);
+    draw_line(painter, end, left, QColor(255, 205, 70, 230), 2.0);
+    draw_line(painter, end, right, QColor(255, 205, 70, 230), 2.0);
+    draw_label(painter, origin, QString("#%1").arg(index + 1), QColor(255, 235, 150));
+  }
 }
 
 void SceneView::draw_tool_preview(QPainter& painter) const {
@@ -928,7 +968,7 @@ void SceneView::draw_tool_preview(QPainter& painter) const {
   const QVector3D end(start.x() + static_cast<float>(std::cos(yaw) * length),
                       start.y() + static_cast<float>(std::sin(yaw) * length), 0.03F);
   draw_line(painter, start, end, color, 4.0);
-  constexpr double kHead = 0.22;
+  const double kHead = std::min(0.14, 0.20 * length);
   const QVector3D head_left(start.x() + static_cast<float>(std::cos(yaw + 2.55) * kHead),
                             start.y() + static_cast<float>(std::sin(yaw + 2.55) * kHead), 0.03F);
   const QVector3D head_right(start.x() + static_cast<float>(std::cos(yaw - 2.55) * kHead),

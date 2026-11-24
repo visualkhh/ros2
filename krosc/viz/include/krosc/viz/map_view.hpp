@@ -1,11 +1,15 @@
 #pragma once
 
 #include <QImage>
+#include <deque>
 #include <QPoint>
 #include <QPointF>
 #include <QWidget>
 
 #include <memory>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 #include "krosc/viz/viz_model.hpp"
 
@@ -23,6 +27,7 @@ class MapView2D final : public QWidget {
 
   void fit_map();
   void set_tool(const std::string& tool);
+  void set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints);
   [[nodiscard]] std::string tool() const { return tool_; }
 
  signals:
@@ -42,6 +47,7 @@ class MapView2D final : public QWidget {
   void place_fit_button();
   [[nodiscard]] QPointF to_screen(double x, double y) const;
   [[nodiscard]] QPointF to_map(const QPointF& screen) const;
+  void draw_arrow(QPainter& painter, const QPointF& start, double angle, double length, const QColor& color) const;
 
   VizModel& model_;
   std::shared_ptr<const msgs::OccupancyGrid> map_cache_;
@@ -59,6 +65,8 @@ class MapView2D final : public QWidget {
   bool tool_dragging_ = false;
   QPointF tool_start_map_;
   QPointF tool_current_map_;
+  std::vector<std::tuple<double, double, double>> waypoints_;
+  std::deque<std::pair<double, double>> trail_;
   QPushButton* fit_button_ = nullptr;
 };
 

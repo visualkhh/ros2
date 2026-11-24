@@ -119,7 +119,14 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   });
 
   paint_timer_ = new QTimer(this);
-  connect(paint_timer_, &QTimer::timeout, scene_, QOverload<>::of(&QWidget::update));
+  connect(paint_timer_, &QTimer::timeout, this, [this] {
+    if (scene_ != nullptr) {
+      scene_->update();
+    }
+    if (map_view_ != nullptr) {
+      map_view_->update();  // 지도가 늦게 와도 탭 전환 없이 바로 그린다
+    }
+  });
   paint_timer_->start(33);
 
   refresh_timer_ = new QTimer(this);
@@ -361,6 +368,7 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   connect(send, &QPushButton::clicked, this, [this] { publish_multi(preview_mode_); });
   connect(clear, &QPushButton::clicked, this, [this] {
     multi_goals_.clear();
+    sync_waypoints();
     slam_status_label_->setText("multi goals: 0");
   });
   connect(cancel, &QPushButton::clicked, this, [this] {
@@ -494,6 +502,15 @@ void VizWindow::set_tool(const std::string& tool) {
     map_view_->set_tool(active_tool_);
   }
   update_tool_buttons();
+}
+
+void VizWindow::sync_waypoints() {
+  if (scene_ != nullptr) {
+    scene_->set_waypoints(multi_goals_);
+  }
+  if (map_view_ != nullptr) {
+    map_view_->set_waypoints(multi_goals_);
+  }
 }
 
 void VizWindow::handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map) {

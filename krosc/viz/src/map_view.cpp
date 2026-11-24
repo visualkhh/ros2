@@ -54,6 +54,22 @@ void MapView2D::set_tool(const std::string& tool) {
   update();
 }
 
+void MapView2D::set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints) {
+  waypoints_ = waypoints;
+  update();
+}
+
+void MapView2D::draw_arrow(QPainter& painter, const QPointF& start, double angle, double length, const QColor& color) const {
+  const QPointF end(start.x() + std::cos(angle) * length, start.y() - std::sin(angle) * length);
+  painter.setPen(QPen(color, 2.0));
+  painter.drawLine(start, end);
+  const double head = std::min(0.12 * zoom_, 0.35 * length);
+  const double a1 = angle + 2.6;
+  const double a2 = angle - 2.6;
+  painter.drawLine(end, QPointF(end.x() + std::cos(a1) * head, end.y() - std::sin(a1) * head));
+  painter.drawLine(end, QPointF(end.x() + std::cos(a2) * head, end.y() - std::sin(a2) * head));
+}
+
 void MapView2D::fit_map() {
   const auto map = model_.map();
   if (!map || map->info.width == 0 || map->info.height == 0 || map->info.resolution <= 0.0) {
@@ -175,19 +191,53 @@ void MapView2D::paintEvent(QPaintEvent* event) {
         return;
       }
     }
+    std::vector<std::tuple<double, double, double>> world;
+    world.reserve(path->poses.size());
+    const double yaw_offset = transform ? tfmath::yaw_of(transform->transform.rotation) : 0.0;
     for (const auto& pose : path->poses) {
       msgs::Vector3 p{pose.pose.position.x, pose.pose.position.y, 0.0};
       if (transform) {
         p = tfmath::apply(transform->transform, p);
       }
       points.push_back(to_screen(p.x, p.y));
+      world.emplace_back(p.x, p.y, tfmath::yaw_of(pose.pose.orientation) + yaw_offset);
     }
     painter.setPen(QPen(color, 2.0));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolyline(points.data(), static_cast<int>(points.size()));
+    double accumulated = 1e9;  // 첫 점에도 화살표
+    const QColor arrow_color(color.red(), color.green(), color.blue(), 210);
+    for (std::size_t index = 0; index < world.size(); ++index) {
+      if (index > 0) {
+        accumulated += std::hypot(std::get<0>(world[index]) - std::get<0>(world[index - 1]),
+                                  std::get<1>(world[index]) - std::get<1>(world[index - 1]));
+      }
+      if (accumulated >= 0.8 || index + 1 == world.size()) {
+        accumulated = 0.0;
+        const double length = (index + 1 == world.size()) ? 0.55 * zoom_ : 0.32 * zoom_;
+        draw_arrow(painter, to_screen(std::get<0>(world[index]), std::get<1>(world[index])),
+                   std::get<2>(world[index]), length, arrow_color);
+      }
+    }
   };
   draw_path(model_.plan(), QColor(80, 235, 130, 230));
   draw_path(model_.local_plan(), QColor(255, 220, 90, 200));
+
+  // Multi Goal로 찍은 웨이포인트 (방향 포함)
+  QFont waypoint_font("Menlo");
+  waypoint_font.setPixelSize(11);
+  painter.setFont(waypoint_font);
+  for (std::size_t index = 0; index < waypoints_.size(); ++index) {
+    const auto& [x, y, yaw] = waypoints_[index];
+    const QPointF point = to_screen(x, y);
+    painter.setPen(QPen(QColor(255, 205, 60, 240), 2.0));
+    painter.setBrush(QColor(255, 205, 60, 220));
+    painter.drawEllipse(point, 4.0, 4.0);
+    painter.setBrush(Qt::NoBrush);
+    draw_arrow(painter, point, yaw, 0.55 * zoom_, QColor(255, 205, 70, 230));
+    painter.setPen(QColor(255, 235, 150));
+    painter.drawText(point + QPointF(8.0, -8.0), QString("#%1").arg(index + 1));
+  }
 
   // 스캔
   if (const auto scan = model_.scan()) {
@@ -211,6 +261,39 @@ void MapView2D::paintEvent(QPaintEvent* event) {
       }
       painter.setPen(QPen(QColor(255, 80, 80, 210), 2.0));
       painter.drawPoints(points.data(), static_cast<int>(points.size()));
+    }
+  }
+
+  // 실제 주행 궤적 (진짜 경로)
+  if (const auto robot = tf("map", "base_footprint")) {
+    const double rx = robot->transform.translation.x;
+    const double ry = robot->transform.translation.y;
+    if (trail_.empty() || std::hypot(rx - trail_.back().first, ry - trail_.back().second) > 0.05) {
+      trail_.emplace_back(rx, ry);
+      while (trail_.size() > 4000) {
+        trail_.pop_front();
+      }
+    }
+    if (trail_.size() > 1) {
+      std::vector<QPointF> points;
+      points.reserve(trail_.size());
+      for (const auto& [x, y] : trail_) {
+        points.push_back(to_screen(x, y));
+      }
+      painter.setPen(QPen(QColor(140, 185, 255, 190), 1.6));
+      painter.drawPolyline(points.data(), static_cast<int>(points.size()));
+      double accumulated = 0.0;
+      for (std::size_t index = 1; index < trail_.size(); ++index) {
+        accumulated += std::hypot(trail_[index].first - trail_[index - 1].first,
+                                  trail_[index].second - trail_[index - 1].second);
+        if (accumulated >= 1.0 && index + 1 < trail_.size()) {
+          accumulated = 0.0;
+          const double angle = std::atan2(trail_[index].second - trail_[index - 1].second,
+                                          trail_[index].first - trail_[index - 1].first);
+          draw_arrow(painter, to_screen(trail_[index].first, trail_[index].second), angle, 0.22 * zoom_,
+                     QColor(140, 185, 255, 210));
+        }
+      }
     }
   }
 
@@ -249,7 +332,7 @@ void MapView2D::paintEvent(QPaintEvent* event) {
                                   tool_start_map_.y() + std::sin(yaw) * length);
     painter.setPen(QPen(color, 3.0));
     painter.drawLine(start, end);
-    const double head = 0.22 * zoom_;
+    const double head = std::min(0.12 * zoom_, 0.30 * length * zoom_);
     painter.drawLine(end, QPointF(end.x() - std::cos(yaw - 0.5) * head, end.y() + std::sin(yaw - 0.5) * head));
     painter.drawLine(end, QPointF(end.x() - std::cos(yaw + 0.5) * head, end.y() + std::sin(yaw + 0.5) * head));
     painter.setBrush(QColor(color.red(), color.green(), color.blue(), 60));

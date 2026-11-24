@@ -11,6 +11,7 @@
 
 #include <array>
 #include <deque>
+#include <tuple>
 #include <map>
 #include <memory>
 #include <optional>
@@ -44,6 +45,7 @@ class SceneView : public QWidget {
   void set_teleop_scale(double scale);
   [[nodiscard]] double teleop_scale() const { return teleop_scale_; }
   void set_tool(const std::string& tool);
+  void set_waypoints(const std::vector<std::tuple<double, double, double>>& waypoints);
   [[nodiscard]] std::string tool() const { return tool_; }
   void reset_camera();
   void fixed_frame_changed();
@@ -102,6 +104,7 @@ class SceneView : public QWidget {
   void draw_logs(QPainter& painter) const;
   void draw_hud(QPainter& painter) const;
   void draw_tool_preview(QPainter& painter) const;
+  void draw_waypoints(QPainter& painter) const;
 
   void draw_line(QPainter& painter, const QVector3D& a, const QVector3D& b, const QColor& color,
                  double width = 1.0) const;
@@ -141,6 +144,7 @@ class SceneView : public QWidget {
   double fps_ = 0.0;
   double teleop_scale_ = 1.0;
   std::string tool_;
+  std::vector<std::tuple<double, double, double>> waypoints_;
   bool tool_dragging_ = false;
   QPoint tool_start_;
   std::optional<QVector3D> tool_start_ground_;
