@@ -762,6 +762,12 @@ void VizWindow::set_tab(int index) {
   }
 }
 
+void VizWindow::set_camera_distance(double distance) {
+  if (scene_ != nullptr) {
+    scene_->set_camera_distance(distance);
+  }
+}
+
 void VizWindow::set_connection_status(bool connected, const std::string& endpoint) {
   if (connection_label_ == nullptr) {
     return;

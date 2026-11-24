@@ -40,6 +40,7 @@ class VizWindow : public QMainWindow {
   void set_fixed_frame(const std::string& frame);
   void set_connection_status(bool connected, const std::string& endpoint);
   void set_tab(int index);
+  void set_camera_distance(double distance);
   [[nodiscard]] bool save_screenshot(const QString& path);
 
  private:

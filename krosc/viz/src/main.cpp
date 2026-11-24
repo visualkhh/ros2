@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
   std::string fixed_frame = "odom";
   std::string tab = "3d";
   double duration = 2.0;
+  double distance = 0.0;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--screenshot" && i + 1 < argc) {
@@ -52,6 +53,8 @@ int main(int argc, char** argv) {
       fixed_frame = argv[++i];
     } else if (argument == "--tab" && i + 1 < argc) {
       tab = argv[++i];
+    } else if (argument == "--distance" && i + 1 < argc) {
+      distance = std::stod(argv[++i]);
     } else if (argument == "--help") {
       std::printf("usage: krosc_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map] [--screenshot PATH] [--duration SEC]\n");
       return 0;
@@ -70,6 +73,9 @@ int main(int argc, char** argv) {
   krosc::viz::VizWindow window(context);
   window.set_fixed_frame(fixed_frame);
   window.set_tab(tab == "map" ? 1 : 0);
+  if (distance > 0.0) {
+    window.set_camera_distance(distance);
+  }
   if (client) {
     window.set_connection_status(client->connected(), client->endpoint());
   }
