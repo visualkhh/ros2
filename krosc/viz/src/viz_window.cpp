@@ -28,6 +28,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cstdio>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -274,6 +275,10 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
 }
 
 VizWindow::~VizWindow() {
+  for (auto& plugin : plugins_) {
+    plugin->shutdown();
+  }
+  plugins_.clear();
   qApp->removeEventFilter(this);
   model_.node().shutdown();
   if (scene_ != nullptr) {
@@ -1493,6 +1498,37 @@ void VizWindow::refresh_moveit() {
   update_moveit_preview();
 }
 
+void VizWindow::add_dock(QDockWidget* dock, Qt::DockWidgetArea area) {
+  if (dock != nullptr) {
+    addDockWidget(area, dock);
+  }
+}
+
+void VizWindow::add_tab(QWidget* tab, const QString& title, bool make_current) {
+  if (tabs_ == nullptr || tab == nullptr) {
+    return;
+  }
+  const int index = tabs_->addTab(tab, title);
+  if (make_current) {
+    tabs_->setCurrentIndex(index);
+  }
+}
+
+void VizWindow::load_plugins(VizPluginRegistry& registry, const std::vector<std::string>& ids) {
+  for (const auto& id : ids) {
+    auto plugin = registry.create(id);
+    if (!plugin) {
+      std::fprintf(stderr, "[viz] 알 수 없는 플러그인: %s\n", id.c_str());
+      continue;
+    }
+    const VizPluginInfo info = plugin->info();
+    std::fprintf(stderr, "[viz] plugin: %s (%s) v%s\n", info.id.c_str(), info.name.c_str(),
+                 info.version.c_str());
+    plugin->initialize(*this);
+    plugins_.push_back(std::move(plugin));
+  }
+}
+
 void VizWindow::set_manual_panels(bool teleop, bool manipulator, bool moveit) {
   if (teleop_dock_ != nullptr) {
     teleop_dock_->setVisible(teleop);
@@ -1843,6 +1879,20 @@ void VizWindow::set_tab(int index) {
   if (tabs_ != nullptr) {
     tabs_->setCurrentIndex(std::clamp(index, 0, tabs_->count() - 1));
   }
+}
+
+void VizWindow::set_tab(const std::string& name) {
+  if (tabs_ == nullptr) {
+    return;
+  }
+  const QString wanted = QString::fromStdString(name);
+  for (int index = 0; index < tabs_->count(); ++index) {
+    if (tabs_->tabText(index).compare(wanted, Qt::CaseInsensitive) == 0) {
+      tabs_->setCurrentIndex(index);
+      return;
+    }
+  }
+  tabs_->setCurrentIndex(0);
 }
 
 void VizWindow::set_camera_distance(double distance) {

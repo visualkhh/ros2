@@ -45,9 +45,11 @@ KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 ./run-sim.sh        # 시뮬레이터(진실) + Viz 데모
 ```
 
-`run-viz.sh`는 `KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME`, `KROSC_VIZ_TAB` 환경 변수를 따른다.
-기본은 **Map 탭**(RViz 스타일 occupancy 이미지)이고, `KROSC_VIZ_TAB=3d ./run-viz.sh` 또는
-`KROSC_VIZ_TAB=moveit ./run-viz.sh`로 시작 탭을 바꿀 수 있다.
+`run-viz.sh`는 프로젝트 전용 `krosc_ws_viz_app`을 빌드/실행한다.
+`KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME`, `KROSC_VIZ_TAB`,
+`KROSC_VIZ_PLUGINS` 환경 변수를 따른다.
+기본은 **Map 탭**(RViz 스타일 occupancy 이미지)이고, `KROSC_VIZ_TAB=3d ./run-viz.sh`,
+`KROSC_VIZ_TAB=moveit ./run-viz.sh`, `KROSC_VIZ_TAB=project ./run-viz.sh`로 시작 탭을 바꿀 수 있다.
 Teleop/Manipulator/MoveIt 도킹 패널을 함께 띄운다. 추가 인자는 그대로 viz에 넘긴다:
 `./run-viz.sh --screenshot /tmp/viz.png --duration 3`, `./run-viz.sh --no-moveit`.
 
@@ -133,6 +135,52 @@ cmake --build build -j
 네트워크 서버는 최대 **8 클라이언트**를 동시에 받는다. 클라이언트마다 송신 큐/writer 스레드가
 따로 있어 느린 Viz 하나가 다른 클라이언트의 센서 스트림을 막지 않는다. 명령 토픽은
 **마지막 명령이 이기는** 구조이며, 클라이언트별 제어권 중재(lease)는 아직 없다.
+
+## Viz 플러그인 / 프로젝트 Viz main
+
+로봇 쪽 진입점이 `src/main.cpp`라면, Viz 쪽 진입점은 `viz/main.cpp`다.
+
+```text
+krosc_ws/
+├── src/main.cpp              # 로봇(Pi) 엔드포인트
+├── viz/
+│   ├── main.cpp              # 프로젝트 Viz 엔드포인트
+│   ├── CMakeLists.txt
+│   └── plugins/
+│       └── project_panel.cpp # 프로젝트 플러그인 예제 ("Project" 탭)
+```
+
+코어 API는 `krosc/viz/include/krosc/viz/viz_plugin.hpp`에 있다.
+
+```cpp
+class MyPlugin final : public krosc::viz::IVizPlugin {
+  krosc::viz::VizPluginInfo info() const override {
+    return {"my_plugin", "My Plugin", "1.0", {}};
+  }
+  void initialize(krosc::viz::VizHost& host) override {
+    auto* page = new QWidget(&host.window());
+    // ...
+    host.add_tab(page, "My Plugin");
+    // host.add_dock(dock, Qt::RightDockWidgetArea);
+  }
+};
+```
+
+프로젝트 Viz main에 등록:
+
+```cpp
+registry.add("my_plugin", [] { return std::make_unique<MyPlugin>(); });
+```
+
+CMake에 소스 추가 후 실행:
+
+```bash
+KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
+```
+
+- 플러그인은 프로젝트 안에서 자유롭게 작성/빌드한다.
+- 코어 `krosc_viz_app`은 공통/최소 앱으로 남아 있고, `run-viz.sh`는 프로젝트 앱을 사용한다.
+- 프로필(YAML) 기반 자동 로딩과 MoveIt/SLAM/Nav의 플러그인 이동은 다음 단계다.
 
 ## MoveIt-lite
 

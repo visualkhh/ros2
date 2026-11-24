@@ -54,5 +54,11 @@ target_compile_options(krosc_viz PRIVATE -Wall -Wextra -Wpedantic)
 add_executable(krosc_viz_app src/main.cpp)
 target_link_libraries(krosc_viz_app PRIVATE krosc::viz)
 
+# 프로젝트별 Viz 플러그인/앱 (예: krosc_ws/viz). 프로젝트가 자기 viz-main을 가진다.
+set(KROSC_VIZ_PROJECT_DIR "" CACHE PATH "Optional project-specific viz plugin/app directory")
+if(KROSC_VIZ_PROJECT_DIR)
+  add_subdirectory(${KROSC_VIZ_PROJECT_DIR} ${CMAKE_CURRENT_BINARY_DIR}/project)
+endif()
+
 install(TARGETS krosc_viz ARCHIVE DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)

@@ -4,6 +4,7 @@
 #include <QMainWindow>
 
 #include <array>
+#include <memory>
 #include <map>
 #include <optional>
 #include <string>
@@ -12,6 +13,7 @@
 
 #include "krosc/context.hpp"
 #include "krosc/viz/scene_view.hpp"
+#include "krosc/viz/viz_plugin.hpp"
 #include "krosc/viz/viz_model.hpp"
 
 class QCheckBox;
@@ -31,19 +33,25 @@ namespace krosc::viz {
 
 class MapView2D;
 
-class VizWindow : public QMainWindow {
+class VizWindow : public QMainWindow, public VizHost {
   Q_OBJECT
 
  public:
   explicit VizWindow(Context& context, QWidget* parent = nullptr);
   ~VizWindow() override;
 
-  [[nodiscard]] VizModel& model() { return model_; }
-  [[nodiscard]] SceneView& scene() { return *scene_; }
+  [[nodiscard]] VizModel& model() override { return model_; }
+  [[nodiscard]] SceneView& scene() override { return *scene_; }
+  [[nodiscard]] MapView2D& map_view() override { return *map_view_; }
+  [[nodiscard]] QMainWindow& window() override { return *this; }
+  void add_dock(QDockWidget* dock, Qt::DockWidgetArea area) override;
+  void add_tab(QWidget* tab, const QString& title, bool make_current = false) override;
+  void load_plugins(VizPluginRegistry& registry, const std::vector<std::string>& ids);
 
   void set_fixed_frame(const std::string& frame);
   void set_connection_status(bool connected, const std::string& endpoint);
   void set_tab(int index);
+  void set_tab(const std::string& name);
   void set_camera_distance(double distance);
   void set_manual_panels(bool teleop, bool manipulator, bool moveit);
   [[nodiscard]] bool save_screenshot(const QString& path);
@@ -90,6 +98,7 @@ class VizWindow : public QMainWindow {
   [[nodiscard]] std::string slam_status_text() const;
 
   VizModel model_;
+  std::vector<std::unique_ptr<IVizPlugin>> plugins_;
   SceneView* scene_ = nullptr;
   SceneView* moveit_view_ = nullptr;
   int moveit_tab_index_ = -1;
