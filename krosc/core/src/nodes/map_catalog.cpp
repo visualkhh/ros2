@@ -42,8 +42,6 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
   map_list_topic_ = declare_parameter<std::string>("map_list_topic", std::string("map_list"));
   map_status_topic_ = declare_parameter<std::string>("map_status_topic", std::string("map_status"));
   slam_mode_topic_ = declare_parameter<std::string>("slam_mode_topic", std::string("slam_mode"));
-  slam_status_topic_ = declare_parameter<std::string>("slam_status_topic", std::string("slam_status"));
-  current_map_topic_ = declare_parameter<std::string>("current_map_topic", std::string("current_map"));
 
   subscribe<msgs::OccupancyGrid>(
       map_topic_.value(), [this](const msgs::OccupancyGrid& grid) { on_map(grid); }, QOS_LATCHED);
@@ -53,12 +51,9 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
       map_save_topic_.value(), [this](const msgs::String& message) { on_map_save(message); });
   subscribe<msgs::Empty>(
       map_unload_topic_.value(), [this](const msgs::Empty& message) { on_map_unload(message); });
-  subscribe<msgs::String>(
-      slam_status_topic_.value(), [this](const msgs::String& message) { on_slam_status(message); }, QOS_LATCHED);
   create_timer(list_period_.value(), [this] { refresh(); });
   refresh();
   publish_status("ready");
-  publish_current_map("");
   logger().info("MapCatalog: maps=%s", directory().string().c_str());
 }
 
@@ -151,30 +146,6 @@ void MapCatalog::publish_slam_mode(const std::string& mode) {
   publish(slam_mode_topic_.value(), msgs::String{mode}, QOS_LATCHED);
 }
 
-void MapCatalog::publish_current_map(const std::string& name) {
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    current_map_ = name;
-  }
-  publish(current_map_topic_.value(), msgs::String{name}, QOS_LATCHED);
-}
-
-void MapCatalog::on_slam_status(const msgs::String& message) {
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    slam_status_ = message.data;
-  }
-  if (message.data == "mapping") {
-    publish_current_map("SLAM (unsaved)");
-  } else {
-    std::string loaded;
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      loaded = loaded_name_;
-    }
-    publish_current_map(loaded);
-  }
-}
 
 void MapCatalog::on_map(const msgs::OccupancyGrid& grid) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -209,8 +180,7 @@ void MapCatalog::on_map_change(const msgs::String& message) {
     empty.info.origin.orientation.w = 1.0;
     publish(map_topic_.value(), std::move(empty), QOS_LATCHED);
     publish_slam_mode("idle");
-    publish_current_map("");
-    refresh();
+      refresh();
     return;
   }
   if (!safe_name(requested)) {
@@ -232,7 +202,6 @@ void MapCatalog::on_map_change(const msgs::String& message) {
     publish(map_topic_.value(), grid, QOS_LATCHED);
     publish_slam_mode("localization");
     publish_status("loaded " + requested);
-    publish_current_map(requested);
     refresh();
   } catch (const MapIoError& error) {
     publish_status("load failed: " + std::string(error.what()));
@@ -255,7 +224,6 @@ void MapCatalog::on_map_unload(const msgs::Empty&) {
   publish(map_topic_.value(), std::move(empty), QOS_LATCHED);
   publish_slam_mode("idle");
   publish_status("map unloaded");
-  publish_current_map("");
   refresh();
 }
 
@@ -291,7 +259,6 @@ void MapCatalog::on_map_save(const msgs::String& message) {
       loaded_name_ = name;
     }
     publish_status("saved " + name + " (" + yaml + ")");
-    publish_current_map(name);
     refresh();
   } catch (const std::exception& error) {
     publish_status("save failed: " + std::string(error.what()));

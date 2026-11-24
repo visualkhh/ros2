@@ -60,7 +60,6 @@ class VizWindow : public QMainWindow {
   QComboBox* map_combo_ = nullptr;
   QLineEdit* map_name_ = nullptr;
   QLabel* slam_mode_label_ = nullptr;
-  QLabel* current_map_label_ = nullptr;
   QLabel* slam_status_label_ = nullptr;
   QLabel* teleop_label_ = nullptr;
   QPushButton* slam_button_ = nullptr;
@@ -72,7 +71,7 @@ class VizWindow : public QMainWindow {
   std::vector<std::tuple<double, double, double>> multi_goals_;
   std::optional<std::tuple<double, double, double>> last_single_goal_;
   bool preview_mode_ = false;
-  std::string last_current_map_;
+  std::string last_map_status_;
   QTimer* paint_timer_ = nullptr;
   QTimer* refresh_timer_ = nullptr;
   QTimer* slam_timer_ = nullptr;

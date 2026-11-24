@@ -526,44 +526,53 @@ void SceneView::draw_map(QPainter& painter) const {
   const auto br = corner(width_m, 0.0);
   const auto bl = corner(0.0, 0.0);
   if (tl.visible && tr.visible && br.visible && bl.visible) {
-    painter.setPen(QPen(QColor(0, 150, 230, 160), 1.0));
-    painter.setBrush(QColor(0, 100, 180, 20));
-    painter.drawPolygon(QPolygonF() << tl.point << tr.point << br.point << bl.point);
+    painter.setPen(QPen(QColor(0, 150, 230, 150), 1.0));
     painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(QPolygonF() << tl.point << tr.point << br.point << bl.point);
   }
+
   const std::uint32_t width = grid->info.width;
   const std::uint32_t height = grid->info.height;
-  const std::size_t total = grid->data.size();
-  if (total == 0) {
+  if (grid->data.size() != static_cast<std::size_t>(width) * height) {
     return;
   }
-  // 지도는 점으로 그린다: 원근 투영에서 큰 QImage 사각형 변환이 화면 밖으로 날아가 지도가 안 보이던 문제 회피.
-  const std::uint32_t step = total > 400000 ? 2U : 1U;
-  painter.setPen(QPen(QColor(70, 100, 140, 115), 1.0));
-  for (std::uint32_t y = 0; y < height; y += step) {
-    for (std::uint32_t x = 0; x < width; x += step) {
+  // RViz map 스타일: 모르는 곳=어두운 회색, 빈 곳=밝은 회색, 벽=흰색.
+  // 한 프레임에 8만 칸을 project하므로 색깔별로 모아 drawPoints로 한 번에 그린다.
+  std::vector<QPointF> unknown;
+  std::vector<QPointF> free_space;
+  std::vector<QPointF> occupied;
+  const std::size_t cells = static_cast<std::size_t>(width) * height;
+  unknown.reserve(cells * 3 / 4);
+  free_space.reserve(cells / 4);
+  occupied.reserve(cells / 20);
+  for (std::uint32_t y = 0; y < height; ++y) {
+    for (std::uint32_t x = 0; x < width; ++x) {
       const std::int8_t value = grid->data[static_cast<std::size_t>(y) * width + x];
-      if (value < 0 || value >= 50) {
+      const auto projected = to_fixed((static_cast<double>(x) + 0.5) * resolution,
+                                     (static_cast<double>(y) + 0.5) * resolution);
+      if (!projected.visible) {
         continue;
       }
-      const auto projected = to_fixed((static_cast<double>(x) + 0.5) * resolution, (static_cast<double>(y) + 0.5) * resolution);
-      if (projected.visible) {
-        painter.drawPoint(projected.point);
+      if (value < 0) {
+        unknown.push_back(projected.point);
+      } else if (value >= 50) {
+        occupied.push_back(projected.point);
+      } else {
+        free_space.push_back(projected.point);
       }
     }
   }
-  painter.setPen(QPen(QColor(245, 246, 250, 235), 2.0));
-  for (std::uint32_t y = 0; y < height; y += step) {
-    for (std::uint32_t x = 0; x < width; x += step) {
-      const std::int8_t value = grid->data[static_cast<std::size_t>(y) * width + x];
-      if (value < 50) {
-        continue;
-      }
-      const auto projected = to_fixed((static_cast<double>(x) + 0.5) * resolution, (static_cast<double>(y) + 0.5) * resolution);
-      if (projected.visible) {
-        painter.drawPoint(projected.point);
-      }
-    }
+  if (!unknown.empty()) {
+    painter.setPen(QPen(QColor(75, 78, 88, 170), 1.0));
+    painter.drawPoints(unknown.data(), static_cast<int>(unknown.size()));
+  }
+  if (!free_space.empty()) {
+    painter.setPen(QPen(QColor(185, 190, 200, 190), 1.0));
+    painter.drawPoints(free_space.data(), static_cast<int>(free_space.size()));
+  }
+  if (!occupied.empty()) {
+    painter.setPen(QPen(QColor(248, 249, 252, 245), 2.0));
+    painter.drawPoints(occupied.data(), static_cast<int>(occupied.size()));
   }
 }
 

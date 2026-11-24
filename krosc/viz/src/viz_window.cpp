@@ -301,8 +301,13 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   auto* load = new QPushButton("load", group);
   grid->addWidget(load, 1, 3);
   connect(load, &QPushButton::clicked, this, [this] {
+    if (map_combo_->currentIndex() <= 0) {
+      model_.node().publish("map_unload", msgs::Empty{}, QOS_DEFAULT);
+      slam_status_label_->setText("unloading map (none) ...");
+      return;
+    }
     const QString name = map_combo_->currentText();
-    if (map_combo_->currentIndex() <= 0 || name.isEmpty()) {
+    if (name.isEmpty()) {
       slam_status_label_->setText("select a map first");
       return;
     }
@@ -334,20 +339,15 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
     model_.node().publish("map_change", msgs::String{""}, QOS_DEFAULT);
     slam_status_label_->setText("deleting loaded map ...");
   });
-  current_map_label_ = new QLabel("current: (none)", group);
-  current_map_label_->setToolTip("");
-  current_map_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  grid->addWidget(current_map_label_, 4, 0, 1, 4);
-
   slam_status_label_ = new QLabel("", group);
   slam_status_label_->setWordWrap(true);
   slam_status_label_->setMinimumHeight(30);
-  grid->addWidget(slam_status_label_, 5, 0, 1, 4);
+  grid->addWidget(slam_status_label_, 4, 0, 1, 4);
 
   pose_button_ = new QPushButton("2D Pose Estimate", group);
   goal_button_ = new QPushButton("2D Goal Pose", group);
-  grid->addWidget(pose_button_, 6, 0, 1, 2);
-  grid->addWidget(goal_button_, 6, 2, 1, 2);
+  grid->addWidget(pose_button_, 5, 0, 1, 2);
+  grid->addWidget(goal_button_, 5, 2, 1, 2);
   connect(pose_button_, &QPushButton::clicked, this,
           [this] { scene_->set_tool(scene_->tool() == "initialpose" ? "" : "initialpose"); });
   connect(goal_button_, &QPushButton::clicked, this,
@@ -357,10 +357,10 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   auto* send = new QPushButton("Send", group);
   auto* clear = new QPushButton("Clear", group);
   auto* cancel = new QPushButton("Cancel", group);
-  grid->addWidget(multi_button_, 7, 0);
-  grid->addWidget(send, 7, 1);
-  grid->addWidget(clear, 7, 2);
-  grid->addWidget(cancel, 7, 3);
+  grid->addWidget(multi_button_, 6, 0);
+  grid->addWidget(send, 6, 1);
+  grid->addWidget(clear, 6, 2);
+  grid->addWidget(cancel, 6, 3);
   connect(multi_button_, &QPushButton::clicked, this,
           [this] { scene_->set_tool(scene_->tool() == "multi" ? "" : "multi"); });
   connect(send, &QPushButton::clicked, this, [this] { publish_multi(preview_mode_); });
@@ -376,8 +376,8 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   preview_button_ = new QPushButton("Preview OFF", group);
   preview_button_->setCheckable(true);
   auto* go = new QPushButton("Go", group);
-  grid->addWidget(preview_button_, 8, 0, 1, 2);
-  grid->addWidget(go, 8, 2);
+  grid->addWidget(preview_button_, 7, 0, 1, 2);
+  grid->addWidget(go, 7, 2);
   connect(preview_button_, &QPushButton::toggled, this, [this](bool checked) {
     preview_mode_ = checked;
     preview_button_->setText(checked ? "Preview ON" : "Preview OFF");
@@ -388,8 +388,8 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
   teleop_slider_ = new QSlider(Qt::Horizontal, group);
   teleop_slider_->setRange(25, 150);
   teleop_slider_->setValue(100);
-  grid->addWidget(teleop_label_, 9, 0, 1, 2);
-  grid->addWidget(teleop_slider_, 9, 2, 1, 2);
+  grid->addWidget(teleop_label_, 8, 0, 1, 2);
+  grid->addWidget(teleop_slider_, 8, 2, 1, 2);
   connect(teleop_slider_, &QSlider::valueChanged, this, [this](int value) {
     scene_->set_teleop_scale(static_cast<double>(value) / 100.0);
     teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * static_cast<double>(value) / 100.0, 0, 'f', 2));
@@ -439,30 +439,35 @@ void VizWindow::refresh_slam() {
     const int index = map_combo_->findText(chosen);
     map_combo_->setCurrentIndex(index >= 0 ? index : 0);
   }
-  QString status = model_.map_status() ? QString::fromStdString(model_.map_status()->data) : QString();
+  QString status;
+  if (const auto map_status = model_.map_status()) {
+    const std::string text = map_status->data;
+    status = QString::fromStdString(text);
+    if (text != last_map_status_) {
+      last_map_status_ = text;
+      if (text == "map unloaded" || text == "no map loaded" || text.rfind("deleted ", 0) == 0) {
+        const QSignalBlocker blocker(map_combo_);
+        map_combo_->setCurrentIndex(0);
+      } else if (text.rfind("loaded ", 0) == 0 || text.rfind("saved ", 0) == 0) {
+        QString name = QString::fromStdString(text.substr(text.find(' ') + 1));
+        const int paren = name.indexOf(" (");
+        if (paren > 0) {
+          name = name.left(paren);
+        }
+        const int index = map_combo_->findText(name);
+        if (index >= 0) {
+          const QSignalBlocker blocker(map_combo_);
+          map_combo_->setCurrentIndex(index);
+        }
+      }
+    }
+  }
   if (const auto map = model_.map()) {
     status += QString(" | map %1x%2").arg(map->info.width).arg(map->info.height);
   } else {
     status += " | map -";
   }
   slam_status_label_->setText(status);
-
-  const std::string current = model_.current_map() ? model_.current_map()->data : std::string{};
-  current_map_label_->setText(QString("current: %1").arg(current.empty() ? "(none)" : QString::fromStdString(current)));
-  current_map_label_->setToolTip(QString::fromStdString(current));
-  if (current != last_current_map_) {
-    if (current.empty()) {
-      const QSignalBlocker blocker(map_combo_);
-      map_combo_->setCurrentIndex(0);
-    } else if (current != "SLAM (unsaved)") {
-      const int index = map_combo_->findText(QString::fromStdString(current));
-      if (index >= 0) {
-        const QSignalBlocker blocker(map_combo_);
-        map_combo_->setCurrentIndex(index);
-      }
-    }
-    last_current_map_ = current;
-  }
   teleop_label_->setText(QString("teleop %1 m/s").arg(0.2 * scene_->teleop_scale(), 0, 'f', 2));
   update_tool_buttons();
 }
