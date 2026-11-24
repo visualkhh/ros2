@@ -167,7 +167,7 @@ msgs::nav2::FollowPathResult ControllerServer::run(
     return fail(msgs::nav2::FollowPathResult::INVALID_CONTROLLER,
                 "컨트롤러 '" + controller_id + "'가 없다");
   }
-  Controller& controller = *controller_it->second;
+  NavControllerPlugin& controller = *controller_it->second;
   const std::string frame = costmap_.global_frame();
   if (goal.path.poses.empty()) {
     return fail(msgs::nav2::FollowPathResult::INVALID_PATH, "빈 경로");

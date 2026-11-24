@@ -50,9 +50,29 @@ target_link_libraries(krosc_viz
 
 target_compile_options(krosc_viz PRIVATE -Wall -Wextra -Wpedantic)
 
+# 코어 Viz 플러그인: 기본 패널을 VizWindow에서 떼어낸 LEGO 부품.
+add_library(krosc_viz_plugins STATIC
+  plugins/teleop_plugin.cpp
+  plugins/slam_plugin.cpp
+  plugins/navigation_plugin.cpp
+  plugins/manipulator_plugin.cpp
+  include/krosc/viz/plugins/teleop_plugin.hpp
+  include/krosc/viz/plugins/slam_plugin.hpp
+  include/krosc/viz/plugins/navigation_plugin.hpp
+  include/krosc/viz/plugins/manipulator_plugin.hpp
+)
+add_library(krosc::viz_plugins ALIAS krosc_viz_plugins)
+target_include_directories(krosc_viz_plugins
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(krosc_viz_plugins PUBLIC krosc::viz)
+target_compile_options(krosc_viz_plugins PRIVATE -Wall -Wextra -Wpedantic)
+
 # viz 패키지 단독 실행기: 빈 그리드와 패널을 띄워 viz 자체를 시험한다.
 add_executable(krosc_viz_app main.cpp)
-target_link_libraries(krosc_viz_app PRIVATE krosc::viz)
+target_link_libraries(krosc_viz_app PRIVATE krosc::viz krosc::viz_plugins)
 
 # 프로젝트별 Viz 플러그인/앱 (예: krosc_ws/viz). 프로젝트가 자기 viz-main을 가진다.
 set(KROSC_VIZ_PROJECT_DIR "" CACHE PATH "Optional project-specific viz plugin/app directory")
@@ -60,5 +80,5 @@ if(KROSC_VIZ_PROJECT_DIR)
   add_subdirectory(${KROSC_VIZ_PROJECT_DIR} ${CMAKE_CURRENT_BINARY_DIR}/project)
 endif()
 
-install(TARGETS krosc_viz ARCHIVE DESTINATION lib)
+install(TARGETS krosc_viz krosc_viz_plugins ARCHIVE DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)

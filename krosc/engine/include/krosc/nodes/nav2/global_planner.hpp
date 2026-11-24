@@ -41,6 +41,13 @@ inline constexpr std::array<Neighbor, 8> kNeighbors{{
     {-1, 1, 1.4142135623730951}, {-1, -1, 1.4142135623730951},
 }};
 
+struct QueueEntry {
+  double priority = 0.0;
+  double cost = 0.0;
+  Cell cell;
+  bool operator>(const QueueEntry& other) const { return priority > other.priority; }
+};
+
 class PlannerError : public std::runtime_error {
  public:
   PlannerError(int error_code, std::string message) : std::runtime_error(std::move(message)), code(error_code) {}
@@ -182,27 +189,28 @@ inline std::vector<std::pair<double, double>> densify(const Costmap& costmap, co
   return points;
 }
 
-class GlobalPlanner {
+class NavPlannerPlugin {
  public:
-  virtual ~GlobalPlanner() = default;
+  virtual ~NavPlannerPlugin() = default;
   virtual void configure(Node& node, const std::string& name) {
     node_ = &node;
     name_ = name;
   }
   virtual std::vector<std::pair<double, double>> create_plan(const Costmap& costmap, const Pose2& start,
                                                               const Pose2& goal) = 0;
+  [[nodiscard]] virtual std::string type() const = 0;
 
  protected:
   Node* node_ = nullptr;
   std::string name_;
 };
 
-using PlannerFactory = std::function<std::unique_ptr<GlobalPlanner>()>;
+using PlannerFactory = std::function<std::unique_ptr<NavPlannerPlugin>()>;
 
 class PlannerRegistry {
  public:
   void add(const std::string& name, PlannerFactory factory) { factories_[name] = std::move(factory); }
-  [[nodiscard]] std::unique_ptr<GlobalPlanner> create(const std::string& name) const {
+  [[nodiscard]] std::unique_ptr<NavPlannerPlugin> create(const std::string& name) const {
     auto it = factories_.find(name);
     return it == factories_.end() ? nullptr : it->second();
   }

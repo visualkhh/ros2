@@ -8,7 +8,7 @@ add_library(krosc_ws_viz_plugins STATIC
   plugins/rl_nav_plugin.cpp
 )
 target_include_directories(krosc_ws_viz_plugins PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(krosc_ws_viz_plugins PUBLIC krosc::viz)
+target_link_libraries(krosc_ws_viz_plugins PUBLIC krosc::viz krosc::viz_plugins)
 target_compile_options(krosc_ws_viz_plugins PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(krosc_ws_viz_app main.cpp)

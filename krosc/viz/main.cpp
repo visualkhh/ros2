@@ -1,13 +1,21 @@
 #include <QApplication>
 #include <QTimer>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "krosc/context.hpp"
 #include "krosc/net.hpp"
 #include "krosc/time.hpp"
+#include "krosc/viz/plugins/manipulator_plugin.hpp"
+#include "krosc/viz/plugins/navigation_plugin.hpp"
+#include "krosc/viz/plugins/slam_plugin.hpp"
+#include "krosc/viz/plugins/teleop_plugin.hpp"
+#include "krosc/viz/viz_plugin.hpp"
 #include "krosc/viz/viz_window.hpp"
 
 namespace {
@@ -15,6 +23,20 @@ struct ServerAddress {
   std::string host;
   std::uint16_t port = 9000;
 };
+
+std::vector<std::string> split_list(const std::string& text) {
+  std::vector<std::string> result;
+  std::stringstream stream(text);
+  std::string item;
+  while (std::getline(stream, item, ',')) {
+    const std::size_t begin = item.find_first_not_of(" \t");
+    const std::size_t end = item.find_last_not_of(" \t");
+    if (begin != std::string::npos) {
+      result.push_back(item.substr(begin, end - begin + 1));
+    }
+  }
+  return result;
+}
 
 ServerAddress parse_server(const std::string& text) {
   ServerAddress address;
@@ -41,6 +63,7 @@ int main(int argc, char** argv) {
   std::string tab = "3d";
   double duration = 2.0;
   double distance = 0.0;
+  std::string plugins_text = "slam,navigation";
   bool teleop_panel = false;
   bool manipulator_panel = false;
   for (int i = 1; i < argc; ++i) {
@@ -57,20 +80,22 @@ int main(int argc, char** argv) {
       tab = argv[++i];
     } else if (argument == "--distance" && i + 1 < argc) {
       distance = std::stod(argv[++i]);
+    } else if (argument == "--plugins" && i + 1 < argc) {
+      plugins_text = argv[++i];
     } else if (argument == "--manual") {
       teleop_panel = true;
       manipulator_panel = true;
     } else if (argument == "--teleop") {
       teleop_panel = true;
-      manipulator_panel = false;
     } else if (argument == "--manipulator") {
-      teleop_panel = false;
       manipulator_panel = true;
     } else if (argument == "--no-manual") {
       teleop_panel = false;
       manipulator_panel = false;
+    } else if (argument == "--no-plugins") {
+      plugins_text.clear();
     } else if (argument == "--help") {
-      std::printf("usage: krosc_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map] [--manual|--teleop|--manipulator|--no-manual] [--distance M] [--screenshot PATH] [--duration SEC]\n");
+      std::printf("usage: krosc_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map] [--plugins a,b,...] [--manual|--teleop|--manipulator|--no-manual] [--no-plugins] [--distance M] [--screenshot PATH] [--duration SEC]\n");
       return 0;
     }
   }
@@ -84,9 +109,23 @@ int main(int argc, char** argv) {
     const ServerAddress address = parse_server(server_text);
     client = std::make_unique<krosc::net::Client>(context, address.host, address.port);
   }
+  krosc::viz::VizPluginRegistry registry;
+  registry.add("teleop", [] { return std::make_unique<krosc::viz::TeleopPlugin>(); });
+  registry.add("slam", [] { return std::make_unique<krosc::viz::SlamPlugin>(); });
+  registry.add("navigation", [] { return std::make_unique<krosc::viz::NavigationPlugin>(); });
+  registry.add("manipulator", [] { return std::make_unique<krosc::viz::ManipulatorPlugin>(); });
+  std::vector<std::string> plugins = split_list(plugins_text);
+  const auto ensure = [&plugins](const std::string& id) {
+    if (std::find(plugins.begin(), plugins.end(), id) == plugins.end()) {
+      plugins.push_back(id);
+    }
+  };
+  if (teleop_panel) ensure("teleop");
+  if (manipulator_panel) ensure("manipulator");
+
   krosc::viz::VizWindow window(context);
   window.set_fixed_frame(fixed_frame);
-  window.set_manual_panels(teleop_panel, manipulator_panel);
+  window.load_plugins(registry, plugins);
   window.set_tab(tab == "map" ? 1 : 0);
   if (distance > 0.0) {
     window.set_camera_distance(distance);

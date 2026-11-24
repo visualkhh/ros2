@@ -116,13 +116,13 @@ int main(int argc, char** argv) {
 
   krosc::examples::RobotBridge bridge(context, *robot);
   krosc::examples::MapPublisher map_publisher(context, world.walls());
-  krosc::nodes::RobotStatePublisher robot_state(context, "RobotStatePublisher",
+  krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});
-  krosc::nodes::DiffDriveOdometry odometry(context, "DiffDriveOdometry",
+  krosc::nodes::DiffDriveOdometry odometry(context, "diff_drive_odometry",
                                            {{"publish_tf", false},
                                             {"wheel_radius", krosc::sim::TurtleBot3::kWheelRadius},
                                             {"wheel_separation", krosc::sim::TurtleBot3::kWheelSeparation}});
-  krosc::nodes::Ekf ekf(context, "Ekf",
+  krosc::nodes::Ekf ekf(context, "ekf_filter_node",
                         {{"odom0", std::string("odom")},
                          {"odom0_config", ekf_config({6, 11})},
                          {"imu0", std::string("imu")},

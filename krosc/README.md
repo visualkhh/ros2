@@ -111,7 +111,7 @@ krosc/
 ├── engine/                        # krosc_core (표준 라이브러리만)
 │   ├── CMakeLists.txt
 │   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/action/msgs
-│   │   ├── nodes/                 # DiffDriveOdometry, Ekf, RobotStatePublisher, TfEcho, TwistMux, nav2
+│   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
 │   │   ├── ros2_control/          # controller_manager, JSB/JTC/forward/diff_drive
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
@@ -241,15 +241,39 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)와 `kros/benchmarks/nav2_ben
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 40 + sim 3 = 43 tests, 2 executables
+# core 42 + sim 3 = 45 tests, 2 executables
 ```
 
-- core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux
+- core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - ros2_control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + moveit_* 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
 - ASan/UBSan으로 core/sim 테스트와 데모 실행 검증 완료 (오류/누수 없음)
+
+## 플러그인 구조
+
+nav2/ros2_control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파생 클래스 + 이름→팩토리 레지스트리**로 되어 있다.
+`builtin_*()` 함수는 알고리즘이 아니라 "등록"만 한다.
+
+| 영역 | 베이스 | 구현 (파일 한 세트씩) |
+|---|---|---|
+| nav2 controller | `NavControllerPlugin` (`nodes/nav2/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController` |
+| nav2 planner | `NavPlannerPlugin` (`nodes/nav2/global_planner.hpp`) | `NavfnPlanner`, `ThetaStarPlanner`, `SmacPlanner2D`, `SmacPlannerHybrid` |
+| ros2_control hardware | `SystemInterface` (`ros2_control/hardware_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
+| ros2_control controller | `ControllerInterface` (`ros2_control/controller_interface.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
+| MoveIt kinematics | `MoveItKinematicsPlugin` (`moveit/kinematics_base.hpp`) | `ArmChainKinematics` |
+| MoveIt planner | `MoveItPlannerPlugin` (`moveit/planner_manager.hpp`) | `CartesianPlanner`, `JointSpacePlanner` |
+| MoveIt controller manager | `MoveItControllerManagerPlugin` (`moveit/controller_manager.hpp`) | `SimpleControllerManager` |
+
+새 알고리즘은 베이스 클래스를 상속해 `compute_velocity_commands`/`create_plan`/`plan`/`read`/`write`를
+오버라이드하고, `builtin_*()`에 팩토리를 한 줄 추가하면 된다.
+
+ROS 2와 맞춘 노드 이름:
+
+`robot_state_publisher`, `ekf_filter_node`, `cartographer_node`, `map_server`, `map_saver`,
+`map_catalog`(krosc 전용), `twist_mux`, `velocity_smoother`, `collision_monitor`,
+`planner_server`, `controller_server`, `behavior_server`, `bt_navigator`, `controller_manager`, `move_group`.
 
 ## 지금 된 것 / 다음
 
@@ -263,7 +287,8 @@ ctest --test-dir build --output-on-failure
 - [x] DiffDriveOdometry, Ekf, RobotStatePublisher, TfEcho, TwistMux
 - [x] `sim` 패키지: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, SnapshotRecorder
 - [x] `sim` Qt `SimWindow`: 진실 월드/퍽/로봇/잡음 없는 라이다 (QPainter 3D)
-- [x] `viz` Qt `VizWindow`: 격자, TF 축, URDF, 라이다, odom/filtered, map/costmap, 경로, 궤적, 로그, 패널, teleop
+- [x] `viz` Qt `VizWindow`: 격자, TF 축, URDF, 라이다, odom/filtered, map/costmap, 경로, 궤적, 로그
+- [x] `viz` 코어 플러그인: `teleop`, `slam`, `navigation`, `manipulator` (VizWindow는 기반 UI만)
 - [x] TCP 원격 토픽(9000): 텔레메트리 + `cmd_vel`, latched 다중 tf_static, Mac `krosc_viz_app --server`
 - [x] noVNC: Docker Ubuntu 26.04 안의 sim+viz 두 창을 맥 브라우저로 본다
 - [x] 오프스크린 스크린샷 검증 (`docs/`)

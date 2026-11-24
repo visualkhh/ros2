@@ -14,8 +14,9 @@
                                     │    ├─ diff_drive_controller ─ odom
                                     │    └─ joint_trajectory_controller ─ 팔
                                     ├─ MoveGroup (MoveIt 플러그인) ─ moveit_*
-                                    ├─ RobotStatePublisher (URDF/TF)
-                                    ├─ Ekf ─ odometry/filtered + odom->base_footprint TF
+                                    ├─ robot_state_publisher (URDF/TF)
+                                    ├─ ekf_filter_node ─ odometry/filtered + odom->base_footprint TF
+                                    ├─ map_server / map_saver / map_catalog
                                     ├─ nav2: planner/controller/behavior/bt_navigator
                                     └─ net::Server (TCP 9000) ──> [맥] krosc_ws_viz_app
                                              ^ cmd_vel / goal / moveit_*
@@ -56,10 +57,13 @@ KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 `KROSC_VIZ_PLUGINS` 환경 변수를 따른다.
 기본은 **Map 탭**(RViz 스타일 occupancy 이미지)이고, `KROSC_VIZ_TAB=3d ./run-viz.sh`,
 `KROSC_VIZ_TAB=moveit ./run-viz.sh`, `KROSC_VIZ_TAB=project ./run-viz.sh`로 시작 탭을 바꿀 수 있다.
-Teleop/Manipulator/MoveIt 도킹 패널을 함께 띄운다. 추가 인자는 그대로 viz에 넘긴다:
+SLAM/Map, Navigation, MoveIt, RL 도킹이 기본으로 붙는다. 텔레옵/매니퓰레이터는
+`--teleop`, `--manipulator`, `--manual`로 추가한다. 추가 인자는 그대로 viz에 넘긴다:
 `./run-viz.sh --screenshot /tmp/viz.png --duration 3`, `./run-viz.sh --no-moveit`.
 
-기본 플러그인은 `project_panel,moveit,rl_nav`이며 `KROSC_VIZ_PLUGINS`로 바꿀 수 있다.
+기본 플러그인은 `project_panel,slam,navigation,moveit,rl_nav`이며
+`KROSC_VIZ_PLUGINS`로 바꿀 수 있다. 코어 플러그인은 `teleop`, `slam`, `navigation`,
+`manipulator`이고 프로젝트 플러그인은 `project_panel`, `moveit`, `rl_nav`다.
 
 Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 
@@ -71,6 +75,9 @@ Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 ### 지도 폴더
 
 기본 지도 폴더는 **`~/ros2/kos_ws/artifacts/maps`** (Python `kos_ws`와 공유)다.
+지도 하나 = 폴더 하나(`<이름>/map.yaml` + `map.pgm`)이고, ROS 2처럼
+`map_server`(load_map/unload_map)와 `map_saver`(save_map)가 실제 파일 I/O를 맡는다.
+`map_catalog`는 목록/선택 토픽(`map_list`, `map_change`, `map_save`, `map_status`)만 담당한다.
 `krosc_ws/CMakeLists.txt`의 `KROSC_WS_MAPS_DIR`로 정해지고, 실행할 때 바꿀 수 있다:
 
 ```bash
@@ -205,9 +212,13 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 ```
 
 - 플러그인은 프로젝트 안에서 자유롭게 작성/빌드한다.
-- 코어 `krosc_viz_app`은 공통/최소 앱으로 남아 있고, `run-viz.sh`는 프로젝트 앱을 사용한다.
-- MoveIt은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 프로젝트 플러그인으로 분리되어 있다.
-- 다음 단계는 Teleop/Manipulator, SLAM/Navigation/Displays의 코어 플러그인 이동과 프로필(YAML) 로딩이다.
+- 코어 `krosc_viz_app`은 공통/최소 앱(디스플레이 토글/토픽/TF)으로 남아 있고,
+  `run-viz.sh`는 프로젝트 앱을 사용한다.
+- 코어 Viz 플러그인: `krosc/viz/plugins/teleop_plugin.cpp`(주행 텔레옵),
+  `slam_plugin.cpp`(SLAM/지도), `navigation_plugin.cpp`(2D Pose/Goal/Multi Goal),
+  `manipulator_plugin.cpp`(수동 관절).
+- 프로젝트 플러그인: `krosc_ws/viz/plugins/project_panel.cpp`, `moveit_plugin.cpp`, `rl_nav_plugin.cpp`.
+- 남은 코어 후보: Displays/Topics 패널의 플러그인화, YAML 프로필 로딩.
 
 ## RL navigation (rl_nav_controller)
 
@@ -345,6 +356,9 @@ ctest --test-dir build --output-on-failure
 - OpenCR S/I/E 파싱, C 명령 포맷
 - LDS-03 패킷 체크섬/링 시작/역방향 각도
 - PTY를 이용한 OpenCrSerial 왕복 (S/I 읽기, C 쓰기)
+- `map_server/load_map`·`unload_map`, `map_saver/save_map` 왕복
+- ros2_control diff drive odom, MoveIt 실제 URDF IK→계획→JTC 실행
+- RL 모델 폴더 스캔/선택 (`rl_nav_model_list`)
 
 ## 아직 안 된 것
 

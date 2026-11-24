@@ -18,7 +18,7 @@ inline constexpr const char* ODOM_TOPIC_NAME = "odom";
 // odom 토픽과 (publish_tf=True면) odom -> base_frame TF를 낸다.
 class DiffDriveOdometry final : public Node {
  public:
-  explicit DiffDriveOdometry(Context& context, std::string name = "DiffDriveOdometry",
+  explicit DiffDriveOdometry(Context& context, std::string name = "diff_drive_odometry",
                              std::map<std::string, ParamValue> parameters = {});
 
   [[nodiscard]] double x() const { return x_; }

@@ -104,9 +104,9 @@ class MoveGroup final : public Node {
   KinematicsRegistry kinematics_registry_;
   PlannerRegistry planner_registry_;
   ControllerManagerRegistry controller_registry_;
-  std::unique_ptr<KinematicsBase> kinematics_;
-  std::unique_ptr<PlannerManager> planner_;
-  std::unique_ptr<MoveItControllerManager> controller_manager_;
+  std::unique_ptr<MoveItKinematicsPlugin> kinematics_;
+  std::unique_ptr<MoveItPlannerPlugin> planner_;
+  std::unique_ptr<MoveItControllerManagerPlugin> controller_manager_;
 
   mutable std::mutex mutex_;
   std::string robot_description_;

@@ -64,7 +64,7 @@ class ControllerServer final : public Node {
 
   Costmap2DROS& costmap_;
   ControllerRegistry registry_;
-  std::map<std::string, std::unique_ptr<Controller>> controllers_;
+  std::map<std::string, std::unique_ptr<NavControllerPlugin>> controllers_;
   Parameter<std::vector<std::string>> controller_plugins_;
   Parameter<double> controller_frequency_;
   Parameter<std::string> odom_topic_;

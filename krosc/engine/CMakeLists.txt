@@ -21,6 +21,8 @@ add_library(krosc_core STATIC
   core/nodes/velocity_smoother.cpp
   core/nodes/navigator.cpp
   core/nodes/map_catalog.cpp
+  core/nodes/map_saver.cpp
+  core/nodes/map_server.cpp
   core/nodes/map_io.cpp
   core/nodes/diff_drive_odometry.cpp
   core/nodes/ekf.cpp
@@ -31,16 +33,31 @@ add_library(krosc_core STATIC
   core/nodes/nav2/bt_navigator.cpp
   core/nodes/nav2/controller_plugins.cpp
   core/nodes/nav2/controller_server.cpp
+  core/nodes/nav2/dwb_local_planner.cpp
+  core/nodes/nav2/mppi_controller.cpp
+  core/nodes/nav2/regulated_pure_pursuit_controller.cpp
   core/nodes/nav2/costmap.cpp
   core/nodes/nav2/costmap_2d_ros.cpp
+  core/nodes/nav2/navfn_planner.cpp
   core/nodes/nav2/planner_plugins.cpp
   core/nodes/nav2/planner_server.cpp
+  core/nodes/nav2/smac_planner_2d.cpp
+  core/nodes/nav2/smac_planner_hybrid.cpp
+  core/nodes/nav2/theta_star_planner.cpp
   core/ros2_control/controller_manager.cpp
   core/ros2_control/diff_drive_controller.cpp
   core/ros2_control/forward_command_controller.cpp
   core/ros2_control/joint_state_broadcaster.cpp
   core/ros2_control/joint_trajectory_controller.cpp
+  core/moveit/arm_chain_kinematics.cpp
+  core/moveit/cartesian_planner.cpp
+  core/moveit/controller_manager_plugins.cpp
+  core/moveit/joint_space_planner.cpp
+  core/moveit/kinematics_plugins.cpp
   core/moveit/move_group.cpp
+  core/moveit/planner_manager.cpp
+  core/moveit/planner_plugins.cpp
+  core/moveit/simple_controller_manager.cpp
 )
 
 add_library(krosc::core ALIAS krosc_core)
@@ -66,6 +83,7 @@ if(KROSC_BUILD_TESTS)
     tests/test_nodes.cpp
     tests/test_cartographer.cpp
     tests/test_map_io.cpp
+    tests/test_map_nodes.cpp
     tests/test_net.cpp
     tests/test_nav2.cpp
     tests/test_ros2_control.cpp

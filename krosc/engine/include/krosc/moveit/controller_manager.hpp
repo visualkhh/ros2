@@ -19,9 +19,9 @@ using FollowJointTrajectoryHandle =
                      msgs::control::FollowJointTrajectoryFeedback,
                      msgs::control::FollowJointTrajectoryResult>;
 
-class MoveItControllerManager {
+class MoveItControllerManagerPlugin {
  public:
-  virtual ~MoveItControllerManager() = default;
+  virtual ~MoveItControllerManagerPlugin() = default;
 
   virtual bool initialize(Node& node, const std::string& name,
                           const std::vector<std::string>& joints) = 0;
@@ -31,14 +31,14 @@ class MoveItControllerManager {
   [[nodiscard]] virtual std::string type() const = 0;
 };
 
-using ControllerManagerFactory = std::function<std::unique_ptr<MoveItControllerManager>()>;
+using ControllerManagerFactory = std::function<std::unique_ptr<MoveItControllerManagerPlugin>()>;
 
 class ControllerManagerRegistry {
  public:
   void add(const std::string& type, ControllerManagerFactory factory) {
     factories_[type] = std::move(factory);
   }
-  [[nodiscard]] std::unique_ptr<MoveItControllerManager> create(const std::string& type) const {
+  [[nodiscard]] std::unique_ptr<MoveItControllerManagerPlugin> create(const std::string& type) const {
     const auto it = factories_.find(type);
     return it == factories_.end() ? nullptr : it->second();
   }
@@ -56,55 +56,6 @@ class ControllerManagerRegistry {
   std::map<std::string, ControllerManagerFactory> factories_;
 };
 
-// moveit_simple_controller_manager와 같은 역할: 정해진 액션 이름으로 궤적을 보낸다.
-class SimpleControllerManager final : public MoveItControllerManager {
- public:
-  bool initialize(Node& node, const std::string& name,
-                  const std::vector<std::string>& joints) override {
-    joints_ = joints;
-    action_name_ = node.declare_parameter<std::string>(name + ".action",
-                                                       "joint_trajectory_controller/follow_joint_trajectory");
-    client_ = std::make_unique<ActionClient<msgs::control::FollowJointTrajectoryGoal,
-                                            msgs::control::FollowJointTrajectoryFeedback,
-                                            msgs::control::FollowJointTrajectoryResult>>(
-        node.context(), action_name_.value());
-    return true;
-  }
-
-  [[nodiscard]] std::shared_ptr<FollowJointTrajectoryHandle> send(
-      const msgs::control::JointTrajectory& trajectory) override {
-    try {
-      msgs::control::FollowJointTrajectoryGoal goal;
-      goal.trajectory = trajectory;
-      goal.goal_time_tolerance = 0.5;
-      return client_->send_goal(goal);
-    } catch (const std::exception&) {
-      return nullptr;
-    }
-  }
-
-  [[nodiscard]] bool cancel(const std::shared_ptr<FollowJointTrajectoryHandle>& handle) override {
-    return handle ? handle->cancel() : false;
-  }
-
-  [[nodiscard]] std::string type() const override {
-    return "krosc_moveit/SimpleControllerManager";
-  }
-
- private:
-  Parameter<std::string> action_name_;
-  std::vector<std::string> joints_;
-  std::unique_ptr<ActionClient<msgs::control::FollowJointTrajectoryGoal,
-                               msgs::control::FollowJointTrajectoryFeedback,
-                               msgs::control::FollowJointTrajectoryResult>>
-      client_;
-};
-
-inline ControllerManagerRegistry builtin_controller_managers() {
-  ControllerManagerRegistry registry;
-  registry.add("krosc_moveit/SimpleControllerManager",
-               [] { return std::make_unique<SimpleControllerManager>(); });
-  return registry;
-}
+ControllerManagerRegistry builtin_controller_managers();
 
 }  // namespace krosc::moveit

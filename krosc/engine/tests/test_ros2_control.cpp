@@ -144,7 +144,7 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
   double right_angle_ = 0.0;
 };
 
-class FakeKinematics final : public krosc::moveit::KinematicsBase {
+class FakeKinematics final : public krosc::moveit::MoveItKinematicsPlugin {
  public:
   krosc::moveit::KinematicsResult search_position_ik(
       const krosc::moveit::KinematicsQuery& query) const override {
@@ -158,9 +158,10 @@ class FakeKinematics final : public krosc::moveit::KinematicsBase {
     (void)joints;
     return {};
   }
+  [[nodiscard]] std::string type() const override { return "test/FakeKinematics"; }
 };
 
-class FakePlanner final : public krosc::moveit::PlannerManager {
+class FakePlanner final : public krosc::moveit::MoveItPlannerPlugin {
  public:
   krosc::moveit::PlanningResult plan(const krosc::moveit::PlanningRequest& request) override {
     krosc::moveit::PlanningResult result;

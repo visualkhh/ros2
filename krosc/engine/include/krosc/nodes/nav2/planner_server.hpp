@@ -19,7 +19,7 @@
 
 namespace krosc::nodes::nav2 {
 
-// nav2 planner_server 흉내: compute_path_to_pose 액션을 받아 GlobalPlanner 플러그인으로 계획하고
+// nav2 planner_server 흉내: compute_path_to_pose 액션을 받아 NavPlannerPlugin 플러그인으로 계획하고
 // plan(nav_msgs/Path)을 latch로 낸다. costmap은 별도 Costmap2DROS 노드에서 읽는다.
 class PlannerServer final : public Node {
  public:
@@ -41,7 +41,7 @@ class PlannerServer final : public Node {
 
   Costmap2DROS& costmap_;
   PlannerRegistry registry_;
-  std::map<std::string, std::unique_ptr<GlobalPlanner>> planners_;
+  std::map<std::string, std::unique_ptr<NavPlannerPlugin>> planners_;
   Parameter<std::vector<std::string>> planner_plugins_;
   Parameter<std::string> plan_topic_;
   Buffer buffer_;

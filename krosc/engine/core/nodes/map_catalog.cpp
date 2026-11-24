@@ -1,5 +1,7 @@
 #include "krosc/nodes/map_catalog.hpp"
 
+#include "krosc/msgs/nav2_srv.hpp"
+
 #include <algorithm>
 #include <ctime>
 #include <filesystem>
@@ -7,7 +9,6 @@
 #include <string>
 #include <utility>
 
-#include "krosc/nodes/map_io.hpp"
 #include "krosc/qos.hpp"
 
 namespace krosc::nodes {
@@ -35,7 +36,8 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
   maps_directory_ = declare_parameter<std::string>("maps_directory", std::string(""));
   map_frame_ = declare_parameter<std::string>("map_frame", std::string("map"));
   list_period_ = declare_parameter<double>("list_period", 1.0, positive);
-  map_topic_ = declare_parameter<std::string>("map_topic", std::string("map"));
+  map_server_ = declare_parameter<std::string>("map_server", std::string("map_server"));
+  map_saver_ = declare_parameter<std::string>("map_saver", std::string("map_saver"));
   map_change_topic_ = declare_parameter<std::string>("map_change_topic", std::string("map_change"));
   map_save_topic_ = declare_parameter<std::string>("map_save_topic", std::string("map_save"));
   map_unload_topic_ = declare_parameter<std::string>("map_unload_topic", std::string("map_unload"));
@@ -43,8 +45,6 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
   map_status_topic_ = declare_parameter<std::string>("map_status_topic", std::string("map_status"));
   slam_mode_topic_ = declare_parameter<std::string>("slam_mode_topic", std::string("slam_mode"));
 
-  subscribe<msgs::OccupancyGrid>(
-      map_topic_.value(), [this](const msgs::OccupancyGrid& grid) { on_map(grid); }, QOS_LATCHED);
   subscribe<msgs::String>(
       map_change_topic_.value(), [this](const msgs::String& message) { on_map_change(message); });
   subscribe<msgs::String>(
@@ -147,11 +147,6 @@ void MapCatalog::publish_slam_mode(const std::string& mode) {
 }
 
 
-void MapCatalog::on_map(const msgs::OccupancyGrid& grid) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  map_ = grid;
-}
-
 void MapCatalog::on_map_change(const msgs::String& message) {
   const std::string requested = message.data;
   if (requested.empty()) {
@@ -160,7 +155,6 @@ void MapCatalog::on_map_change(const msgs::String& message) {
       std::lock_guard<std::mutex> lock(mutex_);
       loaded = loaded_name_;
       loaded_name_.clear();
-      map_.reset();
     }
     if (!loaded.empty() && safe_name(loaded)) {
       std::error_code error;
@@ -173,14 +167,13 @@ void MapCatalog::on_map_change(const msgs::String& message) {
     } else {
       publish_status("no map loaded");
     }
-    msgs::OccupancyGrid empty;
-    empty.header.stamp = now();
-    empty.header.frame_id = map_frame_.value();
-    empty.info.resolution = 0.05;
-    empty.info.origin.orientation.w = 1.0;
-    publish(map_topic_.value(), std::move(empty), QOS_LATCHED);
+    try {
+      call_service<msgs::Empty, msgs::Empty>(map_server_.value() + "/unload_map", msgs::Empty{});
+    } catch (const std::exception& error) {
+      logger().warn("map_server unload 실패: %s", error.what());
+    }
     publish_slam_mode("idle");
-      refresh();
+    refresh();
     return;
   }
   if (!safe_name(requested)) {
@@ -193,18 +186,22 @@ void MapCatalog::on_map_change(const msgs::String& message) {
     return;
   }
   try {
-    const msgs::OccupancyGrid grid = load_map(yaml.string(), map_frame_.value(), now());
+    msgs::nav2::LoadMapRequest request;
+    request.map_url = requested;
+    const auto response =
+        call_service<msgs::nav2::LoadMapRequest, msgs::nav2::LoadMapResponse>(
+            map_server_.value() + "/load_map", request);
+    if (response.result != msgs::nav2::LoadMapResponse::RESULT_SUCCESS) {
+      publish_status("load failed: " + requested + " (" + std::to_string(response.result) + ")");
+      return;
+    }
     {
       std::lock_guard<std::mutex> lock(mutex_);
       loaded_name_ = requested;
-      map_ = grid;
     }
-    publish(map_topic_.value(), grid, QOS_LATCHED);
     publish_slam_mode("localization");
     publish_status("loaded " + requested);
     refresh();
-  } catch (const MapIoError& error) {
-    publish_status("load failed: " + std::string(error.what()));
   } catch (const std::exception& error) {
     publish_status("load failed: " + std::string(error.what()));
   }
@@ -214,14 +211,12 @@ void MapCatalog::on_map_unload(const msgs::Empty&) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     loaded_name_.clear();
-    map_.reset();
   }
-  msgs::OccupancyGrid empty;
-  empty.header.stamp = now();
-  empty.header.frame_id = map_frame_.value();
-  empty.info.resolution = 0.05;
-  empty.info.origin.orientation.w = 1.0;
-  publish(map_topic_.value(), std::move(empty), QOS_LATCHED);
+  try {
+    call_service<msgs::Empty, msgs::Empty>(map_server_.value() + "/unload_map", msgs::Empty{});
+  } catch (const std::exception& error) {
+    logger().warn("map_server unload 실패: %s", error.what());
+  }
   publish_slam_mode("idle");
   publish_status("map unloaded");
   refresh();
@@ -236,29 +231,21 @@ void MapCatalog::on_map_save(const msgs::String& message) {
     publish_status("invalid map name: " + name);
     return;
   }
-  msgs::OccupancyGrid grid;
-  bool has_map = false;
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    has_map = map_ && map_->info.width != 0 && map_->info.height != 0;
-    if (has_map) {
-      grid = *map_;
-    }
-  }
-  if (!has_map) {
-    publish_status("save failed: no map yet (start SLAM first)");
-    return;
-  }
-  if (grid.header.frame_id.empty()) {
-    grid.header.frame_id = map_frame_.value();
-  }
   try {
-    const std::string yaml = save_map(grid, map_path(name).string());
+    msgs::nav2::SaveMapRequest request;
+    request.map_url = name + "/map";
+    const auto response =
+        call_service<msgs::nav2::SaveMapRequest, msgs::nav2::SaveMapResponse>(
+            map_saver_.value() + "/save_map", request);
+    if (!response.result) {
+      publish_status("save failed: " + name);
+      return;
+    }
     {
       std::lock_guard<std::mutex> lock(mutex_);
       loaded_name_ = name;
     }
-    publish_status("saved " + name + " (" + yaml + ")");
+    publish_status("saved " + name);
     refresh();
   } catch (const std::exception& error) {
     publish_status("save failed: " + std::string(error.what()));

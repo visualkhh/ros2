@@ -60,6 +60,14 @@ inline bool blocked(const Costmap& costmap, double x, double y) {
   return costmap.cost_at(x, y) >= INSCRIBED_INFLATED_OBSTACLE;
 }
 
+inline double distance_to_path(double x, double y, const std::vector<Pose2>& path) {
+  double best = std::numeric_limits<double>::infinity();
+  for (const auto& point : path) {
+    best = std::min(best, std::hypot(x - point.x, y - point.y));
+  }
+  return best;
+}
+
 inline std::vector<Pose2> simulate(const Pose2& pose, double linear, double angular, double seconds,
                                    double step) {
   std::vector<Pose2> points;
@@ -76,9 +84,9 @@ inline std::vector<Pose2> simulate(const Pose2& pose, double linear, double angu
   return points;
 }
 
-class Controller {
+class NavControllerPlugin {
  public:
-  virtual ~Controller() = default;
+  virtual ~NavControllerPlugin() = default;
   virtual void configure(Node& node, const std::string& name) {
     node_ = &node;
     name_ = name;
@@ -88,6 +96,7 @@ class Controller {
                                              const std::vector<Pose2>& path, const Costmap& costmap,
                                              double dt) = 0;
   [[nodiscard]] const std::vector<Pose2>& local_plan() const { return local_plan_; }
+  [[nodiscard]] virtual std::string type() const = 0;
 
  protected:
   Node* node_ = nullptr;
@@ -95,12 +104,12 @@ class Controller {
   std::vector<Pose2> local_plan_;
 };
 
-using ControllerFactory = std::function<std::unique_ptr<Controller>()>;
+using ControllerFactory = std::function<std::unique_ptr<NavControllerPlugin>()>;
 
 class ControllerRegistry {
  public:
   void add(const std::string& name, ControllerFactory factory) { factories_[name] = std::move(factory); }
-  [[nodiscard]] std::unique_ptr<Controller> create(const std::string& name) const {
+  [[nodiscard]] std::unique_ptr<NavControllerPlugin> create(const std::string& name) const {
     auto it = factories_.find(name);
     return it == factories_.end() ? nullptr : it->second();
   }

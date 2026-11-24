@@ -20,7 +20,7 @@ namespace krosc::nodes {
 // 움직이는 관절(joint_states -> tf)을 낸다.
 class RobotStatePublisher final : public Node {
  public:
-  explicit RobotStatePublisher(Context& context, std::string name = "RobotStatePublisher",
+  explicit RobotStatePublisher(Context& context, std::string name = "robot_state_publisher",
                                std::map<std::string, ParamValue> parameters = {});
 
   [[nodiscard]] const UrdfRobot* robot() const { return robot_ ? &*robot_ : nullptr; }

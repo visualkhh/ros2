@@ -11,6 +11,10 @@
 #include "krosc/context.hpp"
 #include "krosc/net.hpp"
 #include "krosc/time.hpp"
+#include "krosc/viz/plugins/manipulator_plugin.hpp"
+#include "krosc/viz/plugins/navigation_plugin.hpp"
+#include "krosc/viz/plugins/slam_plugin.hpp"
+#include "krosc/viz/plugins/teleop_plugin.hpp"
 #include "krosc/viz/viz_plugin.hpp"
 #include "krosc/viz/viz_window.hpp"
 
@@ -63,11 +67,12 @@ int main(int argc, char** argv) {
   std::string server_text;
   std::string fixed_frame = "map";
   std::string tab = "3d";
-  std::string plugins_text = "project_panel,moveit,rl_nav";
+  std::string plugins_text = "project_panel,slam,navigation,moveit,rl_nav";
   double duration = 2.0;
   double distance = 0.0;
   bool teleop_panel = false;
   bool manipulator_panel = false;
+  bool no_manual = false;
   bool moveit_plugin = true;
   bool moveit_override = false;
   for (int i = 1; i < argc; ++i) {
@@ -91,9 +96,7 @@ int main(int argc, char** argv) {
       manipulator_panel = true;
     } else if (argument == "--teleop") {
       teleop_panel = true;
-      manipulator_panel = false;
     } else if (argument == "--manipulator") {
-      teleop_panel = false;
       manipulator_panel = true;
     } else if (argument == "--moveit") {
       moveit_plugin = true;
@@ -102,8 +105,7 @@ int main(int argc, char** argv) {
       moveit_plugin = false;
       moveit_override = true;
     } else if (argument == "--no-manual") {
-      teleop_panel = false;
-      manipulator_panel = false;
+      no_manual = true;
     } else if (argument == "--no-plugins") {
       plugins_text.clear();
       moveit_plugin = false;
@@ -128,11 +130,31 @@ int main(int argc, char** argv) {
   }
 
   krosc::viz::VizPluginRegistry registry;
+  registry.add("teleop", [] { return std::make_unique<krosc::viz::TeleopPlugin>(); });
+  registry.add("slam", [] { return std::make_unique<krosc::viz::SlamPlugin>(); });
+  registry.add("navigation", [] { return std::make_unique<krosc::viz::NavigationPlugin>(); });
+  registry.add("manipulator", [] { return std::make_unique<krosc::viz::ManipulatorPlugin>(); });
   registry.add("project_panel", [] { return std::make_unique<krosc_ws::viz::ProjectPanelPlugin>(); });
   registry.add("moveit", [] { return std::make_unique<krosc_ws::viz::MoveItPlugin>(); });
   registry.add("rl_nav", [] { return std::make_unique<krosc_ws::viz::RlNavPlugin>(); });
 
   std::vector<std::string> plugins = split_list(plugins_text);
+  const auto ensure_plugin = [&plugins](const std::string& id) {
+    if (std::find(plugins.begin(), plugins.end(), id) == plugins.end()) {
+      plugins.push_back(id);
+    }
+  };
+  if (teleop_panel) {
+    ensure_plugin("teleop");
+  }
+  if (manipulator_panel) {
+    ensure_plugin("manipulator");
+  }
+  if (no_manual) {
+    plugins.erase(std::remove(plugins.begin(), plugins.end(), "teleop"), plugins.end());
+    plugins.erase(std::remove(plugins.begin(), plugins.end(), "manipulator"), plugins.end());
+  }
+
   if (moveit_override) {
     if (moveit_plugin) {
       if (std::find(plugins.begin(), plugins.end(), "moveit") == plugins.end()) {
@@ -145,7 +167,6 @@ int main(int argc, char** argv) {
 
   krosc::viz::VizWindow window(context);
   window.set_fixed_frame(fixed_frame);
-  window.set_manual_panels(teleop_panel, manipulator_panel);
   window.load_plugins(registry, plugins);
   window.set_tab(tab);
   if (distance > 0.0) {

@@ -32,9 +32,9 @@ struct PlanningResult {
   std::string error;
 };
 
-class PlannerManager {
+class MoveItPlannerPlugin {
  public:
-  virtual ~PlannerManager() = default;
+  virtual ~MoveItPlannerPlugin() = default;
 
   virtual bool initialize(Node& node, const std::string& name, const manipulation::ArmChain& chain,
                           const manipulation::PlanOptions& options) {
@@ -49,17 +49,19 @@ class PlannerManager {
   [[nodiscard]] virtual std::string type() const = 0;
 
  protected:
+  [[nodiscard]] PlanningResult run(const PlanningRequest& request, bool cartesian) const;
+
   Node* node_ = nullptr;
   const manipulation::ArmChain* chain_ = nullptr;
   manipulation::PlanOptions options_;
 };
 
-using PlannerFactory = std::function<std::unique_ptr<PlannerManager>()>;
+using PlannerFactory = std::function<std::unique_ptr<MoveItPlannerPlugin>()>;
 
 class PlannerRegistry {
  public:
   void add(const std::string& type, PlannerFactory factory) { factories_[type] = std::move(factory); }
-  [[nodiscard]] std::unique_ptr<PlannerManager> create(const std::string& type) const {
+  [[nodiscard]] std::unique_ptr<MoveItPlannerPlugin> create(const std::string& type) const {
     const auto it = factories_.find(type);
     return it == factories_.end() ? nullptr : it->second();
   }
@@ -77,58 +79,6 @@ class PlannerRegistry {
   std::map<std::string, PlannerFactory> factories_;
 };
 
-class CartesianPlanner final : public PlannerManager {
- public:
-  [[nodiscard]] PlanningResult plan(const PlanningRequest& request) override;
-  [[nodiscard]] std::string type() const override { return "krosc_moveit/CartesianPlanner"; }
-};
-
-class JointSpacePlanner final : public PlannerManager {
- public:
-  [[nodiscard]] PlanningResult plan(const PlanningRequest& request) override;
-  [[nodiscard]] std::string type() const override { return "krosc_moveit/JointSpacePlanner"; }
-};
-
-inline PlanningResult run_planner(const manipulation::ArmChain& chain,
-                                  const manipulation::PlanOptions& base_options,
-                                  const PlanningRequest& request, bool cartesian) {
-  PlanningResult result;
-  manipulation::PlanOptions options = base_options;
-  options.max_joint_speed = request.max_joint_speed;
-  options.max_joint_accel = request.max_joint_accel;
-  options.sample_time = request.sample_time;
-  options.cartesian_speed = request.cartesian_speed;
-  options.cartesian_accel = request.cartesian_accel;
-  options.cartesian = cartesian;
-  auto trajectory = manipulation::plan_trajectory(chain, request.start, request.goal, options,
-                                                  result.error);
-  if (!trajectory) {
-    return result;
-  }
-  result.success = true;
-  result.trajectory = std::move(*trajectory);
-  return result;
-}
-
-inline PlanningResult CartesianPlanner::plan(const PlanningRequest& request) {
-  if (chain_ == nullptr) {
-    return PlanningResult{false, {}, "URDF 체인이 없다"};
-  }
-  return run_planner(*chain_, options_, request, request.cartesian);
-}
-
-inline PlanningResult JointSpacePlanner::plan(const PlanningRequest& request) {
-  if (chain_ == nullptr) {
-    return PlanningResult{false, {}, "URDF 체인이 없다"};
-  }
-  return run_planner(*chain_, options_, request, false);
-}
-
-inline PlannerRegistry builtin_planners() {
-  PlannerRegistry registry;
-  registry.add("krosc_moveit/CartesianPlanner", [] { return std::make_unique<CartesianPlanner>(); });
-  registry.add("krosc_moveit/JointSpacePlanner", [] { return std::make_unique<JointSpacePlanner>(); });
-  return registry;
-}
+PlannerRegistry builtin_planners();
 
 }  // namespace krosc::moveit

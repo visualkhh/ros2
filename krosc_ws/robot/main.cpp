@@ -27,6 +27,8 @@
 #include "krosc/nodes/collision_monitor.hpp"
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/map_catalog.hpp"
+#include "krosc/nodes/map_saver.hpp"
+#include "krosc/nodes/map_server.hpp"
 #include "krosc/nodes/nav2/behavior_server.hpp"
 #include "krosc/nodes/nav2/bt_navigator.hpp"
 #include "krosc/nodes/nav2/controller_server.hpp"
@@ -195,7 +197,7 @@ int main(int argc, char** argv) {
 
   krosc_ws::RealTurtleBot3 robot(opencr_port, lidar_port, enable_lidar);
   krosc_ws::TurtleBot3Driver driver(context, robot);
-  krosc::nodes::RobotStatePublisher robot_state(context, "RobotStatePublisher",
+  krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});
   // ros2_control: OpenCR을 SystemInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
   // joint_states는 이제 joint_state_broadcaster가 내고, MoveIt은 JTC의 FollowJointTrajectory 액션으로 움직인다.
@@ -256,14 +258,14 @@ int main(int argc, char** argv) {
         std::string("joint_trajectory_controller/follow_joint_trajectory")}});
   // IMU yaw rate는 정지 중에도 bias/진동이 커서 EKF에서 제외한다. 휠 오도메트리의
   // yaw 자세(5)를 절대 기준으로 쓰고, vx/vyaw(6/11)만 융합한다.
-  krosc::nodes::Ekf ekf(context, "Ekf",
+  krosc::nodes::Ekf ekf(context, "ekf_filter_node",
                         {{"odom0", std::string("odom")},
                          {"odom0_config", ekf_config({5, 6, 11})},
                          {"frequency", 20.0},
                          {"publish_tf", true}});
   constexpr double kDegreesToRadians = std::numbers::pi / 180.0;
   krosc::nodes::Cartographer cartographer(
-      context, "Cartographer",
+      context, "cartographer_node",
       {{"mode", std::string(slam ? "mapping" : "idle")},
        {"match_every", std::int64_t{4}},
        {"num_matching_points", std::int64_t{20}},
@@ -272,9 +274,15 @@ int main(int argc, char** argv) {
        {"map_publish_period_sec", 2.0},
        {"tf_publish_period_sec", 0.05},
        {"tf_smoothing", 0.35}});
+  krosc::nodes::MapServer map_server(
+      context, "map_server",
+      {{"maps_directory", maps_dir}, {"topic_name", std::string("map")}, {"frame_id", std::string("map")}});
+  krosc::nodes::MapSaver map_saver(context, "map_saver", {{"maps_directory", maps_dir}});
   krosc::nodes::MapCatalog maps(context, "map_catalog",
                                 {{"maps_directory", maps_dir},
                                  {"map_frame", std::string("map")},
+                                 {"map_server", std::string("map_server")},
+                                 {"map_saver", std::string("map_saver")},
                                  {"list_period", 1.0}});
   // nav2처럼 내비게이션을 노드로 나눈다: costmap_2d -> planner_server -> controller_server -> bt_navigator.
   // 토픽 이름(plan, local_plan, global/local_costmap/costmap, goal_pose(s), preview_goal(s),

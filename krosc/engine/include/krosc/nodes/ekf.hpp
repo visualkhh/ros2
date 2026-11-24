@@ -24,7 +24,7 @@ inline constexpr const char* FILTERED_TOPIC_NAME = "odometry/filtered";
 // 상태 [x, y, yaw, v, w]를 일정 속도 모델로 예측하고 바퀴 오도메트리/IMU로 고친다.
 class Ekf final : public Node {
  public:
-  explicit Ekf(Context& context, std::string name = "Ekf", std::map<std::string, ParamValue> parameters = {});
+  explicit Ekf(Context& context, std::string name = "ekf_filter_node", std::map<std::string, ParamValue> parameters = {});
 
   [[nodiscard]] std::array<double, 5> state() const { return state_; }
   [[nodiscard]] std::uint64_t rejected() const { return rejected_.load(std::memory_order_relaxed); }

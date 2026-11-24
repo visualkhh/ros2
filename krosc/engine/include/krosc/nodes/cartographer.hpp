@@ -23,7 +23,7 @@ namespace krosc::nodes {
 // localization은 map_server가 낸 지도에 맞춰 위치만 고친다. /initialpose(2D Pose Estimate)를 받는다.
 class Cartographer final : public Node {
  public:
-  explicit Cartographer(Context& context, std::string name = "Cartographer",
+  explicit Cartographer(Context& context, std::string name = "cartographer_node",
                         std::map<std::string, ParamValue> parameters = {});
   ~Cartographer() override = default;
 

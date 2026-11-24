@@ -1,38 +1,31 @@
 #pragma once
 
-#include <QHash>
 #include <QMainWindow>
 
-#include <array>
-#include <memory>
 #include <map>
-#include <optional>
+#include <memory>
 #include <string>
-#include <tuple>
 #include <vector>
 
 #include "krosc/context.hpp"
 #include "krosc/viz/scene_view.hpp"
-#include "krosc/viz/viz_plugin.hpp"
 #include "krosc/viz/viz_model.hpp"
+#include "krosc/viz/viz_plugin.hpp"
 
 class QCheckBox;
 class QComboBox;
 class QDockWidget;
-class QDoubleSpinBox;
 class QLabel;
-class QLineEdit;
-class QPushButton;
-class QSlider;
 class QTableWidget;
 class QTabWidget;
 class QTimer;
-class QVBoxLayout;
 
 namespace krosc::viz {
 
 class MapView2D;
 
+// 코어 Viz 창. 화면/토픽/TF/디스플레이 토글만 담당한다.
+// 텔레옵, SLAM/지도, 주행 목표, 매니퓰레이터는 플러그인으로 붙인다.
 class VizWindow : public QMainWindow, public VizHost {
   Q_OBJECT
 
@@ -54,39 +47,13 @@ class VizWindow : public QMainWindow, public VizHost {
   void set_tab(int index);
   void set_tab(const std::string& name);
   void set_camera_distance(double distance);
+  // 호환용: 실제 텔레옵/매니퓰레이터는 플러그인이 만든다.
   void set_manual_panels(bool teleop, bool manipulator);
   [[nodiscard]] bool save_screenshot(const QString& path);
 
- protected:
-  bool eventFilter(QObject* watched, QEvent* event) override;
-
  private:
   void build_panel(QWidget* panel);
-  void build_slam_panel(QWidget* panel, QVBoxLayout* layout);
   void refresh_topics();
-  void refresh_slam();
-  void update_tool_buttons();
-  void update_collision_button();
-  void build_manual_docks();
-  void build_teleop_dock();
-  void build_manipulator_dock();
-  void publish_teleop_pad();
-  void send_arm_target();
-  void refresh_manual();
-  void cancel_moveit_if_executing();
-  void reset_arm();
-  [[nodiscard]] QString arm_error_summary() const;
-  void set_arm_slider_values(const std::array<double, 5>& positions);
-  void set_tool(const std::string& tool);
-  void sync_waypoints();
-  void update_multi_label();
-  void remove_last_multi_goal();
-  void handle_tool_pose(const std::string& tool, double x, double y, double yaw, bool from_map);
-  void publish_pose(const std::string& topic, double x, double y, double yaw, bool from_map);
-  void publish_multi(bool preview);
-  void send_pending();
-  [[nodiscard]] std::string map_status_text() const;
-  [[nodiscard]] std::string slam_status_text() const;
 
   VizModel model_;
   std::vector<std::unique_ptr<IVizPlugin>> plugins_;
@@ -97,57 +64,10 @@ class VizWindow : public QMainWindow, public VizHost {
   QTableWidget* table_ = nullptr;
   QLabel* stats_label_ = nullptr;
   QLabel* connection_label_ = nullptr;
-  std::map<std::string, QCheckBox*> toggles_;
-  QComboBox* map_combo_ = nullptr;
-  QLineEdit* map_name_ = nullptr;
-  QLabel* slam_mode_label_ = nullptr;
-  QLabel* slam_status_label_ = nullptr;
-  QLabel* multi_label_ = nullptr;
   QLabel* tf_label_ = nullptr;
-  QLabel* teleop_label_ = nullptr;
-  QPushButton* slam_button_ = nullptr;
-  QPushButton* pose_button_ = nullptr;
-  QPushButton* goal_button_ = nullptr;
-  QPushButton* multi_button_ = nullptr;
-  QPushButton* collision_button_ = nullptr;
-  bool collision_enabled_ = true;
-  QPushButton* preview_button_ = nullptr;
-  QSlider* teleop_slider_ = nullptr;
-  std::vector<std::tuple<double, double, double>> multi_goals_;
-  std::optional<std::tuple<double, double, double>> last_single_goal_;
-  bool preview_mode_ = false;
-  std::string last_map_status_;
-  std::string active_tool_;
+  std::map<std::string, QCheckBox*> toggles_;
   QTimer* paint_timer_ = nullptr;
   QTimer* refresh_timer_ = nullptr;
-  QTimer* slam_timer_ = nullptr;
-
-  QDockWidget* teleop_dock_ = nullptr;
-  QDockWidget* manipulator_dock_ = nullptr;
-  std::array<QSlider*, 4> arm_sliders_{};
-  std::array<QLabel*, 4> arm_value_labels_{};
-  QSlider* gripper_slider_ = nullptr;
-  QLabel* gripper_value_label_ = nullptr;
-  QLabel* arm_status_label_ = nullptr;
-  QPushButton* arm_torque_button_ = nullptr;
-  QComboBox* arm_reset_target_ = nullptr;
-  QPushButton* arm_reset_button_ = nullptr;
-  QTimer* teleop_pad_timer_ = nullptr;
-  QTimer* arm_send_timer_ = nullptr;
-  QTimer* manual_refresh_timer_ = nullptr;
-  int teleop_direction_ = 0;
-  QHash<int, int> teleop_key_codes_;
-  double teleop_last_linear_ = 0.0;
-  double teleop_last_angular_ = 0.0;
-  std::array<double, 5> arm_target_{};
-  std::array<double, 5> arm_output_{};
-  bool arm_moving_ = false;
-  bool arm_initialized_ = false;
-  bool arm_updating_ = false;
-  bool arm_torque_on_ = true;
-  double arm_speed_ = 0.35;
-  QSlider* arm_speed_slider_ = nullptr;
-  QLabel* arm_speed_label_ = nullptr;
 };
 
 }  // namespace krosc::viz
