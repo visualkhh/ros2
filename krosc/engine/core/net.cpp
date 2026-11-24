@@ -873,6 +873,18 @@ struct Server::Impl {
         if (auto message = decode_string(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
         }
+      } else if (topic == "rl_nav_enable" && kind == Kind::Bool) {
+        Reader reader(payload);
+        if (auto message = decode_bool(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if (topic == "rl_nav_fallback" && kind == Kind::String) {
+        Reader reader(payload);
+        if (auto message = decode_string(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
+      } else if (topic == "rl_nav_reload" && kind == Kind::Empty) {
+        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
       } else if ((topic == "moveit_target" || topic == "moveit_scrub") && kind == Kind::String) {
         Reader reader(payload);
         if (auto message = decode_string(reader)) {
@@ -1088,6 +1100,9 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
       "arm_status", Kind::String, QOS_DEFAULT, false,
+      [](Writer& w, const msgs::String& message) { encode(w, message); });
+  impl_->subscribe_topic<msgs::String>(
+      "rl_nav_status", Kind::String, QOS_DEFAULT, false,
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
       "moveit_status", Kind::String, QOS_DEFAULT, false,
@@ -1508,6 +1523,15 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
       "moveit_execute", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
   impl_->forward_topic<msgs::Empty>(
       "moveit_cancel", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
+  impl_->forward_topic<msgs::Bool>(
+      "rl_nav_enable", Kind::Bool,
+      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "rl_nav_fallback", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Empty>(
+      "rl_nav_reload", Kind::Empty,
+      [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
   impl_->reader_thread = std::thread([impl = impl_.get()] { impl->reader_loop(); });
   impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
 }

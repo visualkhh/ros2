@@ -58,6 +58,7 @@ class VizModel {
   [[nodiscard]] std::shared_ptr<const msgs::String> goal_status() const;
   [[nodiscard]] std::shared_ptr<const msgs::String> collision_status() const;
   [[nodiscard]] std::shared_ptr<const msgs::String> arm_status() const;
+  [[nodiscard]] std::shared_ptr<const msgs::String> rl_nav_status() const;
   [[nodiscard]] std::shared_ptr<const msgs::String> moveit_status() const;
   [[nodiscard]] std::shared_ptr<const msgs::String> moveit_state() const;
   [[nodiscard]] std::shared_ptr<const msgs::PoseStamped> moveit_target_pose() const;
@@ -134,6 +135,7 @@ class VizModel {
   std::shared_ptr<const msgs::String> goal_status_;
   std::shared_ptr<const msgs::String> collision_status_;
   std::shared_ptr<const msgs::String> arm_status_;
+  std::shared_ptr<const msgs::String> rl_nav_status_;
   std::shared_ptr<const msgs::String> moveit_status_;
   std::shared_ptr<const msgs::String> moveit_state_;
   std::shared_ptr<const msgs::PoseStamped> moveit_target_pose_;

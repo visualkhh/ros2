@@ -37,6 +37,10 @@
 #include "real_turtlebot3.hpp"
 #include "robot_bridge.hpp"
 
+#ifdef KROSC_WS_ENABLE_RL_NAV
+#include "nodes/rl_nav_controller.hpp"
+#endif
+
 #ifndef KROSC_WS_URDF_PATH
 #define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"
 #endif
@@ -237,7 +241,23 @@ int main(int argc, char** argv) {
                                      {"inflation", 0.24},
                                      {"xy_tolerance", 0.20},
                                      {"yaw_tolerance", 0.35}});
-  krosc::nodes::TwistMux mux(context, "twist_mux", {{"cmd_vel_out", std::string("cmd_vel_mux")}});
+#ifdef KROSC_WS_ENABLE_RL_NAV
+  krosc_ws::RlNavController rl_nav(context, "rl_nav_controller",
+                                   {{"enable", false}, {"fallback", std::string("pursuit")}});
+#endif
+  krosc::nodes::TwistMux mux(
+      context, "twist_mux",
+      {{"cmd_vel_out", std::string("cmd_vel_mux")},
+       {"topics", std::vector<std::string>{"navigation", "rl", "teleop"}},
+       {"navigation.topic", std::string("cmd_vel_nav")},
+       {"navigation.priority", std::int64_t{10}},
+       {"navigation.timeout", 0.3},
+       {"rl.topic", std::string("cmd_vel_rl")},
+       {"rl.priority", std::int64_t{90}},
+       {"rl.timeout", 0.2},
+       {"teleop.topic", std::string("cmd_vel_teleop")},
+       {"teleop.priority", std::int64_t{100}},
+       {"teleop.timeout", 0.5}});
   krosc::nodes::VelocitySmoother smoother(
       context, "velocity_smoother",
       {{"cmd_vel_in_topic", std::string("cmd_vel_mux")},

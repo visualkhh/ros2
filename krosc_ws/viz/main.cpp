@@ -16,6 +16,7 @@
 
 #include "plugins/moveit_plugin.hpp"
 #include "plugins/project_panel.hpp"
+#include "plugins/rl_nav_plugin.hpp"
 
 namespace {
 
@@ -62,7 +63,7 @@ int main(int argc, char** argv) {
   std::string server_text;
   std::string fixed_frame = "map";
   std::string tab = "3d";
-  std::string plugins_text = "project_panel,moveit";
+  std::string plugins_text = "project_panel,moveit,rl_nav";
   double duration = 2.0;
   double distance = 0.0;
   bool teleop_panel = false;
@@ -129,6 +130,7 @@ int main(int argc, char** argv) {
   krosc::viz::VizPluginRegistry registry;
   registry.add("project_panel", [] { return std::make_unique<krosc_ws::viz::ProjectPanelPlugin>(); });
   registry.add("moveit", [] { return std::make_unique<krosc_ws::viz::MoveItPlugin>(); });
+  registry.add("rl_nav", [] { return std::make_unique<krosc_ws::viz::RlNavPlugin>(); });
 
   std::vector<std::string> plugins = split_list(plugins_text);
   if (moveit_override) {

@@ -13,7 +13,7 @@ set(KROSC_BUILD_VIZ OFF)
 set(KROSC_BUILD_EXAMPLES OFF)
 add_subdirectory(../krosc/engine engine_build)
 
-add_executable(krosc_real
+set(KROSC_REAL_SOURCES
   robot/main.cpp
   robot/robot_bridge.cpp
   robot/real_turtlebot3.cpp
@@ -23,6 +23,30 @@ add_executable(krosc_real
   robot/hardwares/serial.cpp
 )
 
+# RL nav: ONNX Runtime은 ROS 2 lyrical vendor를 우선 찾고, 없으면 RL만 제외한다.
+option(KROSC_WS_BUILD_RL_NAV "Build ONNX RL navigation controller" ON)
+set(KROSC_WS_ONNXRUNTIME_ROOT "/opt/ros/lyrical/opt/onnxruntime_vendor" CACHE PATH
+    "ONNX Runtime vendor root (include/, lib/)")
+set(KROSC_WS_RL_NAV_FOUND OFF)
+if(KROSC_WS_BUILD_RL_NAV)
+  find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
+    HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT
+    PATH_SUFFIXES include)
+  find_library(ONNXRUNTIME_LIBRARY onnxruntime
+    HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT
+    PATH_SUFFIXES lib)
+  if(ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIBRARY)
+    list(APPEND KROSC_REAL_SOURCES
+      robot/ml/onnx_policy.cpp
+      robot/nodes/rl_nav_controller.cpp)
+    set(KROSC_WS_RL_NAV_FOUND ON)
+  else()
+    message(STATUS "krosc_ws: ONNX Runtime을 찾지 못해 RL nav를 제외한다")
+  endif()
+endif()
+
+add_executable(krosc_real ${KROSC_REAL_SOURCES})
+
 target_include_directories(krosc_real PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/robot
   ${CMAKE_CURRENT_SOURCE_DIR})
@@ -30,7 +54,17 @@ target_link_libraries(krosc_real PRIVATE krosc::core)
 target_compile_definitions(krosc_real PRIVATE
   KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
   KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"
+  KROSC_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/models"
 )
+if(KROSC_WS_RL_NAV_FOUND)
+  target_include_directories(krosc_real PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+  target_link_libraries(krosc_real PRIVATE ${ONNXRUNTIME_LIBRARY})
+  target_compile_definitions(krosc_real PRIVATE KROSC_WS_ENABLE_RL_NAV=1)
+  get_filename_component(ONNXRUNTIME_LIBRARY_DIR "${ONNXRUNTIME_LIBRARY}" DIRECTORY)
+  set_target_properties(krosc_real PROPERTIES
+    BUILD_RPATH "${ONNXRUNTIME_LIBRARY_DIR}"
+    INSTALL_RPATH "${ONNXRUNTIME_LIBRARY_DIR}")
+endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(krosc_real PRIVATE -Wno-psabi)
 endif()

@@ -53,7 +53,7 @@ KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 Teleop/Manipulator/MoveIt 도킹 패널을 함께 띄운다. 추가 인자는 그대로 viz에 넘긴다:
 `./run-viz.sh --screenshot /tmp/viz.png --duration 3`, `./run-viz.sh --no-moveit`.
 
-기본 플러그인은 `project_panel,moveit`이며 `KROSC_VIZ_PLUGINS`로 바꿀 수 있다.
+기본 플러그인은 `project_panel,moveit,rl_nav`이며 `KROSC_VIZ_PLUGINS`로 바꿀 수 있다.
 
 Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 
@@ -191,6 +191,32 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 - MoveIt은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 프로젝트 플러그인으로 분리되어 있다.
 - 다음 단계는 Teleop/Manipulator, SLAM/Navigation/Displays의 코어 플러그인 이동과 프로필(YAML) 로딩이다.
 
+## RL navigation (rl_nav_controller)
+
+Isaac `rl_maze` 정책(52관측 → 2행동, 20Hz)을 Pi에서 ONNX Runtime으로 실행한다.
+
+- 모델: `models/rl_maze/policy.onnx` + `policy.onnx.data` (둘 다 필요)
+- 노드: `robot/nodes/rl_nav_controller.cpp`
+- Viz: `viz/plugins/rl_nav_plugin.cpp` — RL ON/OFF, fallback, 상태
+- 기본은 **RL OFF**. Viz의 `RL Nav` 도크에서 켠다.
+
+```text
+teleop   priority 100
+rl       priority  90   cmd_vel_rl
+nav      priority  10   cmd_vel_nav (기존 Navigator: A* + pure pursuit)
+```
+
+fallback:
+
+- `pursuit` — RL이 꺼지거나 실패하면 기존 Navigator가 주행
+- `stop` — `cmd_vel_rl=0`으로 정지
+
+RL이 켜져도 scan/odom/plan/TF가 없거나 추론이 실패하면 자동으로 fallback한다.
+`infer_ms`, `scan_age`, `reason`은 `rl_nav_status`로 Viz에 표시된다.
+
+ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 사용하고,
+없으면 `KROSC_WS_BUILD_RL_NAV=OFF`로 RL만 제외할 수 있다.
+
 ## MoveIt-lite
 
 Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 플러그인이다.
@@ -218,6 +244,8 @@ krosc_ws/
 │   ├── main.cpp                 # 50Hz 실시간 루프, 노드 조립, TCP 서버
 │   ├── robot_bridge.cpp/.hpp    # cmd_vel, scan/imu/joint_states/diagnostics
 │   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
+│   ├── nodes/rl_nav_controller.cpp
+│   ├── ml/onnx_policy.cpp/.hpp
 │   ├── hardwares/
 │   │   ├── serial.cpp/.hpp          # POSIX termios
 │   │   ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
@@ -228,6 +256,7 @@ krosc_ws/
 │   ├── main.cpp
 │   ├── CMakeLists.txt
 │   └── plugins/
+├── models/rl_maze/              # policy.onnx + policy.onnx.data
 ├── firmware/opencr/             # 이 프로젝트 전용 OpenCR 펌웨어 사본
 │   ├── turtlebot_opencr/turtlebot_opencr.ino
 │   ├── turtlebot_opencr/arm_config.h

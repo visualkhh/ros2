@@ -26,6 +26,7 @@ VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_,
   subscribe_latest<msgs::String>("goal_status", goal_status_, QOS_LATCHED);
   subscribe_latest<msgs::String>("collision_status", collision_status_, QOS_LATCHED);
   subscribe_latest<msgs::String>("arm_status", arm_status_, QOS_DEFAULT);
+  subscribe_latest<msgs::String>("rl_nav_status", rl_nav_status_, QOS_DEFAULT);
   subscribe_latest<msgs::String>("moveit_status", moveit_status_, QOS_DEFAULT);
   subscribe_latest<msgs::String>("moveit_state", moveit_state_, QOS_DEFAULT);
   subscribe_latest<msgs::PoseStamped>("moveit_target_pose", moveit_target_pose_, QOS_DEFAULT);
@@ -177,6 +178,11 @@ std::shared_ptr<const msgs::String> VizModel::collision_status() const {
 std::shared_ptr<const msgs::String> VizModel::arm_status() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return arm_status_;
+}
+
+std::shared_ptr<const msgs::String> VizModel::rl_nav_status() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return rl_nav_status_;
 }
 
 std::shared_ptr<const msgs::String> VizModel::moveit_status() const {

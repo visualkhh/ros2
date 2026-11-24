@@ -11,7 +11,7 @@ host="${KROSC_VIZ_HOST:-pak.local}"
 port="${KROSC_VIZ_PORT:-9000}"
 frame="${KROSC_VIZ_FIXED_FRAME:-map}"
 tab="${KROSC_VIZ_TAB:-map}"
-plugins="${KROSC_VIZ_PLUGINS:-project_panel,moveit}"
+plugins="${KROSC_VIZ_PLUGINS:-project_panel,moveit,rl_nav}"
 
 if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists Qt6Widgets; then
   echo "Qt6 Widgets가 필요하다 (viz는 PC에서 실행한다)." >&2
