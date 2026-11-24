@@ -22,9 +22,11 @@ set(CMAKE_AUTORCC ON)
 add_library(krosc_viz STATIC
   src/viz_model.cpp
   src/viz_window.cpp
+  src/map_view.cpp
   src/scene_view.cpp
   include/krosc/viz/viz_model.hpp
   include/krosc/viz/viz_window.hpp
+  include/krosc/viz/map_view.hpp
   include/krosc/viz/scene_view.hpp
 )
 

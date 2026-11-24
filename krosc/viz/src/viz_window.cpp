@@ -13,6 +13,7 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
+#include <QTabWidget>
 #include <QStringList>
 #include <QStatusBar>
 #include <QTableWidget>
@@ -25,6 +26,7 @@
 #include <utility>
 
 #include "krosc/math.hpp"
+#include "krosc/viz/map_view.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 
@@ -87,15 +89,20 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   auto* splitter = new QSplitter(Qt::Horizontal, central);
   splitter->setChildrenCollapsible(false);
   splitter->setHandleWidth(5);
-  scene_ = new SceneView(model_, splitter);
+  tabs_ = new QTabWidget(splitter);
+  auto* tabs = tabs_;
+  scene_ = new SceneView(model_, tabs);
   scene_->setObjectName("scene");
+  map_view_ = new MapView2D(model_, tabs);
+  tabs->addTab(scene_, "3D");
+  tabs->addTab(map_view_, "Map");
 
   auto* panel = new QWidget(splitter);
   panel->setMinimumWidth(300);
   panel->setMaximumWidth(760);
   build_panel(panel);
   splitter->addWidget(panel);
-  splitter->addWidget(scene_);
+  splitter->addWidget(tabs);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
   splitter->setSizes({390, 1050});
@@ -585,6 +592,12 @@ void VizWindow::refresh_topics() {
                             .arg(rows.size())
                             .arg(live)
                             .arg(model_.node().context().node_names().size()));
+}
+
+void VizWindow::set_tab(int index) {
+  if (tabs_ != nullptr) {
+    tabs_->setCurrentIndex(index == 1 ? 1 : 0);
+  }
 }
 
 void VizWindow::set_connection_status(bool connected, const std::string& endpoint) {

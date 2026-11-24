@@ -95,9 +95,9 @@ std::vector<std::string> local_addresses() {
 }
 
 void usage() {
-  std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--no-lidar] [--slam]\n"
+  std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--maps DIR] [--no-lidar] [--slam]\n"
                "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
-               "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000)\n";
+               "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR\n";
 }
 
 }  // namespace
@@ -106,6 +106,7 @@ int main(int argc, char** argv) {
   std::string opencr_port = env_or("OPENCR_PORT", "/dev/opencr");
   std::string lidar_port = env_or("LIDAR_PORT", "");
   std::string urdf_path = KROSC_WS_URDF_PATH;
+  std::string maps_dir = env_or("KROSC_MAPS_DIR", KROSC_WS_MAPS_DIR);
   int server_port = 9000;
   {
     const std::string port_env = env_or("KROSC_SERVER_PORT", "9000");
@@ -127,6 +128,8 @@ int main(int argc, char** argv) {
       server_port = std::stoi(argv[++i]);
     } else if (argument == "--urdf" && i + 1 < argc) {
       urdf_path = argv[++i];
+    } else if (argument == "--maps" && i + 1 < argc) {
+      maps_dir = argv[++i];
     } else if (argument == "--no-lidar") {
       enable_lidar = false;
     } else if (argument == "--slam") {
@@ -205,11 +208,11 @@ int main(int argc, char** argv) {
        {"tf_publish_period_sec", 0.05},
        {"tf_smoothing", 0.35}});
   krosc::nodes::MapCatalog maps(context, "map_catalog",
-                                {{"maps_directory", std::string(KROSC_WS_MAPS_DIR)},
+                                {{"maps_directory", maps_dir},
                                  {"map_frame", std::string("map")},
                                  {"list_period", 1.0}});
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
-  std::printf("[krosc_ws] maps: %s\n", KROSC_WS_MAPS_DIR);
+  std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
 
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);

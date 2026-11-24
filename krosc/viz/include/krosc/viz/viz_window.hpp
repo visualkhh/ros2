@@ -19,10 +19,13 @@ class QLineEdit;
 class QPushButton;
 class QSlider;
 class QTableWidget;
+class QTabWidget;
 class QTimer;
 class QVBoxLayout;
 
 namespace krosc::viz {
+
+class MapView2D;
 
 class VizWindow : public QMainWindow {
   Q_OBJECT
@@ -36,6 +39,7 @@ class VizWindow : public QMainWindow {
 
   void set_fixed_frame(const std::string& frame);
   void set_connection_status(bool connected, const std::string& endpoint);
+  void set_tab(int index);
   [[nodiscard]] bool save_screenshot(const QString& path);
 
  private:
@@ -52,6 +56,8 @@ class VizWindow : public QMainWindow {
 
   VizModel model_;
   SceneView* scene_ = nullptr;
+  QTabWidget* tabs_ = nullptr;
+  MapView2D* map_view_ = nullptr;
   QComboBox* fixed_frame_ = nullptr;
   QTableWidget* table_ = nullptr;
   QLabel* stats_label_ = nullptr;

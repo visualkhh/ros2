@@ -45,8 +45,21 @@ KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 ./run-sim.sh        # 시뮬레이터(진실) + Viz 데모
 ```
 
-`run-viz.sh`는 `KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME` 환경 변수를 따른다.
+`run-viz.sh`는 `KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME`, `KROSC_VIZ_TAB` 환경 변수를 따른다.
+기본은 **Map 탭**(RViz 스타일 occupancy 이미지)이고, `KROSC_VIZ_TAB=3d ./run-viz.sh`면 3D 탭으로 시작한다.
 추가 인자는 그대로 viz에 넘긴다: `./run-viz.sh --screenshot /tmp/viz.png --duration 3`.
+
+### 지도 폴더
+
+기본 지도 폴더는 **`~/ros2/kos_ws/artifacts/maps`** (Python `kos_ws`와 공유)다.
+`krosc_ws/CMakeLists.txt`의 `KROSC_WS_MAPS_DIR`로 정해지고, 실행할 때 바꿀 수 있다:
+
+```bash
+./run.sh --maps /home/pak/ros2/krosc_ws/artifacts/maps
+KROSC_MAPS_DIR=/home/pak/ros2/krosc_ws/artifacts/maps ./run-slam.sh
+```
+
+맵을 `krosc_ws` 소유로 두려면 위 경로에 폴더를 만들고 기존 지도를 복사하거나 심볼릭 링크하면 된다.
 
 ## 실행 (라즈베리파이)
 
