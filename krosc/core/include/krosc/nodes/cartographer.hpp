@@ -34,6 +34,7 @@ class Cartographer final : public Node {
   [[nodiscard]] int scans() const;
   [[nodiscard]] int rejected() const;
   [[nodiscard]] bool localized() const;
+  [[nodiscard]] std::size_t map_cells() const;
   [[nodiscard]] cartographer::Pose2 map_to_odom() const;
 
  private:

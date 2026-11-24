@@ -85,6 +85,11 @@ bool Cartographer::localized() const {
   return localized_;
 }
 
+std::size_t Cartographer::map_cells() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return grid_ ? grid_->size() : 0;
+}
+
 cartographer::Pose2 Cartographer::map_to_odom() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return map_to_odom_;
@@ -266,7 +271,10 @@ void Cartographer::publish_map() {
     own_map_width_ = message.info.width;
     own_map_height_ = message.info.height;
   }
+  const std::uint32_t width = message.info.width;
+  const std::uint32_t height = message.info.height;
   publish("map", std::move(message), QOS_LATCHED);
+  logger().info("지도 발행: %ux%u", width, height);
 }
 
 void Cartographer::publish_tf() {

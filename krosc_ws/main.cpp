@@ -206,6 +206,7 @@ int main(int argc, char** argv) {
   std::fflush(stdout);
   constexpr auto kPeriod = std::chrono::milliseconds(20);
   auto next = std::chrono::steady_clock::now();
+  auto last_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
     robot.tick();
     bridge.poll();
@@ -214,6 +215,13 @@ int main(int argc, char** argv) {
     const auto now = std::chrono::steady_clock::now();
     if (now - next > std::chrono::milliseconds(250)) {
       next = now;
+    }
+    if (now - last_status >= std::chrono::seconds(5)) {
+      last_status = now;
+      std::printf("[krosc_ws] slam: mode=%s scans=%d rejected=%d localized=%s cells=%zu\n",
+                  cartographer.mode().c_str(), cartographer.scans(), cartographer.rejected(),
+                  cartographer.localized() ? "yes" : "no", cartographer.map_cells());
+      std::fflush(stdout);
     }
   }
 
