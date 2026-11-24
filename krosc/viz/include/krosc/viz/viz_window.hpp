@@ -70,6 +70,7 @@ class VizWindow : public QMainWindow {
   QLineEdit* map_name_ = nullptr;
   QLabel* slam_mode_label_ = nullptr;
   QLabel* slam_status_label_ = nullptr;
+  QLabel* multi_label_ = nullptr;
   QLabel* teleop_label_ = nullptr;
   QPushButton* slam_button_ = nullptr;
   QPushButton* pose_button_ = nullptr;

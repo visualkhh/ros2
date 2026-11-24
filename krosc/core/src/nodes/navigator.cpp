@@ -355,6 +355,7 @@ void Navigator::stop(const std::string& status) {
     publish_status(status);
   }
   publish_command(0.0, 0.0);
+  publish_plan(std::vector<msgs::Pose2D>{});
 }
 
 void Navigator::handle_goal(const msgs::PoseStamped& goal_message, bool preview) {

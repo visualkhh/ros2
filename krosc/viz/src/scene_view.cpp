@@ -733,18 +733,45 @@ void SceneView::draw_path(QPainter& painter, const std::shared_ptr<const msgs::P
     return;
   }
   QPolygonF polyline;
+  std::vector<QVector3D> points;
+  std::vector<double> headings;
+  points.reserve(path->poses.size());
+  headings.reserve(path->poses.size());
   for (const auto& pose : path->poses) {
     const msgs::Transform local = transform_of(pose.pose);
     const msgs::Transform composed = tfmath::compose(frame_transform->transform, local);
-    const Projected projected = project(
-        QVector3D(static_cast<float>(composed.translation.x), static_cast<float>(composed.translation.y), 0.03F));
+    const QVector3D point(static_cast<float>(composed.translation.x), static_cast<float>(composed.translation.y), 0.03F);
+    const Projected projected = project(point);
     if (projected.visible) {
       polyline << projected.point;
     }
+    points.push_back(point);
+    headings.push_back(tfmath::yaw_of(composed.rotation));
   }
   painter.setPen(QPen(color, 2.2));
   painter.setBrush(Qt::NoBrush);
   painter.drawPolyline(polyline);
+  double accumulated = 1e9;
+  for (std::size_t index = 0; index < points.size(); ++index) {
+    if (index > 0) {
+      accumulated += std::hypot(static_cast<double>(points[index].x() - points[index - 1].x()),
+                                static_cast<double>(points[index].y() - points[index - 1].y()));
+    }
+    if (accumulated >= 0.8 || index + 1 == points.size()) {
+      accumulated = 0.0;
+      const double length = (index + 1 == points.size()) ? 0.4 : 0.22;
+      const double yaw = headings[index];
+      const QVector3D end(points[index].x() + static_cast<float>(std::cos(yaw) * length),
+                          points[index].y() + static_cast<float>(std::sin(yaw) * length), 0.035F);
+      const QVector3D left(points[index].x() + static_cast<float>(std::cos(yaw + 2.56) * 0.06),
+                           points[index].y() + static_cast<float>(std::sin(yaw + 2.56) * 0.06), 0.035F);
+      const QVector3D right(points[index].x() + static_cast<float>(std::cos(yaw - 2.56) * 0.06),
+                            points[index].y() + static_cast<float>(std::sin(yaw - 2.56) * 0.06), 0.035F);
+      draw_line(painter, points[index], end, color, 2.0);
+      draw_line(painter, end, left, color, 2.0);
+      draw_line(painter, end, right, color, 2.0);
+    }
+  }
 }
 
 void SceneView::draw_trail(QPainter& painter) {
@@ -936,11 +963,11 @@ void SceneView::draw_waypoints(QPainter& painter) const {
     }
     const double yaw = wyaw + offset;
     const QVector3D origin(static_cast<float>(point.x), static_cast<float>(point.y), 0.04F);
-    const QVector3D end(static_cast<float>(point.x + std::cos(yaw) * 0.6),
-                        static_cast<float>(point.y + std::sin(yaw) * 0.6), 0.04F);
-    const QVector3D left(static_cast<float>(point.x + std::cos(yaw + 2.55) * 0.12),
+    const QVector3D end(static_cast<float>(point.x + std::cos(yaw) * 0.42),
+                        static_cast<float>(point.y + std::sin(yaw) * 0.42), 0.04F);
+    const QVector3D left(static_cast<float>(point.x + std::cos(yaw + 2.55) * 0.06),
                          static_cast<float>(point.y + std::sin(yaw + 2.55) * 0.12), 0.04F);
-    const QVector3D right(static_cast<float>(point.x + std::cos(yaw - 2.55) * 0.12),
+    const QVector3D right(static_cast<float>(point.x + std::cos(yaw - 2.55) * 0.06),
                           static_cast<float>(point.y + std::sin(yaw - 2.55) * 0.12), 0.04F);
     draw_line(painter, origin, end, QColor(255, 205, 70, 230), 2.0);
     draw_line(painter, end, left, QColor(255, 205, 70, 230), 2.0);
@@ -968,7 +995,7 @@ void SceneView::draw_tool_preview(QPainter& painter) const {
   const QVector3D end(start.x() + static_cast<float>(std::cos(yaw) * length),
                       start.y() + static_cast<float>(std::sin(yaw) * length), 0.03F);
   draw_line(painter, start, end, color, 4.0);
-  const double kHead = std::min(0.14, 0.20 * length);
+  const double kHead = std::min(0.06, 0.10 * length);
   const QVector3D head_left(start.x() + static_cast<float>(std::cos(yaw + 2.55) * kHead),
                             start.y() + static_cast<float>(std::sin(yaw + 2.55) * kHead), 0.03F);
   const QVector3D head_right(start.x() + static_cast<float>(std::cos(yaw - 2.55) * kHead),

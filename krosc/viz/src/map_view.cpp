@@ -63,7 +63,7 @@ void MapView2D::draw_arrow(QPainter& painter, const QPointF& start, double angle
   const QPointF end(start.x() + std::cos(angle) * length, start.y() - std::sin(angle) * length);
   painter.setPen(QPen(color, 2.0));
   painter.drawLine(start, end);
-  const double head = std::min(0.12 * zoom_, 0.35 * length);
+  const double head = std::min(0.06 * zoom_, 0.22 * length);
   const double a1 = angle + 2.6;
   const double a2 = angle - 2.6;
   painter.drawLine(end, QPointF(end.x() + std::cos(a1) * head, end.y() - std::sin(a1) * head));
@@ -214,7 +214,7 @@ void MapView2D::paintEvent(QPaintEvent* event) {
       }
       if (accumulated >= 0.8 || index + 1 == world.size()) {
         accumulated = 0.0;
-        const double length = (index + 1 == world.size()) ? 0.55 * zoom_ : 0.32 * zoom_;
+        const double length = (index + 1 == world.size()) ? 0.42 * zoom_ : 0.25 * zoom_;
         draw_arrow(painter, to_screen(std::get<0>(world[index]), std::get<1>(world[index])),
                    std::get<2>(world[index]), length, arrow_color);
       }
@@ -234,7 +234,7 @@ void MapView2D::paintEvent(QPaintEvent* event) {
     painter.setBrush(QColor(255, 205, 60, 220));
     painter.drawEllipse(point, 4.0, 4.0);
     painter.setBrush(Qt::NoBrush);
-    draw_arrow(painter, point, yaw, 0.55 * zoom_, QColor(255, 205, 70, 230));
+    draw_arrow(painter, point, yaw, 0.42 * zoom_, QColor(255, 205, 70, 230));
     painter.setPen(QColor(255, 235, 150));
     painter.drawText(point + QPointF(8.0, -8.0), QString("#%1").arg(index + 1));
   }
@@ -332,7 +332,7 @@ void MapView2D::paintEvent(QPaintEvent* event) {
                                   tool_start_map_.y() + std::sin(yaw) * length);
     painter.setPen(QPen(color, 3.0));
     painter.drawLine(start, end);
-    const double head = std::min(0.12 * zoom_, 0.30 * length * zoom_);
+    const double head = std::min(0.06 * zoom_, 0.18 * length * zoom_);
     painter.drawLine(end, QPointF(end.x() - std::cos(yaw - 0.5) * head, end.y() + std::sin(yaw - 0.5) * head));
     painter.drawLine(end, QPointF(end.x() - std::cos(yaw + 0.5) * head, end.y() + std::sin(yaw + 0.5) * head));
     painter.setBrush(QColor(color.red(), color.green(), color.blue(), 60));
