@@ -47,7 +47,8 @@ KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 
 `run-viz.sh`는 `KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME`, `KROSC_VIZ_TAB` 환경 변수를 따른다.
 기본은 **Map 탭**(RViz 스타일 occupancy 이미지)이고, `KROSC_VIZ_TAB=3d ./run-viz.sh`면 3D 탭으로 시작한다.
-추가 인자는 그대로 viz에 넘긴다: `./run-viz.sh --screenshot /tmp/viz.png --duration 3`.
+Teleop/Manipulator/MoveIt 도킹 패널을 함께 띄운다. 추가 인자는 그대로 viz에 넘긴다:
+`./run-viz.sh --screenshot /tmp/viz.png --duration 3`, `./run-viz.sh --no-moveit`.
 
 ### 지도 폴더
 
@@ -95,7 +96,8 @@ cmake --build build -j
 - 네트워크는 신뢰할 수 있는 LAN 전용이다 (인증 없음). 포트 9000을 외부에 열지 마라.
 
 원격 토픽: `tf`, `tf_static`, `robot_description`, `scan`, `imu`, `odom`, `odometry/filtered`,
-`joint_states`, `diagnostics`, `rosout` (+ `cmd_vel` 역방향).
+`joint_states`, `arm_status`, `diagnostics`, `rosout` (+ `cmd_vel`, `arm_joint_command`, `arm_torque`,
+`arm_stop`, `arm_reset` 역방향).
 
 ## 매니퓰레이터 (OpenMANIPULATOR-X 4축 + 그리퍼)
 
@@ -103,7 +105,23 @@ cmake --build build -j
 - 장착: 3층 판 맨 앞 중앙, `base_link` 기준 `x=+0.047985, y=-0.000230, z=+0.130175`
 - OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`firmware/opencr/turtlebot_opencr/arm_config.h`)
 - 토픽: `joint_states`에 팔 관절 포함, 명령은 `arm_joint_command` (`sensor_msgs/JointState`)
+- `arm_torque`(Bool): 전체 토크 ON/OFF, `arm_stop`(Empty): 현재 자세 유지
+- `arm_reset`(String): `all` / `joint1`..`joint4` / `gripper` — OpenCR `AR`로 해당 DYNAMIXEL 재부팅 (Hardware Error 해제)
+- `arm_status`(String): `present=...;err=...;temp=...` — Viz Manipulator 패널에 에러가 빨간색으로 표시된다
 - 손목 roll 관절은 없다. ID 16은 사용하지 않는다.
+
+## MoveIt-lite
+
+Viz의 **MoveIt** 도킹 패널은 ROS 2 MoveIt 없이 URDF 체인으로 직접 계획한다.
+
+- 그룹: `base_link` → `end_effector_link`, 관절 `joint1`~`joint4`
+- 목표: TCP `x,y,z` + 접근 `pitch` (4축이라 full 6D는 불가)
+- `Plan`: IK → joint-space 또는 Cartesian 궤적 → 관절 한계/속도 검사
+- `Execute`: 20Hz `arm_joint_command`, `Cancel`: `arm_stop`
+- 3D: 목표 TCP 프레임, ghost arm, TCP 경로 표시
+- 팔 Hardware Error가 있으면 Plan/Execute를 거부한다 (먼저 Reset)
+
+핵심 계산은 `krosc/core/include/krosc/manipulation/arm_chain.hpp`에 있고 Viz와 향후 노드에서 재사용한다.
 
 ## 구성
 
