@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -14,6 +15,21 @@
 #include "opencr_protocol.hpp"
 
 namespace krosc_ws {
+
+// OpenCR M/F 줄의 팔 상태. position[0..4] = joint1..5, position[5] = gripper [m].
+struct ArmStatus {
+  std::array<double, 6> position{std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::quiet_NaN()};
+  std::array<double, 6> velocity{};
+  std::array<double, 6> current{};
+  std::array<double, 6> temperature{};
+  std::array<int, 6> error{-1, -1, -1, -1, -1, -1};
+  bool present = false;
+};
 
 // ROBOTIS OpenCR 1.0 + tb3_wheels 펌웨어를 USB 시리얼로 쓰는 드라이버.
 // - write(Twist): 역기구학으로 바퀴 목표 속도를 계산해 두고, tick()이 20Hz로 C 줄을 보낸다.
@@ -33,10 +49,12 @@ class OpenCrSerial {
   void stop();
 
   void write(const krosc::msgs::Twist& command);
+  void write_arm(const std::array<double, 6>& position);  // NaN = 그 관절 유지
   void tick();
 
   [[nodiscard]] bool connected() const { return connected_.load(); }
   [[nodiscard]] std::optional<krosc::msgs::Imu> consume_imu();
+  [[nodiscard]] ArmStatus arm_status() const;
 
   [[nodiscard]] double left_position() const;
   [[nodiscard]] double right_position() const;
@@ -84,6 +102,9 @@ class OpenCrSerial {
 
   std::mutex imu_mutex_;
   std::optional<krosc::msgs::Imu> pending_imu_;
+
+  mutable std::mutex arm_mutex_;
+  ArmStatus arm_status_;
 
   std::mutex command_mutex_;
   double target_left_ = 0.0;

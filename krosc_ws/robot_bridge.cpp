@@ -1,6 +1,8 @@
 #include "robot_bridge.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <cstdio>
 #include <utility>
 #include <vector>
@@ -46,6 +48,10 @@ RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
         robot_.opencr().write(twist);
       },
       krosc::QOS_COMMAND);
+  arm_command_subscription_ = subscribe<krosc::msgs::JointState>(
+      "arm_joint_command",
+      [this](const krosc::msgs::JointState& message) { on_arm_command(message); },
+      krosc::QOS_DEFAULT);
   logger().info("로봇 %s: OpenCR=%s, LDS-03=%s", robot_.name().c_str(),
                 robot_.opencr().port().c_str(), robot_.has_lidar() ? robot_.lidar()->port().c_str() : "없음");
   logger().info("OpenCR IMU는 켠 뒤 2초 동안 가만히 둬야 자이로 편향을 잡는다");
@@ -69,6 +75,40 @@ void RobotBridge::poll() {
     publish_diagnostics();
     last_diagnostics_ = current;
   }
+}
+
+void RobotBridge::on_arm_command(const krosc::msgs::JointState& message) {
+  std::array<double, 6> target{std::numeric_limits<double>::quiet_NaN(),
+                               std::numeric_limits<double>::quiet_NaN(),
+                               std::numeric_limits<double>::quiet_NaN(),
+                               std::numeric_limits<double>::quiet_NaN(),
+                               std::numeric_limits<double>::quiet_NaN(),
+                               std::numeric_limits<double>::quiet_NaN()};
+  if (message.name.empty()) {
+    const std::size_t count = std::min<std::size_t>(6, message.position.size());
+    for (std::size_t i = 0; i < count; ++i) {
+      target[i] = message.position[i];
+    }
+  } else {
+    const std::size_t count = std::min(message.name.size(), message.position.size());
+    for (std::size_t i = 0; i < count; ++i) {
+      const std::string& name = message.name[i];
+      if (name == "joint1") {
+        target[0] = message.position[i];
+      } else if (name == "joint2") {
+        target[1] = message.position[i];
+      } else if (name == "joint3") {
+        target[2] = message.position[i];
+      } else if (name == "joint4") {
+        target[3] = message.position[i];
+      } else if (name == "joint5") {
+        target[4] = message.position[i];
+      } else if (name == "gripper" || name == "gripper_left_joint" || name == "gripper_right_joint") {
+        target[5] = message.position[i];
+      }
+    }
+  }
+  robot_.opencr().write_arm(target);
 }
 
 void RobotBridge::publish_joint_states() {

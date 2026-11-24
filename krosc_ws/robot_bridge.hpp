@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <map>
 #include <string>
 
@@ -23,6 +24,7 @@ class RobotBridge final : public krosc::Node {
  private:
   void publish_joint_states();
   void publish_diagnostics();
+  void on_arm_command(const krosc::msgs::JointState& message);
 
   RealTurtleBot3& robot_;
   krosc::Parameter<double> joint_states_period_;
@@ -31,6 +33,7 @@ class RobotBridge final : public krosc::Node {
   double last_joint_states_ = 0.0;
   double last_diagnostics_ = 0.0;
   krosc::Subscription<krosc::msgs::Twist> command_subscription_;
+  krosc::Subscription<krosc::msgs::JointState> arm_command_subscription_;
 };
 
 }  // namespace krosc_ws

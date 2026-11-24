@@ -842,6 +842,11 @@ struct Server::Impl {
         if (auto message = decode_path(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
         }
+      } else if (topic == "arm_joint_command" && kind == Kind::JointState) {
+        Reader reader(payload);
+        if (auto message = decode_joint_state(reader)) {
+          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
+        }
       } else if ((topic == "map_change" || topic == "map_save" || topic == "slam_mode") &&
                  kind == Kind::String) {
         Reader reader(payload);

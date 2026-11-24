@@ -28,7 +28,21 @@ void RealTurtleBot3::stop() {
 }
 
 std::map<std::string, double> RealTurtleBot3::joint_positions() const {
-  return {{"wheel_left_joint", opencr_.left_position()}, {"wheel_right_joint", opencr_.right_position()}};
+  std::map<std::string, double> joints{{"wheel_left_joint", opencr_.left_position()},
+                                       {"wheel_right_joint", opencr_.right_position()}};
+  const ArmStatus arm = opencr_.arm_status();
+  if (arm.present) {
+    for (std::size_t i = 0; i < 5; ++i) {
+      if (std::isfinite(arm.position[i])) {
+        joints["joint" + std::to_string(i + 1)] = arm.position[i];
+      }
+    }
+    if (std::isfinite(arm.position[5])) {
+      joints["gripper_left_joint"] = arm.position[5];
+      joints["gripper_right_joint"] = arm.position[5];
+    }
+  }
+  return joints;
 }
 
 std::optional<krosc::msgs::LaserScan> RealTurtleBot3::scan(double stamp) {
