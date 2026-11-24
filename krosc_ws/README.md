@@ -46,7 +46,8 @@ KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 ```
 
 `run-viz.sh`는 `KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME`, `KROSC_VIZ_TAB` 환경 변수를 따른다.
-기본은 **Map 탭**(RViz 스타일 occupancy 이미지)이고, `KROSC_VIZ_TAB=3d ./run-viz.sh`면 3D 탭으로 시작한다.
+기본은 **Map 탭**(RViz 스타일 occupancy 이미지)이고, `KROSC_VIZ_TAB=3d ./run-viz.sh` 또는
+`KROSC_VIZ_TAB=moveit ./run-viz.sh`로 시작 탭을 바꿀 수 있다.
 Teleop/Manipulator/MoveIt 도킹 패널을 함께 띄운다. 추가 인자는 그대로 viz에 넘긴다:
 `./run-viz.sh --screenshot /tmp/viz.png --duration 3`, `./run-viz.sh --no-moveit`.
 
@@ -55,6 +56,7 @@ Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 - `W/A/S/D` 또는 방향키: 텔레옵, `Q/Z`: 속도, `F`: follow, `C`: overview
 - `Backspace`: Multi Goal 모드에서 마지막 웨이포인트 삭제
 - MoveIt `Plan`/`Execute`/`Cancel`은 `moveit_lite` 노드에 토픽으로 요청한다
+- 중앙 **MoveIt 탭**에서 TCP 마커를 드래그(X/Y), `Shift+드래그`로 Z 이동
 
 ### 지도 폴더
 
@@ -123,6 +125,14 @@ cmake --build build -j
   그 yaw로 제자리 회전해 방향을 맞춘 뒤 다음 구간으로 진행한다.
 - `global_costmap/costmap`: A*용 inflated grid (2D/3D Viz에 표시)
 - `local_costmap/costmap`: 로봇 주변 `local_costmap_size`(기본 4m) 창 (2D/3D Viz에 표시)
+- 색은 RViz `costmap` 스킴: 1~98 blue→red, 99 cyan(inscribed), 100 purple(lethal), -1 blue-green-gray
+- A*는 inflation cost를 약한 패널티로 사용한다.
+
+### Multi-client
+
+네트워크 서버는 최대 **8 클라이언트**를 동시에 받는다. 클라이언트마다 송신 큐/writer 스레드가
+따로 있어 느린 Viz 하나가 다른 클라이언트의 센서 스트림을 막지 않는다. 명령 토픽은
+**마지막 명령이 이기는** 구조이며, 클라이언트별 제어권 중재(lease)는 아직 없다.
 
 ## MoveIt-lite
 
