@@ -79,6 +79,11 @@ struct ToggleSpec {
   const char* label;
 };
 
+double steady_seconds() {
+  using namespace std::chrono;
+  return duration<double>(steady_clock::now().time_since_epoch()).count();
+}
+
 std::map<std::string, std::string> parse_state_fields(const std::string& text) {
   std::map<std::string, std::string> fields;
   std::stringstream stream(text);
@@ -165,13 +170,6 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   tabs->addTab(moveit_view_, "MoveIt");
   moveit_tab_index_ = tabs->indexOf(moveit_view_);
   tabs->setTabVisible(moveit_tab_index_, false);
-  moveit_drag_timer_ = new QTimer(this);
-  moveit_drag_timer_->setInterval(80);
-  connect(moveit_drag_timer_, &QTimer::timeout, this, [this] {
-    if (moveit_dragging_ && !moveit_updating_) {
-      publish_moveit_target();
-    }
-  });
   connect(moveit_view_, &SceneView::moveit_target_dragged, this, &VizWindow::on_moveit_target_dragged);
   connect(moveit_view_, &SceneView::moveit_drag_finished, this, &VizWindow::on_moveit_drag_finished);
 
@@ -1000,7 +998,7 @@ void VizWindow::build_moveit_dock() {
     if (moveit_updating_) {
       return;
     }
-    publish_moveit_target();
+    publish_moveit_target(true);
   };
   for (auto* spin : {moveit_x_, moveit_y_, moveit_z_, moveit_pitch_, moveit_gripper_}) {
     connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
@@ -1159,18 +1157,19 @@ void VizWindow::refresh_manual() {
   refresh_moveit();
 }
 
-void VizWindow::publish_moveit_target() {
+void VizWindow::publish_moveit_target(bool preview) {
   if (moveit_updating_ || moveit_x_ == nullptr) {
     return;
   }
   const QString text =
-      QString("%1,%2,%3,%4,%5,%6")
+      QString("%1,%2,%3,%4,%5,%6,%7")
           .arg(moveit_x_->value(), 0, 'f', 4)
           .arg(moveit_y_->value(), 0, 'f', 4)
           .arg(moveit_z_->value(), 0, 'f', 4)
           .arg(moveit_pitch_->value(), 0, 'f', 2)
           .arg(moveit_gripper_->value(), 0, 'f', 2)
-          .arg(moveit_cartesian_->isChecked() ? 1 : 0);
+          .arg(moveit_cartesian_->isChecked() ? 1 : 0)
+          .arg(preview ? 1 : 0);
   model_.node().publish("moveit_target", msgs::String{text.toStdString()}, QOS_DEFAULT);
 }
 
@@ -1273,7 +1272,7 @@ void VizWindow::moveit_set_target_from_current() {
   if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
     tabs_->setCurrentIndex(moveit_tab_index_);
   }
-  publish_moveit_target();
+  publish_moveit_target(true);
 }
 
 void VizWindow::moveit_plan() {
@@ -1283,7 +1282,7 @@ void VizWindow::moveit_plan() {
   if (tabs_ != nullptr && moveit_tab_index_ >= 0 && tabs_->isTabVisible(moveit_tab_index_)) {
     tabs_->setCurrentIndex(moveit_tab_index_);
   }
-  publish_moveit_target();
+  publish_moveit_target(false);
   if (moveit_status_label_ != nullptr) {
     moveit_status_label_->setText("Plan 요청...");
   }
@@ -1319,18 +1318,17 @@ void VizWindow::on_moveit_target_dragged(double x, double y, double z) {
   moveit_z_->setValue(z);
   moveit_updating_ = false;
   moveit_dragging_ = true;
-  if (moveit_drag_timer_ != nullptr && !moveit_drag_timer_->isActive()) {
-    moveit_drag_timer_->start();
+  const double current = steady_seconds();
+  if (current - moveit_last_drag_publish_ >= 0.12) {
+    publish_moveit_target(true);
+    moveit_last_drag_publish_ = current;
   }
 }
 
 void VizWindow::on_moveit_drag_finished() {
   moveit_dragging_ = false;
-  if (moveit_drag_timer_ != nullptr) {
-    moveit_drag_timer_->stop();
-  }
   if (!moveit_updating_) {
-    publish_moveit_target();
+    publish_moveit_target(true);
   }
 }
 
@@ -1425,7 +1423,7 @@ void VizWindow::refresh_moveit() {
       }
       moveit_updating_ = false;
       moveit_target_initialized_ = true;
-      publish_moveit_target();
+      publish_moveit_target(true);
     }
   } else {
     moveit_current_label_->setText("now: moveit_lite TCP 계산 대기");

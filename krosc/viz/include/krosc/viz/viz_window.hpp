@@ -66,7 +66,7 @@ class VizWindow : public QMainWindow {
   void send_arm_target();
   void refresh_manual();
   void refresh_moveit();
-  void publish_moveit_target();
+  void publish_moveit_target(bool preview = false);
   void update_moveit_preview();
   void moveit_set_target_from_current();
   void moveit_plan();
@@ -139,8 +139,8 @@ class VizWindow : public QMainWindow {
   QLabel* moveit_current_label_ = nullptr;
   QLabel* moveit_status_label_ = nullptr;
   QSlider* moveit_scrub_ = nullptr;
-  QTimer* moveit_drag_timer_ = nullptr;
   bool moveit_dragging_ = false;
+  double moveit_last_drag_publish_ = 0.0;
   bool moveit_executing_ = false;
   bool moveit_updating_ = false;
   bool moveit_target_initialized_ = false;

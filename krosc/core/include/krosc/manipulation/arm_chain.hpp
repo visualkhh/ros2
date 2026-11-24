@@ -55,9 +55,10 @@ struct ArmChain {
 
   // target은 base_link 기준 TCP 위치, pitch_down은 접근축 하향 각도(rad).
   // seed에서 시작해 관절한계를 지키는 해를 찾는다.
+  // fast=true면 seed에서 가까운 해가 나오는 즉시 반환한다 (드래그 preview용).
   [[nodiscard]] bool ik(const msgs::Vector3& target, double pitch_down,
                         const std::array<double, 4>& seed, std::array<double, 4>& solution,
-                        std::string& error) const;
+                        std::string& error, bool fast = false) const;
 };
 
 struct TrajectoryPoint {

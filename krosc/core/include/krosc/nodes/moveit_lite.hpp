@@ -32,6 +32,7 @@ class MoveItLite final : public Node {
     double pitch = 0.0;   // rad, 접근축 하향
     double grip = 0.0;    // m
     bool cartesian = true;
+    bool preview = false;  // true면 IK/ghost만, 전체 궤적 계획은 하지 않는다
   };
 
   void on_robot_description(const msgs::String& message);
@@ -83,6 +84,7 @@ class MoveItLite final : public Node {
   std::optional<Target> target_;
   std::optional<std::array<double, 4>> goal_;
   std::optional<manipulation::Trajectory> trajectory_;
+  std::vector<msgs::Vector3> preview_path_;
   std::array<int, 5> arm_errors_{{0, 0, 0, 0, 0}};
   bool executing_ = false;
   double execution_start_ = 0.0;

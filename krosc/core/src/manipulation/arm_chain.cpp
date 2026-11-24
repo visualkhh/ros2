@@ -457,7 +457,7 @@ double ArmChain::tool_yaw(const std::array<double, 4>& q) const {
 }
 
 bool ArmChain::ik(const msgs::Vector3& target, double desired_pitch, const std::array<double, 4>& seed,
-                  std::array<double, 4>& solution, std::string& error) const {
+                  std::array<double, 4>& solution, std::string& error, bool fast) const {
   if (!valid()) {
     error = "URDF 체인이 준비되지 않았다";
     return false;
@@ -607,6 +607,9 @@ bool ArmChain::ik(const msgs::Vector3& target, double desired_pitch, const std::
         best_score = score;
         best_position_error = position_error;
         best_pitch_error = pitch_error;
+      }
+      if (fast) {
+        break;  // 드래그 preview: 첫 번째로 만족한 해를 바로 쓴다
       }
     } else {
       const double score = 10.0 + position_error / 0.001 + pitch_error / 0.01;

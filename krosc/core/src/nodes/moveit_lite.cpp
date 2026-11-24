@@ -241,6 +241,10 @@ bool MoveItLite::parse_target(const std::string& text, Target& target, std::stri
   if (fields.size() >= 6) {
     target.cartesian = fields[5] != "0" && fields[5] != "false";
   }
+  target.preview = false;
+  if (fields.size() >= 7) {
+    target.preview = fields[6] != "0" && fields[6] != "false";
+  }
   return true;
 }
 
@@ -321,6 +325,9 @@ void MoveItLite::publish_preview_locked(int index) {
     index = std::clamp(index, 0, static_cast<int>(trajectory_->points.size()) - 1);
     joints = trajectory_->points[static_cast<std::size_t>(index)].position;
     have = true;
+  } else if (goal_) {
+    joints = *goal_;
+    have = true;
   } else if (current_) {
     joints = *current_;
     have = true;
@@ -332,6 +339,13 @@ void MoveItLite::publish_preview_locked(int index) {
     std::vector<std::pair<std::string, msgs::Transform>> points;
     points.reserve(trajectory_->tcp_path.size());
     for (const auto& point : trajectory_->tcp_path) {
+      points.emplace_back("tcp", msgs::Transform{point, {}});
+    }
+    publish_path_locked("moveit_path", points);
+  } else if (!preview_path_.empty()) {
+    std::vector<std::pair<std::string, msgs::Transform>> points;
+    points.reserve(preview_path_.size());
+    for (const auto& point : preview_path_) {
       points.emplace_back("tcp", msgs::Transform{point, {}});
     }
     publish_path_locked("moveit_path", points);
@@ -364,14 +378,48 @@ bool MoveItLite::plan_locked(std::string& error) {
     return false;
   }
   std::array<double, 4> goal{};
-  if (!chain_.ik({target_->x, target_->y, target_->z}, target_->pitch, *current_, goal, error)) {
+  std::string ik_error;
+  bool ik_ok = false;
+  // 드래그 preview는 직전 해를 seed로 한 번만 풀어 빠르게 반응한다.
+  if (goal_) {
+    ik_ok = chain_.ik({target_->x, target_->y, target_->z}, target_->pitch, *goal_, goal, ik_error, true);
+  }
+  if (!ik_ok) {
+    ik_ok = chain_.ik({target_->x, target_->y, target_->z}, target_->pitch, *current_, goal, ik_error, true);
+  }
+  if (!ik_ok) {
+    ik_ok = chain_.ik({target_->x, target_->y, target_->z}, target_->pitch, *current_, goal, ik_error, false);
+  }
+  if (!ik_ok) {
     trajectory_.reset();
     goal_.reset();
+    preview_path_.clear();
+    error = ik_error;
     publish_status_locked("Plan 실패: " + error);
     publish_target_pose_locked();
     publish_state_locked();
     return false;
   }
+  goal_ = goal;
+  if (target_->preview) {
+    trajectory_.reset();
+    preview_path_.clear();
+    const msgs::Vector3 start_tcp = chain_.tcp(*current_);
+    const msgs::Vector3 goal_tcp = chain_.tcp(goal);
+    constexpr int kPreviewPoints = 16;
+    for (int i = 0; i <= kPreviewPoints; ++i) {
+      const double t = static_cast<double>(i) / static_cast<double>(kPreviewPoints);
+      preview_path_.push_back({start_tcp.x + (goal_tcp.x - start_tcp.x) * t,
+                               start_tcp.y + (goal_tcp.y - start_tcp.y) * t,
+                               start_tcp.z + (goal_tcp.z - start_tcp.z) * t});
+    }
+    preview_index_ = 0;
+    publish_preview_locked(0);
+    publish_state_locked();
+    publish_status_locked("Preview: IK ok — Plan을 누르면 궤적을 계산한다");
+    return true;
+  }
+  preview_path_.clear();
   manipulation::PlanOptions options;
   options.max_joint_speed = max_joint_speed_.value();
   options.max_joint_accel = max_joint_accel_.value();
@@ -389,7 +437,6 @@ bool MoveItLite::plan_locked(std::string& error) {
     return false;
   }
   trajectory_ = std::move(*trajectory);
-  goal_ = goal;
   preview_index_ = static_cast<int>(trajectory_->points.size()) - 1;
   publish_preview_locked(preview_index_);
   publish_state_locked();
@@ -431,6 +478,9 @@ void MoveItLite::on_plan(const msgs::Empty&) {
   if (executing_) {
     publish_status_locked("Plan 거부: Execute 중이다");
     return;
+  }
+  if (target_) {
+    target_->preview = false;
   }
   std::string error;
   if (!plan_locked(error)) {
@@ -486,6 +536,7 @@ void MoveItLite::on_cancel(const msgs::Empty&) {
   stop_execution_locked("Cancel: 정지, 다시 Plan 필요", true);
   trajectory_.reset();
   goal_.reset();
+  preview_path_.clear();
   preview_index_ = 0;
   publish_target_pose_locked();
   publish_state_locked();
@@ -579,7 +630,7 @@ void MoveItLite::heartbeat() {
   publish_status_locked(status_text_);
   last_status_ = now();
   last_preview_ = now();
-  if (trajectory_ && !trajectory_->points.empty()) {
+  if ((trajectory_ && !trajectory_->points.empty()) || goal_ || !preview_path_.empty()) {
     publish_preview_locked(preview_index_);
   } else {
     publish_target_pose_locked();
