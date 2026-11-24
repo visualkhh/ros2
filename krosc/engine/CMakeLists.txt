@@ -22,7 +22,6 @@ add_library(krosc_core STATIC
   core/nodes/navigator.cpp
   core/nodes/map_catalog.cpp
   core/nodes/map_io.cpp
-  core/nodes/moveit_lite.cpp
   core/nodes/diff_drive_odometry.cpp
   core/nodes/ekf.cpp
   core/nodes/robot_state_publisher.cpp
@@ -36,6 +35,11 @@ add_library(krosc_core STATIC
   core/nodes/nav2/costmap_2d_ros.cpp
   core/nodes/nav2/planner_plugins.cpp
   core/nodes/nav2/planner_server.cpp
+  core/ros2_control/controller_manager.cpp
+  core/ros2_control/forward_command_controller.cpp
+  core/ros2_control/joint_state_broadcaster.cpp
+  core/ros2_control/joint_trajectory_controller.cpp
+  core/moveit/move_group.cpp
 )
 
 add_library(krosc::core ALIAS krosc_core)
@@ -63,6 +67,7 @@ if(KROSC_BUILD_TESTS)
     tests/test_map_io.cpp
     tests/test_net.cpp
     tests/test_nav2.cpp
+    tests/test_ros2_control.cpp
   )
   target_link_libraries(krosc_core_tests PRIVATE krosc::core)
   target_compile_options(krosc_core_tests PRIVATE -Wall -Wextra -Wpedantic)

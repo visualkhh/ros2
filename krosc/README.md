@@ -236,11 +236,13 @@ lidar 360 rays      :  60-70 us/scan (20개 벽)
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 38 + sim 3 = 41 tests, 2 executables
+# core 40 + sim 3 = 43 tests, 2 executables
 ```
 
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI, planner/controller/behavior server, bt_navigator (계획·주행·취소)
+- ros2_control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller
+- MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + moveit_* 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
 - ASan/UBSan으로 core/sim 테스트와 데모 실행 검증 완료 (오류/누수 없음)
 
@@ -262,12 +264,14 @@ ctest --test-dir build --output-on-failure
 - [x] 오프스크린 스크린샷 검증 (`docs/`)
 - [x] `../krosc_ws/`: OpenCR/LDS-03 C++ 드라이버 + EKF + 원격 viz를 붙인 실기 Pi용 워크스페이스 (하드웨어 실측은 Pi에서 해야 함)
 
-**다음 후보** (파이썬 kros에 이미 있는 것)
+**다음 후보 / 진행 상황** (파이썬 kros에 이미 있는 것 + 이번에 추가)
 
 - [x] 액션 (`ActionServer`/`ActionClient`)
 - [ ] `DiagnosticUpdater`/`DiagnosticAggregator`
 - [ ] MapServer/MapSaver (yaml + pgm), Cartographer 스타일 SLAM
 - [x] nav2: costmap(`Costmap2DROS`), planner/controller 플러그인, `planner_server`/`controller_server`, `bt_navigator`, `behavior_server`
+- [x] ros2_control: `controller_manager`, JSB/JTC/forward controller, command interface 점유와 `switch_controller`
+- [x] MoveIt: kinematics/planner/controller_manager 플러그인 + `move_group` (`move_action`, 기존 `moveit_*` 호환)
 - [ ] 진짜 하드웨어: OpenCR 시리얼, LDS-03 시리얼
 - [ ] 네트워크 심화: 파라미터/서비스/액션, 다중 클라이언트, 보안, rosbag 기록/재생
 - [ ] viz: 2D Goal Pose/초기 자세 추정, 마우스로 지도 편집, STL 메시 렌더링

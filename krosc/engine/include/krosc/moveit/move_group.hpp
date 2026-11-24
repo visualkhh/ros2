@@ -1,38 +1,52 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "krosc/action.hpp"
 #include "krosc/manipulation/arm_chain.hpp"
-#include "krosc/msgs.hpp"
+#include "krosc/moveit/controller_manager.hpp"
+#include "krosc/moveit/kinematics_base.hpp"
+#include "krosc/moveit/planner_manager.hpp"
+#include "krosc/msgs/control_msgs.hpp"
+#include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/node.hpp"
-#include "krosc/parameter.hpp"
 #include "krosc/timer.hpp"
-#include "krosc/topic.hpp"
 
-namespace krosc::nodes {
+namespace krosc::moveit {
 
-// MoveIt-lite 코어 노드. URDF 체인으로 IK/궤적을 만들고 arm_joint_command로 실행한다.
-// Viz는 moveit_target / moveit_plan / moveit_execute / moveit_cancel / moveit_scrub만 보내고,
-// moveit_status / moveit_state / moveit_target_pose / moveit_arm / moveit_path를 받아 표시한다.
-class MoveItLite final : public Node {
+// MoveIt move_group의 축소판.
+//   move_action(nav2식 action) + 기존 Viz용 moveit_* 토픽을 함께 제공한다.
+//   무거운 부분은 전부 플러그인으로 분리한다: kinematics / planner / controller_manager.
+class MoveGroup final : public Node {
  public:
-  explicit MoveItLite(Context& context, std::string name = "moveit_lite",
-                      std::map<std::string, ParamValue> parameters = {});
+  using MoveHandle = ServerGoalHandle<msgs::moveit::MoveGroupGoal, msgs::moveit::MoveGroupFeedback>;
+
+  explicit MoveGroup(Context& context, std::string name = "move_group",
+                     std::map<std::string, ParamValue> parameters = {},
+                     KinematicsRegistry kinematics = builtin_kinematics(),
+                     PlannerRegistry planners = builtin_planners(),
+                     ControllerManagerRegistry controllers = builtin_controller_managers());
+  ~MoveGroup() override;
+
+  MoveGroup(const MoveGroup&) = delete;
+  MoveGroup& operator=(const MoveGroup&) = delete;
 
  private:
   struct Target {
     double x = 0.0;
     double y = 0.0;
     double z = 0.0;
-    double pitch = 0.0;   // rad, 접근축 하향
-    double grip = 0.0;    // m
+    double pitch = 0.0;
+    double grip = 0.0;
     bool cartesian = true;
-    bool preview = false;  // true면 IK/ghost만, 전체 궤적 계획은 하지 않는다
+    bool preview = false;
   };
 
   void on_robot_description(const msgs::String& message);
@@ -51,9 +65,17 @@ class MoveItLite final : public Node {
   [[nodiscard]] bool parse_target(const std::string& text, Target& target, std::string& error) const;
   [[nodiscard]] bool has_arm_error_locked() const;
   [[nodiscard]] std::array<int, 5> arm_errors_locked() const;
-
-  // 아래 *_locked 함수는 mutex_를 잡은 상태에서만 호출한다.
-  bool plan_locked(std::string& error);
+  [[nodiscard]] bool solve_ik_locked(const Target& target, const std::array<double, 4>& seed,
+                                     std::array<double, 4>& goal, std::string& error,
+                                     bool fast) const;
+  [[nodiscard]] std::optional<manipulation::Trajectory> plan_trajectory_locked(
+      const std::array<double, 4>& start, const std::array<double, 4>& goal, bool cartesian,
+      std::string& error) const;
+  [[nodiscard]] bool plan_locked(std::string& error);
+  [[nodiscard]] bool goal_from_request_locked(const msgs::moveit::MoveGroupGoal& request,
+                                              std::array<double, 4>& goal, std::string& error) const;
+  [[nodiscard]] msgs::control::JointTrajectory to_message_locked(
+      const manipulation::Trajectory& trajectory) const;
   void publish_status_locked(const std::string& text);
   void publish_state_locked();
   void publish_preview_locked(int index);
@@ -61,6 +83,8 @@ class MoveItLite final : public Node {
   void publish_path_locked(const std::string& topic,
                            const std::vector<std::pair<std::string, msgs::Transform>>& links);
   void stop_execution_locked(const std::string& reason, bool publish_stop);
+  [[nodiscard]] msgs::moveit::MoveGroupResult execute_move(
+      const msgs::moveit::MoveGroupGoal& request, MoveHandle* handle);
 
   Parameter<std::string> base_link_;
   Parameter<std::string> tip_link_;
@@ -72,8 +96,17 @@ class MoveItLite final : public Node {
   Parameter<double> cartesian_speed_;
   Parameter<double> cartesian_accel_;
   Parameter<double> sample_time_;
-  Parameter<std::string> arm_command_topic_;
   Parameter<std::string> arm_stop_topic_;
+  Parameter<std::string> kinematics_plugin_;
+  Parameter<std::string> planner_plugin_;
+  Parameter<std::string> controller_manager_plugin_;
+
+  KinematicsRegistry kinematics_registry_;
+  PlannerRegistry planner_registry_;
+  ControllerManagerRegistry controller_registry_;
+  std::unique_ptr<KinematicsBase> kinematics_;
+  std::unique_ptr<PlannerManager> planner_;
+  std::unique_ptr<MoveItControllerManager> controller_manager_;
 
   mutable std::mutex mutex_;
   std::string robot_description_;
@@ -87,12 +120,17 @@ class MoveItLite final : public Node {
   std::vector<msgs::Vector3> preview_path_;
   std::array<int, 5> arm_errors_{{0, 0, 0, 0, 0}};
   bool executing_ = false;
+  bool action_owned_ = false;
   double execution_start_ = 0.0;
   int preview_index_ = 0;
   double last_state_ = -1e18;
   double last_status_ = -1e18;
   double last_preview_ = -1e18;
   std::string status_text_ = "MoveIt: waiting for robot_description/joint_states";
+  std::shared_ptr<FollowJointTrajectoryHandle> follow_;
+
+  std::atomic<bool> busy_{false};
+  std::atomic<bool> cancel_requested_{false};
 
   Subscription<msgs::String> robot_description_subscription_;
   Subscription<msgs::JointState> joint_states_subscription_;
@@ -102,8 +140,11 @@ class MoveItLite final : public Node {
   Subscription<msgs::Empty> execute_subscription_;
   Subscription<msgs::Empty> cancel_subscription_;
   Subscription<msgs::String> scrub_subscription_;
+  std::unique_ptr<ActionServer<msgs::moveit::MoveGroupGoal, msgs::moveit::MoveGroupFeedback,
+                               msgs::moveit::MoveGroupResult>>
+      action_;
   Timer tick_timer_;
   Timer status_timer_;
 };
 
-}  // namespace krosc::nodes
+}  // namespace krosc::moveit

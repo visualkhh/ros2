@@ -16,7 +16,7 @@ class SceneView;
 
 namespace krosc_ws::viz {
 
-// MoveIt-lite 패널 + MoveIt 탭. Pi의 moveit_lite 노드와 토픽으로만 통신한다.
+// MoveIt 패널 + MoveIt 탭. Pi의 move_group 노드와 토픽으로만 통신한다.
 class MoveItPlugin final : public krosc::viz::VizPlugin {
  public:
   MoveItPlugin() : krosc::viz::VizPlugin({"moveit", "MoveIt", "1.0", {}}) {}

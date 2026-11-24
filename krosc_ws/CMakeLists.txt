@@ -17,6 +17,7 @@ set(KROSC_REAL_SOURCES
   robot/main.cpp
   robot/robot_bridge.cpp
   robot/real_turtlebot3.cpp
+  robot/hardware/opencr_system.cpp
   robot/hardwares/lds03.cpp
   robot/hardwares/opencr_protocol.cpp
   robot/hardwares/opencr_serial.cpp
@@ -76,6 +77,7 @@ if(KROSC_WS_BUILD_TESTS)
   add_executable(krosc_ws_tests
     tests/test_protocol.cpp
     tests/test_serial.cpp
+    tests/test_moveit_stack.cpp
     robot/hardwares/lds03.cpp
     robot/hardwares/opencr_protocol.cpp
     robot/hardwares/opencr_serial.cpp
@@ -88,6 +90,8 @@ if(KROSC_WS_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests
   )
   target_link_libraries(krosc_ws_tests PRIVATE krosc::core)
+  target_compile_definitions(krosc_ws_tests PRIVATE
+    KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf")
   if(UNIX AND NOT APPLE)
     target_link_libraries(krosc_ws_tests PRIVATE util)
   endif()

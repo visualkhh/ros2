@@ -59,7 +59,7 @@ Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 
 - `W/A/S/D` 또는 방향키: 텔레옵, `Q/Z`: 속도, `F`: follow, `C`: overview
 - `Backspace`: Multi Goal 모드에서 마지막 웨이포인트 삭제
-- MoveIt `Plan`/`Execute`/`Cancel`은 `moveit_lite` 노드에 토픽으로 요청한다
+- MoveIt `Plan`/`Execute`/`Cancel`은 `move_group` 노드에 토픽으로 요청한다
 - 중앙 **MoveIt 탭**에서 TCP 마커를 드래그(X/Y), `Shift+드래그`로 Z, `Ctrl+드래그`로 Pitch 조정
 
 ### 지도 폴더
@@ -116,7 +116,10 @@ cmake --build build -j
 - URDF: `robot/description/urdf/turtlebot3_real.urdf` (공식 visual STL + collision 근사, C++ Viz는 visual STL을 12mm 격자로 간소화해 렌더)
 - 장착: 3층 판 맨 앞 중앙, `base_link` 기준 `x=+0.047985, y=-0.000230, z=+0.130175`
 - OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`firmware/opencr/turtlebot_opencr/arm_config.h`)
-- 토픽: `joint_states`에 팔 관절 포함, 명령은 `arm_joint_command` (`sensor_msgs/JointState`)
+- `joint_states`는 ros2_control `joint_state_broadcaster`가 바퀴+팔 관절을 모두 발행한다
+- 팔 명령은 MoveIt → `joint_trajectory_controller/follow_joint_trajectory` 액션으로 내려간다.
+  수동 `arm_joint_command`(`sensor_msgs/JointState`)는 `arm_command_controller`(forward controller)가
+  활성일 때만 하드웨어로 간다 (기본은 비활성, `controller_manager/switch_controller`로 전환)
 - `arm_torque`(Bool): 전체 토크 ON/OFF, `arm_stop`(Empty): 현재 자세 유지
 - `arm_reset`(String): `all` / `joint1`..`joint4` / `gripper` — OpenCR `AR`로 해당 DYNAMIXEL 재부팅 (Hardware Error 해제)
 - `arm_status`(String): `present=...;err=...;temp=...` — Viz Manipulator 패널에 에러가 빨간색으로 표시된다
@@ -225,23 +228,41 @@ RL이 켜져도 scan/odom/plan/TF가 없거나 추론이 실패하면 자동으�
 ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 사용하고,
 없으면 `KROSC_WS_BUILD_RL_NAV=OFF`로 RL만 제외할 수 있다.
 
-## MoveIt-lite
+## MoveIt / ros2_control
 
 Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 플러그인이다.
 코어 `krosc/viz`에는 MoveIt이 없고, 프로젝트 Viz 앱에서만 로드한다.
-계산은 Pi의 `krosc::nodes::MoveItLite` 노드가 하고, Viz는 토픽 클라이언트로만 동작한다.
+계산은 Pi의 `krosc::moveit::MoveGroup` 노드가 하고, Viz는 토픽 클라이언트로만 동작한다.
+내부는 ROS 2처럼 플러그인으로 나뉜다:
+
+- `kinematics.plugin` — `krosc_moveit/ArmChainKinematics` (URDF 체인 해석 IK)
+- `planner.plugin` — `krosc_moveit/CartesianPlanner` 또는 `krosc_moveit/JointSpacePlanner`
+- `controller_manager.plugin` — `krosc_moveit/SimpleControllerManager`
+- `move_action` 액션(`moveit_msgs/action/MoveGroup` 축소판) + 기존 `moveit_*` 토픽
+
+하드웨어는 `ros2_control` 구조를 따른다:
+
+- `controller_manager` 노드: `hardware_plugin`(OpenCR) → state/command interfaces → controllers
+- `joint_state_broadcaster`: `joint_states` 발행
+- `joint_trajectory_controller`: `FollowJointTrajectory` 액션으로 팔 궤적 실행
+- `forward_command_controller`: `arm_joint_command` 수동 명령 (기본 비활성)
+- `controller_manager/list_controllers`, `load_controller`, `configure_controller`,
+  `switch_controller` 서비스
+- command interface는 한 컨트롤러만 잡을 수 있다 (ROS 2와 같은 규칙)
 
 - 그룹: `base_link` → `end_effector_link`, 관절 `joint1`~`joint4`
 - 목표: TCP `x,y,z` + 접근 `pitch` (4축이라 full 6D는 불가)
 - `Plan`: IK → joint-space 또는 Cartesian 궤적 → 관절 한계/속도 검사
-- `Execute`: 20Hz `arm_joint_command`, `Cancel`: `arm_stop`
+- `Execute`: `joint_trajectory_controller`의 `FollowJointTrajectory` 액션, `Cancel`: `arm_stop`
 - 3D: 목표 TCP 프레임, ghost arm, TCP 경로 표시
 - 팔 Hardware Error가 있으면 Plan/Execute를 거부한다 (먼저 Reset)
 - 토픽: `moveit_target`(String CSV), `moveit_plan`, `moveit_execute`, `moveit_cancel`, `moveit_scrub`
 - 상태: `moveit_status`, `moveit_state`, `moveit_target_pose`, `moveit_arm`, `moveit_path`
 
-핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, 노드는
-`krosc/engine/core/nodes/moveit_lite.cpp`에 있고 `krosc_ws/robot/main.cpp`에서 조립한다.
+핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, MoveIt 플러그인/노드는
+`krosc/engine/include/krosc/moveit/`, `krosc/engine/core/moveit/move_group.cpp`에 있다.
+ros2_control 레이어는 `krosc/engine/include/krosc/ros2_control/`, 실기 하드웨어 플러그인은
+`krosc_ws/robot/hardware/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
 ## 구성
@@ -312,10 +333,10 @@ ctest --test-dir build --output-on-failure
 
 ## 아직 안 된 것
 
-- full MoveIt 2 / ros2_control 연동 (현재는 custom MoveIt-lite)
+- full MoveIt 2 (OMPL planning scene, collision world) — 지금은 URDF 체인 + 자체 플러그인
+- 바퀴 구동의 ros2_control `diff_drive_controller` 전환 (현재 cmd_vel → OpenCR 유지)
 - 파라미터/서비스/액션의 네트워크 전달, rosbag
 - Cartographer 전체 기능(loop closure, submap) — 현재는 scan matching + occupancy map 수준
-- Smac/MPPI 등 nav2 고급 플래너·컨트롤러 (현재 A* + pure pursuit)
 
-지금은 **실기 SLAM + A* 주행 + Multi Goal + MoveIt-lite 팔 계획/실행 + 원격 Viz**까지
+지금은 **실기 SLAM + nav2 주행 + Multi Goal + ros2_control MoveIt 팔 계획/실행 + 원격 Viz**까지
 `krosc_ws` 안에서 동작한다.

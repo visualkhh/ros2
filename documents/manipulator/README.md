@@ -6,7 +6,11 @@
 
 - OpenCR의 **3번째 핀(포트)** 에 꽂음 — 정확히 어느 커넥터(Dynamixel TTL 3번 / 전원 / 확장 핀)인지는 실제 확인 후 여기에 적을 것.
 - 펌웨어 `tb3_wheels`에 팔 구동(`A`·`AT`·`AR` 명령, `M`·`F` 상태)을 추가했고 **OpenCR에 업로드·실행 확인**했다. [firmware/opencr](../../firmware/opencr/README.md)
-- C++ `krosc_ws`가 `M`/`F`를 파싱해 `joint_states`에 joint1~4+그리퍼를 넣고, `arm_joint_command`(`sensor_msgs/JointState`)로 `A`를 보낸다. URDF는 `robot/description/urdf/turtlebot3_real.urdf`.
+- C++ `krosc_ws`가 `M`/`F`를 파싱해 ros2_control `OpenCrSystem` state interface로 넣고,
+  `joint_state_broadcaster`가 `joint_states`를 발행한다. 팔 명령은 `joint_trajectory_controller`가
+  `FollowJointTrajectory` 액션으로 받아 `OpenCrSystem` command interface → `A`로 보낸다.
+  수동 `arm_joint_command`는 `forward_command_controller`가 활성일 때 같은 경로를 쓴다.
+  URDF는 `robot/description/urdf/turtlebot3_real.urdf`.
 
 ## 할 일
 
@@ -14,4 +18,6 @@
 - [x] 팔 서보 ID 11~15 (joint1~4=11~14, gripper=15) · 펌웨어 업로드
 - [ ] 관절 부호(`ARM_DIR`)·그리퍼 전류 실측 (현재 모두 +1)
 - [x] Pi C++: `M`·`F` 파싱 / `A` 전송, `joint_states`·`arm_joint_command`
+- [x] ros2_control: `OpenCrSystem` hardware plugin, `controller_manager`, JSB/JTC/forward controller
+- [x] MoveIt: `move_group` + kinematics/planner/controller_manager 플러그인
 - [ ] Viz 팔 슬라이더/그리퍼 UI

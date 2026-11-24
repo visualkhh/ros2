@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <cstdio>
 #include <sstream>
 #include <utility>
@@ -34,13 +33,10 @@ void add_value(krosc::msgs::DiagnosticStatus& status, const std::string& key, co
 RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
     : Node(context, "RobotBridge"),
       robot_(robot),
-      joint_states_period_(declare_parameter<double>("joint_states_period", 0.05,
-                                                     [](double value) { return value > 0.0; })),
       diagnostics_period_(declare_parameter<double>("diagnostics_period", 1.0,
                                                     [](double value) { return value > 0.0; })),
       data_timeout_(declare_parameter<double>("data_timeout", 2.0,
                                               [](double value) { return value > 0.0; })) {
-  last_joint_states_ = now();
   last_diagnostics_ = now();
   last_arm_status_ = now();
   command_subscription_ = subscribe<krosc::msgs::Twist>(
@@ -50,10 +46,6 @@ RobotBridge::RobotBridge(krosc::Context& context, RealTurtleBot3& robot)
         robot_.opencr().write(twist);
       },
       krosc::QOS_COMMAND);
-  arm_command_subscription_ = subscribe<krosc::msgs::JointState>(
-      "arm_joint_command",
-      [this](const krosc::msgs::JointState& message) { on_arm_command(message); },
-      krosc::QOS_DEFAULT);
   arm_torque_subscription_ = subscribe<krosc::msgs::Bool>(
       "arm_torque", [this](const krosc::msgs::Bool& message) { robot_.opencr().set_arm_torque(message.data); },
       krosc::QOS_DEFAULT);
@@ -118,10 +110,6 @@ void RobotBridge::poll() {
   if (auto scan = robot_.scan(current)) {
     publish("scan", std::move(*scan), krosc::QOS_SENSOR_DATA);
   }
-  if (current - last_joint_states_ >= joint_states_period_.value()) {
-    publish_joint_states();
-    last_joint_states_ = current;
-  }
   if (current - last_diagnostics_ >= diagnostics_period_.value()) {
     publish_diagnostics();
     last_diagnostics_ = current;
@@ -130,53 +118,6 @@ void RobotBridge::poll() {
     publish_arm_status();
     last_arm_status_ = current;
   }
-}
-
-void RobotBridge::on_arm_command(const krosc::msgs::JointState& message) {
-  std::array<double, 5> target{std::numeric_limits<double>::quiet_NaN(),
-                               std::numeric_limits<double>::quiet_NaN(),
-                               std::numeric_limits<double>::quiet_NaN(),
-                               std::numeric_limits<double>::quiet_NaN(),
-                               std::numeric_limits<double>::quiet_NaN()};
-  if (message.name.empty()) {
-    const std::size_t count = std::min<std::size_t>(5, message.position.size());
-    for (std::size_t i = 0; i < count; ++i) {
-      target[i] = message.position[i];
-    }
-  } else {
-    const std::size_t count = std::min(message.name.size(), message.position.size());
-    for (std::size_t i = 0; i < count; ++i) {
-      const std::string& name = message.name[i];
-      if (name == "joint1") {
-        target[0] = message.position[i];
-      } else if (name == "joint2") {
-        target[1] = message.position[i];
-      } else if (name == "joint3") {
-        target[2] = message.position[i];
-      } else if (name == "joint4") {
-        target[3] = message.position[i];
-      } else if (name == "gripper" || name == "gripper_left_joint" || name == "gripper_right_joint") {
-        target[4] = message.position[i];
-      }
-    }
-  }
-  robot_.opencr().write_arm(target);
-}
-
-void RobotBridge::publish_joint_states() {
-  const auto positions = robot_.joint_positions();
-  if (positions.empty()) {
-    return;
-  }
-  krosc::msgs::JointState state;
-  state.header.stamp = now();
-  state.name.reserve(positions.size());
-  state.position.reserve(positions.size());
-  for (const auto& [name, position] : positions) {
-    state.name.push_back(name);
-    state.position.push_back(position);
-  }
-  publish(krosc::JOINT_STATES_TOPIC_NAME, std::move(state));
 }
 
 void RobotBridge::publish_arm_status() {

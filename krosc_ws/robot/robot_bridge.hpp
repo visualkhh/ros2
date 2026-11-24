@@ -13,7 +13,8 @@
 namespace krosc_ws {
 
 // 실기 하드웨어와 krosc 토픽을 잇는 접착제.
-// cmd_vel -> OpenCR.write, OpenCR/LDS-03 값 -> scan/imu/joint_states/diagnostics.
+// cmd_vel -> OpenCR.write, OpenCR/LDS-03 값 -> scan/imu/diagnostics.
+// joint_states는 ros2_control joint_state_broadcaster가 낸다 (이 노드는 더 이상 발행하지 않는다).
 // 센서 발행은 메인 실시간 루프가 poll()로 당긴다 (발행 스레드를 따로 두지 않는다).
 class RobotBridge final : public krosc::Node {
  public:
@@ -22,20 +23,15 @@ class RobotBridge final : public krosc::Node {
   void poll();
 
  private:
-  void publish_joint_states();
   void publish_diagnostics();
   void publish_arm_status();
-  void on_arm_command(const krosc::msgs::JointState& message);
 
   RealTurtleBot3& robot_;
-  krosc::Parameter<double> joint_states_period_;
   krosc::Parameter<double> diagnostics_period_;
   krosc::Parameter<double> data_timeout_;
-  double last_joint_states_ = 0.0;
   double last_diagnostics_ = 0.0;
   double last_arm_status_ = 0.0;
   krosc::Subscription<krosc::msgs::Twist> command_subscription_;
-  krosc::Subscription<krosc::msgs::JointState> arm_command_subscription_;
   krosc::Subscription<krosc::msgs::Bool> arm_torque_subscription_;
   krosc::Subscription<krosc::msgs::Empty> arm_stop_subscription_;
   krosc::Subscription<krosc::msgs::String> arm_reset_subscription_;

@@ -1,16 +1,18 @@
-#include "krosc/nodes/moveit_lite.hpp"
+#include "krosc/moveit/move_group.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <sstream>
+#include <thread>
 #include <utility>
 
 #include "krosc/math.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/urdf.hpp"
 
-namespace krosc::nodes {
+namespace krosc::moveit {
 
 namespace {
 
@@ -49,7 +51,8 @@ msgs::PoseStamped make_pose(const std::string& frame, const msgs::Transform& tra
 }
 
 msgs::Path make_path(const std::string& frame,
-                     const std::vector<std::pair<std::string, msgs::Transform>>& transforms, double stamp) {
+                     const std::vector<std::pair<std::string, msgs::Transform>>& transforms,
+                     double stamp) {
   msgs::Path path;
   path.header.stamp = stamp;
   path.header.frame_id = frame;
@@ -62,7 +65,9 @@ msgs::Path make_path(const std::string& frame,
 
 }  // namespace
 
-MoveItLite::MoveItLite(Context& context, std::string name, std::map<std::string, ParamValue> parameters)
+MoveGroup::MoveGroup(Context& context, std::string name, std::map<std::string, ParamValue> parameters,
+                     KinematicsRegistry kinematics, PlannerRegistry planners,
+                     ControllerManagerRegistry controllers)
     : Node(context, std::move(name), std::move(parameters)),
       base_link_(declare_parameter<std::string>("base_link", "base_link")),
       tip_link_(declare_parameter<std::string>("tip_link", "end_effector_link")),
@@ -82,11 +87,19 @@ MoveItLite::MoveItLite(Context& context, std::string name, std::map<std::string,
                                                  [](double value) { return value > 0.0; })),
       sample_time_(declare_parameter<double>("sample_time", 0.05,
                                              [](double value) { return value > 0.0; })),
-      arm_command_topic_(declare_parameter<std::string>("arm_command_topic", "arm_joint_command")),
-      arm_stop_topic_(declare_parameter<std::string>("arm_stop_topic", "arm_stop")) {
+      arm_stop_topic_(declare_parameter<std::string>("arm_stop_topic", "arm_stop")),
+      kinematics_plugin_(declare_parameter<std::string>("kinematics.plugin",
+                                                        "krosc_moveit/ArmChainKinematics")),
+      planner_plugin_(declare_parameter<std::string>("planner.plugin",
+                                                     "krosc_moveit/CartesianPlanner")),
+      controller_manager_plugin_(declare_parameter<std::string>(
+          "controller_manager.plugin", "krosc_moveit/SimpleControllerManager")),
+      kinematics_registry_(std::move(kinematics)),
+      planner_registry_(std::move(planners)),
+      controller_registry_(std::move(controllers)) {
   if (joint_names_.value().size() != 4 || lower_limits_.value().size() != 4 ||
       upper_limits_.value().size() != 4) {
-    logger().error("MoveItLite: joint_names/lower_limits/upper_limits는 4개여야 한다");
+    logger().error("MoveGroup: joint_names/lower_limits/upper_limits는 4개여야 한다");
   }
   robot_description_subscription_ = subscribe<msgs::String>(
       "robot_description", [this](const msgs::String& message) { on_robot_description(message); },
@@ -106,14 +119,37 @@ MoveItLite::MoveItLite(Context& context, std::string name, std::map<std::string,
       "moveit_cancel", [this](const msgs::Empty& message) { on_cancel(message); }, QOS_DEFAULT);
   scrub_subscription_ = subscribe<msgs::String>(
       "moveit_scrub", [this](const msgs::String& message) { on_scrub(message); }, QOS_DEFAULT);
+  action_ = std::make_unique<ActionServer<msgs::moveit::MoveGroupGoal,
+                                          msgs::moveit::MoveGroupFeedback,
+                                          msgs::moveit::MoveGroupResult>>(
+      context, msgs::moveit::MOVE_ACTION,
+      [this](MoveHandle& handle) { return execute_move(handle.goal(), &handle); },
+      [this](const msgs::moveit::MoveGroupGoal&) { return !busy_.load(); });
   tick_timer_ = create_timer(0.05, [this] { tick(); });
   status_timer_ = create_timer(1.0, [this] { heartbeat(); });
-  logger().info("MoveItLite: base=%s tip=%s joints=%zu speed=%.2f/%.2f cart=%.3f",
-                base_link_.value().c_str(), tip_link_.value().c_str(), joint_names_.value().size(),
-                max_joint_speed_.value(), max_joint_accel_.value(), cartesian_speed_.value());
+  logger().info("MoveGroup: base=%s tip=%s joints=%zu kinematics=%s planner=%s controller=%s",
+                base_link_.value().c_str(), tip_link_.value().c_str(),
+                joint_names_.value().size(), kinematics_plugin_.value().c_str(),
+                planner_plugin_.value().c_str(), controller_manager_plugin_.value().c_str());
 }
 
-void MoveItLite::on_robot_description(const msgs::String& message) {
+MoveGroup::~MoveGroup() {
+  cancel_requested_.store(true);
+  if (action_) {
+    action_->shutdown();
+  }
+  std::shared_ptr<FollowJointTrajectoryHandle> follow;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    follow = follow_;
+    follow_.reset();
+  }
+  if (follow) {
+    follow->cancel();
+  }
+}
+
+void MoveGroup::on_robot_description(const msgs::String& message) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (message.data.empty() || message.data == robot_description_) {
     return;
@@ -121,12 +157,13 @@ void MoveItLite::on_robot_description(const msgs::String& message) {
   robot_description_ = message.data;
   std::string error;
   if (!rebuild_chain(error)) {
-    logger().error("MoveItLite: %s", error.c_str());
-    status_text_ = "MoveIt: " + error;
+    logger().error("MoveGroup: %s", error.c_str());
+    status_text_ = "MoveGroup: " + error;
   }
+  publish_state_locked();
 }
 
-bool MoveItLite::rebuild_chain(std::string& error) {
+bool MoveGroup::rebuild_chain(std::string& error) {
   chain_ready_ = false;
   try {
     const UrdfRobot robot = parse_urdf(robot_description_);
@@ -135,8 +172,6 @@ bool MoveItLite::rebuild_chain(std::string& error) {
     if (!chain) {
       return false;
     }
-    chain->lower = {-3.141592653589793, -2.20, -2.00, -2.00};
-    chain->upper = {3.141592653589793, 2.20, 2.00, 2.20};
     if (lower_limits_.value().size() == 4) {
       for (std::size_t i = 0; i < 4; ++i) {
         chain->lower[i] = lower_limits_.value()[i];
@@ -148,8 +183,26 @@ bool MoveItLite::rebuild_chain(std::string& error) {
       }
     }
     chain_ = std::move(*chain);
+    kinematics_ = kinematics_registry_.create(kinematics_plugin_.value());
+    planner_ = planner_registry_.create(planner_plugin_.value());
+    controller_manager_ = controller_registry_.create(controller_manager_plugin_.value());
+    if (!kinematics_ || !planner_ || !controller_manager_) {
+      error = "MoveIt 플러그인을 찾을 수 없다: kinematics=" + kinematics_plugin_.value() +
+              " planner=" + planner_plugin_.value() + " controller=" +
+              controller_manager_plugin_.value();
+      return false;
+    }
+    manipulation::PlanOptions options;
+    options.max_joint_speed = max_joint_speed_.value();
+    options.max_joint_accel = max_joint_accel_.value();
+    options.sample_time = sample_time_.value();
+    options.cartesian_speed = cartesian_speed_.value();
+    options.cartesian_accel = cartesian_accel_.value();
+    kinematics_->initialize(*this, "kinematics", chain_);
+    planner_->initialize(*this, "planner", chain_, options);
+    controller_manager_->initialize(*this, "controller_manager", joint_names_.value());
     chain_ready_ = true;
-    logger().info("MoveItLite: URDF 체인 준비 (segments=%zu)", chain_.segments.size());
+    logger().info("MoveGroup: URDF 체인 준비 (segments=%zu)", chain_.segments.size());
     return true;
   } catch (const std::exception& exception) {
     error = std::string("URDF: ") + exception.what();
@@ -157,7 +210,7 @@ bool MoveItLite::rebuild_chain(std::string& error) {
   }
 }
 
-void MoveItLite::on_joint_states(const msgs::JointState& message) {
+void MoveGroup::on_joint_states(const msgs::JointState& message) {
   std::lock_guard<std::mutex> lock(mutex_);
   std::map<std::string, double> values;
   for (std::size_t i = 0; i < message.name.size() && i < message.position.size(); ++i) {
@@ -179,7 +232,7 @@ void MoveItLite::on_joint_states(const msgs::JointState& message) {
   }
 }
 
-void MoveItLite::on_arm_status(const msgs::String& message) {
+void MoveGroup::on_arm_status(const msgs::String& message) {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string& text = message.data;
   const std::size_t start = text.find("err=");
@@ -187,7 +240,8 @@ void MoveItLite::on_arm_status(const msgs::String& message) {
     return;
   }
   const std::size_t end = text.find(';', start);
-  const std::string list = text.substr(start + 4, end == std::string::npos ? std::string::npos : end - start - 4);
+  const std::string list =
+      text.substr(start + 4, end == std::string::npos ? std::string::npos : end - start - 4);
   std::stringstream stream(list);
   std::string token;
   std::array<int, 5> errors{{-1, -1, -1, -1, -1}};
@@ -208,10 +262,13 @@ void MoveItLite::on_arm_status(const msgs::String& message) {
   arm_errors_ = errors;
   if (executing_ && has_arm_error_locked()) {
     stop_execution_locked("ARM ERR — Execute 중지", true);
+    if (follow_) {
+      (void)controller_manager_->cancel(follow_);
+    }
   }
 }
 
-bool MoveItLite::parse_target(const std::string& text, Target& target, std::string& error) const {
+bool MoveGroup::parse_target(const std::string& text, Target& target, std::string& error) const {
   std::vector<std::string> fields;
   std::stringstream stream(text);
   std::string token;
@@ -248,7 +305,7 @@ bool MoveItLite::parse_target(const std::string& text, Target& target, std::stri
   return true;
 }
 
-bool MoveItLite::current_joints(std::array<double, 4>& joints) const {
+bool MoveGroup::current_joints(std::array<double, 4>& joints) const {
   if (!current_) {
     return false;
   }
@@ -256,7 +313,7 @@ bool MoveItLite::current_joints(std::array<double, 4>& joints) const {
   return true;
 }
 
-bool MoveItLite::has_arm_error_locked() const {
+bool MoveGroup::has_arm_error_locked() const {
   for (int error : arm_errors_) {
     if (error > 0) {
       return true;
@@ -265,14 +322,59 @@ bool MoveItLite::has_arm_error_locked() const {
   return false;
 }
 
-std::array<int, 5> MoveItLite::arm_errors_locked() const { return arm_errors_; }
+std::array<int, 5> MoveGroup::arm_errors_locked() const { return arm_errors_; }
 
-void MoveItLite::publish_status_locked(const std::string& text) {
+bool MoveGroup::solve_ik_locked(const Target& target, const std::array<double, 4>& seed,
+                                std::array<double, 4>& goal, std::string& error,
+                                bool fast) const {
+  if (!kinematics_) {
+    error = "kinematics 플러그인이 없다";
+    return false;
+  }
+  KinematicsQuery query;
+  query.target = {target.x, target.y, target.z};
+  query.pitch_down = target.pitch;
+  query.seed = seed;
+  query.fast = fast;
+  const auto result = kinematics_->search_position_ik(query);
+  if (!result.success) {
+    error = result.error;
+    return false;
+  }
+  goal = result.solution;
+  return true;
+}
+
+std::optional<manipulation::Trajectory> MoveGroup::plan_trajectory_locked(
+    const std::array<double, 4>& start, const std::array<double, 4>& goal, bool cartesian,
+    std::string& error) const {
+  if (!planner_) {
+    error = "planner 플러그인이 없다";
+    return std::nullopt;
+  }
+  PlanningRequest request;
+  request.start = start;
+  request.goal = goal;
+  request.cartesian = cartesian;
+  request.max_joint_speed = max_joint_speed_.value();
+  request.max_joint_accel = max_joint_accel_.value();
+  request.sample_time = sample_time_.value();
+  request.cartesian_speed = cartesian_speed_.value();
+  request.cartesian_accel = cartesian_accel_.value();
+  auto result = planner_->plan(request);
+  if (!result.success) {
+    error = result.error;
+    return std::nullopt;
+  }
+  return std::move(result.trajectory);
+}
+
+void MoveGroup::publish_status_locked(const std::string& text) {
   status_text_ = text;
   publish("moveit_status", msgs::String{text}, QOS_DEFAULT);
 }
 
-void MoveItLite::publish_state_locked() {
+void MoveGroup::publish_state_locked() {
   std::ostringstream stream;
   stream.precision(4);
   stream << std::fixed;
@@ -293,7 +395,7 @@ void MoveItLite::publish_state_locked() {
   last_state_ = now();
 }
 
-void MoveItLite::publish_target_pose_locked() {
+void MoveGroup::publish_target_pose_locked() {
   if (!chain_ready_ || !target_) {
     return;
   }
@@ -303,19 +405,20 @@ void MoveItLite::publish_target_pose_locked() {
   } else {
     const msgs::Vector3 point{target_->x, target_->y, target_->z};
     const msgs::Vector3 proximal = tfmath::apply(tfmath::inverse(chain_.base_to_proximal), point);
-    const double yaw = std::atan2(proximal.y, proximal.x - chain_.proximal_joint_origin.translation.x);
+    const double yaw =
+        std::atan2(proximal.y, proximal.x - chain_.proximal_joint_origin.translation.x);
     transform = {{target_->x, target_->y, target_->z}, tfmath::from_rpy(0.0, target_->pitch, yaw)};
   }
   publish("moveit_target_pose", make_pose(base_link_.value(), transform, now()), QOS_DEFAULT);
 }
 
-void MoveItLite::publish_path_locked(
+void MoveGroup::publish_path_locked(
     const std::string& topic,
     const std::vector<std::pair<std::string, msgs::Transform>>& links) {
   publish(topic, make_path(base_link_.value(), links, now()), QOS_DEFAULT);
 }
 
-void MoveItLite::publish_preview_locked(int index) {
+void MoveGroup::publish_preview_locked(int index) {
   if (!chain_ready_) {
     return;
   }
@@ -353,7 +456,7 @@ void MoveItLite::publish_preview_locked(int index) {
   publish_target_pose_locked();
 }
 
-bool MoveItLite::plan_locked(std::string& error) {
+bool MoveGroup::plan_locked(std::string& error) {
   if (!chain_ready_) {
     publish_status_locked("Plan 실패: robot_description/URDF 체인 대기 중");
     publish_state_locked();
@@ -380,15 +483,14 @@ bool MoveItLite::plan_locked(std::string& error) {
   std::array<double, 4> goal{};
   std::string ik_error;
   bool ik_ok = false;
-  // 드래그 preview는 직전 해를 seed로 한 번만 풀어 빠르게 반응한다.
   if (goal_) {
-    ik_ok = chain_.ik({target_->x, target_->y, target_->z}, target_->pitch, *goal_, goal, ik_error, true);
+    ik_ok = solve_ik_locked(*target_, *goal_, goal, ik_error, true);
   }
   if (!ik_ok) {
-    ik_ok = chain_.ik({target_->x, target_->y, target_->z}, target_->pitch, *current_, goal, ik_error, true);
+    ik_ok = solve_ik_locked(*target_, *current_, goal, ik_error, true);
   }
   if (!ik_ok) {
-    ik_ok = chain_.ik({target_->x, target_->y, target_->z}, target_->pitch, *current_, goal, ik_error, false);
+    ik_ok = solve_ik_locked(*target_, *current_, goal, ik_error, false);
   }
   if (!ik_ok) {
     trajectory_.reset();
@@ -420,14 +522,8 @@ bool MoveItLite::plan_locked(std::string& error) {
     return true;
   }
   preview_path_.clear();
-  manipulation::PlanOptions options;
-  options.max_joint_speed = max_joint_speed_.value();
-  options.max_joint_accel = max_joint_accel_.value();
-  options.sample_time = sample_time_.value();
-  options.cartesian = target_->cartesian;
-  options.cartesian_speed = cartesian_speed_.value();
-  options.cartesian_accel = cartesian_accel_.value();
-  auto trajectory = manipulation::plan_trajectory(chain_, *current_, goal, options, error);
+  auto trajectory =
+      plan_trajectory_locked(*current_, goal, target_->cartesian, error);
   if (!trajectory) {
     trajectory_.reset();
     goal_.reset();
@@ -447,11 +543,64 @@ bool MoveItLite::plan_locked(std::string& error) {
   if (trajectory_->fallback) {
     status << "\nCartesian 실패 → joint-space 대체";
   }
+  status << " [" << planner_->type() << "]";
   publish_status_locked(status.str());
   return true;
 }
 
-void MoveItLite::on_target(const msgs::String& message) {
+bool MoveGroup::goal_from_request_locked(const msgs::moveit::MoveGroupGoal& request,
+                                         std::array<double, 4>& goal, std::string& error) const {
+  if (!current_) {
+    error = "joint_states가 없다";
+    return false;
+  }
+  if (request.joint_goal.size() == 4) {
+    for (std::size_t i = 0; i < 4; ++i) {
+      if (request.joint_goal[i] < chain_.lower[i] - 1e-6 ||
+          request.joint_goal[i] > chain_.upper[i] + 1e-6) {
+        error = "joint_goal이 관절 한계를 벗어난다";
+        return false;
+      }
+      goal[i] = request.joint_goal[i];
+    }
+    return true;
+  }
+  Target target;
+  target.x = request.target_pose.pose.position.x;
+  target.y = request.target_pose.pose.position.y;
+  target.z = request.target_pose.pose.position.z;
+  const auto rpy = tfmath::to_rpy(request.target_pose.pose.orientation);
+  target.pitch = -rpy.pitch;
+  target.grip = gripper_;
+  target.cartesian = request.cartesian;
+  target.preview = false;
+  std::string ik_error;
+  if (solve_ik_locked(target, *current_, goal, ik_error, true)) {
+    return true;
+  }
+  error = ik_error;
+  return false;
+}
+
+msgs::control::JointTrajectory MoveGroup::to_message_locked(
+    const manipulation::Trajectory& trajectory) const {
+  msgs::control::JointTrajectory message;
+  message.header = msgs::Header{now(), base_link_.value()};
+  message.joint_names = joint_names_.value();
+  message.joint_names.push_back("gripper_left_joint");
+  const double grip = target_ ? target_->grip : gripper_;
+  message.points.reserve(trajectory.points.size());
+  for (const auto& point : trajectory.points) {
+    msgs::control::JointTrajectoryPoint target;
+    target.positions.assign(point.position.begin(), point.position.end());
+    target.positions.push_back(grip);
+    target.time_from_start = point.time;
+    message.points.push_back(std::move(target));
+  }
+  return message;
+}
+
+void MoveGroup::on_target(const msgs::String& message) {
   Target target;
   std::string error;
   if (!parse_target(message.data, target, error)) {
@@ -460,7 +609,7 @@ void MoveItLite::on_target(const msgs::String& message) {
     return;
   }
   std::lock_guard<std::mutex> lock(mutex_);
-  if (executing_) {
+  if (executing_ || busy_.load()) {
     publish_status_locked("Target 거부: Execute 중이다");
     return;
   }
@@ -473,9 +622,9 @@ void MoveItLite::on_target(const msgs::String& message) {
   }
 }
 
-void MoveItLite::on_plan(const msgs::Empty&) {
+void MoveGroup::on_plan(const msgs::Empty&) {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (executing_) {
+  if (executing_ || busy_.load()) {
     publish_status_locked("Plan 거부: Execute 중이다");
     return;
   }
@@ -483,26 +632,27 @@ void MoveItLite::on_plan(const msgs::Empty&) {
     target_->preview = false;
   }
   std::string error;
-  if (!plan_locked(error)) {
-    return;
-  }
+  (void)plan_locked(error);
 }
 
-void MoveItLite::on_execute(const msgs::Empty&) {
+void MoveGroup::on_execute(const msgs::Empty&) {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (executing_) {
+  if (busy_.exchange(true)) {
     publish_status_locked("Execute: 이미 실행 중");
     return;
   }
   if (!trajectory_ || trajectory_->points.empty()) {
+    busy_.store(false);
     publish_status_locked("Execute 실패: 계획이 없다");
     return;
   }
   if (!current_) {
+    busy_.store(false);
     publish_status_locked("Execute 실패: joint_states가 없다");
     return;
   }
   if (has_arm_error_locked()) {
+    busy_.store(false);
     publish_status_locked("Execute 실패: ARM ERR — 먼저 Reset (AR)");
     return;
   }
@@ -512,17 +662,32 @@ void MoveItLite::on_execute(const msgs::Empty&) {
     difference = std::max(difference, std::abs(first[i] - (*current_)[i]));
   }
   if (difference > 0.08) {
+    busy_.store(false);
     publish_status_locked("Execute 거부: 현재 자세가 계획 시작과 다르다 (replan)");
     return;
   }
+  if (!controller_manager_) {
+    busy_.store(false);
+    publish_status_locked("Execute 실패: controller_manager 플러그인이 없다");
+    return;
+  }
+  follow_ = controller_manager_->send(to_message_locked(*trajectory_));
+  if (!follow_ || !follow_->accepted()) {
+    follow_.reset();
+    busy_.store(false);
+    publish_status_locked("Execute 실패: controller가 goal을 거부했다");
+    return;
+  }
+  cancel_requested_.store(false);
   executing_ = true;
+  action_owned_ = false;
   execution_start_ = now();
   preview_index_ = 0;
   publish_status_locked("Execute 시작");
   publish_state_locked();
 }
 
-void MoveItLite::stop_execution_locked(const std::string& reason, bool publish_stop) {
+void MoveGroup::stop_execution_locked(const std::string& reason, bool publish_stop) {
   executing_ = false;
   if (publish_stop) {
     publish(arm_stop_topic_.value(), msgs::Empty{}, QOS_DEFAULT);
@@ -531,20 +696,22 @@ void MoveItLite::stop_execution_locked(const std::string& reason, bool publish_s
   publish_state_locked();
 }
 
-void MoveItLite::on_cancel(const msgs::Empty&) {
+void MoveGroup::on_cancel(const msgs::Empty&) {
   std::lock_guard<std::mutex> lock(mutex_);
+  cancel_requested_.store(true);
+  if (follow_ && controller_manager_) {
+    (void)controller_manager_->cancel(follow_);
+  }
   stop_execution_locked("Cancel: 정지, 다시 Plan 필요", true);
-  trajectory_.reset();
-  goal_.reset();
-  preview_path_.clear();
-  preview_index_ = 0;
-  publish_target_pose_locked();
-  publish_state_locked();
+  follow_.reset();
+  if (!action_owned_) {
+    busy_.store(false);
+  }
 }
 
-void MoveItLite::on_scrub(const msgs::String& message) {
+void MoveGroup::on_scrub(const msgs::String& message) {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (executing_) {
+  if (executing_ || busy_.load()) {
     publish_status_locked("Preview: Execute 중에는 scrub할 수 없다");
     return;
   }
@@ -570,7 +737,7 @@ void MoveItLite::on_scrub(const msgs::String& message) {
   publish_status_locked(status.str());
 }
 
-void MoveItLite::tick() {
+void MoveGroup::tick() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!executing_ || !trajectory_ || trajectory_->points.empty()) {
     return;
@@ -582,26 +749,33 @@ void MoveItLite::tick() {
   while (index + 1 < points.size() && points[index + 1].time <= elapsed) {
     ++index;
   }
-  std::array<double, 4> position = points[index].position;
-  if (index + 1 < points.size()) {
-    const double segment = points[index + 1].time - points[index].time;
-    if (segment > 1e-9) {
-      const double ratio = std::clamp((elapsed - points[index].time) / segment, 0.0, 1.0);
-      for (std::size_t i = 0; i < 4; ++i) {
-        position[i] = points[index].position[i] +
-                      (points[index + 1].position[i] - points[index].position[i]) * ratio;
+  preview_index_ = static_cast<int>(index);
+  if (!action_owned_ && follow_ && follow_->status() != GoalStatus::Accepted) {
+    const ActionResult action_result = follow_->result(1.0);
+    int code = msgs::control::FollowJointTrajectoryResult::INVALID_GOAL;
+    std::string error;
+    if (action_result.result.has_value()) {
+      try {
+        const auto result =
+            std::any_cast<msgs::control::FollowJointTrajectoryResult>(action_result.result);
+        code = result.error_code;
+        error = result.error_string;
+      } catch (const std::bad_any_cast&) {
       }
     }
+    follow_.reset();
+    executing_ = false;
+    action_owned_ = false;
+    busy_.store(false);
+    if (code == msgs::control::FollowJointTrajectoryResult::SUCCESSFUL) {
+      publish_status_locked("Execute 완료");
+    } else {
+      publish_status_locked("Execute 실패: " + error);
+    }
+    publish_preview_locked(preview_index_);
+    publish_state_locked();
+    return;
   }
-  msgs::JointState command;
-  for (std::size_t i = 0; i < 4; ++i) {
-    command.name.push_back(joint_names_.value()[i]);
-    command.position.push_back(position[i]);
-  }
-  command.name.push_back("gripper_left_joint");
-  command.position.push_back(target_ ? target_->grip : gripper_);
-  publish(arm_command_topic_.value(), command, QOS_DEFAULT);
-  preview_index_ = static_cast<int>(index);
   if (now() - last_preview_ >= 0.1) {
     publish_preview_locked(preview_index_);
     last_preview_ = now();
@@ -618,13 +792,9 @@ void MoveItLite::tick() {
     publish_status_locked(status.str());
     last_status_ = now();
   }
-  if (elapsed >= duration - 1e-9) {
-    stop_execution_locked("Execute 완료", false);
-    publish_preview_locked(preview_index_);
-  }
 }
 
-void MoveItLite::heartbeat() {
+void MoveGroup::heartbeat() {
   std::lock_guard<std::mutex> lock(mutex_);
   publish_state_locked();
   publish_status_locked(status_text_);
@@ -637,4 +807,161 @@ void MoveItLite::heartbeat() {
   }
 }
 
-}  // namespace krosc::nodes
+msgs::moveit::MoveGroupResult MoveGroup::execute_move(const msgs::moveit::MoveGroupGoal& request,
+                                                      MoveHandle* handle) {
+  msgs::moveit::MoveGroupResult result;
+  if (busy_.exchange(true)) {
+    result.error_code = msgs::moveit::MoveGroupResult::CONTROLLER_FAILED;
+    result.error_msg = "이미 실행 중이다";
+    return result;
+  }
+  cancel_requested_.store(false);
+  std::array<double, 4> start{};
+  std::array<double, 4> goal{};
+  std::string error;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!chain_ready_ || !current_) {
+      busy_.store(false);
+      result.error_code = msgs::moveit::MoveGroupResult::UNKNOWN;
+      result.error_msg = !chain_ready_ ? "URDF 체인 대기 중" : "joint_states 대기 중";
+      publish_status_locked("Move: " + result.error_msg);
+      return result;
+    }
+    if (has_arm_error_locked()) {
+      busy_.store(false);
+      result.error_code = msgs::moveit::MoveGroupResult::INVALID_GOAL;
+      result.error_msg = "ARM ERR — 먼저 Reset (AR)";
+      publish_status_locked("Move: " + result.error_msg);
+      return result;
+    }
+    start = *current_;
+    if (!goal_from_request_locked(request, goal, error)) {
+      busy_.store(false);
+      result.error_code = msgs::moveit::MoveGroupResult::INVALID_GOAL;
+      result.error_msg = error;
+      publish_status_locked("Move 실패: " + error);
+      return result;
+    }
+    auto trajectory = plan_trajectory_locked(start, goal, request.cartesian, error);
+    if (!trajectory) {
+      busy_.store(false);
+      result.error_code = msgs::moveit::MoveGroupResult::PLANNING_FAILED;
+      result.error_msg = error;
+      publish_status_locked("Move 실패: " + error);
+      return result;
+    }
+    trajectory_ = std::move(*trajectory);
+    goal_ = goal;
+    preview_index_ = static_cast<int>(trajectory_->points.size()) - 1;
+    publish_preview_locked(preview_index_);
+    publish_state_locked();
+    result.trajectory = to_message_locked(*trajectory_);
+    if (request.plan_only) {
+      busy_.store(false);
+      publish_status_locked("Move: plan_only");
+      return result;
+    }
+    if (!controller_manager_) {
+      busy_.store(false);
+      result.error_code = msgs::moveit::MoveGroupResult::CONTROLLER_FAILED;
+      result.error_msg = "controller_manager 플러그인이 없다";
+      return result;
+    }
+    follow_ = controller_manager_->send(result.trajectory);
+    if (!follow_ || !follow_->accepted()) {
+      follow_.reset();
+      busy_.store(false);
+      result.error_code = msgs::moveit::MoveGroupResult::CONTROLLER_FAILED;
+      result.error_msg = "controller가 goal을 거부했다";
+      publish_status_locked("Move 실패: " + result.error_msg);
+      return result;
+    }
+    executing_ = true;
+    action_owned_ = true;
+    execution_start_ = now();
+    publish_status_locked("Execute 시작 (move_action)");
+  }
+  double last_feedback = -1e18;
+  double duration = 0.0;
+  double started = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    duration = trajectory_ ? trajectory_->duration : 0.0;
+    started = execution_start_;
+  }
+  for (;;) {
+    if (handle != nullptr && handle->is_cancel_requested()) {
+      cancel_requested_.store(true);
+    }
+    if (cancel_requested_.load()) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (follow_ && controller_manager_) {
+        (void)controller_manager_->cancel(follow_);
+      }
+      follow_.reset();
+      executing_ = false;
+      action_owned_ = false;
+      busy_.store(false);
+      publish_status_locked("Cancel: 정지, 다시 Plan 필요");
+      result.error_code = msgs::moveit::MoveGroupResult::CANCELLED;
+      result.error_msg = "취소";
+      return result;
+    }
+    std::shared_ptr<FollowJointTrajectoryHandle> follow;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      follow = follow_;
+    }
+    if (!follow || follow->status() != GoalStatus::Accepted) {
+      break;
+    }
+    const double current = now();
+    if (handle != nullptr && current - last_feedback >= 0.1) {
+      last_feedback = current;
+      msgs::moveit::MoveGroupFeedback feedback;
+      feedback.state = "executing";
+      feedback.progress = duration > 1e-9 ? std::clamp((current - started) / duration, 0.0, 1.0) : 1.0;
+      handle->publish_feedback(feedback);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  std::shared_ptr<FollowJointTrajectoryHandle> follow;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    follow = follow_;
+    follow_.reset();
+    executing_ = false;
+    action_owned_ = false;
+    busy_.store(false);
+  }
+  int code = msgs::control::FollowJointTrajectoryResult::INVALID_GOAL;
+  std::string message;
+  if (follow) {
+    const ActionResult action_result = follow->result(1.0);
+    if (action_result.result.has_value()) {
+      try {
+        const auto controller_result =
+            std::any_cast<msgs::control::FollowJointTrajectoryResult>(action_result.result);
+        code = controller_result.error_code;
+        message = controller_result.error_string;
+      } catch (const std::bad_any_cast&) {
+      }
+    }
+  } else {
+    message = "controller goal이 사라졌다";
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  publish_state_locked();
+  if (code == msgs::control::FollowJointTrajectoryResult::SUCCESSFUL) {
+    publish_status_locked("Execute 완료");
+    result.error_code = msgs::moveit::MoveGroupResult::NONE;
+  } else {
+    publish_status_locked("Execute 실패: " + message);
+    result.error_code = msgs::moveit::MoveGroupResult::CONTROLLER_FAILED;
+    result.error_msg = message;
+  }
+  return result;
+}
+
+}  // namespace krosc::moveit

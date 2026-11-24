@@ -21,23 +21,25 @@
 #include <vector>
 
 #include "krosc/context.hpp"
+#include "krosc/moveit/move_group.hpp"
 #include "krosc/net.hpp"
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
+#include "krosc/nodes/diff_drive_odometry.hpp"
+#include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/map_catalog.hpp"
-#include "krosc/nodes/moveit_lite.hpp"
-#include "krosc/nodes/velocity_smoother.hpp"
 #include "krosc/nodes/nav2/behavior_server.hpp"
 #include "krosc/nodes/nav2/bt_navigator.hpp"
 #include "krosc/nodes/nav2/controller_server.hpp"
 #include "krosc/nodes/nav2/costmap_2d_ros.hpp"
 #include "krosc/nodes/nav2/planner_server.hpp"
-#include "krosc/nodes/twist_mux.hpp"
-#include "krosc/nodes/diff_drive_odometry.hpp"
-#include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
+#include "krosc/nodes/twist_mux.hpp"
+#include "krosc/nodes/velocity_smoother.hpp"
+#include "krosc/ros2_control/controller_manager.hpp"
 #include "krosc/time.hpp"
 
+#include "hardware/opencr_system.hpp"
 #include "real_turtlebot3.hpp"
 #include "robot_bridge.hpp"
 
@@ -196,8 +198,37 @@ int main(int argc, char** argv) {
   krosc_ws::RobotBridge bridge(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "RobotStatePublisher",
                                                 {{"robot_description", urdf}});
-  krosc::nodes::MoveItLite moveit(
-      context, "moveit_lite",
+  // ros2_control: OpenCR을 SystemInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
+  // joint_states는 이제 joint_state_broadcaster가 내고, MoveIt은 JTC의 FollowJointTrajectory 액션으로 움직인다.
+  krosc::ros2_control::HardwareRegistry hardware_registry;
+  hardware_registry.add("krosc_ws/OpenCrSystem",
+                        [&robot] { return std::make_unique<krosc_ws::OpenCrSystem>(robot); });
+  krosc::ros2_control::ControllerManager controller_manager(
+      context, "controller_manager",
+      {{"update_rate", 50.0},
+       {"hardware.plugin", std::string("krosc_ws/OpenCrSystem")},
+       {"hardware.name", std::string("turtlebot3_real")},
+       {"controller_plugins",
+        std::vector<std::string>{"joint_state_broadcaster", "joint_trajectory_controller",
+                                 "arm_command_controller"}},
+       {"joint_state_broadcaster.type",
+        std::string("joint_state_broadcaster/JointStateBroadcaster")},
+       {"joint_trajectory_controller.type",
+        std::string("joint_trajectory_controller/JointTrajectoryController")},
+       {"joint_trajectory_controller.joints",
+        std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
+       {"joint_trajectory_controller.goal_time_tolerance", 0.5},
+       {"arm_command_controller.type",
+        std::string("forward_command_controller/ForwardCommandController")},
+       {"arm_command_controller.joints",
+        std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
+       {"arm_command_controller.command_topic", std::string("arm_joint_command")},
+       {"arm_command_controller.auto_activate", false}},
+      hardware_registry);
+  // MoveIt move_group: kinematics/planner/controller_manager 플러그인을 골라 조립한다.
+  // 기존 Viz의 moveit_target/moveit_plan/moveit_execute/moveit_cancel/moveit_scrub 토픽도 그대로 받는다.
+  krosc::moveit::MoveGroup move_group(
+      context, "move_group",
       {{"base_link", std::string("base_link")},
        {"tip_link", std::string("end_effector_link")},
        {"joint_names", std::vector<std::string>{"joint1", "joint2", "joint3", "joint4"}},
@@ -207,7 +238,12 @@ int main(int argc, char** argv) {
        {"max_joint_accel", 1.0},
        {"cartesian_speed", 0.08},
        {"cartesian_accel", 0.25},
-       {"sample_time", 0.05}});
+       {"sample_time", 0.05},
+       {"kinematics.plugin", std::string("krosc_moveit/ArmChainKinematics")},
+       {"planner.plugin", std::string("krosc_moveit/CartesianPlanner")},
+       {"controller_manager.plugin", std::string("krosc_moveit/SimpleControllerManager")},
+       {"controller_manager.action",
+        std::string("joint_trajectory_controller/follow_joint_trajectory")}});
   krosc::nodes::DiffDriveOdometry odometry(
       context, "DiffDriveOdometry",
       {{"wheel_radius", krosc_ws::RealTurtleBot3::kWheelRadius},

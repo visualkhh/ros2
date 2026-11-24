@@ -413,7 +413,7 @@ void MoveItPlugin::refresh() {
   }
   const auto state_message = host_->model().moveit_state();
   if (!state_message) {
-    current_label_->setText("now: moveit_lite 노드 대기 중");
+    current_label_->setText("now: move_group 노드 대기 중");
     return;
   }
   const auto fields = parse_state_fields(state_message->data);
@@ -455,7 +455,7 @@ void MoveItPlugin::refresh() {
       publish_target(true);
     }
   } else {
-    current_label_->setText("now: moveit_lite TCP 계산 대기");
+    current_label_->setText("now: move_group TCP 계산 대기");
   }
 
   int points = 0;
