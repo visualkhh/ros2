@@ -285,8 +285,8 @@ void VizWindow::build_slam_panel(QWidget* panel, QVBoxLayout* layout) {
 
   slam_mode_label_ = new QLabel("SLAM: -", group);
   slam_button_ = new QPushButton("start SLAM", group);
-  grid->addWidget(slam_mode_label_, 0, 0, 1, 3);
-  grid->addWidget(slam_button_, 0, 3);
+  grid->addWidget(slam_mode_label_, 0, 0, 1, 2);
+  grid->addWidget(slam_button_, 0, 2, 1, 2);
   connect(slam_button_, &QPushButton::clicked, this, [this] {
     const std::string target = slam_status_text() == "mapping" ? "idle" : "mapping";
     model_.node().publish("slam_mode", msgs::String{target}, QOS_DEFAULT);
