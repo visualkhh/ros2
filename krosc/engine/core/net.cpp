@@ -1102,7 +1102,7 @@ Server::Server(Context& context, std::uint16_t port) : impl_(std::make_unique<Im
       "arm_status", Kind::String, QOS_DEFAULT, false,
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
-      "rl_nav_status", Kind::String, QOS_DEFAULT, false,
+      "rl_nav_status", Kind::String, QOS_LATCHED, true,
       [](Writer& w, const msgs::String& message) { encode(w, message); });
   impl_->subscribe_topic<msgs::String>(
       "rl_nav_model_list", Kind::String, QOS_LATCHED, true,

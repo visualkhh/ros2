@@ -52,7 +52,10 @@ void add_value(krosc::msgs::DiagnosticStatus& status, const std::string& key,
 
 RlNavController::RlNavController() = default;
 
-RlNavController::~RlNavController() { cancel_subscriptions(); }
+RlNavController::~RlNavController() {
+  status_timer_.cancel();
+  cancel_subscriptions();
+}
 
 void RlNavController::cancel_subscriptions() {
   scan_subscription_.cancel();
@@ -134,7 +137,22 @@ void RlNavController::configure(krosc::Node& node, const std::string& name) {
       "rl_nav_reload", [this](const auto& message) { on_reload(message); }, krosc::QOS_DEFAULT);
   model_subscription_ = node_->subscribe<krosc::msgs::String>(
       "rl_nav_model", [this](const auto& message) { on_model(message); }, krosc::QOS_DEFAULT);
+  last_model_list_ = node_->now();
   publish_status_locked(Velocity{}, 2, false, 0.0);
+  // Viz가 늦게 붙어도(특히 시작 직후) 상태/모델 목록을 받도록 주기적으로 다시 낸다.
+  // 주행 중에는 compute가 0.2s마다 상태를 내므로 이 타이머는 쉰다.
+  status_timer_ = node_->create_timer(0.5, [this] {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const double now = node_->now();
+    if (now - last_status_ >= 1.0) {
+      const int reason = !enable_.value() ? 2 : (policy_.loaded() ? 0 : 1);
+      publish_status_locked(Velocity{}, reason, false, 0.0);
+    }
+    if (now - last_model_list_ >= 2.0) {
+      last_model_list_ = now;
+      publish_model_list_locked();
+    }
+  });
   node_->logger().info(
       "RlNavController plugin: enable=%d fallback=%s model=%s inputs=%lld onnxruntime=%d provider=%s",
       enable_.value(), fallback_controller_.value().c_str(), current_model_.c_str(),
@@ -409,7 +427,7 @@ void RlNavController::publish_status_locked(const Velocity& command, int reason,
     if (!policy_error_.empty()) {
       stream << ";error=" << policy_error_;
     }
-    node_->publish("rl_nav_status", krosc::msgs::String{stream.str()}, krosc::QOS_DEFAULT);
+    node_->publish("rl_nav_status", krosc::msgs::String{stream.str()}, krosc::QOS_LATCHED);
   }
 
   if (current - last_diagnostics_ >= diagnostics_period_.value()) {

@@ -255,6 +255,8 @@ fallback (`FollowPath.fallback_controller` 또는 Viz의 `rl_nav_fallback`):
 
 RL이 켜져도 scan/odom/plan/TF가 없거나 추론이 실패하면 자동으로 fallback한다.
 `infer_ms`, `scan_age`, `reason`, `provider`, `onnxruntime`은 `rl_nav_status`로 Viz에 표시된다.
+`rl_nav_status`는 latched이고 1초마다, 모델 목록은 2초마다 다시 내므로 Viz가 늦게 접속해도
+현재 상태/모델이 보인다 (주행 중에는 compute가 0.2초마다 상태를 갱신한다).
 
 진단은 ROS 2처럼 `diagnostics`(`diagnostic_msgs/DiagnosticArray`)에 `controller_server: RL Navigation`
 상태를 낸다. 값: `onnxruntime`, `onnxruntime_version`, `provider`, `providers`,

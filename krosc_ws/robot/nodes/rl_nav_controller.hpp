@@ -12,6 +12,7 @@
 #include "krosc/nodes/nav2/controllers/controller.hpp"
 #include "krosc/tf.hpp"
 #include "krosc/tf_ros.hpp"
+#include "krosc/timer.hpp"
 #include "krosc/topic.hpp"
 
 #include "ml/onnx_policy.hpp"
@@ -97,6 +98,8 @@ class RlNavController final : public krosc::nodes::nav2::NavControllerPlugin {
   bool active_last_ = false;
   double last_status_ = -1e18;
   double last_diagnostics_ = -1e18;
+  double last_model_list_ = -1e18;
+  krosc::Timer status_timer_;
 
   krosc::Buffer buffer_;
   std::unique_ptr<krosc::TransformListener> listener_;
