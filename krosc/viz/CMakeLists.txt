@@ -51,7 +51,7 @@ target_link_libraries(krosc_viz
 target_compile_options(krosc_viz PRIVATE -Wall -Wextra -Wpedantic)
 
 # viz 패키지 단독 실행기: 빈 그리드와 패널을 띄워 viz 자체를 시험한다.
-add_executable(krosc_viz_app app/main.cpp)
+add_executable(krosc_viz_app main.cpp)
 target_link_libraries(krosc_viz_app PRIVATE krosc::viz)
 
 # 프로젝트별 Viz 플러그인/앱 (예: krosc_ws/viz). 프로젝트가 자기 viz-main을 가진다.

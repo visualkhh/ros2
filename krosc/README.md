@@ -122,9 +122,9 @@ krosc/
 │   └── tests/                     # sim 3 tests
 ├── viz/                           # krosc_viz (Qt6 Widgets)
 │   ├── CMakeLists.txt
+│   ├── main.cpp                   # krosc_viz_app
 │   ├── include/krosc/viz/         # VizModel, SceneView, VizWindow, plugin API
 │   ├── core/                      # Viz shell/렌더 소스
-│   ├── app/                       # krosc_viz_app main
 │   └── plugins/                   # 코어 Viz 플러그인
 ├── examples/turtlebot3/           # krosc_turtlebot3
 └── docs/                          # 검증 스크린샷 (vnc.png, screenshot.png, simulation.png)

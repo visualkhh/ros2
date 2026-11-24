@@ -150,7 +150,7 @@ krosc_ws/
 │       └── project_panel.cpp # 프로젝트 플러그인 예제 ("Project" 탭)
 
 krosc/viz/
-├── app/main.cpp              # 공통/최소 Viz 앱
+├── main.cpp                  # 공통/최소 Viz 앱
 ├── core/                     # VizWindow, SceneView, MapView2D, VizModel
 ├── plugins/                  # 코어 플러그인 (SLAM/Nav/Teleop/...)
 └── include/krosc/viz/        # IVizPlugin, VizHost, VizPlugin, ...
