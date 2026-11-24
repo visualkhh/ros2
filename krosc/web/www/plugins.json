@@ -1,0 +1,8 @@
+[
+  { "name": "slam", "title": "SLAM / Map", "module": "/plugins/slam.js" },
+  { "name": "navigation", "title": "Navigation", "module": "/plugins/navigation.js" },
+  { "name": "teleop", "title": "Teleop", "module": "/plugins/teleop.js" },
+  { "name": "rl_nav", "title": "RL Nav", "module": "/plugins/rl_nav.js" },
+  { "name": "moveit", "title": "MoveIt", "module": "/plugins/moveit.js" },
+  { "name": "diagnostics", "title": "Diagnostics", "module": "/plugins/diagnostics.js" }
+]

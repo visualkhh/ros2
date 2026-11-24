@@ -5,6 +5,7 @@
 #include "krosc/context.hpp"
 #include "krosc/msgs/nav2_srv.hpp"
 #include "krosc/node.hpp"
+#include "krosc/nodes/map_catalog.hpp"
 #include "krosc/nodes/map_io.hpp"
 #include "krosc/nodes/map_saver.hpp"
 #include "krosc/nodes/map_server.hpp"
@@ -68,6 +69,35 @@ KROSC_TEST(map_server_loads_and_unloads) {
   monitor.call_service<krosc::msgs::Empty, krosc::msgs::Empty>("map_server/unload_map",
                                                               krosc::msgs::Empty{});
   CHECK_EQ(0u, latest.info.width);
+  fs::remove_all(directory);
+}
+
+KROSC_TEST(map_catalog_loads_map_by_name) {
+  const fs::path directory = temp_dir("catalog");
+  const krosc::msgs::OccupancyGrid grid = make_grid(20, 10);
+  krosc::nodes::save_map(grid, (directory / "src" / "map").string());
+
+  krosc::Context context;
+  krosc::nodes::MapServer server(context, "map_server",
+                                 {{"maps_directory", directory.string()},
+                                  {"topic_name", std::string("map")},
+                                  {"frame_id", std::string("map")}});
+  krosc::nodes::MapCatalog catalog(context, "map_catalog",
+                                   {{"maps_directory", directory.string()},
+                                    {"map_frame", std::string("map")},
+                                    {"map_server", std::string("map_server")},
+                                    {"map_saver", std::string("map_saver")},
+                                    {"list_period", 10.0}});
+  krosc::Node monitor(context, "monitor");
+  krosc::msgs::OccupancyGrid latest;
+  monitor.subscribe<krosc::msgs::OccupancyGrid>(
+      "map", [&](const krosc::msgs::OccupancyGrid& message) { latest = message; },
+      krosc::QOS_LATCHED);
+
+  // MapCatalog는 이름만 받고, map_server에는 <이름>/map.yaml로 넘겨야 한다.
+  monitor.publish("map_change", krosc::msgs::String{"src"});
+  CHECK_EQ(20u, latest.info.width);
+  CHECK_EQ(10u, latest.info.height);
   fs::remove_all(directory);
 }
 

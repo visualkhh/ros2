@@ -14,6 +14,7 @@ endif()
 
 option(KROSC_BUILD_TESTS "Build krosc tests" ON)
 option(KROSC_BUILD_BENCH "Build krosc benchmarks" ON)
+option(KROSC_BUILD_WEB "Build krosc web gateway" ON)
 option(KROSC_BUILD_VIZ "Build krosc viz (Qt6)" ON)
 option(KROSC_BUILD_EXAMPLES "Build krosc examples" ON)
 
@@ -21,6 +22,9 @@ include(CTest)
 
 add_subdirectory(engine)
 add_subdirectory(sim)
+if(KROSC_BUILD_WEB)
+  add_subdirectory(web)
+endif()
 if(TARGET krosc_bench)
   target_link_libraries(krosc_bench PRIVATE krosc::sim)
 endif()

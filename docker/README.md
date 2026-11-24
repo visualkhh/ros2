@@ -36,7 +36,30 @@ ctest --test-dir build --output-on-failure
 
 테스트: `krosc_core_tests` 29개 + `krosc_sim_tests` 3개 = 32개. `krosc_ws`는 별도 빌드/테스트(4개)를 가진다.
 
-## 3. 맥에서 UI 보기 (noVNC) — 추천
+## 3. 웹 Viz (브라우저)
+
+로봇 앱 + `krosc_web`(HTTP/WebSocket)을 한 컨테이너에서 띄운다.
+
+```bash
+# ros2/ 에서
+./docker/web.sh
+```
+
+브라우저:
+
+```
+http://localhost:8080/
+```
+
+- `krosc_web`은 로봇 TCP(127.0.0.1:9000)에 붙어 프레임을 **그대로** WebSocket으로 중계한다.
+  메시지 해석/렌더링은 브라우저 JS가 한다 (JSON 변환 없음).
+- `web/www/plugins.json`에 JS 플러그인을 나열한다. `web/www/plugins/*.js`를 추가하고
+  매니페스트에 한 줄 넣으면 패널이 붙는다 (viz의 플러그인과 같은 개념).
+- 지도/상태/모델 목록처럼 늦게 붙은 브라우저에 필요한 토픽은 게이트웨이가 최신 프레임을
+  캐시했다가 새 WebSocket 클라이언트에 보낸다.
+- RL은 Docker에 ONNX Runtime이 없어 `no-ort` + RPP fallback으로 표시된다.
+
+## 4. 맥에서 UI 보기 (noVNC)
 
 ```bash
 # ros2/ 에서
@@ -64,13 +87,13 @@ docker compose -f docker/docker-compose.yml exec -T krosc-vnc \
 
 > 보안: noVNC는 로컬 개발용으로 비밀번호 없이(`-nopw`) 띄운다. `6080`을 외부에 공개하지 마라.
 
-## 4. 대안: XQuartz (macOS X11)
+## 5. 대안: XQuartz (macOS X11)
 
 XQuartz를 설치하고 TCP 접속을 허용한 뒤, 컨테이너에 `DISPLAY=host.docker.internal:0`과
 `QT_QPA_PLATFORM=xcb`를 주면 네이티브 X11 창으로 볼 수도 있다. 다만 Docker Desktop 설정에 따라
 자주 막히므로 **noVNC를 권장**한다.
 
-## 5. 로컬 Qt6 GUI
+## 6. 로컬 Qt6 GUI
 
 화면을 보며 조종하는 가장 간단한 방법은 Docker를 쓰지 않고 로컬에서 빌드하는 것이다.
 

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>krosc web</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">krosc <span>web</span></div>
+    <div class="status"><span id="ws-dot" class="dot"></span><span id="ws-text">websocket</span></div>
+    <div class="status"><span id="robot-dot" class="dot"></span><span id="robot-text">robot</span></div>
+    <div class="spacer"></div>
+    <button id="fit" title="화면 맞춤">Fit</button>
+    <label class="check"><input id="follow" type="checkbox" checked> follow robot</label>
+    <span id="cursor" class="muted">0.00, 0.00</span>
+  </header>
+  <main>
+    <aside id="left">
+      <section class="panel">
+        <h2>Displays</h2>
+        <div id="displays" class="displays"></div>
+      </section>
+      <section class="panel grow">
+        <h2>Topics</h2>
+        <div id="topics" class="topics"></div>
+      </section>
+    </aside>
+    <section id="stage">
+      <canvas id="scene"></canvas>
+      <div id="hint">drag pan · wheel zoom · click 2D goal · WASD teleop</div>
+    </section>
+    <aside id="right"></aside>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

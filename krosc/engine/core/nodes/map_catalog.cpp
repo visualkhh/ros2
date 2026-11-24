@@ -187,7 +187,7 @@ void MapCatalog::on_map_change(const msgs::String& message) {
   }
   try {
     msgs::nav2::LoadMapRequest request;
-    request.map_url = requested;
+    request.map_url = requested + "/map.yaml";
     const auto response =
         call_service<msgs::nav2::LoadMapRequest, msgs::nav2::LoadMapResponse>(
             map_server_.value() + "/load_map", request);

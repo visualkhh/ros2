@@ -1,0 +1,153 @@
+:root {
+  --bg: #0c0f14;
+  --panel: #121821;
+  --line: #1f2a3a;
+  --text: #d7e0ec;
+  --muted: #7f8ea3;
+  --accent: #54d18c;
+  --warn: #ffb36b;
+  --bad: #ff6b6b;
+  --blue: #6aa9ff;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+header {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: #0a0d12;
+}
+.brand { font-weight: 700; letter-spacing: .3px; }
+.brand span { color: var(--accent); }
+.status { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.dot.on { background: var(--accent); }
+.dot.off { background: var(--bad); }
+.spacer { flex: 1; }
+.muted { color: var(--muted); }
+button, select, input {
+  background: #1a2230;
+  color: var(--text);
+  border: 1px solid #2a3850;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font: inherit;
+}
+button { cursor: pointer; }
+button:hover { border-color: #3a4f70; }
+button.primary { background: #1f6b43; border-color: #2f8a59; }
+button.danger { background: #7a2a2a; border-color: #9c3a3a; }
+input[type="checkbox"] { accent-color: var(--accent); }
+.check { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+
+main {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 340px;
+  height: calc(100% - 48px);
+}
+aside {
+  overflow: auto;
+  background: #0a0d12;
+  padding: 8px;
+}
+#left { border-right: 1px solid var(--line); }
+#right { border-left: 1px solid var(--line); }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.panel h2 {
+  margin: 0;
+  padding: 7px 10px;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #9fb0c7;
+  border-bottom: 1px solid var(--line);
+}
+.panel .body { padding: 8px 10px; display: grid; gap: 6px; }
+.panel.grow { display: flex; flex-direction: column; }
+.panel.grow .topics { min-height: 120px; }
+
+.displays { padding: 6px 10px; display: grid; gap: 4px; }
+.displays label { display: flex; align-items: center; gap: 6px; color: #b9c6d8; }
+
+.topics {
+  padding: 4px 0;
+  overflow: auto;
+  max-height: 45vh;
+  font-size: 12px;
+}
+.topic {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 66px 40px;
+  gap: 4px;
+  padding: 2px 10px;
+  color: #8fa0b7;
+  font-size: 11.5px;
+}
+.topic .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic .hz { text-align: right; color: #6f8199; }
+.topic .kind { text-align: right; color: #58708d; }
+
+#stage { position: relative; min-width: 0; background: #080b10; }
+#scene { width: 100%; height: 100%; display: block; cursor: crosshair; }
+#hint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  color: #5f7188;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-row > * { flex: 1 1 0; }
+.field { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px; align-items: center; }
+.field label { color: var(--muted); }
+.value { color: #b9c6d8; word-break: break-all; }
+.value.ok { color: var(--accent); }
+.value.warn { color: var(--warn); }
+.value.bad { color: var(--bad); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  max-width: 420px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #7a2a2a;
+  color: #fff;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .15s, transform .15s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+.diag { border-top: 1px solid var(--line); padding: 5px 0; }
+.diag:first-child { border-top: 0; }
+.diag .name { font-weight: 600; }
+.diag .msg { color: var(--muted); }
+.diag .kv { color: #6f8199; font-size: 11px; }
+
+@media (max-width: 1100px) {
+  main { grid-template-columns: 210px minmax(0, 1fr) 290px; }
+}

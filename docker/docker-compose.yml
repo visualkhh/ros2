@@ -16,6 +16,21 @@ services:
     tty: true
     command: /bin/bash
 
+  # 브라우저로 바로 보는 웹 Viz. 로봇 앱 + WebSocket 게이트웨이.
+  krosc-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: krosc:ubuntu-26.04
+    working_dir: /workspace/krosc
+    volumes:
+      - ..:/workspace
+    ports:
+      - "8080:8080"
+    stdin_open: true
+    tty: true
+    command: ["/bin/bash", "/workspace/docker/run-web.sh"]
+
   # 브라우저(noVNC)로 리눅스 안의 sim+viz 창을 보는 서비스.
   krosc-vnc:
     build:

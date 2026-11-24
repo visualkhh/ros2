@@ -8,6 +8,7 @@
 | `core/` | ROS 프레임워크: Node, 토픽+QoS, TF, 타이머, 파라미터, 서비스, 메시지, URDF, 기본 노드, **TCP 원격 토픽(9000)** |
 | `sim/` | **진실 시뮬레이션**: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, Snapshot, **Qt SimWindow** |
 | `viz/` | **토픽 뷰어**: rviz 스타일 Qt 화면 (TF, map, costmap, scan, odom/filtered, 경로, 로그, 패널, teleop, **URDF visual STL 메시**) + **원격 `--server` 모드** |
+| `web/` | **브라우저 Viz**: 로봇에서 HTTP+WebSocket으로 프레임을 중계하고, `www/plugins/*.js`로 패널을 붙이는 경량 웹 게이트웨이 |
 | `examples/turtlebot3/` | sim + viz + EKF를 한 프로세스에서 같이 돌리는 데모 (`--server`로 원격 viz 테스트 가능) |
 | `../krosc_ws/` | **실기 Pi 워크스페이스**: OpenCR/LDS-03 C++ 드라이버, EKF, 원격 viz 서버 (`krosc`를 링크) |
 
@@ -43,6 +44,28 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 - noVNC는 로컬 개발용으로 **비밀번호 없이**(`-nopw`) 띄운다. `6080`을 외부에 공개하지 마라.
 
 `docker/README.md`에 같은 내용과 XQuartz 대안이 있다.
+
+## 웹 Viz
+
+```bash
+./docker/web.sh
+# 브라우저: http://localhost:8080/
+```
+
+![krosc web: 지도/스캔/플러그인 패널](docs/web.png)
+
+실기(Pi)에서는 두 프로세스로 띄운다:
+
+```bash
+./krosc_real --port 9000                    # 로봇 앱 (TCP 서버)
+./krosc_web --robot 127.0.0.1:9000 --port 8080
+```
+
+- `krosc_web`은 Qt/Node 없이 표준 라이브러리만 쓰는 **프레임 게이트웨이**다.
+  로봇 TCP의 `4바이트 길이 + 본문`을 WebSocket 바이너리 프레임으로 그대로 넘긴다.
+- 브라우저는 `www/app.js`에서 프레임을 해석해 지도/스캔/TF/경로를 Canvas에 그린다.
+- 플러그인은 `www/plugins.json` + `www/plugins/*.js`다. SLAM/Navigation/Teleop/RL/MoveIt/Diagnostics가 기본.
+- 늦게 접속한 브라우저를 위해 지도/상태/모델 목록 등 최신 프레임을 캐시했다가 새 연결에 보낸다.
 
 ## 빌드/테스트 (Docker, 화면 없이)
 
@@ -107,7 +130,7 @@ MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed
 
 ```
 krosc/
-├── CMakeLists.txt                 # 최상위 (engine, sim, viz, examples)
+├── CMakeLists.txt                 # 최상위 (engine, sim, web, viz, examples)
 ├── engine/                        # krosc_core (표준 라이브러리만)
 │   ├── CMakeLists.txt
 │   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/action/msgs
@@ -115,7 +138,7 @@ krosc/
 │   │   ├── ros2_control/          # controller_manager, JSB/JTC/forward/diff_drive
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 40 tests (nav2/ros2_control/MoveIt 포함)
+│   ├── tests/                     # core 43 tests (nav2/ros2_control/MoveIt 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp
 ├── sim/                           # krosc_sim (+ krosc_sim_qt)
 │   ├── CMakeLists.txt
@@ -128,6 +151,11 @@ krosc/
 │   ├── include/krosc/viz/         # VizModel, SceneView, VizWindow, plugin API
 │   ├── core/                      # Viz shell/렌더 소스
 │   └── plugins/                   # 코어 Viz 플러그인
+├── web/                           # krosc_web (HTTP + WebSocket, Qt 없음)
+│   ├── main.cpp                   # krosc_web 실행기
+│   ├── include/krosc/web/         # HttpServer, RobotLink, WebSocket
+│   ├── core/                      # 게이트웨이 소스
+│   └── www/                       # index.html/app.js/plugins.json + JS 플러그인
 ├── examples/turtlebot3/           # krosc_turtlebot3
 └── docs/                          # 검증 스크린샷 (vnc.png, screenshot.png, simulation.png)
 ```
@@ -140,6 +168,7 @@ Docker 설정은 저장소 루트의 `../docker/`에 있다.
 - `sim`: `core`의 메시지 타입 + pthread. **Qt가 없어도 물리/테스트는 빌드된다.**
 - `sim_qt`: `sim` + Qt6 Widgets (`SimWindow`)
 - `viz`: `core` + Qt6 Widgets (`VizWindow`)
+- `web`: 표준 라이브러리 + pthread만 (Qt/Node 없음). 로봇 TCP 프레임을 WebSocket으로 중계
 - `examples`: `core` + `sim_qt` + `viz`
 
 ## API 맛보기
@@ -313,6 +342,7 @@ ROS 2와 맞춘 노드 이름:
 - [x] `viz` 코어 플러그인: `teleop`, `slam`, `navigation`, `manipulator` (VizWindow는 기반 UI만)
 - [x] TCP 원격 토픽(9000): 텔레메트리 + `cmd_vel`, latched 다중 tf_static, Mac `krosc_viz_app --server`
 - [x] noVNC: Docker Ubuntu 26.04 안의 sim+viz 두 창을 맥 브라우저로 본다
+- [x] `web`: HTTP + WebSocket 게이트웨이, `www/plugins.json` JS 플러그인, 지도/스캔/TF/경로/상태 뷰
 - [x] 오프스크린 스크린샷 검증 (`docs/`)
 - [x] `../krosc_ws/`: OpenCR/LDS-03 C++ 드라이버 + EKF + 원격 viz를 붙인 실기 Pi용 워크스페이스 (하드웨어 실측은 Pi에서 해야 함)
 
