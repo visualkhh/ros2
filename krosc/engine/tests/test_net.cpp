@@ -228,6 +228,19 @@ KROSC_TEST(net_latched_map_replays_for_late_subscriber) {
   CHECK(cv.wait_for(lock, 2s, [&] { return got_map.load(); }));
 }
 
+KROSC_TEST(net_peer_local_only_and_host) {
+  krosc::Context local;
+  CHECK(local.peer_network() == nullptr);
+
+  krosc::Context::Options host_options;
+  host_options.network.host = "127.0.0.1";
+  host_options.network.port = 0;  // 임시 포트
+  krosc::Context host(host_options);
+  CHECK(host.peer_network() != nullptr);
+  CHECK(host.peer_network()->port() != 0);
+  CHECK(host.peer_network()->peer_endpoints().empty());
+}
+
 KROSC_TEST(net_peer_topic_mesh_and_latched) {
   krosc::Context::Options server_options;
   server_options.network.name = "peer_server";
