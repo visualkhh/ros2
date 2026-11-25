@@ -893,6 +893,20 @@ void MoveGroup::heartbeat() {
   publish_status_locked(status_text_);
   last_status_ = now();
   last_preview_ = now();
+  // 아직 목표가 없으면 현재 TCP로 목표 마커를 초기화한다.
+  // (안 하면 moveit_target_pose가 발행되지 않아 Viz에서 TCP 원반이 없어 드래그를 시작할 수 없다)
+  if (!target_ && chain_ready_ && current_) {
+    Target target;
+    const msgs::Vector3 tcp = chain_.tcp(*current_);
+    target.x = tcp.x;
+    target.y = tcp.y;
+    target.z = tcp.z;
+    target.pitch = chain_.pitch_down(*current_);
+    target.grip = gripper_;
+    target.cartesian = true;
+    target.preview = false;
+    target_ = target;
+  }
   if ((trajectory_ && !trajectory_->points.empty()) || goal_ || !preview_path_.empty()) {
     publish_preview_locked(preview_index_, false);
   } else {
