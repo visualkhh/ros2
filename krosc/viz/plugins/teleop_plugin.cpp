@@ -1,12 +1,15 @@
 #include "krosc/viz/plugins/teleop_plugin.hpp"
 
 #include <QAbstractSlider>
+#include <QAbstractSpinBox>
 #include <QApplication>
+#include <QComboBox>
 #include <QDockWidget>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -170,10 +173,18 @@ void TeleopPlugin::publish_pad() {
                                         ((direction_ & 2) != 0 ? 1.0 : 0.0));
   const double angular = 1.5 * scale * (((direction_ & 4) != 0 ? 1.0 : 0.0) -
                                         ((direction_ & 8) != 0 ? 1.0 : 0.0));
-  if (linear != last_linear_ || angular != last_angular_) {
+  // 버튼을 누르고 있는 동안에는 매 tick 다시 보낸다. 한 번만 보내면
+  // twist_mux/OpenCR의 0.5초 명령 타임아웃에 걸려 곧 멈춘다.
+  if (linear != 0.0 || angular != 0.0) {
     host_->model().publish_cmd_vel(linear, angular);
     last_linear_ = linear;
     last_angular_ = angular;
+    return;
+  }
+  if (last_linear_ != 0.0 || last_angular_ != 0.0) {
+    host_->model().publish_cmd_vel(0.0, 0.0);
+    last_linear_ = 0.0;
+    last_angular_ = 0.0;
   }
 }
 
@@ -186,7 +197,10 @@ bool TeleopPlugin::eventFilter(QObject* watched, QEvent* event) {
     return false;
   }
   QWidget* focus = QApplication::focusWidget();
-  if (focus == nullptr || (focus != dock_ && !dock_->isAncestorOf(focus))) {
+  const bool typing = qobject_cast<QLineEdit*>(focus) != nullptr ||
+                      qobject_cast<QAbstractSpinBox*>(focus) != nullptr ||
+                      qobject_cast<QComboBox*>(focus) != nullptr;
+  if (typing) {
     return false;
   }
   auto* key = static_cast<QKeyEvent*>(event);
