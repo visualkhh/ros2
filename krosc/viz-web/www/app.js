@@ -17,6 +17,8 @@ const state = {
   subscribers: new Map(),
   tf: new Map(),
   goalTopic: 'goal_pose',
+  waypoints: [],
+  multiGoal: false,
   settings: {
     grid: true,
     map: true,
@@ -654,6 +656,22 @@ function sendTwist(topicName, linear, angular) {
   writer.f64(0); writer.f64(0); writer.f64(angular);
   return sendBinary(topicName, 1, writer.data);
 }
+function sendPath(topicName, points) {
+  const writer = new Writer();
+  const stamp = Date.now() / 1000;
+  writer.f64(stamp);
+  writer.str('map');
+  writer.u32(points.length);
+  for (const point of points) {
+    writer.f64(stamp);
+    writer.str('map');
+    writer.f64(point.x); writer.f64(point.y); writer.f64(0);
+    const yaw = point.yaw || 0;
+    writer.f64(0); writer.f64(0); writer.f64(Math.sin(yaw / 2)); writer.f64(Math.cos(yaw / 2));
+  }
+  return sendBinary(topicName, 9, writer.data);
+}
+
 function sendGoal(x, y, yaw = 0) {
   const writer = new Writer();
   writer.f64(Date.now() / 1000);
@@ -768,6 +786,10 @@ const host = {
   sendGoal,
   setGoalTopic(topicName) { state.goalTopic = topicName; },
   fitMap: fitToMap,
+  setMultiGoal(enabled) { state.multiGoal = Boolean(enabled); },
+  waypointCount() { return state.waypoints.length; },
+  clearWaypoints() { state.waypoints = []; },
+  sendWaypoints() { return sendPath('goal_poses', state.waypoints); },
   toast,
   robotPose,
   lookup,
@@ -1024,7 +1046,11 @@ canvas.addEventListener('pointerup', (event) => {
   if (!dragged) {
     const world = screenToWorld(event.clientX - canvas.getBoundingClientRect().left,
                                 event.clientY - canvas.getBoundingClientRect().top);
-    sendGoal(world.x, world.y);
+    if (state.multiGoal) {
+      state.waypoints.push({ x: world.x, y: world.y, yaw: 0 });
+    } else {
+      sendGoal(world.x, world.y);
+    }
   }
 });
 canvas.addEventListener('wheel', (event) => {
@@ -1291,6 +1317,30 @@ function drawOdometry() {
     const yaw = frame.yaw + yawOf(message.pose.orientation);
     drawYawArrow(worldToScreen(point.x, point.y), yaw, Math.max(0.35 * view.scale, 14), color, label);
   }
+}
+
+function drawWaypoints2d() {
+  if (state.waypoints.length === 0) return;
+  const screens = state.waypoints.map((point) => worldToScreen(point.x, point.y));
+  context.strokeStyle = 'rgba(255, 179, 107, 0.9)';
+  context.lineWidth = 1.5;
+  context.setLineDash([5, 4]);
+  context.beginPath();
+  screens.forEach((screen, index) => {
+    if (index === 0) context.moveTo(screen.x, screen.y);
+    else context.lineTo(screen.x, screen.y);
+  });
+  context.stroke();
+  context.setLineDash([]);
+  context.font = '11px system-ui';
+  screens.forEach((screen, index) => {
+    context.fillStyle = index === screens.length - 1 ? '#ffb36b' : 'rgba(255, 179, 107, 0.75)';
+    context.beginPath();
+    context.arc(screen.x, screen.y, 7, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = '#1b2230';
+    context.fillText(String(index + 1), screen.x - (index + 1 >= 10 ? 6 : 3), screen.y + 4);
+  });
 }
 
 function drawRobot() {
@@ -1565,6 +1615,21 @@ function draw3dRobot() {
       draw3dPrimitive(primitive, transform);
     }
   }
+}
+
+function draw3dWaypoints() {
+  if (state.waypoints.length === 0) return;
+  context3d.font = '11px system-ui';
+  state.waypoints.forEach((waypoint, index) => {
+    const point = project3d(waypoint.x, waypoint.y, 0.05);
+    if (!point) return;
+    context3d.fillStyle = 'rgba(255, 179, 107, 0.9)';
+    context3d.beginPath();
+    context3d.arc(point.x, point.y, index === state.waypoints.length - 1 ? 5 : 3.5, 0, Math.PI * 2);
+    context3d.fill();
+    context3d.fillStyle = '#1b2230';
+    context3d.fillText(String(index + 1), point.x - 3, point.y + 4);
+  });
 }
 
 function draw3dArm() {
@@ -1900,6 +1965,7 @@ function draw3d() {
   draw3dRobot();
   draw3dJointAxes();
   draw3dArm();
+  draw3dWaypoints();
   draw3dGoal();
 }
 
@@ -1972,6 +2038,7 @@ function render() {
   drawTfAxes();
   drawOdometry();
   drawGoal();
+  drawWaypoints2d();
   drawRobot();
   } catch (error) {
     console.error('render', error);
@@ -1999,6 +2066,11 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   const key = event.key.toLowerCase();
+  if (key === 'backspace' && state.multiGoal && state.waypoints.length > 0) {
+    event.preventDefault();
+    state.waypoints.pop();
+    return;
+  }
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
     event.preventDefault();
     keys.add(key);
