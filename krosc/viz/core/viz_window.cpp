@@ -16,6 +16,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
@@ -111,11 +112,18 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   tabs->addTab(scene_, "3D");
   tabs->addTab(map_view_, "Map");
   scene_->set_teleop_enabled(false);  // teleop 플러그인이 켠다
-  auto* panel = new QWidget(splitter);
+  auto* panel = new QWidget();
   panel->setMinimumWidth(300);
   panel->setMaximumWidth(760);
   build_panel(panel);
-  splitter->addWidget(panel);
+  auto* panel_scroll = new QScrollArea(splitter);
+  panel_scroll->setWidgetResizable(true);
+  panel_scroll->setFrameShape(QFrame::NoFrame);
+  panel_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  panel_scroll->setMinimumWidth(300);
+  panel_scroll->setMaximumWidth(768);
+  panel_scroll->setWidget(panel);
+  splitter->addWidget(panel_scroll);
   splitter->addWidget(tabs);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
@@ -304,9 +312,20 @@ void VizWindow::build_panel(QWidget* panel) {
 
 
 void VizWindow::add_dock(QDockWidget* dock, Qt::DockWidgetArea area) {
-  if (dock != nullptr) {
-    addDockWidget(area, dock);
+  if (dock == nullptr) {
+    return;
   }
+  // 플러그인 패널이 세로로 길어도 창 자체는 자유롭게 줄일 수 있게 스크롤로 감싼다.
+  if (auto* content = dock->widget();
+      content != nullptr && qobject_cast<QScrollArea*>(content) == nullptr) {
+    auto* scroll = new QScrollArea(dock);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setWidget(content);
+    dock->setWidget(scroll);
+  }
+  addDockWidget(area, dock);
 }
 
 void VizWindow::add_tab(QWidget* tab, const QString& title, bool make_current) {
