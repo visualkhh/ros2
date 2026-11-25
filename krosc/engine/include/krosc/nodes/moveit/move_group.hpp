@@ -80,7 +80,7 @@ class MoveGroup final : public Node {
       const manipulation::Trajectory& trajectory) const;
   void publish_status_locked(const std::string& text);
   void publish_state_locked();
-  void publish_preview_locked(int index);
+  void publish_preview_locked(int index, bool include_planned_path = true);
   void publish_target_pose_locked();
   void publish_path_locked(const std::string& topic,
                            const std::vector<std::pair<std::string, msgs::Transform>>& links);

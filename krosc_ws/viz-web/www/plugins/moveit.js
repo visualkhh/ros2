@@ -9,6 +9,8 @@ export function init(host) {
 
   const camera = { yaw: -0.6, pitch: 0.45, distance: 1.05, tx: 0.15, ty: 0.0, tz: 0.18 };
   let targetScreenPoint = null;
+  let draggingTarget = false;
+  let lastLocalEdit = 0;
 
   function project(point, width, height) {
     const dx = (Number(point.x) || 0) - camera.tx;
@@ -131,6 +133,47 @@ export function init(host) {
         if (c && d) { context.beginPath(); context.moveTo(c.x, c.y); context.lineTo(d.x, d.y); context.stroke(); }
       }
 
+      // 계획된 TCP 궤적 (Qt Viz와 동일한 moveit_path).
+      const path = host.latest('moveit_path');
+      if (path && Array.isArray(path.poses) && path.poses.length > 1) {
+        context.strokeStyle = 'rgba(95, 211, 160, 0.9)';
+        context.lineWidth = 2;
+        context.beginPath();
+        let started = false;
+        for (const stamped of path.poses) {
+          const point = project(stamped.pose.position, width, height);
+          if (!point) {
+            started = false;
+            continue;
+          }
+          if (started) context.lineTo(point.x, point.y);
+          else { context.moveTo(point.x, point.y); started = true; }
+        }
+        context.stroke();
+        const end = project(path.poses[path.poses.length - 1].pose.position, width, height);
+        if (end) {
+          context.fillStyle = '#5fd3a0';
+          context.beginPath(); context.arc(end.x, end.y, 3.5, 0, Math.PI * 2); context.fill();
+        }
+      }
+
+      // 미리보기/스크럽 자세의 링크 체인 (계획 시점의 moveit_arm).
+      const previewArm = host.latest('moveit_arm');
+      if (previewArm && Array.isArray(previewArm.poses) && previewArm.poses.length > 1) {
+        const points = previewArm.poses.map((stamped) => project(stamped.pose.position, width, height))
+            .filter(Boolean);
+        if (points.length > 1) {
+          context.strokeStyle = '#6aa9ff';
+          context.lineWidth = 1.5;
+          context.setLineDash([4, 3]);
+          context.beginPath();
+          context.moveTo(points[0].x, points[0].y);
+          for (let i = 1; i < points.length; ++i) context.lineTo(points[i].x, points[i].y);
+          context.stroke();
+          context.setLineDash([]);
+        }
+      }
+
       if (host.settings.urdf_collision) {
         for (const primitive of (host.urdfPrimitives ? host.urdfPrimitives() : [])) {
           drawPrimitive(primitive, width, height);
@@ -192,8 +235,12 @@ export function init(host) {
 
       const target = host.latest('moveit_target_pose');
       targetScreenPoint = null;
-      if (target) {
-        const pose = target.pose.position;
+      // 드래그 중에는 네트워크 왕복을 기다리지 않고 입력값으로 즉시 그린다 (Qt와 동일한 반응).
+      let pose = target ? target.pose.position : null;
+      if (draggingTarget || performance.now() - lastLocalEdit < 250) {
+        pose = { x: Number(xInput.value), y: Number(yInput.value), z: Number(zInput.value) };
+      }
+      if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y) && Number.isFinite(pose.z)) {
         const point = project(pose, width, height);
         if (point) {
           targetScreenPoint = point;
@@ -276,7 +323,10 @@ export function init(host) {
     previewTimer = setTimeout(() => publishTarget(true), 120);
   };
   for (const input of [xInput, yInput, zInput, pitchInput, gripInput]) {
-    input.addEventListener('input', schedulePreview);
+    input.addEventListener('input', () => {
+      lastLocalEdit = performance.now();
+      schedulePreview();
+    });
   }
   cartesian.addEventListener('change', schedulePreview);
 
@@ -318,6 +368,7 @@ export function init(host) {
       : event.shiftKey ? 'z'
       : event.ctrlKey || event.metaKey ? 'pitch' : 'xy';
     dragLast = { x: event.clientX, y: event.clientY };
+    draggingTarget = dragMode !== 'orbit';
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
   });
@@ -343,7 +394,8 @@ export function init(host) {
       yInput.value = clamp(Number(yInput.value) - dy * step, -0.35, 0.35).toFixed(4);
     }
     const now = performance.now();
-    if (dragMode !== 'orbit' && now - lastPublish >= 50) {
+    lastLocalEdit = now;
+    if (dragMode !== 'orbit' && now - lastPublish >= 70) {
       publishTarget(true);
       lastPublish = now;
     }
@@ -351,12 +403,14 @@ export function init(host) {
   });
   canvas.addEventListener('pointerup', (event) => {
     if (dragView && dragMode !== 'orbit') {
+      lastLocalEdit = performance.now();
       publishTarget(true);
     }
     dragView = false;
+    draggingTarget = false;
     event.preventDefault();
   });
-  canvas.addEventListener('pointercancel', () => { dragView = false; });
+  canvas.addEventListener('pointercancel', () => { dragView = false; draggingTarget = false; });
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
     camera.distance = clamp(camera.distance * (event.deltaY < 0 ? 0.9 : 1.1), 0.35, 4.0);

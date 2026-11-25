@@ -429,7 +429,7 @@ void MoveGroup::publish_path_locked(
   publish(topic, make_path(base_link_.value(), links, now()), QOS_DEFAULT);
 }
 
-void MoveGroup::publish_preview_locked(int index) {
+void MoveGroup::publish_preview_locked(int index, bool include_planned_path) {
   if (!chain_ready_) {
     return;
   }
@@ -450,12 +450,16 @@ void MoveGroup::publish_preview_locked(int index) {
     publish_path_locked("moveit_arm", chain_.link_transforms(joints));
   }
   if (trajectory_ && !trajectory_->tcp_path.empty()) {
-    std::vector<std::pair<std::string, msgs::Transform>> points;
-    points.reserve(trajectory_->tcp_path.size());
-    for (const auto& point : trajectory_->tcp_path) {
-      points.emplace_back("tcp", msgs::Transform{point, {}});
+    // 계획 경로는 바뀔 때만 보낸다. 드래그 미리보기마다 100+ 점을 다시 보내면
+    // 웹 소켓이 막혀 TCP 마커가 버벅인다.
+    if (include_planned_path) {
+      std::vector<std::pair<std::string, msgs::Transform>> points;
+      points.reserve(trajectory_->tcp_path.size());
+      for (const auto& point : trajectory_->tcp_path) {
+        points.emplace_back("tcp", msgs::Transform{point, {}});
+      }
+      publish_path_locked("moveit_path", points);
     }
-    publish_path_locked("moveit_path", points);
   } else if (!preview_path_.empty()) {
     std::vector<std::pair<std::string, msgs::Transform>> points;
     points.reserve(preview_path_.size());
@@ -532,7 +536,7 @@ bool MoveGroup::plan_locked(std::string& error) {
                                start_tcp.z + (goal_tcp.z - start_tcp.z) * t});
     }
     preview_index_ = 0;
-    publish_preview_locked(0);
+    publish_preview_locked(0, false);
     publish_state_locked();
     publish_status_locked("Preview: IK ok — Plan을 누르면 궤적을 계산한다");
     return true;
@@ -866,7 +870,7 @@ void MoveGroup::tick() {
     return;
   }
   if (now() - last_preview_ >= 0.1) {
-    publish_preview_locked(preview_index_);
+    publish_preview_locked(preview_index_, false);
     last_preview_ = now();
   }
   if (now() - last_state_ >= 0.2) {
@@ -890,7 +894,7 @@ void MoveGroup::heartbeat() {
   last_status_ = now();
   last_preview_ = now();
   if ((trajectory_ && !trajectory_->points.empty()) || goal_ || !preview_path_.empty()) {
-    publish_preview_locked(preview_index_);
+    publish_preview_locked(preview_index_, false);
   } else {
     publish_target_pose_locked();
   }
