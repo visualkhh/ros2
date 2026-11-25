@@ -318,7 +318,7 @@ export function init(host) {
     if (!updating) host.sendString('moveit_target', targetText(preview));
   };
   const schedulePreview = () => {
-    if (updating) return;
+    if (updating || draggingTarget) return;
     if (previewTimer) clearTimeout(previewTimer);
     previewTimer = setTimeout(() => publishTarget(true), 120);
   };
@@ -352,7 +352,6 @@ export function init(host) {
   let dragView = false;
   let dragMode = 'xy';
   let dragLast = { x: 0, y: 0 };
-  let lastPublish = 0;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   canvas.style.touchAction = 'none';
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
@@ -393,12 +392,9 @@ export function init(host) {
       xInput.value = clamp(Number(xInput.value) + dx * step, -0.15, 0.55).toFixed(4);
       yInput.value = clamp(Number(yInput.value) - dy * step, -0.35, 0.35).toFixed(4);
     }
-    const now = performance.now();
-    lastLocalEdit = now;
-    if (dragMode !== 'orbit' && now - lastPublish >= 70) {
-      publishTarget(true);
-      lastPublish = now;
-    }
+    // 드래그 중에는 네트워크로 보내지 않는다. 마커는 로컬 입력값으로 즉시 움직이고
+    // (draw()가 draggingTarget일 때 입력값을 그린다), 손을 뗄 때 한 번만 보낸다.
+    lastLocalEdit = performance.now();
     event.preventDefault();
   });
   canvas.addEventListener('pointerup', (event) => {
