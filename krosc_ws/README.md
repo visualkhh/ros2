@@ -123,8 +123,8 @@ cmake --build build -j
 
 원격 토픽: `tf`, `tf_static`, `robot_description`, `scan`, `imu`, `odom`, `odometry/filtered`,
 `joint_states`, `arm_status`, `diagnostics`, `rosout`, `rl_nav_model_list`
-(+ `cmd_vel`, `goal_*`, `moveit_*`, `rl_nav_model`, `arm_joint_command`, `arm_torque`, `arm_stop`,
-`arm_reset` 역방향).
+(+ `cmd_vel`, `goal_*`, `moveit_*`, `rl_nav_model`, `arm_joint_command`, `arm_manual`, `arm_torque`,
+`arm_stop`, `arm_reset` 역방향).
 
 ## 매니퓰레이터 (OpenMANIPULATOR-X 4축 + 그리퍼)
 
@@ -134,8 +134,13 @@ cmake --build build -j
 - `joint_states`는 ros2_control `joint_state_broadcaster`가 바퀴+팔 관절을 모두 발행한다
 - 팔 명령은 MoveIt → `joint_trajectory_controller/follow_joint_trajectory` 액션으로 내려간다.
   수동 `arm_joint_command`(`sensor_msgs/JointState`)는 `arm_command_controller`(forward controller)가
-  활성일 때만 하드웨어로 간다 (기본은 비활성, `controller_manager/switch_controller`로 전환)
+  활성일 때만 하드웨어로 간다. Viz가 슬라이더를 움직이면 `arm_manual`(Bool)을 보내
+  `joint_trajectory_controller` ↔ `arm_command_controller`를 자동 전환한다. MoveIt 실행 전에는
+  `move_group`이 같은 서비스로 JTC를 다시 활성화한다.
+- Viz의 STOW/HOME은 수동 경로가 아니라 `moveit_preset` + `moveit_execute`를 쓰고 토크를 자동으로 켠다.
+- 부팅 시 `arm_torque_on_start`(기본 true)로 토크를 켜 팔이 중력으로 떨어지지 않게 한다
 - `arm_torque`(Bool): 전체 토크 ON/OFF, `arm_stop`(Empty): 현재 자세 유지
+- `arm_manual`(Bool): true=수동 `arm_command_controller`, false=`joint_trajectory_controller`
 - `arm_reset`(String): `all` / `joint1`..`joint4` / `gripper` — OpenCR `AR`로 해당 DYNAMIXEL 재부팅 (Hardware Error 해제)
 - `arm_status`(String): `present=...;err=...;temp=...` — Viz Manipulator 패널에 에러가 빨간색으로 표시된다
 - 손목 roll 관절은 없다. ID 16은 사용하지 않는다.
