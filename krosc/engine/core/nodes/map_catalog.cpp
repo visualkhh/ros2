@@ -1,6 +1,7 @@
 #include "krosc/nodes/map_catalog.hpp"
 
 #include "krosc/msgs/nav2_srv.hpp"
+#include "krosc/msgs/rcl_interfaces.hpp"
 
 #include <algorithm>
 #include <ctime>
@@ -41,7 +42,8 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
   map_list_topic_ = declare_parameter<std::string>("map_list_topic", std::string("map_list"));
   map_name_topic_ = declare_parameter<std::string>("map_name_topic", std::string("map_name"));
   map_status_topic_ = declare_parameter<std::string>("map_status_topic", std::string("map_status"));
-  slam_mode_topic_ = declare_parameter<std::string>("slam_mode_topic", std::string("slam_mode"));
+  cartographer_node_ =
+      declare_parameter<std::string>("cartographer_node", std::string("cartographer_node"));
 
   create_service<msgs::nav2::LoadMapRequest, msgs::nav2::LoadMapResponse>(
       this->name() + "/load_map", [this](const msgs::nav2::LoadMapRequest& request) { return on_load(request); });
@@ -149,8 +151,28 @@ void MapCatalog::publish_status(const std::string& text) {
   publish(map_status_topic_.value(), msgs::String{text}, QOS_LATCHED);
 }
 
-void MapCatalog::publish_slam_mode(const std::string& mode) {
-  publish(slam_mode_topic_.value(), msgs::String{mode}, QOS_LATCHED);
+bool MapCatalog::set_slam_mode(const std::string& mode) {
+  msgs::rcl_interfaces::SetParametersRequest request;
+  msgs::rcl_interfaces::Parameter parameter;
+  parameter.name = "mode";
+  parameter.value.type =
+      static_cast<std::uint8_t>(msgs::rcl_interfaces::ParameterType::String);
+  parameter.value.string_value = mode;
+  request.parameters.push_back(std::move(parameter));
+  try {
+    const auto response = call_service<msgs::rcl_interfaces::SetParametersRequest,
+                                       msgs::rcl_interfaces::SetParametersResponse>(
+        cartographer_node_.value() + "/set_parameters", request);
+    if (!response.results.empty() && !response.results.front().successful) {
+      logger().warn("Cartographer mode=%s 실패: %s", mode.c_str(),
+                    response.results.front().reason.c_str());
+      return false;
+    }
+    return true;
+  } catch (const std::exception& error) {
+    logger().warn("Cartographer mode=%s 실패: %s", mode.c_str(), error.what());
+    return false;
+  }
 }
 
 
@@ -185,7 +207,7 @@ msgs::nav2::LoadMapResponse MapCatalog::on_load(const msgs::nav2::LoadMapRequest
       std::lock_guard<std::mutex> lock(mutex_);
       loaded_name_ = name;
     }
-    publish_slam_mode("localization");
+    set_slam_mode("localization");
     publish_map_name();
     publish_status("loaded " + name);
     refresh();
@@ -270,7 +292,7 @@ msgs::nav2::DeleteMapResponse MapCatalog::on_delete(const msgs::nav2::DeleteMapR
     } catch (const std::exception& exception) {
       logger().warn("map_server unload 실패: %s", exception.what());
     }
-    publish_slam_mode("idle");
+    set_slam_mode("idle");
     publish_map_name();
   }
   response.result = true;
@@ -290,7 +312,7 @@ msgs::Empty MapCatalog::on_unload(const msgs::Empty&) {
   } catch (const std::exception& error) {
     logger().warn("map_server unload 실패: %s", error.what());
   }
-  publish_slam_mode("idle");
+  set_slam_mode("idle");
   publish_map_name();
   publish_status("map unloaded");
   refresh();
@@ -303,9 +325,9 @@ msgs::Bool MapCatalog::on_set_slam_mode(const msgs::String& request) {
     publish_status("invalid slam mode: " + mode);
     return msgs::Bool{false};
   }
-  publish_slam_mode(mode);
-  publish_status("slam mode: " + mode);
-  return msgs::Bool{true};
+  const bool applied = set_slam_mode(mode);
+  publish_status(applied ? "slam mode: " + mode : "slam mode 실패: " + mode);
+  return msgs::Bool{applied};
 }
 
 }  // namespace krosc::nodes

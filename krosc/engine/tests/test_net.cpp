@@ -10,6 +10,7 @@
 
 #include "krosc/action.hpp"
 #include "krosc/context.hpp"
+#include "krosc/msgs/nav2_msgs.hpp"
 #include "krosc/msgs/rcl_interfaces.hpp"
 #include "krosc/net/net.hpp"
 #include "krosc/node.hpp"
@@ -480,6 +481,100 @@ KROSC_TEST(net_rpc_service_and_parameter_services) {
   CHECK(missing_failed);
 
   lock.unlock();
+  client.shutdown();
+  server.shutdown();
+}
+
+KROSC_TEST(net_rpc_nav2_actions_roundtrip) {
+  krosc::Context::Options server_options;
+  server_options.network.name = "nav2_action_server";
+  server_options.network.listen = true;
+  server_options.network.port = 0;
+  krosc::Context server(server_options);
+
+  using NavigateServer = krosc::ActionServer<krosc::msgs::nav2::NavigateToPoseGoal,
+                                             krosc::msgs::nav2::NavigateToPoseFeedback,
+                                             krosc::msgs::nav2::NavigateToPoseResult>;
+  NavigateServer navigate_server(
+      server, krosc::msgs::nav2::NAVIGATE_TO_POSE_ACTION,
+      [](krosc::ServerGoalHandle<krosc::msgs::nav2::NavigateToPoseGoal,
+                                krosc::msgs::nav2::NavigateToPoseFeedback>& handle) {
+        krosc::msgs::nav2::NavigateToPoseFeedback feedback;
+        feedback.current_pose = handle.goal().pose;
+        feedback.distance_remaining = 1.5;
+        handle.publish_feedback(feedback);
+        krosc::msgs::nav2::NavigateToPoseResult result;
+        result.error_code = krosc::msgs::nav2::NavigateToPoseResult::NONE;
+        return result;
+      });
+  using ThroughServer = krosc::ActionServer<krosc::msgs::nav2::NavigateThroughPosesGoal,
+                                            krosc::msgs::nav2::NavigateThroughPosesFeedback,
+                                            krosc::msgs::nav2::NavigateThroughPosesResult>;
+  ThroughServer through_server(
+      server, krosc::msgs::nav2::NAVIGATE_THROUGH_POSES_ACTION,
+      [](krosc::ServerGoalHandle<krosc::msgs::nav2::NavigateThroughPosesGoal,
+                                krosc::msgs::nav2::NavigateThroughPosesFeedback>& handle) {
+        krosc::msgs::nav2::NavigateThroughPosesFeedback feedback;
+        feedback.current_waypoint = static_cast<std::uint32_t>(handle.goal().poses.size() - 1);
+        handle.publish_feedback(feedback);
+        krosc::msgs::nav2::NavigateThroughPosesResult result;
+        result.error_code = krosc::msgs::nav2::NavigateThroughPosesResult::NONE;
+        return result;
+      });
+
+  krosc::Context::Options client_options;
+  client_options.network.name = "nav2_action_client";
+  client_options.network.rpc_timeout_sec = 1.0;
+  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  krosc::Context client(client_options);
+  krosc::ActionClient<krosc::msgs::nav2::NavigateToPoseGoal,
+                      krosc::msgs::nav2::NavigateToPoseFeedback,
+                      krosc::msgs::nav2::NavigateToPoseResult>
+      navigate_client(client, krosc::msgs::nav2::NAVIGATE_TO_POSE_ACTION);
+  krosc::ActionClient<krosc::msgs::nav2::NavigateThroughPosesGoal,
+                      krosc::msgs::nav2::NavigateThroughPosesFeedback,
+                      krosc::msgs::nav2::NavigateThroughPosesResult>
+      through_client(client, krosc::msgs::nav2::NAVIGATE_THROUGH_POSES_ACTION);
+
+  std::mutex mutex;
+  std::condition_variable cv;
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 3s, [&] { return !client.peer_network()->peer_endpoints().empty(); }));
+  std::this_thread::sleep_for(100ms);
+
+  krosc::msgs::nav2::NavigateToPoseGoal goal;
+  goal.pose.header = krosc::msgs::Header{1.0, "map"};
+  goal.pose.pose.position = {1.0, 2.0, 0.0};
+  std::atomic<double> feedback_distance{0.0};
+  auto navigate = navigate_client.send_goal(goal, [&](const krosc::msgs::nav2::NavigateToPoseFeedback& feedback) {
+    feedback_distance.store(feedback.distance_remaining);
+    cv.notify_all();
+  });
+  const auto navigate_result = navigate->result(3.0);
+  CHECK(navigate_result.status == krosc::GoalStatus::Succeeded);
+  CHECK_EQ(1.5, feedback_distance.load());
+
+  krosc::msgs::nav2::NavigateThroughPosesGoal through_goal;
+  through_goal.poses.push_back(goal.pose);
+  krosc::msgs::PoseStamped second;
+  second.header = goal.pose.header;
+  second.pose.position = {3.0, 4.0, 0.0};
+  through_goal.poses.push_back(second);
+  std::atomic<int> current_waypoint{-1};
+  auto through = through_client.send_goal(
+      through_goal, [&](const krosc::msgs::nav2::NavigateThroughPosesFeedback& feedback) {
+        current_waypoint.store(static_cast<int>(feedback.current_waypoint));
+        cv.notify_all();
+      });
+  const auto through_result = through->result(3.0);
+  CHECK(through_result.status == krosc::GoalStatus::Succeeded);
+  CHECK_EQ(1, current_waypoint.load());
+
+  lock.unlock();
+  navigate_client.shutdown();
+  through_client.shutdown();
+  navigate_server.shutdown();
+  through_server.shutdown();
   client.shutdown();
   server.shutdown();
 }

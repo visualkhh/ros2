@@ -43,16 +43,10 @@ BtNavigator::BtNavigator(Context& context, std::string name,
       recovery_backup_(declare_parameter<bool>("recovery_backup", true)),
       global_frame_(declare_parameter<std::string>("global_frame", "map")),
       robot_base_frame_(declare_parameter<std::string>("robot_base_frame", "base_footprint")),
-      goal_topic_(declare_parameter<std::string>("goal_topic", "goal_pose")),
-      goal_poses_topic_(declare_parameter<std::string>("goal_poses_topic", "goal_poses")),
-      preview_goal_topic_(declare_parameter<std::string>("preview_goal_topic", "preview_goal")),
-      preview_goals_topic_(declare_parameter<std::string>("preview_goals_topic", "preview_goals")),
-      cancel_topic_(declare_parameter<std::string>("cancel_topic", "cancel_goal")),
       status_topic_(declare_parameter<std::string>("status_topic", "goal_status")) {
   listener_ = std::make_unique<TransformListener>(buffer_, *this);
   planner_ = std::make_unique<PlannerClient>(context, msgs::nav2::COMPUTE_PATH_TO_POSE_ACTION);
   controller_ = std::make_unique<ControllerClient>(context, msgs::nav2::FOLLOW_PATH_ACTION);
-  self_client_ = std::make_unique<SelfClient>(context, msgs::nav2::NAVIGATE_TO_POSE_ACTION);
   spin_ = std::make_unique<SpinClient>(context, msgs::nav2::SPIN_ACTION);
   backup_ = std::make_unique<BackUpClient>(context, msgs::nav2::BACKUP_ACTION);
   wait_ = std::make_unique<WaitClient>(context, msgs::nav2::WAIT_ACTION);
@@ -66,18 +60,19 @@ BtNavigator::BtNavigator(Context& context, std::string name,
         preempt_.store(true);
         return true;
       });
-  pose_subscriptions_.push_back(subscribe<msgs::PoseStamped>(
-      goal_topic_.value(), [this](const msgs::PoseStamped& pose) { on_goal_pose(pose); }));
-  goal_poses_subscription_ = subscribe<msgs::Path>(
-      goal_poses_topic_.value(), [this](const msgs::Path& goals) { on_goal_poses(goals); });
-  pose_subscriptions_.push_back(subscribe<msgs::PoseStamped>(
-      preview_goal_topic_.value(), [this](const msgs::PoseStamped& pose) { on_preview_goal(pose); }));
-  preview_goals_subscription_ = subscribe<msgs::Path>(
-      preview_goals_topic_.value(), [this](const msgs::Path& goals) { on_preview_goals(goals); });
-  cancel_subscription_ = subscribe<msgs::Bool>(
-      cancel_topic_.value(), [this](const msgs::Bool& message) { on_cancel(message); });
-  logger().info("bt_navigator: goal=%s global=%s robot=%s", goal_topic_.value().c_str(),
-                global_frame_.value().c_str(), robot_base_frame_.value().c_str());
+  through_action_ = std::make_unique<
+      ActionServer<msgs::nav2::NavigateThroughPosesGoal,
+                   msgs::nav2::NavigateThroughPosesFeedback,
+                   msgs::nav2::NavigateThroughPosesResult>>(
+      context, msgs::nav2::NAVIGATE_THROUGH_POSES_ACTION,
+      [this](ThroughHandle& handle) { return execute_through(handle); },
+      [this](const msgs::nav2::NavigateThroughPosesGoal& goal) {
+        (void)goal;
+        preempt_.store(true);
+        return true;
+      });
+  logger().info("bt_navigator: global=%s robot=%s", global_frame_.value().c_str(),
+                robot_base_frame_.value().c_str());
 }
 
 BtNavigator::~BtNavigator() {
@@ -89,8 +84,8 @@ BtNavigator::~BtNavigator() {
   if (action_) {
     action_->shutdown();
   }
-  if (through_thread_.joinable()) {
-    through_thread_.join();
+  if (through_action_) {
+    through_action_->shutdown();
   }
 }
 
@@ -134,72 +129,6 @@ void BtNavigator::publish_empty_plan() {
   msgs::Path path;
   path.header = msgs::Header{now(), global_frame_.value()};
   publish("plan", std::move(path), QOS_LATCHED);
-}
-
-void BtNavigator::on_goal_pose(const msgs::PoseStamped& pose) {
-  logger().info("goal_pose: (%.2f, %.2f)", pose.pose.position.x, pose.pose.position.y);
-  cancel_requested_.store(true);
-  if (const auto follow = current_follow()) {
-    follow->cancel();
-  }
-  cancel_requested_.store(false);
-  try {
-    self_client_->send_goal(msgs::nav2::NavigateToPoseGoal{pose, ""});
-  } catch (const std::exception& error) {
-    logger().warn("navigate_to_pose goal을 보내지 못했다: %s", error.what());
-  }
-}
-
-void BtNavigator::on_preview_goal(const msgs::PoseStamped& pose) {
-  logger().info("preview_goal: (%.2f, %.2f)", pose.pose.position.x, pose.pose.position.y);
-  const auto plan = plan_goal(pose);
-  if (plan.error_code != msgs::nav2::ComputePathToPoseResult::NONE) {
-    logger().warn("preview: 계획 실패 (%d): %s", plan.error_code, plan.error_msg.c_str());
-    return;
-  }
-  publish("plan", plan.path, QOS_LATCHED);
-  publish_status("preview");
-}
-
-void BtNavigator::on_preview_goals(const msgs::Path& goals) {
-  if (goals.poses.empty()) {
-    return;
-  }
-  logger().info("preview_goals: %zu goals", goals.poses.size());
-  const auto combined = plan_through(goals.poses);
-  if (!combined) {
-    return;
-  }
-  publish("plan", *combined, QOS_LATCHED);
-  publish_status("preview");
-}
-
-void BtNavigator::on_goal_poses(const msgs::Path& goals) {
-  if (goals.poses.empty()) {
-    return;
-  }
-  logger().info("goal_poses: %zu goals", goals.poses.size());
-  cancel_requested_.store(true);
-  if (const auto follow = current_follow()) {
-    follow->cancel();
-  }
-  if (through_thread_.joinable()) {
-    through_thread_.join();
-  }
-  cancel_requested_.store(false);
-  through_thread_ = std::thread([this, poses = goals.poses] { run_through(poses); });
-}
-
-void BtNavigator::on_cancel(const msgs::Bool& message) {
-  (void)message;
-  logger().info("cancel requested");
-  cancel_requested_.store(true);
-  preempt_.store(true);
-  if (const auto follow = current_follow()) {
-    follow->cancel();
-  }
-  publish_empty_plan();
-  publish_status("canceled");
 }
 
 msgs::nav2::ComputePathToPoseResult BtNavigator::plan_segment(
@@ -283,13 +212,27 @@ std::optional<msgs::Path> BtNavigator::plan_through(
   return path;
 }
 
-void BtNavigator::run_through(std::vector<msgs::PoseStamped> goals) {
+msgs::nav2::NavigateThroughPosesResult BtNavigator::execute_through(ThroughHandle& handle) {
+  msgs::nav2::NavigateThroughPosesResult result;
+  preempt_.store(false);
   cancel_requested_.store(false);
+  const std::vector<msgs::PoseStamped> goals = handle.goal().poses;
+  if (goals.empty()) {
+    result.error_code = msgs::nav2::NavigateThroughPosesResult::UNKNOWN;
+    result.error_msg = "poses가 비어 있다";
+    return result;
+  }
+  const double began = now();
+  std::uint32_t waypoint = 0;
+  publish_status("planning");
   const auto combined = plan_through(goals);
   if (!combined || cancel_requested_.load()) {
-    return;
+    publish_status("plan failed");
+    result.error_code = msgs::nav2::NavigateThroughPosesResult::UNKNOWN;
+    result.error_msg = "경로 계획 실패";
+    return result;
   }
-  logger().info("goal_poses: combined path %zu poses", combined->poses.size());
+  logger().info("navigate_through_poses: combined path %zu poses", combined->poses.size());
   publish("plan", *combined, QOS_LATCHED);
   std::shared_ptr<FollowHandle> follow;
   try {
@@ -297,21 +240,62 @@ void BtNavigator::run_through(std::vector<msgs::PoseStamped> goals) {
     request.path = *combined;
     follow = controller_->send_goal(request);
   } catch (const std::exception& error) {
-    logger().warn("goal_poses: controller goal을 보내지 못했다: %s", error.what());
-    return;
+    result.error_code = msgs::nav2::NavigateThroughPosesResult::UNKNOWN;
+    result.error_msg = error.what();
+    return result;
   }
   set_follow(follow);
-  while (follow->status() == GoalStatus::Accepted && !cancel_requested_.load()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  publish_status("following");
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (cancel_requested_.load() || handle.is_cancel_requested()) {
+      follow->cancel();
+      set_follow(nullptr);
+      publish_empty_plan();
+      publish_status("canceled");
+      result.error_msg = "취소";
+      return result;
+    }
+    if (preempt_.load()) {
+      set_follow(nullptr);
+      result.error_msg = kReplaced;
+      return result;
+    }
+    if (follow->status() != GoalStatus::Accepted) {
+      const ActionResult action_result = follow->result(5.0);
+      int code = msgs::nav2::FollowPathResult::UNKNOWN;
+      std::string message = "controller_server 결과가 없다 (" + status_name(action_result.status) + ")";
+      if (action_result.result.has_value()) {
+        try {
+          const auto follow_result = std::any_cast<msgs::nav2::FollowPathResult>(action_result.result);
+          code = follow_result.error_code;
+          message = follow_result.error_msg;
+        } catch (const std::bad_any_cast&) {
+        }
+      }
+      set_follow(nullptr);
+      publish_empty_plan();
+      if (code == msgs::nav2::FollowPathResult::NONE && message != kReplaced) {
+        publish_status("reached");
+        logger().info("navigate_through_poses: %zu goals reached", goals.size());
+        return result;
+      }
+      publish_status("failed");
+      result.error_code = code;
+      result.error_msg = message;
+      logger().warn("navigate_through_poses 실패 (%d): %s", code, message.c_str());
+      return result;
+    }
+    if (const auto pose = robot_pose()) {
+      while (waypoint + 1 < goals.size() &&
+             std::hypot(goals[waypoint].pose.position.x - pose->pose.position.x,
+                        goals[waypoint].pose.position.y - pose->pose.position.y) < 0.25) {
+        ++waypoint;
+      }
+      handle.publish_feedback(
+          through_feedback(goals.back(), began, 0, waypoint, *pose, pose));
+    }
   }
-  if (cancel_requested_.load()) {
-    follow->cancel();
-    publish_status("canceled");
-  } else {
-    publish_status("reached");
-  }
-  publish_empty_plan();
-  set_follow(nullptr);
 }
 
 void BtNavigator::recover() {
@@ -368,6 +352,22 @@ msgs::nav2::NavigateToPoseFeedback BtNavigator::feedback(const msgs::PoseStamped
     message.distance_remaining =
         std::hypot(goal.pose.position.x - pose->pose.position.x,
                    goal.pose.position.y - pose->pose.position.y);
+  }
+  return message;
+}
+
+msgs::nav2::NavigateThroughPosesFeedback BtNavigator::through_feedback(
+    const msgs::PoseStamped& goal, double began, int recoveries, std::uint32_t waypoint,
+    const msgs::PoseStamped& current, const std::optional<msgs::PoseStamped>& robot) const {
+  msgs::nav2::NavigateThroughPosesFeedback message;
+  message.navigation_time = now() - began;
+  message.number_of_recoveries = recoveries;
+  message.current_waypoint = waypoint;
+  message.current_pose = current;
+  if (robot) {
+    message.distance_remaining =
+        std::hypot(goal.pose.position.x - robot->pose.position.x,
+                   goal.pose.position.y - robot->pose.position.y);
   }
   return message;
 }

@@ -73,6 +73,9 @@ if(KROSC_BUILD_TESTS)
   )
   target_include_directories(krosc_simulator_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../engine/tests)
   target_link_libraries(krosc_simulator_tests PRIVATE krosc::simulator)
+  target_compile_definitions(krosc_simulator_tests PRIVATE
+    KROSC_SIMULATOR_URDF="${CMAKE_CURRENT_SOURCE_DIR}/description/turtlebot3_waffle_pi.urdf"
+  )
   target_compile_options(krosc_simulator_tests PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME krosc_simulator_tests COMMAND krosc_simulator_tests)
 endif()

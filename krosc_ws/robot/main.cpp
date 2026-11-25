@@ -291,8 +291,8 @@ int main(int argc, char** argv) {
                                  {"map_saver", std::string("map_saver")},
                                  {"list_period", 1.0}});
   // nav2처럼 내비게이션을 노드로 나눈다: costmap_2d -> planner_server -> controller_server -> bt_navigator.
-  // 토픽 이름(plan, local_plan, global/local_costmap/costmap, goal_pose(s), preview_goal(s),
-  // cancel_goal, goal_status, cmd_vel_nav)은 기존 Viz/RL과 같게 유지한다.
+  // Viz/웹은 nav2 표준 액션(navigate_to_pose, compute_path_to_pose, navigate_through_poses,
+  // compute_path_through_poses)으로 명령한다. 상태 토픽(plan, goal_status, cmd_vel_nav)만 유지한다.
   krosc::nodes::nav2::Costmap2DROS global_costmap(
       context, "global_costmap",
       {{"global_frame", std::string("map")},

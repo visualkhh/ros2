@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "krosc/context.hpp"
+#include "krosc/qos.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
@@ -127,11 +128,15 @@ void Simulator::stop() {
 }
 
 void Simulator::set_demo_command() {
-  impl_->robot->set_command(krosc::msgs::Twist{{0.16, 0.0, 0.0}, {0.0, 0.0, 0.28}});
+  impl_->bridge->publish("cmd_vel",
+                         krosc::msgs::Twist{{0.16, 0.0, 0.0}, {0.0, 0.0, 0.28}},
+                         krosc::QOS_COMMAND);
 }
 
 void Simulator::set_stop_command() {
-  impl_->robot->set_command(krosc::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}});
+  impl_->bridge->publish("cmd_vel",
+                         krosc::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},
+                         krosc::QOS_COMMAND);
 }
 
 World& Simulator::world() { return *impl_->world; }

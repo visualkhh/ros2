@@ -44,12 +44,24 @@ PlannerServer::PlannerServer(Context& context, Costmap2DROS& global_costmap, std
       [this](ServerGoalHandle<msgs::nav2::ComputePathToPoseGoal, msgs::nav2::ComputePathToPoseFeedback>& handle) {
         return compute_path(handle.goal());
       });
+  through_action_ = std::make_unique<
+      ActionServer<msgs::nav2::ComputePathThroughPosesGoal,
+                   msgs::nav2::ComputePathThroughPosesFeedback,
+                   msgs::nav2::ComputePathThroughPosesResult>>(
+      context, msgs::nav2::COMPUTE_PATH_THROUGH_POSES_ACTION,
+      [this](ServerGoalHandle<msgs::nav2::ComputePathThroughPosesGoal,
+                              msgs::nav2::ComputePathThroughPosesFeedback>& handle) {
+        return compute_path_through_poses(handle.goal());
+      });
   logger().info("planner_server: %zu plugins, costmap=%s", planners_.size(), costmap_.name().c_str());
 }
 
 PlannerServer::~PlannerServer() {
   if (action_) {
     action_->shutdown();
+  }
+  if (through_action_) {
+    through_action_->shutdown();
   }
 }
 
@@ -80,7 +92,7 @@ std::optional<Pose2> PlannerServer::pose_in_frame(const msgs::PoseStamped& pose,
   }
 }
 
-msgs::nav2::ComputePathToPoseResult PlannerServer::compute_path(
+msgs::nav2::ComputePathToPoseResult PlannerServer::plan_path(
     const msgs::nav2::ComputePathToPoseGoal& goal) {
   const auto started = std::chrono::steady_clock::now();
   msgs::nav2::ComputePathToPoseResult result;
@@ -148,7 +160,6 @@ msgs::nav2::ComputePathToPoseResult PlannerServer::compute_path(
     if (path.poses.size() > 2) {
       path.poses[path.poses.size() - 2].pose.orientation = tfmath::from_yaw(target->yaw);
     }
-    publish(plan_topic_.value(), path, QOS_LATCHED);
     result.path = path;
   } catch (const PlannerError& error) {
     result.error_code = error.code;
@@ -161,6 +172,68 @@ msgs::nav2::ComputePathToPoseResult PlannerServer::compute_path(
   }
   result.planning_time =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+  return result;
+}
+
+msgs::nav2::ComputePathToPoseResult PlannerServer::compute_path(
+    const msgs::nav2::ComputePathToPoseGoal& goal) {
+  const auto result = plan_path(goal);
+  if (result.error_code == msgs::nav2::ComputePathToPoseResult::NONE) {
+    publish(plan_topic_.value(), result.path, QOS_LATCHED);
+  }
+  return result;
+}
+
+msgs::nav2::ComputePathThroughPosesResult PlannerServer::compute_path_through_poses(
+    const msgs::nav2::ComputePathThroughPosesGoal& goal) {
+  const auto started = std::chrono::steady_clock::now();
+  msgs::nav2::ComputePathThroughPosesResult result;
+  if (goal.goals.empty()) {
+    result.error_code = msgs::nav2::ComputePathThroughPosesResult::NO_VALID_PATH;
+    result.error_msg = "goals가 비어 있다";
+    return result;
+  }
+  msgs::PoseStamped current = goal.start;
+  bool have_start = goal.use_start;
+  std::vector<msgs::PoseStamped> combined;
+  for (const auto& target : goal.goals) {
+    msgs::nav2::ComputePathToPoseGoal segment;
+    segment.goal = target;
+    segment.planner_id = goal.planner_id;
+    if (have_start) {
+      segment.start = current;
+      segment.use_start = true;
+    }
+    const auto planned = plan_path(segment);
+    if (planned.error_code != msgs::nav2::ComputePathToPoseResult::NONE) {
+      result.error_code = planned.error_code;
+      result.error_msg = planned.error_msg;
+      result.planning_time =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return result;
+    }
+    std::vector<msgs::PoseStamped> poses = planned.path.poses;
+    if (!combined.empty() && !poses.empty()) {
+      const auto& last = combined.back().pose.position;
+      const auto& first = poses.front().pose.position;
+      if (last.x == first.x && last.y == first.y) {
+        poses.erase(poses.begin());
+      }
+    }
+    combined.insert(combined.end(), poses.begin(), poses.end());
+    current = target;
+    have_start = true;
+  }
+  if (combined.empty()) {
+    result.error_code = msgs::nav2::ComputePathThroughPosesResult::NO_VALID_PATH;
+    result.error_msg = "경로가 비어 있다";
+    return result;
+  }
+  result.path.header = msgs::Header{now(), costmap_.global_frame()};
+  result.path.poses = std::move(combined);
+  result.planning_time =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+  publish(plan_topic_.value(), result.path, QOS_LATCHED);
   return result;
 }
 

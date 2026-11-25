@@ -66,8 +66,9 @@ void NavigationPlugin::initialize(VizHost& host) {
     multi_goals_.clear();
     sync_waypoints();
     update_multi_label();
-    host_->model().node().publish("cancel_goal", msgs::Bool{true}, QOS_DEFAULT);
-    status_->setText("cancel requested");
+    std::string error;
+    host_->model().cancel_navigation(error);
+    status_->setText(error.empty() ? "cancel requested" : QString::fromStdString(error));
     update_buttons();
   });
 
@@ -104,8 +105,9 @@ void NavigationPlugin::initialize(VizHost& host) {
     multi_goals_.clear();
     sync_waypoints();
     update_multi_label();
-    host_->model().node().publish("cancel_goal", msgs::Bool{true}, QOS_DEFAULT);
-    status_->setText("waypoints cleared");
+    std::string error;
+    host_->model().cancel_navigation(error);
+    status_->setText(error.empty() ? "waypoints cleared" : QString::fromStdString(error));
     update_buttons();
   });
 
@@ -339,67 +341,52 @@ void NavigationPlugin::handle_tool_pose(double x, double y, double yaw, bool fro
       set_tool("");
       return;
     }
-    publish_pose("initialpose", x, y, yaw, from_map);
+    publish_initial_pose(x, y, yaw);
   } else if (active_tool_ == "goal") {
-    publish_pose(single_preview_ ? "preview_goal" : "goal_pose", x, y, yaw, from_map);
+    send_goal(x, y, yaw, single_preview_);
   }
   set_tool("");
 }
 
-void NavigationPlugin::publish_pose(const std::string& topic, double x, double y, double yaw,
-                                    bool from_map) {
-  if (!from_map && host_->model().fixed_frame() != "map") {
-    try {
-      const msgs::TransformStamped transform =
-          host_->model().tf_buffer().lookup_transform("map", host_->model().fixed_frame());
-      const double offset = tfmath::yaw_of(transform.transform.rotation);
-      const double c = std::cos(offset);
-      const double s = std::sin(offset);
-      const double px = x;
-      const double py = y;
-      x = transform.transform.translation.x + c * px - s * py;
-      y = transform.transform.translation.y + s * px + c * py;
-      yaw = std::atan2(std::sin(offset + yaw), std::cos(offset + yaw));
-    } catch (const TransformException&) {
-      status_->setText("no map TF (2D Pose Estimate first)");
-      return;
-    }
-  }
-  if (topic != "initialpose" && slam_status_text() != "localization") {
-    status_->setText("load a map first (localization)");
-    return;
-  }
+void NavigationPlugin::publish_initial_pose(double x, double y, double yaw) {
   msgs::Pose pose;
   pose.position = {x, y, 0.0};
   pose.orientation = tfmath::from_yaw(yaw);
-  if (topic == "initialpose") {
-    msgs::PoseWithCovarianceStamped message;
-    message.header = msgs::Header{host_->model().node().now(), "map"};
-    message.pose.pose = pose;
-    message.pose.covariance[0] = 0.25;
-    message.pose.covariance[7] = 0.25;
-    message.pose.covariance[35] = 0.0685;
-    host_->model().node().publish(topic, message, QOS_DEFAULT);
-    status_->setText(QString("initialpose (%.2f, %.2f, %.0fdeg)")
-                         .arg(x)
-                         .arg(y)
-                         .arg(yaw * 180.0 / 3.141592653589793));
-  } else {
-    msgs::PoseStamped message;
-    message.header = msgs::Header{host_->model().node().now(), "map"};
-    message.pose = pose;
-    host_->model().node().publish(topic, message, QOS_DEFAULT);
-    status_->setText(QString("%1 (%.2f, %.2f)").arg(QString::fromStdString(topic)).arg(x).arg(y));
+  msgs::PoseWithCovarianceStamped message;
+  message.header = msgs::Header{host_->model().node().now(), "map"};
+  message.pose.pose = pose;
+  message.pose.covariance[0] = 0.25;
+  message.pose.covariance[7] = 0.25;
+  message.pose.covariance[35] = 0.0685;
+  host_->model().node().publish("initialpose", message, QOS_DEFAULT);
+  status_->setText(QString("initialpose (%.2f, %.2f, %.0fdeg)")
+                       .arg(x)
+                       .arg(y)
+                       .arg(yaw * 180.0 / 3.141592653589793));
+}
+
+void NavigationPlugin::send_goal(double x, double y, double yaw, bool preview) {
+  if (slam_status_text() != "localization") {
+    status_->setText("load a map first (localization)");
+    return;
   }
+  msgs::PoseStamped message;
+  message.header = msgs::Header{host_->model().node().now(), "map"};
+  message.pose.position = {x, y, 0.0};
+  message.pose.orientation = tfmath::from_yaw(yaw);
+  std::string error;
+  const bool ok = preview ? host_->model().compute_path_to_pose(message, error)
+                          : host_->model().navigate_to_pose(message, error);
+  if (!ok) {
+    status_->setText(QString::fromStdString(error));
+    return;
+  }
+  status_->setText(preview ? QString("미리보기 (%.2f, %.2f)").arg(x).arg(y)
+                           : QString("이동 (%.2f, %.2f)").arg(x).arg(y));
 }
 
 void NavigationPlugin::publish_multi(bool preview) {
   if (multi_goals_.empty()) {
-    if (preview) {
-      msgs::Path empty;
-      empty.header = msgs::Header{host_->model().node().now(), "map"};
-      host_->model().node().publish("preview_goals", empty, QOS_DEFAULT);
-    }
     status_->setText("웨이포인트가 없다");
     return;
   }
@@ -411,16 +398,22 @@ void NavigationPlugin::publish_multi(bool preview) {
     status_->setText("switch fixed frame to map");
     return;
   }
-  msgs::Path path;
-  path.header = msgs::Header{host_->model().node().now(), "map"};
+  std::vector<msgs::PoseStamped> goals;
+  goals.reserve(multi_goals_.size());
   for (const auto& [x, y, yaw] : multi_goals_) {
     msgs::PoseStamped pose;
-    pose.header = path.header;
+    pose.header = msgs::Header{host_->model().node().now(), "map"};
     pose.pose.position = {x, y, 0.0};
     pose.pose.orientation = tfmath::from_yaw(yaw);
-    path.poses.push_back(std::move(pose));
+    goals.push_back(std::move(pose));
   }
-  host_->model().node().publish(preview ? "preview_goals" : "goal_poses", path, QOS_DEFAULT);
+  std::string error;
+  const bool ok = preview ? host_->model().compute_path_through_poses(goals, error)
+                          : host_->model().navigate_through_poses(goals, error);
+  if (!ok) {
+    status_->setText(QString::fromStdString(error));
+    return;
+  }
   status_->setText(preview ? QString("미리보기 %1개 (주행 안 함)").arg(multi_goals_.size())
                            : QString("이동 시작: %1개").arg(multi_goals_.size()));
 }

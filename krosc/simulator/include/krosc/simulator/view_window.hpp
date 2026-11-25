@@ -26,14 +26,20 @@ class QPainter;
 class QTimer;
 class QWheelEvent;
 
+namespace krosc {
+class Node;
+}
+
 namespace krosc::simulator {
 
-// "진실" 화면: 월드/로봇의 실제 상태와 잡음 없는 라이다를 그린다. 토픽을 보지 않는다.
+// "진실" 화면: 월드/로봇의 실제 상태와 잡음 없는 라이다를 그린다.
+// 키보드 텔레옵은 로봇을 직접 만지지 않고 ROS 2 표준 cmd_vel 토픽으로 낸다.
 class SimView final : public QWidget {
   Q_OBJECT
 
  public:
-  SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, QWidget* parent = nullptr);
+  SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, krosc::Node& node,
+          QWidget* parent = nullptr);
 
   void reset_camera();
   void set_camera_distance(double distance);
@@ -85,6 +91,7 @@ class SimView final : public QWidget {
   std::vector<Wall> walls_;
   TurtleBot3& robot_;
   SnapshotStore& store_;
+  krosc::Node& node_;
   Camera camera_;
   QMatrix4x4 matrix_;
   int view_width_ = 1;
@@ -108,7 +115,8 @@ class SimWindow final : public QMainWindow {
   Q_OBJECT
 
  public:
-  SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, QWidget* parent = nullptr);
+  SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, krosc::Node& node,
+            QWidget* parent = nullptr);
   ~SimWindow() override;
 
   [[nodiscard]] SimView& view() { return *view_; }

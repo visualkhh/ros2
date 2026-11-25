@@ -60,14 +60,6 @@ Cartographer::Cartographer(Context& context, std::string name, std::map<std::str
       [](const std::string& value) { return value == "idle" || value == "mapping" || value == "localization"; },
       [this](const std::string& value) { set_mode(value); });
   set_mode(mode_.value());
-  subscribe<msgs::String>(
-      "slam_mode",
-      [this](const msgs::String& message) {
-        if (message.data == "idle" || message.data == "mapping" || message.data == "localization") {
-          mode_.set(message.data);
-        }
-      },
-      QOS_LATCHED);
   logger().info("Cartographer: map=%s odom=%s scan=%s resolution=%.2f",
                 map_frame_.value().c_str(), odom_frame_.value().c_str(), scan_topic_.value().c_str(),
                 resolution_.value());

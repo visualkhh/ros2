@@ -1329,76 +1329,9 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
   impl_->forward_topic<msgs::PoseWithCovarianceStamped>(
       "initialpose", Kind::PoseCov,
       [](Writer& writer, const msgs::PoseWithCovarianceStamped& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::PoseStamped>(
-      "goal_pose", Kind::Pose,
-      [](Writer& writer, const msgs::PoseStamped& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::PoseStamped>(
-      "preview_goal", Kind::Pose,
-      [](Writer& writer, const msgs::PoseStamped& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Path>(
-      "goal_poses", Kind::Path,
-      [](Writer& writer, const msgs::Path& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Path>(
-      "preview_goals", Kind::Path,
-      [](Writer& writer, const msgs::Path& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "map_change", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "map_save", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "slam_mode", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Bool>(
-      "cancel_goal", Kind::Bool,
-      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Empty>(
-      "map_unload", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
-  impl_->forward_topic<msgs::Bool>(
-      "collision_set_enabled", Kind::Bool,
-      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
   impl_->forward_topic<msgs::JointState>(
       "arm_joint_command", Kind::JointState,
       [](Writer& writer, const msgs::JointState& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Bool>(
-      "arm_manual", Kind::Bool,
-      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Bool>(
-      "arm_torque", Kind::Bool,
-      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Empty>(
-      "arm_stop", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
-  impl_->forward_topic<msgs::String>(
-      "arm_reset", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "moveit_target", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "moveit_scrub", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "moveit_preset", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Empty>(
-      "moveit_plan", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
-  impl_->forward_topic<msgs::Empty>(
-      "moveit_execute", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
-  impl_->forward_topic<msgs::Empty>(
-      "moveit_cancel", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
-  impl_->forward_topic<msgs::Bool>(
-      "rl_nav_enable", Kind::Bool,
-      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "rl_nav_fallback", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::String>(
-      "rl_nav_model", Kind::String,
-      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
-  impl_->forward_topic<msgs::Empty>(
-      "rl_nav_reload", Kind::Empty,
-      [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
   impl_->reader_thread = std::thread([impl = impl_.get()] { impl->reader_loop(); });
   impl_->writer_thread = std::thread([impl = impl_.get()] { impl->writer_loop(); });
 }

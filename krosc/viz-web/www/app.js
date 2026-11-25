@@ -16,7 +16,8 @@ const state = {
   stats: new Map(),
   subscribers: new Map(),
   tf: new Map(),
-  goalTopic: 'goal_pose',
+  goalMode: 'move',
+  lastGoal: null,
   waypoints: [],
   multiGoal: false,
   goalArmed: false,
@@ -716,17 +717,6 @@ function onEvent(name, callback) {
   return () => eventHandlers.get(name)?.delete(callback);
 }
 
-function sendString(topicName, value) {
-  const writer = new Writer();
-  writer.str(value);
-  return sendBinary(topicName, 2, writer.data);
-}
-function sendBool(topicName, value) {
-  return sendBinary(topicName, 15, [value ? 1 : 0]);
-}
-function sendEmpty(topicName) {
-  return sendBinary(topicName, 14, []);
-}
 function sendJointState(topicName, names, positions) {
   const writer = new Writer();
   writer.f64(Date.now() / 1000);
@@ -745,22 +735,6 @@ function sendTwist(topicName, linear, angular) {
   writer.f64(0); writer.f64(0); writer.f64(angular);
   return sendBinary(topicName, 1, writer.data);
 }
-function sendPath(topicName, points) {
-  const writer = new Writer();
-  const stamp = Date.now() / 1000;
-  writer.f64(stamp);
-  writer.str('map');
-  writer.u32(points.length);
-  for (const point of points) {
-    writer.f64(stamp);
-    writer.str('map');
-    writer.f64(point.x); writer.f64(point.y); writer.f64(0);
-    const yaw = point.yaw || 0;
-    writer.f64(0); writer.f64(0); writer.f64(Math.sin(yaw / 2)); writer.f64(Math.cos(yaw / 2));
-  }
-  return sendBinary(topicName, 9, writer.data);
-}
-
 const goalSentListeners = [];
 function addGoalSentListener(listener) { goalSentListeners.push(listener); }
 const poseSentListeners = [];
@@ -779,12 +753,19 @@ function sendInitialPose(x, y, yaw = 0) {
 }
 
 function sendGoal(x, y, yaw = 0) {
-  const writer = new Writer();
-  writer.f64(Date.now() / 1000);
-  writer.str('map');
-  writer.f64(x); writer.f64(y); writer.f64(0);
-  writer.f64(0); writer.f64(0); writer.f64(Math.sin(yaw / 2)); writer.f64(Math.cos(yaw / 2));
-  return sendBinary(state.goalTopic, 12, writer.data);
+  state.lastGoal = { x, y, yaw, preview: state.goalMode === 'preview' };
+  const method = state.goalMode === 'preview'
+    ? 'nav/compute_path_to_pose'
+    : 'nav/navigate_to_pose';
+  return rpc(method, { x, y, yaw })
+    .then((response) => {
+      if (!response.accepted) throw new Error(response.error || 'goal rejected');
+      return response;
+    })
+    .catch((error) => {
+      toast(`navigation: ${error.message}`);
+      return null;
+    });
 }
 
 function onTopic(topicName, callback) {
@@ -894,13 +875,42 @@ const host = {
   async getParameters(node, names) {
     return rpc('params/get', { node, names });
   },
-  sendString,
-  sendBool,
-  sendEmpty,
   sendTwist,
   sendJointState,
-  sendGoal,
-  setGoalTopic(topicName) { state.goalTopic = topicName; },
+  setGoalMode(mode) { state.goalMode = mode === 'preview' ? 'preview' : 'move'; },
+  cancelNavigation() {
+    return rpc('nav/cancel').catch((error) => {
+      toast(`cancel: ${error.message}`);
+      return { ok: false };
+    });
+  },
+  setArmTorque(on) {
+    return rpc('arm/set_torque', { on: Boolean(on) }).catch((error) => {
+      toast(`arm torque: ${error.message}`);
+      return { success: false };
+    });
+  },
+  stopArm() {
+    return rpc('arm/stop').catch((error) => {
+      toast(`arm stop: ${error.message}`);
+      return { success: false };
+    });
+  },
+  resetArm(target) {
+    return rpc('arm/reset', { target }).catch((error) => {
+      toast(`arm reset: ${error.message}`);
+      return { success: false };
+    });
+  },
+  beep(frequency, duration) {
+    return rpc('buzzer', {
+      frequency: Number(frequency),
+      duration: Number(duration),
+    }).catch((error) => {
+      toast(`buzzer: ${error.message}`);
+      return { success: false };
+    });
+  },
   fitMap: fitToMap,
   setMultiGoal(enabled) { state.multiGoal = Boolean(enabled); },
   setGoalArmed(enabled) { state.goalArmed = Boolean(enabled); },
@@ -909,7 +919,15 @@ const host = {
   onGoalSent(listener) { addGoalSentListener(listener); },
   waypointCount() { return state.waypoints.length; },
   clearWaypoints() { state.waypoints = []; },
-  sendWaypoints(preview) { return sendPath(preview ? 'preview_goals' : 'goal_poses', state.waypoints); },
+  sendWaypoints(preview) {
+    const method = preview ? 'nav/compute_path_through_poses' : 'nav/navigate_through_poses';
+    return rpc(method, {
+      poses: state.waypoints.map(({ x, y, yaw }) => ({ x, y, yaw })),
+    }).then((response) => {
+      if (!response.accepted) throw new Error(response.error || 'goal rejected');
+      return response;
+    });
+  },
   toast,
   robotPose,
   lookup,
@@ -1665,20 +1683,18 @@ function drawRobot() {
 }
 
 function drawGoal() {
-  for (const name of ['goal_pose', 'preview_goal']) {
-    const goal = topic(name);
-    if (!goal) continue;
-    const transform = frameTransform(goal.header.frame);
-    if (!transform) continue;
-    const point = transformPoint(transform, goal.pose.position.x, goal.pose.position.y);
-    const screen = worldToScreen(point.x, point.y);
-    context.strokeStyle = name === 'preview_goal' ? '#ffb36b' : '#54d18c';
-    context.lineWidth = 2;
-    context.beginPath();
-    context.moveTo(screen.x - 7, screen.y); context.lineTo(screen.x + 7, screen.y);
-    context.moveTo(screen.x, screen.y - 7); context.lineTo(screen.x, screen.y + 7);
-    context.stroke();
-  }
+  const goal = state.lastGoal;
+  if (!goal) return;
+  const transform = frameTransform('map');
+  if (!transform) return;
+  const point = transformPoint(transform, goal.x, goal.y);
+  const screen = worldToScreen(point.x, point.y);
+  context.strokeStyle = goal.preview ? '#ffb36b' : '#54d18c';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(screen.x - 7, screen.y); context.lineTo(screen.x + 7, screen.y);
+  context.moveTo(screen.x, screen.y - 7); context.lineTo(screen.x, screen.y + 7);
+  context.stroke();
 }
 
 function project3d(x, y, z) {
@@ -1950,14 +1966,14 @@ function draw3dArm() {
 }
 
 function draw3dGoal() {
-  const goal = topic('goal_pose');
+  const goal = state.lastGoal;
   if (!goal) return;
-  const transform = frameTransform(goal.header.frame);
+  const transform = frameTransform('map');
   if (!transform) return;
-  const x = transform.x + Math.cos(transform.yaw) * goal.pose.position.x -
-            Math.sin(transform.yaw) * goal.pose.position.y;
-  const y = transform.y + Math.sin(transform.yaw) * goal.pose.position.x +
-            Math.cos(transform.yaw) * goal.pose.position.y;
+  const x = transform.x + Math.cos(transform.yaw) * goal.x -
+            Math.sin(transform.yaw) * goal.y;
+  const y = transform.y + Math.sin(transform.yaw) * goal.x +
+            Math.cos(transform.yaw) * goal.y;
   const bottom = project3d(x, y, 0);
   const top = project3d(x, y, 0.5);
   if (bottom && top) {

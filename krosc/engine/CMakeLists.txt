@@ -15,6 +15,7 @@ add_library(krosc_core STATIC
   core/msgs/codec_parameters.cpp
   core/msgs/codec_ros2_control.cpp
   core/msgs/codec_actions.cpp
+  core/msgs/codec_arm.cpp
   core/node.cpp
   core/parameter.cpp
   core/service.cpp

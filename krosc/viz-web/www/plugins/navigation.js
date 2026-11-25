@@ -17,9 +17,9 @@ export function init(host) {
   body.append(poseTitle);
   const poseRow = buttonRow(body);
   const poseButton = button(poseRow, '2D Pose Estimate', () => toggle('pose'));
-  const cancelButton = button(poseRow, '취소 / 정지', () => {
+  const cancelButton = button(poseRow, '취소 / 정지', async () => {
     host.clearWaypoints();
-    host.sendBool('cancel_goal', true);
+    await host.cancelNavigation();
     setLevel(status, 'cancel requested', 'warn');
   }, 'danger');
 
@@ -41,9 +41,9 @@ export function init(host) {
   const waypointButton = button(multiRow, '웨이포인트 추가', () => toggle('waypoint'));
   const multiPreview = button(multiRow, '경로 미리보기', () => sendMulti(true));
   const multiGo = button(multiRow, '이동 시작', () => sendMulti(false), 'primary');
-  const clearButton = button(multiRow, '비우기', () => {
+  const clearButton = button(multiRow, '비우기', async () => {
     host.clearWaypoints();
-    host.sendBool('cancel_goal', true);
+    await host.cancelNavigation();
     setLevel(status, 'waypoints cleared', 'warn');
     updateUi();
   });
@@ -72,7 +72,7 @@ export function init(host) {
     if (mode === 'pose') {
       host.setPoseArmed(true);
     } else if (mode === 'preview' || mode === 'move') {
-      host.setGoalTopic(mode === 'preview' ? 'preview_goal' : 'goal_pose');
+      host.setGoalMode(mode);
       host.setGoalArmed(true);
     } else if (mode === 'waypoint') {
       host.setMultiGoal(true);
@@ -80,7 +80,7 @@ export function init(host) {
     updateUi();
   }
 
-  function sendMulti(preview) {
+  async function sendMulti(preview) {
     const count = host.waypointCount();
     if (count === 0) {
       setLevel(status, '웨이포인트가 없다 — [웨이포인트 추가] 후 맵을 클릭', 'warn');
@@ -90,9 +90,13 @@ export function init(host) {
       setLevel(status, '지도를 먼저 load 하세요 (localization)', 'warn');
       return;
     }
-    host.sendWaypoints(preview);
-    setLevel(status, preview ? `미리보기 ${count}개 (주행 안 함)` : `이동 시작: ${count}개`,
-             preview ? 'warn' : 'ok');
+    try {
+      await host.sendWaypoints(preview);
+      setLevel(status, preview ? `미리보기 ${count}개 (주행 안 함)` : `이동 시작: ${count}개`,
+               preview ? 'warn' : 'ok');
+    } catch (error) {
+      setLevel(status, `navigation: ${error.message}`, 'bad');
+    }
   }
 
   function updateUi() {

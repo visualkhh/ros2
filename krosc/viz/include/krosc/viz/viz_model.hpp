@@ -9,8 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "krosc/action.hpp"
 #include "krosc/context.hpp"
 #include "krosc/msgs.hpp"
+#include "krosc/msgs/nav2_msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/tf/tf.hpp"
@@ -76,7 +78,13 @@ class VizModel {
   [[nodiscard]] std::optional<msgs::TransformStamped> transform_in_fixed(const std::string& frame) const;
 
   void publish_cmd_vel(double linear, double angular);
-  void publish_goal(double x, double y, double theta);
+
+  // nav2 표준 액션. 성공하면 error를 비우고, 실패하면 이유를 채운다.
+  bool navigate_to_pose(const msgs::PoseStamped& goal, std::string& error);
+  bool compute_path_to_pose(const msgs::PoseStamped& goal, std::string& error);
+  bool navigate_through_poses(const std::vector<msgs::PoseStamped>& goals, std::string& error);
+  bool compute_path_through_poses(const std::vector<msgs::PoseStamped>& goals, std::string& error);
+  bool cancel_navigation(std::string& error);
 
   // RPC 편의 함수. 실패하면 error/message에 이유를 채운다.
   bool set_parameters(const std::string& node_name,
@@ -88,6 +96,25 @@ class VizModel {
   bool trigger(const std::string& service, std::string& message);
 
  private:
+  using NavClient = ActionClient<msgs::nav2::NavigateToPoseGoal,
+                                 msgs::nav2::NavigateToPoseFeedback,
+                                 msgs::nav2::NavigateToPoseResult>;
+  using ThroughClient = ActionClient<msgs::nav2::NavigateThroughPosesGoal,
+                                     msgs::nav2::NavigateThroughPosesFeedback,
+                                     msgs::nav2::NavigateThroughPosesResult>;
+  using PathClient = ActionClient<msgs::nav2::ComputePathToPoseGoal,
+                                  msgs::nav2::ComputePathToPoseFeedback,
+                                  msgs::nav2::ComputePathToPoseResult>;
+  using PathThroughClient = ActionClient<msgs::nav2::ComputePathThroughPosesGoal,
+                                         msgs::nav2::ComputePathThroughPosesFeedback,
+                                         msgs::nav2::ComputePathThroughPosesResult>;
+  using NavHandle = ClientGoalHandle<msgs::nav2::NavigateToPoseGoal,
+                                     msgs::nav2::NavigateToPoseFeedback,
+                                     msgs::nav2::NavigateToPoseResult>;
+  using ThroughHandle = ClientGoalHandle<msgs::nav2::NavigateThroughPosesGoal,
+                                         msgs::nav2::NavigateThroughPosesFeedback,
+                                         msgs::nav2::NavigateThroughPosesResult>;
+
   struct Stat {
     std::string type;
     std::uint64_t count = 0;
@@ -127,6 +154,13 @@ class VizModel {
   Node node_;
   Buffer buffer_;
   TransformListener listener_;
+  std::unique_ptr<NavClient> nav_client_;
+  std::unique_ptr<ThroughClient> through_client_;
+  std::unique_ptr<PathClient> path_client_;
+  std::unique_ptr<PathThroughClient> path_through_client_;
+  std::shared_ptr<NavHandle> nav_handle_;
+  std::shared_ptr<ThroughHandle> through_handle_;
+  mutable std::mutex nav_mutex_;
 
   mutable std::mutex mutex_;
   std::map<std::string, Stat> stats_;

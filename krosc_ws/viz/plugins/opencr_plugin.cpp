@@ -141,9 +141,12 @@ void OpencrPlugin::beep() {
   if (host_ == nullptr) {
     return;
   }
-  const std::string text =
-      std::to_string(frequency_->value()) + "," + std::to_string(duration_->value());
-  host_->model().node().publish("buzzer", krosc::msgs::String{text}, krosc::QOS_DEFAULT);
+  try {
+    host_->model().node().call_service<krosc::msgs::BuzzerRequest,
+                                       krosc::msgs::BuzzerResponse>(
+        "buzzer", krosc::msgs::BuzzerRequest{frequency_->value(), duration_->value()});
+  } catch (const std::exception&) {
+  }
 }
 
 void OpencrPlugin::refresh() {

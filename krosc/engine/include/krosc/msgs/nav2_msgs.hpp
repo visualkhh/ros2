@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "krosc/msgs.hpp"
 
@@ -50,6 +52,55 @@ struct FollowPathResult {
   static constexpr int PATIENCE_EXCEEDED = 104;
   static constexpr int FAILED_TO_MAKE_PROGRESS = 105;
   static constexpr int NO_VALID_CONTROL = 106;
+
+  int error_code = NONE;
+  std::string error_msg;
+};
+
+// nav2_msgs/action/ComputePathThroughPoses: 웨이포인트들을 잇는 경로 미리보기.
+struct ComputePathThroughPosesGoal {
+  std::vector<PoseStamped> goals;
+  PoseStamped start;
+  std::string planner_id;
+  bool use_start = false;
+};
+struct ComputePathThroughPosesFeedback {};
+struct ComputePathThroughPosesResult {
+  static constexpr int NONE = 0;
+  static constexpr int UNKNOWN = 200;
+  static constexpr int INVALID_PLANNER = 201;
+  static constexpr int TF_ERROR = 202;
+  static constexpr int START_OUTSIDE_MAP = 203;
+  static constexpr int GOAL_OUTSIDE_MAP = 204;
+  static constexpr int START_OCCUPIED = 205;
+  static constexpr int GOAL_OCCUPIED = 206;
+  static constexpr int TIMEOUT = 207;
+  static constexpr int NO_VALID_PATH = 208;
+
+  Path path;
+  double planning_time = 0.0;
+  int error_code = NONE;
+  std::string error_msg;
+};
+
+// nav2_msgs/action/NavigateThroughPoses: 웨이포인트를 순서대로 주행.
+struct NavigateThroughPosesGoal {
+  std::vector<PoseStamped> poses;
+  std::string behavior_tree;
+};
+struct NavigateThroughPosesFeedback {
+  PoseStamped current_pose;
+  double navigation_time = 0.0;
+  double distance_remaining = 0.0;
+  int number_of_recoveries = 0;
+  std::uint32_t current_waypoint = 0;
+};
+struct NavigateThroughPosesResult {
+  static constexpr int NONE = 0;
+  static constexpr int UNKNOWN = 9000;
+  static constexpr int FAILED_TO_LOAD_BEHAVIOR_TREE = 9001;
+  static constexpr int TF_ERROR = 9002;
+  static constexpr int TIMEOUT = 9003;
 
   int error_code = NONE;
   std::string error_msg;
@@ -129,8 +180,10 @@ struct WaitResult {
 };
 
 inline constexpr const char* COMPUTE_PATH_TO_POSE_ACTION = "compute_path_to_pose";
+inline constexpr const char* COMPUTE_PATH_THROUGH_POSES_ACTION = "compute_path_through_poses";
 inline constexpr const char* FOLLOW_PATH_ACTION = "follow_path";
 inline constexpr const char* NAVIGATE_TO_POSE_ACTION = "navigate_to_pose";
+inline constexpr const char* NAVIGATE_THROUGH_POSES_ACTION = "navigate_through_poses";
 inline constexpr const char* SPIN_ACTION = "spin";
 inline constexpr const char* BACKUP_ACTION = "backup";
 inline constexpr const char* WAIT_ACTION = "wait";

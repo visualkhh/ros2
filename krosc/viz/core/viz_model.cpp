@@ -13,7 +13,16 @@ namespace {
 constexpr const char* kRosoutTopic = "rosout";
 }
 
-VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_, node_) {
+VizModel::VizModel(Context& context)
+    : node_(context, "Viz"),
+      listener_(buffer_, node_),
+      nav_client_(std::make_unique<NavClient>(context, msgs::nav2::NAVIGATE_TO_POSE_ACTION)),
+      through_client_(
+          std::make_unique<ThroughClient>(context, msgs::nav2::NAVIGATE_THROUGH_POSES_ACTION)),
+      path_client_(
+          std::make_unique<PathClient>(context, msgs::nav2::COMPUTE_PATH_TO_POSE_ACTION)),
+      path_through_client_(std::make_unique<PathThroughClient>(
+          context, msgs::nav2::COMPUTE_PATH_THROUGH_POSES_ACTION)) {
   subscribe_latest<msgs::LaserScan>("scan", scan_, QOS_SENSOR_DATA);
   subscribe_latest<msgs::Imu>("imu", imu_, QOS_SENSOR_DATA);
   subscribe_latest<msgs::Odometry>("odom", odom_, QOS_SENSOR_DATA);
@@ -52,6 +61,10 @@ VizModel::VizModel(Context& context) : node_(context, "Viz"), listener_(buffer_,
 }
 
 VizModel::~VizModel() {
+  nav_client_.reset();
+  through_client_.reset();
+  path_client_.reset();
+  path_through_client_.reset();
   node_.shutdown();
 }
 
@@ -396,13 +409,107 @@ void VizModel::publish_cmd_vel(double linear, double angular) {
   node_.publish("cmd_vel", twist, QOS_COMMAND);
 }
 
-void VizModel::publish_goal(double x, double y, double theta) {
-  msgs::PoseStamped goal;
-  goal.header.stamp = node_.now();
-  goal.header.frame_id = fixed_frame_;
-  goal.pose.position = {x, y, 0.0};
-  goal.pose.orientation = tfmath::from_yaw(theta);
-  node_.publish("goal_pose", goal, QOS_SENSOR_DATA);
+bool VizModel::navigate_to_pose(const msgs::PoseStamped& goal, std::string& error) {
+  try {
+    std::lock_guard<std::mutex> lock(nav_mutex_);
+    if (through_handle_) {
+      (void)through_handle_->cancel();
+      through_handle_.reset();
+    }
+    nav_handle_ = nav_client_->send_goal(msgs::nav2::NavigateToPoseGoal{goal, ""});
+    if (!nav_handle_->accepted()) {
+      error = "navigate_to_pose goal이 거부됐다";
+      nav_handle_.reset();
+      return false;
+    }
+    error.clear();
+    return true;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
+}
+
+bool VizModel::compute_path_to_pose(const msgs::PoseStamped& goal, std::string& error) {
+  try {
+    const auto handle = path_client_->send_goal(msgs::nav2::ComputePathToPoseGoal{goal, {}, "", false});
+    if (!handle->accepted()) {
+      error = "compute_path_to_pose goal이 거부됐다";
+      return false;
+    }
+    error.clear();
+    return true;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
+}
+
+bool VizModel::navigate_through_poses(const std::vector<msgs::PoseStamped>& goals,
+                                      std::string& error) {
+  if (goals.empty()) {
+    error = "웨이포인트가 없다";
+    return false;
+  }
+  try {
+    std::lock_guard<std::mutex> lock(nav_mutex_);
+    if (nav_handle_) {
+      (void)nav_handle_->cancel();
+      nav_handle_.reset();
+    }
+    through_handle_ =
+        through_client_->send_goal(msgs::nav2::NavigateThroughPosesGoal{goals, ""});
+    if (!through_handle_->accepted()) {
+      error = "navigate_through_poses goal이 거부됐다";
+      through_handle_.reset();
+      return false;
+    }
+    error.clear();
+    return true;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
+}
+
+bool VizModel::compute_path_through_poses(const std::vector<msgs::PoseStamped>& goals,
+                                          std::string& error) {
+  if (goals.empty()) {
+    error = "웨이포인트가 없다";
+    return false;
+  }
+  try {
+    const auto handle = path_through_client_->send_goal(
+        msgs::nav2::ComputePathThroughPosesGoal{goals, {}, "", false});
+    if (!handle->accepted()) {
+      error = "compute_path_through_poses goal이 거부됐다";
+      return false;
+    }
+    error.clear();
+    return true;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
+}
+
+bool VizModel::cancel_navigation(std::string& error) {
+  try {
+    std::lock_guard<std::mutex> lock(nav_mutex_);
+    if (nav_handle_) {
+      (void)nav_handle_->cancel();
+      nav_handle_.reset();
+    }
+    if (through_handle_) {
+      (void)through_handle_->cancel();
+      through_handle_.reset();
+    }
+    error.clear();
+    return true;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
 }
 
 }  // namespace krosc::viz

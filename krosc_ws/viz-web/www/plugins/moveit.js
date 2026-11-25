@@ -542,7 +542,7 @@ export function init(host) {
 
   const presetRow = buttonRow(body);
   const preset = async (mode) => {
-    host.sendBool('arm_torque', true);
+    host.setArmTorque(true);
     try {
       await host.rpc('controller/switch', {
         start: ['joint_trajectory_controller'],

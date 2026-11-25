@@ -210,6 +210,23 @@ struct TriggerResponse {
   std::string message;
 };
 
+// krosc_ws 하드웨어 서비스 (std_srvs에 없는 명령)
+struct ArmResetRequest {
+  std::string target;
+};
+struct ArmResetResponse {
+  bool success = false;
+  std::string message;
+};
+struct BuzzerRequest {
+  std::int32_t frequency = 2000;
+  std::int32_t duration = 150;
+};
+struct BuzzerResponse {
+  bool success = false;
+  std::string message;
+};
+
 // tf2_msgs / nav_msgs / sensor_msgs 와 같은 이름을 패널과 로그에 보여 주기 위한 타입 이름.
 template <class T>
 constexpr std::string_view message_type_name() {
@@ -255,6 +272,10 @@ KROSC_MSG_NAME(SetBoolRequest, "std_srvs/SetBool_Request")
 KROSC_MSG_NAME(SetBoolResponse, "std_srvs/SetBool_Response")
 KROSC_MSG_NAME(TriggerRequest, "std_srvs/Trigger_Request")
 KROSC_MSG_NAME(TriggerResponse, "std_srvs/Trigger_Response")
+KROSC_MSG_NAME(ArmResetRequest, "krosc_ws/srv/ArmReset_Request")
+KROSC_MSG_NAME(ArmResetResponse, "krosc_ws/srv/ArmReset_Response")
+KROSC_MSG_NAME(BuzzerRequest, "krosc_ws/srv/Buzzer_Request")
+KROSC_MSG_NAME(BuzzerResponse, "krosc_ws/srv/Buzzer_Response")
 
 #undef KROSC_MSG_NAME
 

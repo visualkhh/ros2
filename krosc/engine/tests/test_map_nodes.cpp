@@ -159,3 +159,23 @@ KROSC_TEST(map_saver_saves_latched_map) {
   CHECK_EQ(12u, loaded.info.height);
   fs::remove_all(directory);
 }
+
+KROSC_TEST(map_catalog_switches_cartographer_mode_parameter) {
+  const fs::path directory = temp_dir("mode");
+  krosc::Context context;
+  krosc::Node cartographer(context, "cartographer_node");
+  auto mode = cartographer.declare_parameter<std::string>(
+      "mode", std::string("idle"),
+      [](const std::string& value) {
+        return value == "idle" || value == "mapping" || value == "localization";
+      });
+  krosc::Node monitor(context, "monitor");
+  krosc::nodes::MapCatalog catalog(context, "map_catalog",
+                                   {{"maps_directory", directory.string()}});
+  const auto response =
+      monitor.call_service<krosc::msgs::String, krosc::msgs::Bool>(
+          "map_catalog/set_slam_mode", krosc::msgs::String{"mapping"});
+  CHECK(response.data);
+  CHECK_EQ(std::string("mapping"), mode.value());
+  fs::remove_all(directory);
+}

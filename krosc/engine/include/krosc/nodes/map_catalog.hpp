@@ -20,10 +20,10 @@ namespace krosc::nodes {
 // - <name>/delete_map (DeleteMap): maps_directory/<이름> 폴더를 지운다.
 // - <name>/unload_map (Empty): 지도만 내리고 폴더는 남긴다.
 // - <name>/set_slam_mode (String -> Bool): mapping/localization/idle 전환.
+//   Cartographer의 mode 파라미터를 표준 set_parameters 서비스로 바꾼다.
 // - map_list (String, latch): maps_directory 아래 지도 이름들 (한 줄에 하나)
 // - map_name (String, latch): 지금 불러온 지도 이름. 없으면 빈 문자열
 // - map_status (String, latch): 마지막 결과
-// - slam_mode (String, latch): 내부 Cartographer에 알리는 상태 토픽.
 class MapCatalog final : public Node {
  public:
   explicit MapCatalog(Context& context, std::string name = "map_catalog",
@@ -47,7 +47,7 @@ class MapCatalog final : public Node {
   void publish_status(const std::string& text);
   void publish_map_name();
   void publish_list();
-  void publish_slam_mode(const std::string& mode);
+  bool set_slam_mode(const std::string& mode);
   [[nodiscard]] std::filesystem::path directory() const;
   [[nodiscard]] std::filesystem::path map_path(const std::string& name) const;
   [[nodiscard]] static bool safe_name(const std::string& name);
@@ -60,7 +60,7 @@ class MapCatalog final : public Node {
   Parameter<std::string> map_list_topic_;
   Parameter<std::string> map_name_topic_;
   Parameter<std::string> map_status_topic_;
-  Parameter<std::string> slam_mode_topic_;
+  Parameter<std::string> cartographer_node_;
 
   mutable std::mutex mutex_;
   std::string loaded_name_;

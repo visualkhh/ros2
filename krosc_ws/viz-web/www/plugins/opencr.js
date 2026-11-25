@@ -31,7 +31,7 @@ export function init(host) {
   const frequency = numberField('beep Hz', 2000, 100);
   const duration = numberField('beep ms', 150, 10);
   button(buzzerRow, 'Beep', () => {
-    host.sendString('buzzer', `${frequency.value},${duration.value}`);
+    host.beep(frequency.value, duration.value);
   }, 'primary');
 
   // 3S Li-ion 대략: 9.6V(0%) ~ 12.6V(100%). 부하 시 전압이 처지므로 참고값.

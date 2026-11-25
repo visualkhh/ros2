@@ -44,43 +44,32 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
   if (arm_torque_on_start_.value()) {
     robot_.opencr().set_arm_torque(true);
   }
-  arm_torque_subscription_ = subscribe<krosc::msgs::Bool>(
-      "arm_torque", [this](const krosc::msgs::Bool& message) { robot_.opencr().set_arm_torque(message.data); },
-      krosc::QOS_DEFAULT);
-  buzzer_subscription_ = subscribe<krosc::msgs::String>(
-      "buzzer",
-      [this](const krosc::msgs::String& message) {
-        // "Hz,ms" 또는 "Hz" (기본 150ms)
-        int frequency = 2000;
-        int duration = 150;
-        try {
-          const auto comma = message.data.find(',');
-          if (comma == std::string::npos) {
-            frequency = std::stoi(message.data);
-          } else {
-            frequency = std::stoi(message.data.substr(0, comma));
-            duration = std::stoi(message.data.substr(comma + 1));
-          }
-        } catch (const std::exception&) {
-          return;
-        }
-        robot_.opencr().buzzer(frequency, duration);
-      },
-      krosc::QOS_DEFAULT);
-  arm_stop_subscription_ = subscribe<krosc::msgs::Empty>(
-      "arm_stop",
-      [this](const krosc::msgs::Empty&) {
+  create_service<krosc::msgs::SetBoolRequest, krosc::msgs::SetBoolResponse>(
+      "arm/set_torque", [this](const krosc::msgs::SetBoolRequest& request) {
+        robot_.opencr().set_arm_torque(request.data);
+        return krosc::msgs::SetBoolResponse{true, request.data ? "torque on" : "torque off"};
+      });
+  create_service<krosc::msgs::TriggerRequest, krosc::msgs::TriggerResponse>(
+      "arm/stop", [this](const krosc::msgs::TriggerRequest&) {
         const ArmStatus arm = robot_.opencr().arm_status();
-        if (arm.present) {
-          robot_.opencr().write_arm(arm.position);
+        if (!arm.present) {
+          return krosc::msgs::TriggerResponse{false, "arm status 없음"};
         }
-      },
-      krosc::QOS_DEFAULT);
-  arm_reset_subscription_ = subscribe<krosc::msgs::String>(
-      "arm_reset",
-      [this](const krosc::msgs::String& message) {
+        robot_.opencr().write_arm(arm.position);
+        return krosc::msgs::TriggerResponse{true, "현재 자세 유지"};
+      });
+  create_service<krosc::msgs::BuzzerRequest, krosc::msgs::BuzzerResponse>(
+      "buzzer", [this](const krosc::msgs::BuzzerRequest& request) {
+        if (request.frequency <= 0 || request.duration <= 0) {
+          return krosc::msgs::BuzzerResponse{false, "frequency/duration은 0보다 커야 한다"};
+        }
+        robot_.opencr().buzzer(request.frequency, request.duration);
+        return krosc::msgs::BuzzerResponse{true, "buzzer"};
+      });
+  create_service<krosc::msgs::ArmResetRequest, krosc::msgs::ArmResetResponse>(
+      "arm/reset", [this](const krosc::msgs::ArmResetRequest& request) {
         std::array<bool, 5> mask{};
-        const std::string text = message.data;
+        const std::string text = request.target;
         if (text.empty() || text == "all" || text == "*") {
           mask.fill(true);
         } else {
@@ -111,8 +100,8 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
         robot_.opencr().reboot_arm(mask);
         logger().info("팔 리셋(AR): j1=%d j2=%d j3=%d j4=%d grip=%d", mask[0], mask[1], mask[2],
                       mask[3], mask[4]);
-      },
-      krosc::QOS_DEFAULT);
+        return krosc::msgs::ArmResetResponse{true, "arm reset"};
+      });
   logger().info("로봇 %s: OpenCR=%s, LDS-03=%s", robot_.name().c_str(),
                 robot_.opencr().port().c_str(), robot_.has_lidar() ? robot_.lidar()->port().c_str() : "없음");
   logger().info("OpenCR IMU는 켠 뒤 2초 동안 가만히 둬야 자이로 편향을 잡는다");

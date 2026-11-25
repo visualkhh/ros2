@@ -11,6 +11,7 @@
 #include "krosc/tf/math.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
+#include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/maze_world.hpp"
 #include "krosc/simulator/runner.hpp"
 #include "krosc/simulator/turtlebot3.hpp"
@@ -171,4 +172,18 @@ KROSC_TEST(simulation_runner_steps_world) {
   }
   runner.stop();
   CHECK(steps >= 5);
+}
+
+KROSC_TEST(simulator_demo_command_uses_cmd_vel) {
+  krosc::Context context;
+  krosc::simulator::Simulator simulator(
+      context, krosc::simulator::SimulatorOptions{
+                   false, 0, 42, 100.0, KROSC_SIMULATOR_URDF});
+  simulator.set_demo_command();
+  CHECK_NEAR(0.16, simulator.robot().command().linear.x, 1e-9);
+  CHECK_NEAR(0.28, simulator.robot().command().angular.z, 1e-9);
+  simulator.set_stop_command();
+  CHECK_NEAR(0.0, simulator.robot().command().linear.x, 1e-9);
+  CHECK_NEAR(0.0, simulator.robot().command().angular.z, 1e-9);
+  context.shutdown();
 }

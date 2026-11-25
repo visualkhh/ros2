@@ -12,8 +12,10 @@
 #include <thread>
 #include <utility>
 
+#include "krosc/action.hpp"
 #include "krosc/context.hpp"
 #include "krosc/msgs.hpp"
+#include "krosc/msgs/nav2_msgs.hpp"
 #include "krosc/msgs/nav2_srv.hpp"
 #include "krosc/msgs/rcl_interfaces.hpp"
 #include "krosc/parameter_rpc.hpp"
@@ -141,6 +143,61 @@ std::map<std::string, Json> json_object_map(const Json& value) {
     result[key] = item;
   }
   return result;
+}
+
+using NavClient = ActionClient<msgs::nav2::NavigateToPoseGoal,
+                               msgs::nav2::NavigateToPoseFeedback,
+                               msgs::nav2::NavigateToPoseResult>;
+using ThroughClient = ActionClient<msgs::nav2::NavigateThroughPosesGoal,
+                                   msgs::nav2::NavigateThroughPosesFeedback,
+                                   msgs::nav2::NavigateThroughPosesResult>;
+using PathClient = ActionClient<msgs::nav2::ComputePathToPoseGoal,
+                                msgs::nav2::ComputePathToPoseFeedback,
+                                msgs::nav2::ComputePathToPoseResult>;
+using PathThroughClient = ActionClient<msgs::nav2::ComputePathThroughPosesGoal,
+                                       msgs::nav2::ComputePathThroughPosesFeedback,
+                                       msgs::nav2::ComputePathThroughPosesResult>;
+using NavHandle = ClientGoalHandle<msgs::nav2::NavigateToPoseGoal,
+                                   msgs::nav2::NavigateToPoseFeedback,
+                                   msgs::nav2::NavigateToPoseResult>;
+using ThroughHandle = ClientGoalHandle<msgs::nav2::NavigateThroughPosesGoal,
+                                       msgs::nav2::NavigateThroughPosesFeedback,
+                                       msgs::nav2::NavigateThroughPosesResult>;
+
+struct NavState {
+  explicit NavState(Context& context)
+      : navigate(std::make_shared<NavClient>(context, msgs::nav2::NAVIGATE_TO_POSE_ACTION)),
+        through(std::make_shared<ThroughClient>(context,
+                                                msgs::nav2::NAVIGATE_THROUGH_POSES_ACTION)),
+        path(std::make_shared<PathClient>(context, msgs::nav2::COMPUTE_PATH_TO_POSE_ACTION)),
+        path_through(std::make_shared<PathThroughClient>(
+            context, msgs::nav2::COMPUTE_PATH_THROUGH_POSES_ACTION)) {}
+
+  std::shared_ptr<NavClient> navigate;
+  std::shared_ptr<ThroughClient> through;
+  std::shared_ptr<PathClient> path;
+  std::shared_ptr<PathThroughClient> path_through;
+  std::shared_ptr<NavHandle> nav_handle;
+  std::shared_ptr<ThroughHandle> through_handle;
+  std::mutex mutex;
+};
+
+msgs::PoseStamped pose_from_json(const Json& point, double stamp, const std::string& frame) {
+  const double yaw = point["yaw"].as_double(0.0);
+  msgs::PoseStamped pose;
+  pose.header = msgs::Header{stamp, frame};
+  pose.pose.position = {point["x"].as_double(), point["y"].as_double(), 0.0};
+  pose.pose.orientation = {0.0, 0.0, std::sin(yaw / 2.0), std::cos(yaw / 2.0)};
+  return pose;
+}
+
+std::vector<msgs::PoseStamped> poses_from_json(const Json& params, double stamp,
+                                               const std::string& frame) {
+  std::vector<msgs::PoseStamped> poses;
+  for (const auto& point : params["poses"].as_array()) {
+    poses.push_back(pose_from_json(point, stamp, frame));
+  }
+  return poses;
 }
 
 }  // namespace
@@ -294,6 +351,97 @@ void WebRpc::handle(const std::string& text, Reply reply) {
 }
 
 void register_default_web_rpc(WebRpc& rpc, Context& context) {
+  auto nav = std::make_shared<NavState>(context);
+
+  rpc.add("nav/navigate_to_pose", [nav, &context](const Json& params, const WebRpc::Notify&) {
+    const std::string frame = params["frame"].as_string("map");
+    const auto pose = pose_from_json(params, context.now(), frame);
+    std::lock_guard<std::mutex> lock(nav->mutex);
+    if (nav->through_handle) {
+      (void)nav->through_handle->cancel();
+      nav->through_handle.reset();
+    }
+    nav->nav_handle = nav->navigate->send_goal(msgs::nav2::NavigateToPoseGoal{pose, ""});
+    Json result = Json::object();
+    result["accepted"] = nav->nav_handle->accepted();
+    if (result["accepted"].as_bool()) {
+      result["goal_id"] = nav->nav_handle->goal_id();
+    } else {
+      nav->nav_handle.reset();
+    }
+    return result;
+  });
+
+  rpc.add("nav/compute_path_to_pose", [nav, &context](const Json& params,
+                                                      const WebRpc::Notify&) {
+    const std::string frame = params["frame"].as_string("map");
+    const auto pose = pose_from_json(params, context.now(), frame);
+    const auto handle = nav->path->send_goal(
+        msgs::nav2::ComputePathToPoseGoal{pose, {}, "", false});
+    Json result = Json::object();
+    result["accepted"] = handle->accepted();
+    return result;
+  });
+
+  rpc.add("nav/navigate_through_poses", [nav, &context](const Json& params,
+                                                        const WebRpc::Notify&) {
+    const std::string frame = params["frame"].as_string("map");
+    const auto poses = poses_from_json(params, context.now(), frame);
+    Json result = Json::object();
+    if (poses.empty()) {
+      result["accepted"] = false;
+      result["error"] = "poses가 비어 있다";
+      return result;
+    }
+    std::lock_guard<std::mutex> lock(nav->mutex);
+    if (nav->nav_handle) {
+      (void)nav->nav_handle->cancel();
+      nav->nav_handle.reset();
+    }
+    nav->through_handle =
+        nav->through->send_goal(msgs::nav2::NavigateThroughPosesGoal{poses, ""});
+    result["accepted"] = nav->through_handle->accepted();
+    if (result["accepted"].as_bool()) {
+      result["goal_id"] = nav->through_handle->goal_id();
+    } else {
+      nav->through_handle.reset();
+    }
+    return result;
+  });
+
+  rpc.add("nav/compute_path_through_poses", [nav, &context](const Json& params,
+                                                            const WebRpc::Notify&) {
+    const std::string frame = params["frame"].as_string("map");
+    const auto poses = poses_from_json(params, context.now(), frame);
+    Json result = Json::object();
+    if (poses.empty()) {
+      result["accepted"] = false;
+      result["error"] = "poses가 비어 있다";
+      return result;
+    }
+    const auto handle = nav->path_through->send_goal(
+        msgs::nav2::ComputePathThroughPosesGoal{poses, {}, "", false});
+    result["accepted"] = handle->accepted();
+    return result;
+  });
+
+  rpc.add("nav/cancel", [nav](const Json&, const WebRpc::Notify&) {
+    std::lock_guard<std::mutex> lock(nav->mutex);
+    bool canceled = false;
+    if (nav->nav_handle) {
+      canceled = nav->nav_handle->cancel() || canceled;
+      nav->nav_handle.reset();
+    }
+    if (nav->through_handle) {
+      canceled = nav->through_handle->cancel() || canceled;
+      nav->through_handle.reset();
+    }
+    Json result = Json::object();
+    result["ok"] = true;
+    result["canceled"] = canceled;
+    return result;
+  });
+
   rpc.add("map/load", [&context](const Json& params, const WebRpc::Notify&) {
     const std::string name = params["name"].as_string();
     const auto response = context.services().call<msgs::nav2::LoadMapRequest,

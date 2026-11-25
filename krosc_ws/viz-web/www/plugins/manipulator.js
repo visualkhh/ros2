@@ -14,7 +14,7 @@ export function init(host) {
   let torqueOn = true;
   const torqueButton = button(actions, 'Torque ON', () => {
     torqueOn = !torqueOn;
-    host.sendBool('arm_torque', torqueOn);
+    host.setArmTorque(torqueOn);
     renderTorque();
     if (!torqueOn) moving = false;
   }, 'primary');
@@ -46,7 +46,7 @@ export function init(host) {
   };
   const preset = async (mode) => {
     torqueOn = true;
-    host.sendBool('arm_torque', true);
+    host.setArmTorque(true);
     renderTorque();
     if (!(await setManualMode(false))) return;
     try {
@@ -69,7 +69,7 @@ export function init(host) {
   button(actions, 'HOME', () => preset('home'));
   button(actions, 'E-STOP', () => {
     moving = false;
-    host.sendEmpty('arm_stop');
+    host.stopArm();
     setLevel(status, 'E-STOP: 현재 자세 유지', 'warn');
   }, 'danger');
 
@@ -85,13 +85,13 @@ export function init(host) {
   body.append(resetRow);
   resetButton.addEventListener('click', () => {
     moving = false;
-    host.sendString('arm_reset', resetTarget.value);
+    host.resetArm(resetTarget.value);
     setLevel(status, `reset(${resetTarget.value}) 요청`, 'warn');
     resetButton.disabled = true;
     setTimeout(() => {
       resetButton.disabled = false;
       torqueOn = true;
-      host.sendBool('arm_torque', true);
+      host.setArmTorque(true);
       renderTorque();
     }, 2000);
   });
@@ -127,7 +127,7 @@ export function init(host) {
       if (updating) return;
       if (!torqueOn) {
         torqueOn = true;
-        host.sendBool('arm_torque', true);
+        host.setArmTorque(true);
         renderTorque();
       }
       setManualMode(true);
@@ -156,7 +156,7 @@ export function init(host) {
     if (updating) return;
     if (!torqueOn) {
       torqueOn = true;
-      host.sendBool('arm_torque', true);
+      host.setArmTorque(true);
       renderTorque();
     }
     setManualMode(true);

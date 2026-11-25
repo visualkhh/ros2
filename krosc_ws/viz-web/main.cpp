@@ -9,6 +9,7 @@
 #include "krosc/action.hpp"
 #include "krosc/krosc.hpp"
 #include "krosc/tf/math.hpp"
+#include "krosc/msgs.hpp"
 #include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/viz_web/viz_web.hpp"
 #include "krosc/viz_web/viz_web_cli.hpp"
@@ -113,6 +114,56 @@ void register_move_rpc(krosc::viz_web::WebRpc& rpc, krosc::Context& context) {
           });
 }
 
+void register_arm_rpc(krosc::viz_web::WebRpc& rpc, krosc::Context& context) {
+  rpc.add("arm/set_torque",
+          [&context](const krosc::viz_web::Json& params, const krosc::viz_web::WebRpc::Notify&) {
+            const auto response = context.services().call<krosc::msgs::SetBoolRequest,
+                                                          krosc::msgs::SetBoolResponse>(
+                "arm/set_torque", krosc::msgs::SetBoolRequest{params["on"].as_bool()});
+            krosc::viz_web::Json result = krosc::viz_web::Json::object();
+            result["success"] = response.success;
+            result["message"] = response.message;
+            return result;
+          });
+
+  rpc.add("arm/stop",
+          [&context](const krosc::viz_web::Json&, const krosc::viz_web::WebRpc::Notify&) {
+            const auto response = context.services().call<krosc::msgs::TriggerRequest,
+                                                          krosc::msgs::TriggerResponse>(
+                "arm/stop", krosc::msgs::TriggerRequest{});
+            krosc::viz_web::Json result = krosc::viz_web::Json::object();
+            result["success"] = response.success;
+            result["message"] = response.message;
+            return result;
+          });
+
+  rpc.add("arm/reset",
+          [&context](const krosc::viz_web::Json& params, const krosc::viz_web::WebRpc::Notify&) {
+            const auto response = context.services().call<krosc::msgs::ArmResetRequest,
+                                                          krosc::msgs::ArmResetResponse>(
+                "arm/reset",
+                krosc::msgs::ArmResetRequest{params["target"].as_string("all")});
+            krosc::viz_web::Json result = krosc::viz_web::Json::object();
+            result["success"] = response.success;
+            result["message"] = response.message;
+            return result;
+          });
+
+  rpc.add("buzzer",
+          [&context](const krosc::viz_web::Json& params, const krosc::viz_web::WebRpc::Notify&) {
+            krosc::msgs::BuzzerRequest request;
+            request.frequency = static_cast<std::int32_t>(params["frequency"].as_int(2000));
+            request.duration = static_cast<std::int32_t>(params["duration"].as_int(150));
+            const auto response = context.services().call<krosc::msgs::BuzzerRequest,
+                                                          krosc::msgs::BuzzerResponse>(
+                "buzzer", request);
+            krosc::viz_web::Json result = krosc::viz_web::Json::object();
+            result["success"] = response.success;
+            result["message"] = response.message;
+            return result;
+          });
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -159,6 +210,7 @@ int main(int argc, char** argv) {
   krosc::Krosc app(nullptr, network);
   krosc::viz_web::VizWeb web(std::move(options), std::move(registry), app.context());
   register_move_rpc(web.rpc(), app.context());
+  register_arm_rpc(web.rpc(), app.context());
   if (!web.initialize(error)) {
     std::fprintf(stderr, "[viz-web] %s\n", error.c_str());
     return 1;

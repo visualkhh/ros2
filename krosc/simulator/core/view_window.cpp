@@ -18,6 +18,8 @@
 #include <limits>
 #include <utility>
 
+#include "krosc/node.hpp"
+#include "krosc/qos.hpp"
 #include "krosc/tf/math.hpp"
 
 namespace krosc::simulator {
@@ -31,8 +33,9 @@ QColor with_alpha(QColor color, int alpha) {
 }
 }  // namespace
 
-SimView::SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, QWidget* parent)
-    : QWidget(parent), walls_(std::move(walls)), robot_(robot), store_(store) {
+SimView::SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store,
+                 krosc::Node& node, QWidget* parent)
+    : QWidget(parent), walls_(std::move(walls)), robot_(robot), store_(store), node_(node) {
   setFocusPolicy(Qt::StrongFocus);
   setMouseTracking(true);
   setMinimumSize(520, 420);
@@ -459,17 +462,19 @@ void SimView::publish_teleop() {
   const double angular = 1.5 * teleop_scale_ * left;
   const bool active = linear != 0.0 || angular != 0.0;
   if (active || last_linear_ != 0.0 || last_angular_ != 0.0) {
-    robot_.set_command(msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}});
+    node_.publish("cmd_vel", msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}},
+                  QOS_COMMAND);
   }
   last_linear_ = linear;
   last_angular_ = angular;
 }
 
-SimWindow::SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, QWidget* parent)
+SimWindow::SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store,
+                     krosc::Node& node, QWidget* parent)
     : QMainWindow(parent) {
   setWindowTitle("krosc sim (truth)");
   resize(760, 860);
-  view_ = new SimView(std::move(walls), robot, store, this);
+  view_ = new SimView(std::move(walls), robot, store, node, this);
   setCentralWidget(view_);
   statusBar()->showMessage(view_->help_text());
   timer_ = new QTimer(this);

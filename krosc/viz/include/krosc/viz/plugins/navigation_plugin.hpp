@@ -21,7 +21,7 @@ class QTimer;
 namespace krosc::viz {
 
 // 주행 목표 플러그인: 2D Pose Estimate, 2D Goal Pose, Multi Goal, Preview/Cancel.
-// SceneView/MapView2D의 tool 신호를 받아 goal 토픽으로 내보낸다.
+// 위치는 ROS 2 표준 initialpose 토픽, 주행/미리보기/취소는 nav2 표준 액션으로 보낸다.
 class NavigationPlugin final : public QObject, public VizPlugin {
   Q_OBJECT
 
@@ -42,7 +42,8 @@ class NavigationPlugin final : public QObject, public VizPlugin {
   void update_multi_label();
   void remove_last_multi_goal();
   void handle_tool_pose(double x, double y, double yaw, bool from_map);
-  void publish_pose(const std::string& topic, double x, double y, double yaw, bool from_map);
+  void publish_initial_pose(double x, double y, double yaw);
+  void send_goal(double x, double y, double yaw, bool preview);
   void publish_multi(bool preview);
   void apply_costmap_params();
   void refresh_costmap_state();

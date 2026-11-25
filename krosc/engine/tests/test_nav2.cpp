@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+#include "krosc/action.hpp"
 #include "krosc/context.hpp"
 #include "krosc/tf/math.hpp"
 #include "krosc/msgs/nav2_msgs.hpp"
@@ -131,6 +132,22 @@ KROSC_TEST(nav2_costmap_layers_and_planner_plugins) {
     CHECK_NEAR(2.5, result.path.poses.back().pose.position.x, 1e-6);
     CHECK_NEAR(1.2, result.path.poses.back().pose.position.y, 1e-6);
   }
+
+  // 웨이포인트 미리보기(compute_path_through_poses)도 nav2 표준 액션 결과를 낸다.
+  krosc::msgs::nav2::ComputePathThroughPosesGoal through;
+  through.start = request.start;
+  through.use_start = true;
+  through.planner_id = "GridBased";
+  through.goals.push_back(request.goal);
+  krosc::msgs::PoseStamped second;
+  second.header = request.goal.header;
+  second.pose.position = {2.5, 2.0, 0.0};
+  through.goals.push_back(second);
+  const auto through_result = planner.compute_path_through_poses(through);
+  CHECK_EQ(krosc::msgs::nav2::ComputePathThroughPosesResult::NONE, through_result.error_code);
+  CHECK(through_result.path.poses.size() > 4);
+  CHECK_NEAR(2.5, through_result.path.poses.back().pose.position.x, 1e-6);
+  CHECK_NEAR(2.0, through_result.path.poses.back().pose.position.y, 1e-6);
 }
 
 KROSC_TEST(nav2_controller_plugins_choose_motion) {
@@ -289,13 +306,46 @@ KROSC_TEST(nav2_bt_navigator_drives_and_cancels) {
   krosc::msgs::PoseStamped goal;
   goal.header = krosc::msgs::Header{sim.now(), "map"};
   goal.pose.position = {2.5, 1.2, 0.0};
-  sim.publish("goal_pose", goal);
+  krosc::ActionClient<krosc::msgs::nav2::NavigateToPoseGoal,
+                      krosc::msgs::nav2::NavigateToPoseFeedback,
+                      krosc::msgs::nav2::NavigateToPoseResult>
+      nav_client(context, krosc::msgs::nav2::NAVIGATE_TO_POSE_ACTION);
+  const auto handle = nav_client.send_goal(krosc::msgs::nav2::NavigateToPoseGoal{goal, ""});
+  CHECK(handle->accepted());
   CHECK(wait_until([&] { return std::abs(linear.load()) > 0.01; }, 3.0));
   CHECK(std::abs(angular.load()) < 2.0);
   CHECK(wait_until([&] { return got_plan.load() && plan_poses.load() > 2; }, 2.0));
   CHECK(wait_until([&] { return local_plan_poses.load() > 0; }, 2.0));
 
-  sim.publish("cancel_goal", krosc::msgs::Bool{true});
+  CHECK(handle->cancel());
+  CHECK(wait_until(
+      [&] {
+        std::lock_guard<std::mutex> lock(status_mutex);
+        return last_status == "canceled";
+      },
+      2.0));
+  CHECK(wait_until([&] { return std::abs(linear.load()) < 1e-9; }, 2.0));
+
+  krosc::ActionClient<krosc::msgs::nav2::NavigateThroughPosesGoal,
+                      krosc::msgs::nav2::NavigateThroughPosesFeedback,
+                      krosc::msgs::nav2::NavigateThroughPosesResult>
+      through_client(context, krosc::msgs::nav2::NAVIGATE_THROUGH_POSES_ACTION);
+  krosc::msgs::nav2::NavigateThroughPosesGoal through_goal;
+  through_goal.poses.push_back(goal);
+  krosc::msgs::PoseStamped second;
+  second.header = goal.header;
+  second.pose.position = {2.5, 2.0, 0.0};
+  through_goal.poses.push_back(second);
+  plan_poses.store(0);
+  {
+    std::lock_guard<std::mutex> lock(status_mutex);
+    last_status.clear();
+  }
+  const auto through = through_client.send_goal(through_goal);
+  CHECK(through->accepted());
+  CHECK(wait_until([&] { return std::abs(linear.load()) > 0.01; }, 3.0));
+  CHECK(wait_until([&] { return plan_poses.load() > 4; }, 2.0));
+  CHECK(through->cancel());
   CHECK(wait_until(
       [&] {
         std::lock_guard<std::mutex> lock(status_mutex);

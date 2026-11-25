@@ -34,9 +34,13 @@ class PlannerServer final : public Node {
 
   [[nodiscard]] msgs::nav2::ComputePathToPoseResult compute_path(
       const msgs::nav2::ComputePathToPoseGoal& goal);
+  [[nodiscard]] msgs::nav2::ComputePathThroughPosesResult compute_path_through_poses(
+      const msgs::nav2::ComputePathThroughPosesGoal& goal);
   [[nodiscard]] std::vector<std::string> planner_ids() const;
 
  private:
+  [[nodiscard]] msgs::nav2::ComputePathToPoseResult plan_path(
+      const msgs::nav2::ComputePathToPoseGoal& goal);
   [[nodiscard]] std::optional<Pose2> pose_in_frame(const msgs::PoseStamped& pose, const std::string& frame) const;
 
   Costmap2DROS& costmap_;
@@ -49,6 +53,10 @@ class PlannerServer final : public Node {
   std::unique_ptr<ActionServer<msgs::nav2::ComputePathToPoseGoal, msgs::nav2::ComputePathToPoseFeedback,
                                msgs::nav2::ComputePathToPoseResult>>
       action_;
+  std::unique_ptr<ActionServer<msgs::nav2::ComputePathThroughPosesGoal,
+                               msgs::nav2::ComputePathThroughPosesFeedback,
+                               msgs::nav2::ComputePathThroughPosesResult>>
+      through_action_;
 };
 
 }  // namespace krosc::nodes::nav2

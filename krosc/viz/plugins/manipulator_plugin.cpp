@@ -76,7 +76,12 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     if (!torque_on_) {
       moving_ = false;
     }
-    host_->model().node().publish("arm_torque", msgs::Bool{torque_on_}, QOS_DEFAULT);
+    try {
+      host_->model().node().call_service<msgs::SetBoolRequest, msgs::SetBoolResponse>(
+          "arm/set_torque", msgs::SetBoolRequest{torque_on_});
+    } catch (const std::exception& error) {
+      set_status(QString("torque service: %1").arg(error.what()));
+    }
     set_torque_button();
   };
   connect(torque_, &QPushButton::clicked, this, [this, apply_torque] {
@@ -199,9 +204,15 @@ void ManipulatorPlugin::initialize(VizHost& host) {
   });
   connect(estop, &QPushButton::clicked, this, [this] {
     cancel_moveit_if_executing();
-    host_->model().node().publish("arm_stop", msgs::Empty{}, QOS_DEFAULT);
     moving_ = false;
-    set_status("E-STOP: hold current pose");
+    try {
+      const auto response = host_->model().node().call_service<msgs::TriggerRequest,
+                                                               msgs::TriggerResponse>(
+          "arm/stop", msgs::TriggerRequest{});
+      set_status(QString("E-STOP: %1").arg(QString::fromStdString(response.message)));
+    } catch (const std::exception& error) {
+      set_status(QString("E-STOP service: %1").arg(error.what()));
+    }
   });
   connect(reset_button_, &QPushButton::clicked, this, [this] { reset_arm(); });
 
@@ -422,8 +433,19 @@ void ManipulatorPlugin::reset_arm() {
   const QString target = reset_target_->currentText();
   cancel_moveit_if_executing();
   moving_ = false;
-  host_->model().node().publish("arm_reset", msgs::String{target.toStdString()}, QOS_DEFAULT);
-  set_status(QString("reset(AR) 요청: %1 — 서보 재부팅 후 토크 복구").arg(target));
+  try {
+    const auto response = host_->model().node().call_service<msgs::ArmResetRequest,
+                                                             msgs::ArmResetResponse>(
+        "arm/reset", msgs::ArmResetRequest{target.toStdString()});
+    set_status(QString("reset(AR) 요청: %1 — %2")
+                   .arg(target, QString::fromStdString(response.message)));
+  } catch (const std::exception& error) {
+    set_status(QString("reset(AR) service: %1").arg(error.what()));
+    if (reset_button_ != nullptr) {
+      reset_button_->setEnabled(true);
+    }
+    return;
+  }
   status_->setStyleSheet("color:#ffd166;");
   reset_button_->setEnabled(false);
   QTimer::singleShot(2000, this, [this] {
@@ -432,7 +454,11 @@ void ManipulatorPlugin::reset_arm() {
     }
     if (host_ != nullptr) {
       torque_on_ = true;
-      host_->model().node().publish("arm_torque", msgs::Bool{true}, QOS_DEFAULT);
+      try {
+        host_->model().node().call_service<msgs::SetBoolRequest, msgs::SetBoolResponse>(
+            "arm/set_torque", msgs::SetBoolRequest{true});
+      } catch (const std::exception&) {
+      }
       if (torque_ != nullptr) {
         torque_->setText("Torque ON");
         torque_->setStyleSheet("background:#1f6b43;");
