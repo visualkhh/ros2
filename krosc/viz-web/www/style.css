@@ -194,7 +194,7 @@ aside {
   background: #173d2a;
   border-color: #2f8a59;
 }
-.moveit-canvas { width: 100%; height: 100%; display: block; }
+.moveit-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
 .moveit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .moveit-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .moveit-field label { font-size: 11px; color: var(--muted); }

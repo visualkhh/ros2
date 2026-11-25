@@ -28,6 +28,9 @@ export function init(host) {
       }
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, width, height);
+      context.fillStyle = '#5f7188';
+      context.font = '12px system-ui';
+      context.fillText('drag X/Y · Shift+Z · Ctrl+Pitch', 12, 20);
       const scale = Math.min(width, height) * 0.9 / 0.9;
       context.strokeStyle = '#141c27';
       context.lineWidth = 1;
@@ -126,6 +129,50 @@ export function init(host) {
     input.addEventListener('input', schedulePreview);
   }
   cartesian.addEventListener('change', schedulePreview);
+
+  // MoveIt 뷰에서 TCP target을 직접 드래그한다 (X/Y, Shift=Z, Ctrl=Pitch).
+  let dragView = false;
+  let dragMode = 'xy';
+  let dragLast = { x: 0, y: 0 };
+  let lastPublish = 0;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  canvas.style.touchAction = 'none';
+  canvas.addEventListener('pointerdown', (event) => {
+    dragView = true;
+    dragMode = event.shiftKey ? 'z' : event.ctrlKey || event.metaKey ? 'pitch' : 'xy';
+    dragLast = { x: event.clientX, y: event.clientY };
+    canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!dragView) return;
+    const dx = event.clientX - dragLast.x;
+    const dy = event.clientY - dragLast.y;
+    dragLast = { x: event.clientX, y: event.clientY };
+    const step = 0.0015;
+    if (dragMode === 'z') {
+      zInput.value = clamp(Number(zInput.value) - dy * step, 0.02, 0.7).toFixed(4);
+    } else if (dragMode === 'pitch') {
+      pitchInput.value = clamp(Number(pitchInput.value) + dx * 0.25, -90, 90).toFixed(2);
+    } else {
+      xInput.value = clamp(Number(xInput.value) + dx * step, -0.15, 0.55).toFixed(4);
+      yInput.value = clamp(Number(yInput.value) - dy * step, -0.35, 0.35).toFixed(4);
+    }
+    const now = performance.now();
+    if (now - lastPublish >= 50) {
+      publishTarget(true);
+      lastPublish = now;
+    }
+    event.preventDefault();
+  });
+  canvas.addEventListener('pointerup', (event) => {
+    if (dragView) {
+      publishTarget(true);
+    }
+    dragView = false;
+    event.preventDefault();
+  });
+  canvas.addEventListener('pointercancel', () => { dragView = false; });
 
   const presetRow = buttonRow(body);
   const preset = (mode) => {

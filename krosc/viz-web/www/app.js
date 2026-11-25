@@ -401,7 +401,9 @@ function activateView(id) {
   }
   $('hint').textContent = id === '3d'
     ? 'left drag orbit · right/shift drag pan · wheel zoom · WASD teleop'
-    : 'drag pan · wheel zoom · click 2D goal · WASD teleop';
+    : id === 'moveit'
+      ? 'drag X/Y · Shift+Z · Ctrl+Pitch · Plan/Execute는 control-panel에서'
+      : 'drag pan · wheel zoom · click 2D goal · WASD teleop';
   if (typeof resizeCanvas === 'function') {
     resizeCanvas();
   }
@@ -1092,7 +1094,7 @@ canvas3d.addEventListener('pointermove', (event) => {
     $('follow').checked = false;
   } else {
     camera3d.yaw -= dx * 0.008;
-    camera3d.pitch = Math.max(0.12, Math.min(1.25, camera3d.pitch + dy * 0.008));
+    camera3d.pitch = Math.max(0.12, Math.min(1.25, camera3d.pitch - dy * 0.008));
   }
 });
 canvas3d.addEventListener('pointerup', () => { drag3d = false; });
