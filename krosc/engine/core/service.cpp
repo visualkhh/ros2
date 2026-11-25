@@ -76,6 +76,24 @@ std::any ServiceRegistry::invoke_any(const std::string& name, const std::any& re
   return service->invoke(request);
 }
 
+std::vector<std::uint8_t> ServiceRegistry::invoke_encoded(
+    const std::string& name, const std::any& request,
+    const detail::ServiceResponseEncoder& encoder) const {
+  std::shared_ptr<detail::ServiceBase> service;
+  {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    const auto found = state_->services.find(name);
+    if (found == state_->services.end()) {
+      return {};
+    }
+    service = found->second;
+  }
+  if (service->request_type != std::type_index(request.type())) {
+    return {};
+  }
+  return service->invoke_encoded(request, encoder);
+}
+
 bool ServiceRegistry::has_service(const std::string& name) const {
   std::lock_guard<std::mutex> lock(state_->mutex);
   return state_->services.count(name) != 0;

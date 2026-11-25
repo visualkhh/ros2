@@ -4,9 +4,9 @@
 #include <string>
 
 #include "krosc/node.hpp"
-#include "krosc/tf.hpp"
-#include "krosc/tf_ros.hpp"
-#include "krosc/timer.hpp"
+#include "krosc/tf/tf.hpp"
+#include "krosc/tf/tf_ros.hpp"
+#include "krosc/time/timer.hpp"
 
 namespace krosc::nodes {
 

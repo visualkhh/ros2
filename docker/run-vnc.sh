@@ -17,10 +17,10 @@ websockify --web=/usr/share/novnc 0.0.0.0:6080 localhost:5900 >/tmp/websockify.l
 
 echo "[krosc] noVNC: http://localhost:6080/vnc.html?autoconnect=1&resize=scale"
 
-if [ ! -x build/examples/turtlebot3/krosc_turtlebot3 ]; then
+if [ ! -x build/simulator/krosc_simulator ]; then
   echo "[krosc] 빌드가 없어서 먼저 빌드한다..."
   cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER=g++
   cmake --build build -j"$(nproc)"
 fi
 
-exec ./build/examples/turtlebot3/krosc_turtlebot3 "$@"
+exec ./build/simulator/krosc_simulator "$@"

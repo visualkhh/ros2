@@ -6,4 +6,4 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 
 "$here/build.sh" sim
-exec "$root/krosc/build/examples/turtlebot3/krosc_turtlebot3" "$@"
+exec "$root/krosc/build/simulator/krosc_simulator" "$@"

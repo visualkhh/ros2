@@ -22,7 +22,7 @@ run_test() {
 }
 
 run_test "$root/krosc/build/engine/krosc_core_tests"
-run_test "$root/krosc/build/sim/krosc_sim_tests"
+run_test "$root/krosc/build/simulator/krosc_simulator_tests"
 run_test "$here/build/krosc_ws_tests"
 
 exit "$status"

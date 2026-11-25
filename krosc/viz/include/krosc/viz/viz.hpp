@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/net_peer.hpp"
+#include "krosc/net/net_peer.hpp"
 #include "krosc/viz/viz_plugin.hpp"
 
 class QTimer;

@@ -11,10 +11,10 @@
 #include "krosc/action.hpp"
 #include "krosc/context.hpp"
 #include "krosc/msgs/rcl_interfaces.hpp"
-#include "krosc/net.hpp"
+#include "krosc/net/net.hpp"
 #include "krosc/node.hpp"
 #include "krosc/parameter_rpc.hpp"
-#include "krosc/rpc.hpp"
+#include "krosc/net/rpc.hpp"
 #include "krosc/qos.hpp"
 
 #include "test_framework.hpp"

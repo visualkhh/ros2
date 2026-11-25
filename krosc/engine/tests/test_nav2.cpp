@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 #include "krosc/msgs/nav2_msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/nodes/nav2/behavior_server.hpp"
@@ -20,7 +20,7 @@
 #include "krosc/nodes/nav2/costmap/costmap_2d_ros.hpp"
 #include "krosc/nodes/nav2/planner_server.hpp"
 #include "krosc/qos.hpp"
-#include "krosc/tf_ros.hpp"
+#include "krosc/tf/tf_ros.hpp"
 
 #include "test_framework.hpp"
 

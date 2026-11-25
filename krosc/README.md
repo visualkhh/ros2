@@ -9,7 +9,7 @@
 | `sim/` | **진실 시뮬레이션**: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, Snapshot, **Qt SimWindow** |
 | `viz/` | **토픽 뷰어**: rviz 스타일 Qt 화면 (TF, map, costmap, scan, odom/filtered, 경로, 로그, 패널, teleop, **URDF visual STL 메시**) + **원격 `--server` 모드** |
 | `viz-web/` | **브라우저 Viz**: 로봇과 `PeerNetwork`로 토픽을 주고받고 HTTP+WebSocket으로 브라우저에 넘기는 경량 웹 게이트웨이. `www/plugins/*.js`로 패널을 붙인다 |
-| `examples/turtlebot3/` | sim + viz + EKF를 한 프로세스에서 같이 돌리는 데모 (`--server`로 원격 viz 테스트 가능) |
+| `simulator/` | **시뮬레이터 앱/코어**(스캔 10Hz): MazeWorld + TurtleBot3 + ROS 브리지 + EKF를 Context에 조립하고, `Simulator`가 Runner/스냅샷을 소유한다 (`--server`로 원격 Viz) |
 | `../krosc_ws/` | **실기 Pi 워크스페이스**: OpenCR/LDS-03 C++ 드라이버, EKF, 원격 viz 서버 (`krosc`를 링크) |
 
 ![krosc sim(truth) + viz, noVNC로 본 리눅스 데스크톱](docs/vnc.png)
@@ -94,7 +94,7 @@ GCC + CMake + Ninja로 빌드한 뒤 `ctest`를 돌린다.
 ```bash
 # 오프스크린 스크린샷 (Docker, GUI 없이)
 docker compose -f docker/docker-compose.yml run --rm krosc bash -lc \
-  "QT_QPA_PLATFORM=offscreen ./build/examples/turtlebot3/krosc_turtlebot3 \
+  "QT_QPA_PLATFORM=offscreen ./build/simulator/krosc_simulator \
    --screenshot /workspace/krosc/docs/screenshot.png \
    --screenshot-sim /workspace/krosc/docs/simulation.png \
    --duration 4 --headless"
@@ -106,7 +106,7 @@ docker compose -f docker/docker-compose.yml run --rm krosc bash -lc \
 cd krosc
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build -j
-./build/examples/turtlebot3/krosc_turtlebot3
+./build/simulator/krosc_simulator
 ```
 
 `SimWindow`(진실)와 `VizWindow`(토픽) 두 창이 같이 뜬다. Docker 없이 바로 조종할 때 이 방법을 쓴다.
@@ -153,11 +153,12 @@ krosc/
 │   ├── core/                      # 라이브러리 소스
 │   ├── tests/                     # core 54 tests (nav2/ros2_control/MoveIt/net/RPC 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp
-├── sim/                           # krosc_sim (+ krosc_sim_qt)
+├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
-│   ├── include/krosc/sim/         # world, maze_world, turtlebot3, runner, snapshot, view_window
-│   ├── core/                      # 라이브러리 소스
-│   └── tests/                     # sim 3 tests
+│   ├── main.cpp                   # krosc_simulator 실행기 (Krosc + Simulator + 창)
+│   ├── include/krosc/simulator/    # Simulator, world, maze_world, turtlebot3, runner, snapshot, view_window
+│   ├── core/                      # Simulator/월드/ 브리지/러너 소스
+│   └── tests/                     # simulator 3 tests
 ├── viz/                           # krosc_viz (Qt6 Widgets)
 │   ├── CMakeLists.txt
 │   ├── main.cpp                   # krosc_viz_app
@@ -169,7 +170,6 @@ krosc/
 │   ├── include/krosc/viz_web/     # VizWeb, HttpServer, WebSocket
 │   ├── core/                      # VizWeb/게이트웨이 소스
 │   └── www/                       # index.html/app.js/style + JS 플러그인
-├── examples/turtlebot3/           # krosc_turtlebot3
 └── docs/                          # 검증 스크린샷 (vnc.png, screenshot.png, simulation.png)
 ```
 
@@ -269,21 +269,19 @@ const auto response = node.call_service<krosc::msgs::SetBoolRequest, krosc::msgs
 ### 시뮬레이션 + 진실 화면
 
 ```cpp
-krosc::sim::MazeWorld world(10, 42);
-auto robot_holder = std::make_unique<krosc::sim::TurtleBot3>(/*noisy=*/true, 42);
-auto* robot = static_cast<krosc::sim::TurtleBot3*>(world.add(std::move(robot_holder)));
+krosc::Krosc app(nullptr, network);  // network를 주면 Viz/VizWeb이 PeerNetwork로 붙는다
+krosc::simulator::Simulator simulator(
+    app.context(), {.noisy = true, .pucks = 10, .seed = 42,
+                    .urdf_path = "simulator/description/turtlebot3_waffle_pi.urdf"});
 
-krosc::sim::SnapshotRecorder recorder(world, *robot);
-krosc::sim::SimWindow sim_window(world.walls(), *robot, recorder.store());
+krosc::simulator::SimWindow sim_window(
+    simulator.world().walls(), simulator.robot(), simulator.snapshots());
 sim_window.show();
-
-krosc::sim::SimulationRunner runner(world, 60.0);
-runner.add_listener([&](krosc::sim::World& current) {
-  time_source->set(current.time());
-  recorder.record();
-});
-runner.start();
+simulator.start();
 ```
+
+Simulator는 Viz/VizWeb과 같이 **Context를 밖에서 받는다**. 같은 Context의 토픽/서비스/RPC를
+그대로 쓰므로 시뮬레이터·Viz·웹이 같은 통신 방식을 공유한다.
 
 ## 최적화 포인트
 

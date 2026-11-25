@@ -5,8 +5,8 @@
 #
 #   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot+viz-web, PC: robot+sim+viz+viz-web)
 #   ./build.sh robot           # krosc_real
-#   ./build.sh sim             # krosc_turtlebot3 (PC 전용)
-#   ./build.sh tests           # krosc_core_tests + krosc_sim_tests + krosc_ws_tests
+#   ./build.sh sim             # krosc_simulator (PC 전용)
+#   ./build.sh tests           # krosc_core_tests + krosc_simulator_tests + krosc_ws_tests
 #   ./build.sh viz             # krosc_ws_viz_app (PC 전용, Qt6)
 #   ./build.sh viz-web         # krosc_ws_viz_web (Pi/PC)
 #
@@ -71,9 +71,9 @@ build_robot() {
 build_sim() {
   require_pc sim
   require_qt
-  echo "[build] krosc: krosc_turtlebot3 (sim + viz)"
+  echo "[build] krosc: krosc_simulator + viz"
   configure_krosc -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=ON
-  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_turtlebot3
+  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_simulator
 }
 
 build_tests() {
@@ -83,7 +83,7 @@ build_tests() {
   else
     configure_krosc -DKROSC_BUILD_TESTS=ON
   fi
-  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_core_tests krosc_sim_tests
+  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_core_tests krosc_simulator_tests
   echo "[build] krosc_ws: tests"
   configure_ws
   cmake --build "$here/build" -j"$jobs" --target krosc_ws_tests

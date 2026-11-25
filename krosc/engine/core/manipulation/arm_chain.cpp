@@ -7,7 +7,7 @@
 #include <map>
 #include <set>
 
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 
 namespace krosc::manipulation {
 

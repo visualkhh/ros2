@@ -5,15 +5,15 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/nodes/twist_mux.hpp"
 #include "krosc/msgs/rcl_interfaces.hpp"
 #include "krosc/parameter_rpc.hpp"
 #include "krosc/service.hpp"
-#include "krosc/tf_ros.hpp"
-#include "krosc/time.hpp"
+#include "krosc/tf/tf_ros.hpp"
+#include "krosc/time/time.hpp"
 
 #include "test_framework.hpp"
 

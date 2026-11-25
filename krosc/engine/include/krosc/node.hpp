@@ -8,12 +8,12 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/log.hpp"
+#include "krosc/log/log.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/parameter.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/service.hpp"
-#include "krosc/timer.hpp"
+#include "krosc/time/timer.hpp"
 #include "krosc/topic.hpp"
 
 namespace krosc {

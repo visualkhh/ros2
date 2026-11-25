@@ -7,7 +7,7 @@
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/parameter.hpp"
-#include "krosc/timer.hpp"
+#include "krosc/time/timer.hpp"
 #include "krosc/topic.hpp"
 
 namespace krosc::nodes {

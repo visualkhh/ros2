@@ -270,7 +270,7 @@ KROSC_VIZ_HOST=10.2.150.138 ./run-viz-web.sh
 
 ## RL navigation (rl_nav_controller)
 
-Isaac `rl_maze` 정책(52관측 → 2행동, 20Hz)을 Pi에서 ONNX Runtime으로 실행한다.
+Isaac `rl_maze` 정책(52관측 → 2행동, nav 50Hz)을 Pi에서 ONNX Runtime으로 실행한다.
 
 - 모델 폴더: `artifacts/models/rl_nav_controller/<name>/`에 `*.onnx` + `*.onnx.data`
   (기본 `rl_maze`: `policy.onnx` + `policy.onnx.data`)
@@ -361,7 +361,7 @@ Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 �
 ```
 krosc_ws/
 ├── robot/                       # 로봇(Pi) 앱
-│   ├── main.cpp                 # 50Hz 실시간 루프, 노드 조립, TCP 서버
+│   ├── main.cpp                 # 100Hz 실시간 루프, 노드 조립, TCP 서버
 │   ├── turtlebot3_driver.cpp/.hpp # scan/imu/arm_status/diagnostics, 팔 서비스
 │   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
 │   ├── nodes/rl_nav_controller.cpp/.hpp # NavControllerPlugin (RL + fallback)
@@ -371,7 +371,7 @@ krosc_ws/
 │   │   ├── serial.cpp/.hpp          # POSIX termios
 │   │   ├── opencr/
 │   │   │   ├── opencr_system.cpp/.hpp   # ros2_control SystemInterface (바퀴+팔)
-│   │   │   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 20Hz C/A 명령
+│   │   │   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 50Hz C/A 명령
 │   │   │   └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
 │   │   └── lds03/
 │   │       └── lds03.cpp/.hpp       # SensorInterface(read-only) + 패킷 파서 + 몸통 필터
@@ -400,7 +400,7 @@ krosc_ws/
 - 두 모터 모두 `+속도 = 뒤` → 앱 안에서 `left_dir = right_dir = -1`로 뒤집는다
 - LDS-03: 230400, 360칸, 0.05~12 m, `reverse=True`, base_link 기준 x=0.060, z=0.022
 - 라이다 몸통 필터: base_link 기준 x -0.21~0.075, y ±0.17 안의 점 제거
-- EKF: odom pose(yaw)/vx/vyaw, 20Hz, `odom -> base_footprint` TF (IMU yaw는 bias 때문에 제외)
+- EKF: odom pose(yaw)/vx/vyaw, 50Hz, `odom -> base_footprint` TF (IMU yaw는 bias 때문에 제외)
 
 ## 펌웨어 (이 프로젝트 전용 사본)
 

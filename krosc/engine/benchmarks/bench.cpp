@@ -8,8 +8,8 @@
 
 #include "krosc/context.hpp"
 #include "krosc/node.hpp"
-#include "krosc/sim/maze_world.hpp"
-#include "krosc/tf.hpp"
+#include "krosc/simulator/maze_world.hpp"
+#include "krosc/tf/tf.hpp"
 
 namespace {
 
@@ -72,7 +72,7 @@ int main() {
     std::printf("tf lookup           : %8.1f ns/op  (sum %.3f)\n", elapsed / kCount * 1e9, sum);
   }
   {
-    krosc::sim::MazeWorld world(0);
+    krosc::simulator::MazeWorld world(0);
     std::vector<double> angles(360);
     for (int i = 0; i < 360; ++i) {
       angles[static_cast<std::size_t>(i)] = static_cast<double>(i) * 0.017453292519943295;

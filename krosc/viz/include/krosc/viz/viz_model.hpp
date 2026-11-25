@@ -13,8 +13,8 @@
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/qos.hpp"
-#include "krosc/tf.hpp"
-#include "krosc/tf_ros.hpp"
+#include "krosc/tf/tf.hpp"
+#include "krosc/tf/tf_ros.hpp"
 
 namespace krosc::viz {
 

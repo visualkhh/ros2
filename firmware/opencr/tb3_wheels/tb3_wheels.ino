@@ -65,7 +65,7 @@
 #define POS_UNIT_RAD     (2.0f * 3.14159265f / 4096.0f)
 #define CUR_UNIT_A       0.00269f   // 1 unit = 2.69 mA (XM430)
 #define VEL_LIMIT_RAD_S  8.0f       // Waffle Pi spec 0.26 m/s / r 0.033 = 7.9 rad/s (DYNAMIXEL Velocity Limit also caps)
-#define STATUS_HZ        20
+#define STATUS_HZ        50
 #define GYRO_FACTOR      0.0010642f       // ADC -> rad/s  (+-2000 deg/s, TurtleBot3 turtlebot3_sensor.h)
 #define ACCEL_FACTOR     0.000598550415f  // ADC -> m/s^2  (+-2 g)
 #define CMD_TIMEOUT_MS   500

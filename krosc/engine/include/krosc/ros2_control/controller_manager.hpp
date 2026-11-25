@@ -11,7 +11,7 @@
 #include "krosc/node.hpp"
 #include "krosc/ros2_control/controller_interface.hpp"
 #include "krosc/ros2_control/hardware_interface.hpp"
-#include "krosc/timer.hpp"
+#include "krosc/time/timer.hpp"
 
 namespace krosc::ros2_control {
 

@@ -7,11 +7,11 @@
 #include <vector>
 
 #include "krosc/executor.hpp"
-#include "krosc/net_peer.hpp"
+#include "krosc/net/net_peer.hpp"
 #include "krosc/parameter.hpp"
 #include "krosc/service.hpp"
-#include "krosc/time.hpp"
-#include "krosc/timer.hpp"
+#include "krosc/time/time.hpp"
+#include "krosc/time/timer.hpp"
 #include "krosc/topic.hpp"
 
 namespace krosc {

@@ -30,7 +30,7 @@
 #include <set>
 #include <utility>
 
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 
 namespace krosc::viz {
 

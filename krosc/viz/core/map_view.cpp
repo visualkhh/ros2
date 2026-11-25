@@ -17,10 +17,10 @@
 #include <string>
 #include <vector>
 
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 #include "krosc/viz/costmap_color.hpp"
 #include "krosc/viz/key_bindings.hpp"
-#include "krosc/tf.hpp"
+#include "krosc/tf/tf.hpp"
 
 namespace krosc::viz {
 

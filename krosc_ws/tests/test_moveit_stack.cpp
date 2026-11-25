@@ -12,7 +12,7 @@
 
 #include "krosc/action.hpp"
 #include "krosc/manipulation/arm_chain.hpp"
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 #include "krosc/context.hpp"
 #include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/msgs.hpp"

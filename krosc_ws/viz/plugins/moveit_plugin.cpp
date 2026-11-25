@@ -21,8 +21,8 @@
 #include <sstream>
 #include <string>
 
-#include "krosc/math.hpp"
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
+#include "krosc/tf/math.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/viz/scene_view.hpp"

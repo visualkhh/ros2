@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 #include "krosc/qos.hpp"
-#include "krosc/tf_ros.hpp"
+#include "krosc/tf/tf_ros.hpp"
 
 namespace krosc::nodes {
 

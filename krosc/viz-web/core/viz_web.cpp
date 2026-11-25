@@ -8,7 +8,7 @@
 #include <thread>
 #include <utility>
 
-#include "krosc/net.hpp"
+#include "krosc/net/net.hpp"
 #include "krosc/viz_web/http_server.hpp"
 
 namespace krosc::viz_web {

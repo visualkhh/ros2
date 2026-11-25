@@ -5,8 +5,8 @@
 
 #include "krosc/context.hpp"
 #include "krosc/node.hpp"
-#include "krosc/time.hpp"
-#include "krosc/timer.hpp"
+#include "krosc/time/time.hpp"
+#include "krosc/time/timer.hpp"
 
 #include "test_framework.hpp"
 

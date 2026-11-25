@@ -4,19 +4,25 @@ add_library(krosc_core STATIC
   core/context.cpp
   core/executor.cpp
   core/krosc.cpp
-  core/log.cpp
-  core/net.cpp
-  core/net_protocol.cpp
-  core/net_peer.cpp
-  core/rpc.cpp
+  core/log/log.cpp
+  core/net/net.cpp
+  core/net/net_protocol.cpp
+  core/net/net_peer.cpp
+  core/net/rpc.cpp
+  core/msgs/rpc_builtin.cpp
+  core/msgs/codec_basic.cpp
+  core/msgs/codec_nav2.cpp
+  core/msgs/codec_parameters.cpp
+  core/msgs/codec_ros2_control.cpp
+  core/msgs/codec_actions.cpp
   core/node.cpp
   core/parameter.cpp
   core/service.cpp
-  core/time.cpp
-  core/timer.cpp
+  core/time/time.cpp
+  core/time/timer.cpp
   core/topic.cpp
-  core/tf.cpp
-  core/tf_ros.cpp
+  core/tf/tf.cpp
+  core/tf/tf_ros.cpp
   core/urdf.cpp
   core/manipulation/arm_chain.cpp
   core/nodes/cartographer.cpp

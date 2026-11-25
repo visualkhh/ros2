@@ -5,7 +5,7 @@
 namespace krosc_ws {
 
 RealTurtleBot3::RealTurtleBot3(std::string opencr_port, std::string lidar_port, bool enable_lidar)
-    : opencr_(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200, 0.05, 0.5, -1.0, -1.0, kMaxWheel) {
+    : opencr_(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0, kMaxWheel) {
   // 이 로봇은 두 모터 모두 +속도 = 뒤로 (ROS robot.yaml left_dir/right_dir = -1).
   if (enable_lidar) {
     lidar_ = std::make_unique<Lds03>(std::move(lidar_port), kLidarMountX, "base_scan", true, true);

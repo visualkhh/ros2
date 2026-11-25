@@ -12,8 +12,8 @@
 #include "krosc/action.hpp"
 #include "krosc/msgs/nav2_msgs.hpp"
 #include "krosc/node.hpp"
-#include "krosc/tf.hpp"
-#include "krosc/tf_ros.hpp"
+#include "krosc/tf/tf.hpp"
+#include "krosc/tf/tf_ros.hpp"
 
 namespace krosc::nodes::nav2 {
 

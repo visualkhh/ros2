@@ -9,7 +9,7 @@
 #include "krosc/context.hpp"
 #include "krosc/executor.hpp"
 #include "krosc/node.hpp"
-#include "krosc/time.hpp"
+#include "krosc/time/time.hpp"
 
 #include "test_framework.hpp"
 

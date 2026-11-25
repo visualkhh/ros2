@@ -4,7 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
-#include "krosc/math.hpp"
+#include "krosc/tf/math.hpp"
 
 namespace krosc::nodes::nav2 {
 

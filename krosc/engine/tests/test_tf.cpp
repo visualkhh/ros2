@@ -2,8 +2,8 @@
 #include <cmath>
 #include <thread>
 
-#include "krosc/math.hpp"
-#include "krosc/tf.hpp"
+#include "krosc/tf/math.hpp"
+#include "krosc/tf/tf.hpp"
 
 #include "test_framework.hpp"
 

@@ -7,7 +7,7 @@ TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, 
 
 - 소스: `tb3_wheels/tb3_wheels.ino` (Arduino 스케치, 폴더명=파일명 유지 필수) · 팔 설정(ID·부호·그리퍼 표) `tb3_wheels/arm_config.h`
 - 의존: OpenCR 보드 패키지 + DynamixelSDK (보드 설치는 [OpenCR 문서](../../documents/opencr/opencr-setup-ubuntu26.04.md))
-- **현재(2026-10-30)**: `pak`에 업로드 완료. `/imu` 20 Hz 확인 (정지 `gz≈0`, `az≈9.98`). `S` 직후 `I` 줄이 오는 구조 그대로.
+- **현재 소스 기준**: `/imu` 50 Hz (`STATUS_HZ=50`). 기존 20 Hz 펌웨어를 쓰는 보드는 `./upload.sh`로 다시 올려야 반영된다 (정지 `gz≈0`, `az≈9.98`). `S` 직후 `I` 줄이 오는 구조 그대로.
 
 ## 프로토콜 (USB CDC, `/dev/opencr`, 115200)
 
@@ -17,8 +17,8 @@ TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, 
 | SBC → OpenCR | `T,0` / `T,1` (토크 off/on) | 필요시 |
 | SBC → OpenCR | `R` (양쪽) / `R,<좌 0·1>,<우 0·1>` (다이나믹셀 재부팅, 빈칸·0=그대로) | 에러 시 |
 | SBC → OpenCR | `B` (2000Hz 150ms) / `B,<Hz>,<ms>` (부저 삑, 100~8000Hz · 10~2000ms, 안 기다림) | 필요시 |
-| OpenCR → SBC | `S,<좌pos rad>,<좌vel>,<우pos>,<우vel>,<uptime ms>,<좌전류 A>,<우전류 A>,<좌온도 ℃>,<우온도 ℃>,<배터리 V>` | 20Hz |
-| OpenCR → SBC | `I,<gx>,<gy>,<gz rad/s>,<ax>,<ay>,<az m/s²>,<qw>,<qx>,<qy>,<qz>` (OpenCR 내장 IMU, 보드 좌표 = `imu_link`). 부팅 때 자이로 바이어스 보정 → **켜고 ~2초 가만히** | `S` 바로 뒤 (20Hz) |
+| OpenCR → SBC | `S,<좌pos rad>,<좌vel>,<우pos>,<우vel>,<uptime ms>,<좌전류 A>,<우전류 A>,<좌온도 ℃>,<우온도 ℃>,<배터리 V>` | 50Hz |
+| OpenCR → SBC | `I,<gx>,<gy>,<gz rad/s>,<ax>,<ay>,<az m/s²>,<qw>,<qx>,<qy>,<qz>` (OpenCR 내장 IMU, 보드 좌표 = `imu_link`). 부팅 때 자이로 바이어스 보정 → **켜고 ~2초 가만히** | `S` 바로 뒤 (50Hz) |
 | OpenCR → SBC | `E,<좌err>,<우err>` (Hardware Error Status 비트마스크, 0=정상, -1=무응답) | 변화 시 + 에러 중 1Hz |
 
 ### 팔 줄 (추가)
@@ -30,7 +30,7 @@ TurtleBot3 Waffle Pi형 2륜 + OpenCR 최소 펌웨어. 바퀴 2개(XM430-W210, 
 | SBC → OpenCR | `A,<j1>,<j2>,<j3>,<j4 rad>,<그리퍼 m>[,<그리퍼 전류 A>]` | 빈칸 = 유지. 한 패킷으로 동시 반영. 그리퍼 전류 = 쥐는 힘 한계 |
 | SBC → OpenCR | `AT,0` · `AT,1` · `AT,<5칸 0/1>` | 팔 토크. 켤 때 지금 자세가 목표 |
 | SBC → OpenCR | `AR,1` · `AR,<5칸 0/1>` | 팔 모터 재부팅 (Hardware Error 해제) |
-| OpenCR → SBC | `M,<5 × (pos, vel, 전류 A)>,<5 온도 ℃>` | 20Hz, `I` 뒤. 못 읽은 값 `nan` · 온도 −1 |
+| OpenCR → SBC | `M,<5 × (pos, vel, 전류 A)>,<5 온도 ℃>` | 50Hz, `I` 뒤. 못 읽은 값 `nan` · 온도 −1 |
 | OpenCR → SBC | `F,<6 에러>` | `E`와 같음 (변화 시 + 에러 중 1Hz) |
 
 안전: 500ms 동안 `A`가 없으면 현재 자세 유지. 12V를 껐다 켜 토크가 풀린 모터는 0.5초 안에 다시 켜고 느린 속도로 복귀. 관절 부호(`ARM_DIR`)와 그리퍼 쥐는 전류는 아직 **실측 전** (Lv2 값 그대로).

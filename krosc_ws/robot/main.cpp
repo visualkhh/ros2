@@ -23,7 +23,7 @@
 #include "krosc/context.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/nodes/moveit/move_group.hpp"
-#include "krosc/net.hpp"
+#include "krosc/net/net.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
@@ -40,7 +40,7 @@
 #include "krosc/nodes/twist_mux.hpp"
 #include "krosc/nodes/velocity_smoother.hpp"
 #include "krosc/ros2_control/controller_manager.hpp"
-#include "krosc/time.hpp"
+#include "krosc/time/time.hpp"
 
 #include "hardwares/opencr/opencr_system.hpp"
 #include "real_turtlebot3.hpp"
@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
                         [&robot] { return std::make_unique<krosc_ws::OpenCrSystem>(robot); });
   krosc::ros2_control::ControllerManager controller_manager(
       context, "controller_manager",
-      {{"update_rate", 50.0},
+      {{"update_rate", 100.0},
        {"hardware.plugin", std::string("krosc_ws/OpenCrSystem")},
        {"hardware.name", std::string("turtlebot3_real")},
        {"controller_plugins",
@@ -233,6 +233,7 @@ int main(int argc, char** argv) {
        {"diff_drive_controller.base_frame", std::string("base_footprint")},
        {"diff_drive_controller.publish_tf", false},
        {"diff_drive_controller.command_timeout", 0.5},
+       {"diff_drive_controller.odom_publish_rate", 50.0},
        {"arm_command_controller.type",
         std::string("forward_command_controller/ForwardCommandController")},
        {"arm_command_controller.joints",
@@ -264,7 +265,7 @@ int main(int argc, char** argv) {
   krosc::nodes::Ekf ekf(context, "ekf_filter_node",
                         {{"odom0", std::string("odom")},
                          {"odom0_config", ekf_config({5, 6, 11})},
-                         {"frequency", 20.0},
+                         {"frequency", 50.0},
                          {"publish_tf", true}});
   constexpr double kDegreesToRadians = std::numbers::pi / 180.0;
   krosc::nodes::Cartographer cartographer(
@@ -277,7 +278,7 @@ int main(int argc, char** argv) {
        {"linear_search_window", 0.25},
        {"angular_search_window", 15.0 * kDegreesToRadians},
        {"map_publish_period_sec", 2.0},
-       {"tf_publish_period_sec", 0.05},
+       {"tf_publish_period_sec", 0.02},
        {"tf_smoothing", 0.35}});
   krosc::nodes::MapServer map_server(
       context, "map_server",
@@ -311,7 +312,7 @@ int main(int argc, char** argv) {
        {"width", 4.0},
        {"height", 4.0},
        {"resolution", 0.05},
-       {"update_frequency", 5.0},
+       {"update_frequency", 10.0},
        {"observation_sources", std::vector<std::string>{"scan"}},
        {"scan.topic", std::string("scan")},
        {"obstacle_max_range", 2.5},
@@ -347,7 +348,7 @@ int main(int argc, char** argv) {
        {"FollowPath.use_collision_detection", true},
        {"FollowPath.rotate_to_heading_min_angle", 0.35},
        {"cmd_vel_topic", std::string("cmd_vel_nav")},
-       {"controller_frequency", 20.0},
+       {"controller_frequency", 50.0},
        {"general_goal_checker.xy_goal_tolerance", 0.20},
        {"general_goal_checker.yaw_goal_tolerance", 0.35},
        {"max_linear_accel", 0.0},
@@ -378,7 +379,7 @@ int main(int argc, char** argv) {
        {"max_angular_accel", 2.0},
        {"max_linear_speed", 0.26},
        {"max_angular_speed", 1.82},
-       {"frequency", 50.0},
+       {"frequency", 100.0},
        {"input_timeout", 0.5}});
   krosc::nodes::CollisionMonitor collision_monitor(
       context, "collision_monitor",
@@ -391,7 +392,7 @@ int main(int argc, char** argv) {
 
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);
-  constexpr auto kPeriod = std::chrono::milliseconds(20);
+  constexpr auto kPeriod = std::chrono::milliseconds(10);
   auto next = std::chrono::steady_clock::now();
   auto last_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {

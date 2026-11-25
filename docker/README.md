@@ -34,7 +34,7 @@ cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 ```
 
-테스트: `krosc_core_tests` 29개 + `krosc_sim_tests` 3개 = 32개. `krosc_ws`는 별도 빌드/테스트(4개)를 가진다.
+테스트: `krosc_core_tests` 54개 + `krosc_simulator_tests` 3개 = 57개. `krosc_ws`는 별도 빌드/테스트(9개)를 가진다.
 
 ## 3. 웹 Viz (브라우저)
 
@@ -77,7 +77,7 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 ```
 
 - 컨테이너 안에서 `Xvfb :99` → `openbox` → `x11vnc` → `websockify(noVNC)`를 띄우고,
-  그 X 디스플레이 위에서 `krosc_turtlebot3`가 **SimWindow(진실)** 와 **VizWindow(토픽)** 두 창을 연다.
+  그 X 디스플레이 위에서 `krosc_simulator`가 **SimWindow(진실)** 와 **VizWindow(토픽)** 두 창을 연다.
 - 맥은 WebSocket(6080)으로 화면만 받는다. 시뮬레이션/토픽/데이터는 전부 리눅스 컨테이너 안에 있다.
 - 왼쪽 sim 창에서 `W/A/S/D`로 직접 몰거나, 오른쪽 viz 창에서 조종하면 된다.
 - `Ctrl+C`로 끝내면 컨테이너도 정리된다.
@@ -105,7 +105,7 @@ XQuartz를 설치하고 TCP 접속을 허용한 뒤, 컨테이너에 `DISPLAY=ho
 cd krosc
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build -j
-./build/examples/turtlebot3/krosc_turtlebot3
+./build/simulator/krosc_simulator
 ```
 
 ## 셸

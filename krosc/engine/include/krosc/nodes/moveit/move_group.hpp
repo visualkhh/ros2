@@ -17,7 +17,7 @@
 #include "krosc/msgs/control_msgs.hpp"
 #include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/node.hpp"
-#include "krosc/timer.hpp"
+#include "krosc/time/timer.hpp"
 
 namespace krosc::moveit {
 

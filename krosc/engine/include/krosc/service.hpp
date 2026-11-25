@@ -1,8 +1,10 @@
 #pragma once
 
 #include <any>
+#include <cstdint>
 #include <functional>
 #include <optional>
+#include <vector>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -28,6 +30,9 @@ class ServiceTypeError : public std::runtime_error {
 
 namespace detail {
 
+using ServiceResponseEncoder =
+    std::function<std::vector<std::uint8_t>(std::type_index, const void*)>;
+
 struct ServiceBase {
   std::string name;
   std::type_index request_type{typeid(void)};
@@ -35,6 +40,9 @@ struct ServiceBase {
   std::string type_name;
   virtual ~ServiceBase() = default;
   virtual std::any invoke(const std::any& request) = 0;
+  // RPC 응답을 std::any를 거치지 않고 바로 인코딩한다.
+  virtual std::vector<std::uint8_t> invoke_encoded(const std::any& request,
+                                                   const ServiceResponseEncoder& encoder) = 0;
 };
 
 using RemoteServiceCall = std::function<std::any(
@@ -53,6 +61,11 @@ template <class Req, class Res>
 struct ServiceImpl final : ServiceBase {
   std::function<Res(const Req&)> handler;
   std::any invoke(const std::any& request) override { return handler(std::any_cast<const Req&>(request)); }
+  std::vector<std::uint8_t> invoke_encoded(const std::any& request,
+                                           const ServiceResponseEncoder& encoder) override {
+    const Res response = handler(std::any_cast<const Req&>(request));
+    return encoder(std::type_index(typeid(Res)), &response);
+  }
 };
 
 }  // namespace detail
@@ -161,6 +174,10 @@ class ServiceRegistry {
       const std::string& name) const;
   // 네트워크에서 받은 요청을 로컬 서비스로 실행한다. 없거나 타입이 다르면 빈 any.
   [[nodiscard]] std::any invoke_any(const std::string& name, const std::any& request) const;
+  // 응답을 바로 인코딩한다. 서비스가 없거나 요청 타입이 다르면 빈 벡터.
+  [[nodiscard]] std::vector<std::uint8_t> invoke_encoded(
+      const std::string& name, const std::any& request,
+      const detail::ServiceResponseEncoder& encoder) const;
 
   // 로컬에 서비스가 없을 때 원격 피어로 넘긴다 (PeerNetwork가 설정).
   void set_remote_call(detail::RemoteServiceCall hook);
