@@ -622,9 +622,21 @@ function body(topicName, kind, payload) {
   return writer.result();
 }
 
+const sendOutbox = [];
+
 function sendBinary(topicName, kind, payload) {
-  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return false;
-  state.ws.send(body(topicName, kind, payload));
+  const bytes = body(topicName, kind, payload);
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+    // 새로고침 직후처럼 아직 연결 중이면 잠깐 모아뒀다가 열리면 보낸다 (첫 클릭 유실 방지)
+    if (state.ws && state.ws.readyState === WebSocket.CONNECTING) {
+      sendOutbox.push(bytes);
+      if (sendOutbox.length > 100) sendOutbox.shift();
+      return true;
+    }
+    toast('연결 대기 중… 잠시 후 다시 시도');
+    return false;
+  }
+  state.ws.send(bytes);
   return true;
 }
 
@@ -955,7 +967,13 @@ function connect() {
   const socket = new WebSocket(`${scheme}://${location.host}/ws`);
   socket.binaryType = 'arraybuffer';
   state.ws = socket;
-  socket.onopen = () => { state.wsOpen = true; updateWsStatus(); };
+  socket.onopen = () => {
+    state.wsOpen = true;
+    updateWsStatus();
+    while (sendOutbox.length > 0) {
+      socket.send(sendOutbox.shift());
+    }
+  };
   socket.onclose = () => {
     state.wsOpen = false;
     state.robotConnected = false;

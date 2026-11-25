@@ -33,9 +33,29 @@ export function init(host) {
     host.sendString('map_change', mapSelect.value);
   });
   button(buttons, 'unload', () => host.sendEmpty('map_unload'));
+  // 저장/삭제는 로봇 링크가 잠깐 끊겨도 유실되지 않게 몇 번 재시도한다.
+  let pending = null;  // {kind:'save'|'delete', name, tries, timer}
+  function sendPending(kind, name) {
+    if (pending) clearTimeout(pending.timer);
+    pending = { kind, name, tries: 1, timer: null };
+    host.sendString(kind === 'save' ? 'map_save' : 'map_delete', name);
+    setLevel(mapStatus, kind === 'save' ? `saving ${name} ...` : `deleting ${name} ...`, 'warn');
+    pending.timer = setTimeout(() => retryPending(), 4000);
+  }
+  function retryPending() {
+    if (!pending) return;
+    if (pending.tries >= 3) {
+      setLevel(mapStatus, `${pending.kind} 실패: ${pending.name} (로봇 연결 확인)`, 'bad');
+      pending = null;
+      return;
+    }
+    pending.tries += 1;
+    host.sendString(pending.kind === 'save' ? 'map_save' : 'map_delete', pending.name);
+    pending.timer = setTimeout(() => retryPending(), 4000);
+  }
   button(buttons, 'save', () => {
     const name = window.prompt('map 이름', `map_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`);
-    if (name) host.sendString('map_save', name.trim());
+    if (name) sendPending('save', name.trim());
   });
   button(buttons, 'delete', () => {
     const name = mapSelect.value;
@@ -44,8 +64,7 @@ export function init(host) {
       return;
     }
     if (!window.confirm(`map "${name}" 을(를) 삭제할까?`)) return;
-    host.sendString('map_delete', name);
-    setLevel(mapStatus, `deleting ${name} ...`, 'warn');
+    sendPending('delete', name);
   }, 'danger');
   let collisionEnabled = true;
   const collisionButton = button(buttons, 'collision ON', () => {
@@ -66,6 +85,11 @@ export function init(host) {
   host.onTopic('map_status', (message) => {
     const text = message.data || '-';
     setLevel(mapStatus, text);
+    if (pending && (text === `saved ${pending.name}` || text === `deleted ${pending.name}` ||
+                    text.startsWith('save failed') || text.startsWith('delete failed'))) {
+      clearTimeout(pending.timer);
+      pending = null;
+    }
     // 지도 load 직후에는 지도 전체가 보이게 맞춘다 (새로고침 없이 바로 보이도록)
     if (text.startsWith('loaded ') && host.fitMap) host.fitMap();
   });
