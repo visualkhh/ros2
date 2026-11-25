@@ -2113,6 +2113,18 @@ canvas.tabIndex = 0;
 canvas.focus();
 const keys = new Set();
 let teleopTimer = null;
+// 모바일에서 버튼을 길게 눌러도 컨텍스트 메뉴/선택이 뜨지 않게 한다.
+document.addEventListener('contextmenu', (event) => {
+  if (event.target.closest && event.target.closest('button, .view-tab, .view-tool, .btn-row')) {
+    event.preventDefault();
+  }
+});
+document.addEventListener('selectstart', (event) => {
+  if (event.target.closest && event.target.closest('button, .btn-row')) {
+    event.preventDefault();
+  }
+});
+
 function sendKeyboard() {
   let linear = 0;
   let angular = 0;
