@@ -39,11 +39,14 @@ constexpr std::uint8_t kPeerTopicLatched = 3;  // kFrameTopic(1)의 latched 변�
 constexpr std::uint8_t kPeerControl = 4;
 constexpr std::size_t kMaxQueue = 512;
 
-thread_local bool t_receiving = false;
+// peer에서 받은 프레임을 로컬에 publish할 때, 그 publish에서 파생된 응답(상태/목록)이
+// peer로 다시 나가지 못하게 막던 문제를 고친다. 이제 "원래 보낸 peer"에게만 되돌려 보내지 않는다.
+thread_local const void* t_origin_peer = nullptr;
 
 struct ReceiveGuard {
-  ReceiveGuard() { t_receiving = true; }
-  ~ReceiveGuard() { t_receiving = false; }
+  explicit ReceiveGuard(const void* peer) : previous(t_origin_peer) { t_origin_peer = peer; }
+  ~ReceiveGuard() { t_origin_peer = previous; }
+  const void* previous;
 };
 
 std::string endpoint_text(const std::string& host, std::uint16_t port) {
@@ -511,7 +514,7 @@ struct PeerNetwork::Impl {
 
   void on_publish(const std::string& topic, std::type_index type,
                   const std::shared_ptr<const void>& message, QoS qos) {
-    if (stopping.load() || t_receiving) {
+    if (stopping.load()) {
       return;
     }
     const auto kind = message_kind(type);
@@ -535,6 +538,9 @@ struct PeerNetwork::Impl {
     for (const auto& peer : snapshot) {
       if (!peer || !peer->alive.load()) {
         continue;
+      }
+      if (t_origin_peer == static_cast<const void*>(peer.get())) {
+        continue;  // 보낸 peer에게 그대로 되돌려 보내지 않는다 (에코 방지)
       }
       {
         std::lock_guard<std::mutex> lock(peer->subscription_mutex);
@@ -607,7 +613,7 @@ struct PeerNetwork::Impl {
       topic = remapped->second;
     }
     const QoS qos = qos_for_remote_topic(topic, frame.type == kPeerTopicLatched);
-    ReceiveGuard guard;
+    ReceiveGuard guard(&peer);
     switch (frame.kind) {
       case Kind::Twist:
         context.topics().publish<msgs::Twist>(
@@ -780,6 +786,6 @@ std::vector<std::string> PeerNetwork::peer_endpoints() const {
   return impl_ ? impl_->peer_endpoints() : std::vector<std::string>{};
 }
 
-bool PeerNetwork::receiving() { return t_receiving; }
+bool PeerNetwork::receiving() { return t_origin_peer != nullptr; }
 
 }  // namespace krosc::net
