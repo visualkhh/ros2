@@ -1081,6 +1081,8 @@ struct PeerNetwork::Impl {
 };
 
 void Peer::start() {
+  // 두 스레드가 실제로 시작되기 전에 카운트한다. shutdown이 먼저 0을 보고
+  // Impl을 지우는 경쟁을 막는다.
   owner.thread_started();
   owner.thread_started();
   reader = std::thread([self = shared_from_this()] {

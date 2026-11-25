@@ -4,6 +4,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -223,11 +224,15 @@ void bench_rpc() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   std::printf("krosc net benchmark (localhost loopback)\n");
   bench_latency();
   bench_throughput();
-  bench_fanout(3);
+  int clients = 3;
+  if (argc > 1) {
+    clients = std::max(1, std::min(32, std::atoi(argv[1])));
+  }
+  bench_fanout(clients);
   bench_rpc();
   return 0;
 }

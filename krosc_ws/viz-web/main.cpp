@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -31,6 +32,8 @@ struct MoveState {
       : client(std::make_shared<MoveClient>(context, krosc::msgs::moveit::MOVE_ACTION)) {}
   std::shared_ptr<MoveClient> client;
   std::shared_ptr<MoveHandle> handle;
+  bool active = false;
+  std::chrono::steady_clock::time_point active_since;
   std::mutex mutex;
 };
 
@@ -40,7 +43,14 @@ void register_move_rpc(krosc::viz_web::WebRpc& rpc, krosc::Context& context) {
           [state, &context](const krosc::viz_web::Json& params,
                             const krosc::viz_web::WebRpc::Notify& notify) {
             std::lock_guard<std::mutex> lock(state->mutex);
-            if (state->handle && state->handle->status() == krosc::GoalStatus::Accepted) {
+            // result 이벤트가 늦게 와도 다음 요청에서 상태를 정리한다.
+            if (state->active &&
+                (!state->handle || state->handle->status() != krosc::GoalStatus::Accepted ||
+                 std::chrono::steady_clock::now() - state->active_since >
+                     std::chrono::seconds(60))) {
+              state->active = false;
+            }
+            if (state->active) {
               krosc::viz_web::Json result = krosc::viz_web::Json::object();
               result["accepted"] = false;
               result["error"] = "busy";
@@ -72,6 +82,8 @@ void register_move_rpc(krosc::viz_web::WebRpc& rpc, krosc::Context& context) {
             krosc::viz_web::Json result = krosc::viz_web::Json::object();
             result["goal_id"] = state->handle->goal_id();
             result["accepted"] = state->handle->status() != krosc::GoalStatus::Rejected;
+            state->active = state->handle->status() == krosc::GoalStatus::Accepted;
+            state->active_since = std::chrono::steady_clock::now();
             return result;
           });
 
@@ -84,6 +96,9 @@ void register_move_rpc(krosc::viz_web::WebRpc& rpc, krosc::Context& context) {
             }
             krosc::viz_web::Json result = krosc::viz_web::Json::object();
             result["ok"] = !goal_id.empty() && state->client->cancel(goal_id);
+            if (result["ok"].as_bool()) {
+              state->active = false;
+            }
             return result;
           });
 

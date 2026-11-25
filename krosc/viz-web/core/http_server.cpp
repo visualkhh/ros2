@@ -495,15 +495,18 @@ void HttpServer::broadcast_binary(std::vector<std::uint8_t> body) {
       last = now;
     }
   }
-  auto frame = std::make_shared<const std::vector<std::uint8_t>>(std::move(body));
-  if (keep) {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-    cache_[*topic_name] = frame;
-  }
   std::vector<std::shared_ptr<Client>> clients;
   {
     std::lock_guard<std::mutex> lock(clients_mutex_);
     clients = clients_;
+  }
+  if (clients.empty() && !keep) {
+    return;  // 브라우저도 없고 캐시할 프레임도 아니면 만들지 않는다
+  }
+  auto frame = std::make_shared<const std::vector<std::uint8_t>>(std::move(body));
+  if (keep) {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    cache_[*topic_name] = frame;
   }
   if (clients.empty()) {
     return;

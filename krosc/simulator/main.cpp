@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
 
   krosc::simulator::Simulator simulator(
       app.context(),
-      krosc::simulator::SimulatorOptions{noisy, pucks, seed, 60.0, KROSC_SIMULATOR_URDF});
+      krosc::simulator::SimulatorOptions{noisy, pucks, seed, 100.0, KROSC_SIMULATOR_URDF});
 
   krosc::simulator::SimWindow sim_window(simulator.world().walls(), simulator.robot(),
                                          simulator.snapshots());

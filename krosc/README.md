@@ -115,7 +115,7 @@ cmake --build build -j
 
 ```
 MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed 고정)
-        │ tick 60Hz
+        │ tick 100Hz
         ├─ RobotBridge: scan/imu/joint_states 발행, cmd_vel 수신
         ├─ DiffDriveOdometry: joint_states -> odom (TF는 끔)
         ├─ Ekf: odom(vx, vyaw) + imu(vyaw) -> odometry/filtered + odom -> base_footprint TF
@@ -143,16 +143,16 @@ MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed
 
 ```
 krosc/
-├── CMakeLists.txt                 # 최상위 (engine, sim, viz-web, viz, examples)
+├── CMakeLists.txt                 # 최상위 (engine, viz, simulator, viz-web)
 ├── engine/                        # krosc_core (표준 라이브러리만)
 │   ├── CMakeLists.txt
-│   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/action/msgs/rpc
+│   ├── include/krosc/             # node/context/topic/tf/time/parameter/service/action/msgs/net(rpc)
 │   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
 │   │   ├── ros2_control/          # controller_manager, JSB/JTC/forward/diff_drive
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
 │   ├── tests/                     # core 54 tests (nav2/ros2_control/MoveIt/net/RPC 포함)
-│   └── benchmarks/                # bench.cpp, nav2_bench.cpp
+│   └── benchmarks/                # bench.cpp, nav2_bench.cpp, net_bench.cpp
 ├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
 │   ├── main.cpp                   # krosc_simulator 실행기 (Krosc + Simulator + 창)
@@ -320,6 +320,15 @@ ctest --test-dir build --output-on-failure
 - RPC: 서비스/액션/파라미터 포워딩(discovery, timeout, latched), 웹 JSON RPC
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
 - ASan/UBSan으로 core/sim 테스트와 데모 실행 검증 완료 (오류/누수 없음)
+
+네트워크 benchmark:
+
+```bash
+./build/engine/krosc_net_bench   # loopback 토픽 RTT/대역폭/fanout/RPC
+```
+
+현재 Mac loopback 기준: 토픽 RTT p50 ~0.11ms, 1KiB payload ~80k msg/s,
+3 peer fanout ~114k deliveries/s, RPC p50 ~0.06ms. Pi에서는 별도 측정이 필요하다.
 
 ## RPC (PeerNetwork)
 

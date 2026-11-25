@@ -24,7 +24,7 @@ struct SimulatorOptions {
   bool noisy = true;
   int pucks = 10;
   std::uint32_t seed = 42;
-  double step_hz = 60.0;
+  double step_hz = 100.0;
   std::string urdf_path;
 };
 

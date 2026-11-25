@@ -15,7 +15,7 @@ RobotBridge::RobotBridge(krosc::Context& context, krosc::simulator::TurtleBot3& 
   robot_.set_imu_callback([this](const krosc::msgs::Imu& imu) { publish("imu", imu, krosc::QOS_SENSOR_DATA); });
   subscribe<krosc::msgs::Twist>(
       "cmd_vel", [this](const krosc::msgs::Twist& twist) { robot_.set_command(twist); }, krosc::QOS_COMMAND);
-  joint_states_timer_ = create_timer(0.05, [this] { publish_joint_states(); });
+  joint_states_timer_ = create_timer(0.02, [this] { publish_joint_states(); });
 }
 
 void RobotBridge::publish_joint_states() {
