@@ -1115,18 +1115,27 @@ function costmapCanvas(grid) {
   const imageContext = image.getContext('2d');
   const imageData = imageContext.createImageData(grid.width, grid.height);
   const pixels = imageData.data;
+  // Qt Viz의 costmap_color()와 같은 팔레트:
+  //   -1 unknown(회청록) / 0 free(투명) / 1..98 blue→red / 99 inscribed(cyan) / 100 lethal(magenta)
   for (let index = 0; index < grid.data.length; ++index) {
     const value = grid.data[index];
     const offset = index * 4;
-    if (value <= 0) {
-      pixels[offset + 3] = 0;
-      continue;
+    let r = 0, g = 0, b = 0, a = 0;
+    if (value < 0) {
+      r = 90; g = 120; b = 120; a = 80;
+    } else if (value === 0) {
+      a = 0;
+    } else if (value >= 100) {
+      r = 255; b = 255; a = 225;
+    } else if (value === 99) {
+      g = 255; b = 255; a = 220;
+    } else {
+      const t = value / 99;
+      r = Math.round(255 * t);
+      b = Math.round(255 * (1 - t));
+      a = 190;
     }
-    const intensity = Math.min(1, value / 254);
-    pixels[offset] = Math.round(150 * (1 - intensity));
-    pixels[offset + 1] = Math.round(220 * intensity);
-    pixels[offset + 2] = 255;
-    pixels[offset + 3] = Math.round(25 + 125 * intensity);
+    pixels[offset] = r; pixels[offset + 1] = g; pixels[offset + 2] = b; pixels[offset + 3] = a;
   }
   imageContext.putImageData(imageData, 0, 0);
   grid._costCanvas = image;
@@ -1717,6 +1726,62 @@ function draw3dOdometry() {
   }
 }
 
+// 3D 바닥에 occupancy grid/costmap을 그린다. 타일별 affine으로 원근을 근사한다.
+function draw3dGrid(name, builder, alpha) {
+  const grid = topic(name);
+  if (!grid || !grid.width || !grid.height || !grid.resolution) return;
+  const frame = frameTransform(grid.header.frame);
+  if (!frame) return;
+  const image = builder(grid);
+  const res = grid.resolution;
+  const c0 = Math.cos(frame.yaw);
+  const s0 = Math.sin(frame.yaw);
+  const gx = frame.x + c0 * grid.origin.position.x - s0 * grid.origin.position.y;
+  const gy = frame.y + s0 * grid.origin.position.x + c0 * grid.origin.position.y;
+  const yaw = frame.yaw + yawOf(grid.origin.orientation);
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const world = (px, py) => {
+    const wx = px * res;
+    const wy = py * res;
+    return { x: gx + cy * wx - sy * wy, y: gy + sy * wx + cy * wy };
+  };
+  const tiles = name === 'map' ? 10 : 4;
+  const ratio = window.devicePixelRatio || 1;
+  context3d.save();
+  context3d.globalAlpha = alpha;
+  context3d.imageSmoothingEnabled = false;
+  for (let ty = 0; ty < tiles; ++ty) {
+    const py0 = Math.floor(ty * grid.height / tiles);
+    const py1 = Math.floor((ty + 1) * grid.height / tiles);
+    const sh = py1 - py0;
+    if (sh <= 0) continue;
+    for (let tx = 0; tx < tiles; ++tx) {
+      const px0 = Math.floor(tx * grid.width / tiles);
+      const px1 = Math.floor((tx + 1) * grid.width / tiles);
+      const sw = px1 - px0;
+      if (sw <= 0) continue;
+      const a = world(px0, py0);
+      const b = world(px1, py0);
+      const c = world(px0, py1);
+      const p0 = project3d(a.x, a.y, 0.008);
+      const p1 = project3d(b.x, b.y, 0.008);
+      const p2 = project3d(c.x, c.y, 0.008);
+      if (!p0 || !p1 || !p2) continue;
+      const m00 = (p1.x - p0.x) / sw;
+      const m10 = (p1.y - p0.y) / sw;
+      const m01 = (p2.x - p0.x) / sh;
+      const m11 = (p2.y - p0.y) / sh;
+      const m02 = p0.x - m00 * px0 - m01 * py0;
+      const m12 = p0.y - m10 * px0 - m11 * py0;
+      context3d.setTransform(m00 * ratio, m10 * ratio, m01 * ratio, m11 * ratio,
+                             m02 * ratio, m12 * ratio);
+      context3d.drawImage(image, px0, py0, sw, sh, px0, py0, sw, sh);
+    }
+  }
+  context3d.restore();
+}
+
 function draw3d() {
   const width = canvas3d.clientWidth;
   const height = canvas3d.clientHeight;
@@ -1730,6 +1795,9 @@ function draw3d() {
     }
   }
   draw3dGrid();
+  if (state.settings.map) draw3dGrid('map', mapCanvas, 1.0);
+  if (state.settings.global_costmap) draw3dGrid('global_costmap/costmap', costmapCanvas, 0.6);
+  if (state.settings.local_costmap) draw3dGrid('local_costmap/costmap', costmapCanvas, 0.7);
   draw3dAxes();
   draw3dTfAxes();
   draw3dLinkAxes();
