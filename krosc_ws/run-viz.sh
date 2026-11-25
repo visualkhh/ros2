@@ -19,7 +19,7 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists Qt6Widgets; 
 fi
 
 cmake -S "$root/krosc" -B "$root/krosc/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-      -DKROSC_BUILD_TESTS=OFF -DKROSC_BUILD_BENCH=OFF -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=OFF \
+      -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=OFF \
       -DKROSC_VIZ_PROJECT_DIR="$here/viz"
 cmake --build "$root/krosc/build" --target krosc_ws_viz_app -j"$jobs"
 
