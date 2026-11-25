@@ -355,6 +355,14 @@ aside {
     border-top: 1px solid var(--line);
   }
   #control-panel-tabs { position: sticky; top: 0; z-index: 2; }
+  /* 모바일: 레이어 버튼이 view 탭을 가리지 않게 우측 하단으로 */
+  #view-tools {
+    top: auto;
+    bottom: 10px;
+    right: 10px;
+    left: auto;
+    max-width: calc(100% - 20px);
+  }
 }
 @media (max-width: 720px) {
   header { height: auto; min-height: 48px; flex-wrap: wrap; padding: 6px 10px; gap: 8px; }
