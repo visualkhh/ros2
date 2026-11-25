@@ -203,6 +203,7 @@ struct Peer : public std::enable_shared_from_this<Peer> {
 struct PeerNetwork::Impl {
   Impl(Context& context_value, PeerNetworkOptions options_value)
       : context(context_value), options(std::move(options_value)) {}
+  ~Impl() { shutdown(); }
 
   Context& context;
   PeerNetworkOptions options;

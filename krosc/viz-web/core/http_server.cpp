@@ -208,15 +208,22 @@ struct HttpServer::Client {
   }
 
   void stop() {
-    if (!alive.exchange(false)) {
-      return;
-    }
+    // 이미 다른 경로에서 alive=false가 됐어도 writer는 반드시 join한다.
+    // (join하지 않은 std::thread가 소멸하면 std::terminate)
+    alive.store(false);
     queue_cv.notify_all();
-    ::shutdown(fd, SHUT_RDWR);
+    if (fd >= 0) {
+      ::shutdown(fd, SHUT_RDWR);
+    }
     if (writer.joinable() && writer.get_id() != std::this_thread::get_id()) {
       writer.join();
     }
-    ::close(fd);
+    if (!closed.exchange(true)) {
+      if (fd >= 0) {
+        ::close(fd);
+        fd = -1;
+      }
+    }
   }
 
   void writer_loop() {
@@ -239,8 +246,9 @@ struct HttpServer::Client {
     }
   }
 
-  int fd = -1;
+  std::atomic<int> fd{-1};
   std::atomic<bool> alive{true};
+  std::atomic<bool> closed{false};
   std::mutex queue_mutex;
   std::condition_variable queue_cv;
   std::deque<Item> queue;
