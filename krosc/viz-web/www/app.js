@@ -26,7 +26,9 @@ const state = {
     path: true,
     local_plan: true,
     robot: true,
-    tf: false,
+    tf: true,
+    odom: true,
+    filtered: true,
     urdf_visual: true,
     urdf_collision: false,
     axes: true,
@@ -834,6 +836,8 @@ const displays = [
   ['urdf_visual', 'URDF visual'],
   ['urdf_collision', 'URDF collision'],
   ['tf', 'TF axes'],
+  ['odom', 'Odom'],
+  ['filtered', 'Odometry filtered'],
 ];
 
 for (const [key, label] of displays) {
@@ -1185,6 +1189,75 @@ function drawScan() {
     const y = transform.y + sinYaw * localX + cosYaw * localY;
     const screen = worldToScreen(x, y);
     context.fillRect(screen.x - 1, screen.y - 1, 2, 2);
+  }
+}
+
+function drawYawArrow(origin, yaw, length, color, label) {
+  const tip = { x: origin.x + Math.cos(yaw) * length, y: origin.y - Math.sin(yaw) * length };
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(origin.x, origin.y);
+  context.lineTo(tip.x, tip.y);
+  context.stroke();
+  const angle = Math.atan2(tip.y - origin.y, tip.x - origin.x);
+  context.beginPath();
+  context.moveTo(tip.x, tip.y);
+  context.lineTo(tip.x - Math.cos(angle - 0.4) * 7, tip.y - Math.sin(angle - 0.4) * 7);
+  context.lineTo(tip.x - Math.cos(angle + 0.4) * 7, tip.y - Math.sin(angle + 0.4) * 7);
+  context.closePath();
+  context.fillStyle = color;
+  context.fill();
+  if (label) {
+    context.font = '11px system-ui';
+    context.fillText(label, tip.x + 6, tip.y - 4);
+  }
+}
+
+// Qt Viz와 같이 모든 TF 프레임의 x/y 축을 그린다 (2D 맵 뷰).
+function drawTfAxes() {
+  if (!state.settings.tf) return;
+  context.lineWidth = 1.2;
+  for (const frame of state.tf.keys()) {
+    const pose = lookup('map', frame);
+    if (!pose) continue;
+    const origin = worldToScreen(pose.x, pose.y);
+    const cos = Math.cos(pose.yaw);
+    const sin = Math.sin(pose.yaw);
+    const size = Math.max(0.12 * view.scale, 4);
+    context.strokeStyle = 'rgba(255, 90, 90, 0.9)';
+    context.beginPath();
+    context.moveTo(origin.x, origin.y);
+    context.lineTo(origin.x + cos * size, origin.y - sin * size);
+    context.stroke();
+    context.strokeStyle = 'rgba(90, 235, 120, 0.9)';
+    context.beginPath();
+    context.moveTo(origin.x, origin.y);
+    context.lineTo(origin.x - sin * size, origin.y - cos * size);
+    context.stroke();
+    if (frame === 'map' || frame === 'odom' || view.scale >= 90) {
+      context.fillStyle = 'rgba(190, 200, 215, 0.9)';
+      context.font = '10px system-ui';
+      context.fillText(frame, origin.x + 4, origin.y - 4);
+    }
+  }
+}
+
+// odom / odometry/filtered 위치와 방향 (Qt Viz의 분홍/하늘색 화살표).
+function drawOdometry() {
+  const sources = [
+    ['odom', 'odom', '#ff5fd2', 'odom'],
+    ['odometry/filtered', 'filtered', '#50dcff', 'filtered'],
+  ];
+  for (const [topicName, key, color, label] of sources) {
+    if (!state.settings[key]) continue;
+    const message = topic(topicName);
+    if (!message) continue;
+    const frame = frameTransform(message.header.frame);
+    if (!frame) continue;
+    const point = transformPoint(frame, message.pose.position.x, message.pose.position.y);
+    const yaw = frame.yaw + yawOf(message.pose.orientation);
+    drawYawArrow(worldToScreen(point.x, point.y), yaw, Math.max(0.35 * view.scale, 14), color, label);
   }
 }
 
@@ -1574,6 +1647,70 @@ function draw3dJointAxes() {
   }
 }
 
+// 3D: TF 프레임 축 (TF는 2D x/y/yaw만 디코드하므로 지면 근처에 그린다).
+function draw3dTfAxes() {
+  if (!state.settings.tf) return;
+  context3d.lineWidth = 1.4;
+  for (const frame of state.tf.keys()) {
+    const pose = lookup('map', frame);
+    if (!pose) continue;
+    const z = 0.04;
+    const origin = project3d(pose.x, pose.y, z);
+    if (!origin) continue;
+    const cos = Math.cos(pose.yaw);
+    const sin = Math.sin(pose.yaw);
+    const xEnd = project3d(pose.x + cos * 0.12, pose.y + sin * 0.12, z);
+    const yEnd = project3d(pose.x - sin * 0.12, pose.y + cos * 0.12, z);
+    if (xEnd) {
+      context3d.strokeStyle = 'rgba(255, 90, 90, 0.9)';
+      context3d.beginPath(); context3d.moveTo(origin.x, origin.y); context3d.lineTo(xEnd.x, xEnd.y); context3d.stroke();
+    }
+    if (yEnd) {
+      context3d.strokeStyle = 'rgba(90, 235, 120, 0.9)';
+      context3d.beginPath(); context3d.moveTo(origin.x, origin.y); context3d.lineTo(yEnd.x, yEnd.y); context3d.stroke();
+    }
+    if (frame === 'map' || frame === 'odom') {
+      context3d.fillStyle = 'rgba(190, 200, 215, 0.9)';
+      context3d.font = '11px system-ui';
+      context3d.fillText(frame, origin.x + 4, origin.y - 4);
+    }
+  }
+}
+
+function draw3dOdometry() {
+  const sources = [
+    ['odom', 'odom', '#ff5fd2', 'odom'],
+    ['odometry/filtered', 'filtered', '#50dcff', 'filtered'],
+  ];
+  for (const [topicName, key, color, label] of sources) {
+    if (!state.settings[key]) continue;
+    const message = topic(topicName);
+    if (!message) continue;
+    const frame = frameTransform(message.header.frame);
+    if (!frame) continue;
+    const point = transformPoint(frame, message.pose.position.x, message.pose.position.y);
+    const yaw = frame.yaw + yawOf(message.pose.orientation);
+    const z = 0.05;
+    const origin = project3d(point.x, point.y, z);
+    const tip = project3d(point.x + Math.cos(yaw) * 0.35, point.y + Math.sin(yaw) * 0.35, z);
+    if (!origin || !tip) continue;
+    context3d.strokeStyle = color;
+    context3d.lineWidth = 2;
+    context3d.beginPath(); context3d.moveTo(origin.x, origin.y); context3d.lineTo(tip.x, tip.y); context3d.stroke();
+    const angle = Math.atan2(tip.y - origin.y, tip.x - origin.x);
+    context3d.beginPath();
+    context3d.moveTo(tip.x, tip.y);
+    context3d.lineTo(tip.x - Math.cos(angle - 0.4) * 7, tip.y - Math.sin(angle - 0.4) * 7);
+    context3d.lineTo(tip.x - Math.cos(angle + 0.4) * 7, tip.y - Math.sin(angle + 0.4) * 7);
+    context3d.closePath();
+    context3d.fillStyle = color;
+    context3d.fill();
+    context3d.font = '11px system-ui';
+    context3d.fillStyle = color;
+    context3d.fillText(label, tip.x + 6, tip.y - 4);
+  }
+}
+
 function draw3d() {
   const width = canvas3d.clientWidth;
   const height = canvas3d.clientHeight;
@@ -1588,7 +1725,9 @@ function draw3d() {
   }
   draw3dGrid();
   draw3dAxes();
+  draw3dTfAxes();
   draw3dLinkAxes();
+  draw3dOdometry();
   draw3dScan();
   draw3dRobot();
   draw3dJointAxes();
@@ -1660,6 +1799,8 @@ function render() {
   if (state.settings.path) drawPath(topic('plan'), '#6aa9ff', 2);
   if (state.settings.local_plan) drawPath(topic('local_plan'), '#54d18c', 1.5);
   drawScan();
+  drawTfAxes();
+  drawOdometry();
   drawGoal();
   drawRobot();
   requestAnimationFrame(render);
