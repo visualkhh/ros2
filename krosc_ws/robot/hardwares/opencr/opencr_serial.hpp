@@ -51,6 +51,7 @@ class OpenCrSerial {
   void write(const krosc::msgs::Twist& command);
   void write_arm(const std::array<double, 5>& position);  // NaN = 그 관절 유지
   void set_arm_torque(bool enabled);
+  void buzzer(int frequency_hz, int duration_ms);  // B,<Hz>,<ms>
   // AR: 고른 DYNAMIXEL을 reboot해 Hardware Error를 지운다. true=joint1..4/gripper.
   void reboot_arm(const std::array<bool, 5>& joints);
   void reboot_arm_all();

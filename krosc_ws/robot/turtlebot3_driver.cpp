@@ -47,6 +47,26 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
   arm_torque_subscription_ = subscribe<krosc::msgs::Bool>(
       "arm_torque", [this](const krosc::msgs::Bool& message) { robot_.opencr().set_arm_torque(message.data); },
       krosc::QOS_DEFAULT);
+  buzzer_subscription_ = subscribe<krosc::msgs::String>(
+      "buzzer",
+      [this](const krosc::msgs::String& message) {
+        // "Hz,ms" 또는 "Hz" (기본 150ms)
+        int frequency = 2000;
+        int duration = 150;
+        try {
+          const auto comma = message.data.find(',');
+          if (comma == std::string::npos) {
+            frequency = std::stoi(message.data);
+          } else {
+            frequency = std::stoi(message.data.substr(0, comma));
+            duration = std::stoi(message.data.substr(comma + 1));
+          }
+        } catch (const std::exception&) {
+          return;
+        }
+        robot_.opencr().buzzer(frequency, duration);
+      },
+      krosc::QOS_DEFAULT);
   arm_stop_subscription_ = subscribe<krosc::msgs::Empty>(
       "arm_stop",
       [this](const krosc::msgs::Empty&) {

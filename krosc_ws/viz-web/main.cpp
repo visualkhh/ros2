@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
   krosc::viz_web::VizWebPluginRegistry registry;
   krosc::viz_web::register_core_web_plugins(registry,
                                             {"slam", "navigation", "teleop", "diagnostics"});
+  registry.add("opencr", "OpenCR", "/plugins/opencr.js");
   registry.add("moveit", "MoveIt", "/plugins/moveit.js");
   registry.add("rl_nav", "RL Nav", "/plugins/rl_nav.js");
   registry.add("manipulator", "Manipulator", "/plugins/manipulator.js");

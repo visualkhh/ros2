@@ -34,6 +34,7 @@ class TurtleBot3Driver final : public krosc::Node {
   double last_arm_status_ = 0.0;
   krosc::Subscription<krosc::msgs::Bool> arm_torque_subscription_;
   krosc::Subscription<krosc::msgs::Empty> arm_stop_subscription_;
+  krosc::Subscription<krosc::msgs::String> buzzer_subscription_;
   krosc::Subscription<krosc::msgs::String> arm_reset_subscription_;
 };
 

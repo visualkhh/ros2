@@ -124,6 +124,12 @@ void OpenCrSerial::send_arm_line(const std::array<double, 5>& position) {
   (void)write_command(line);
 }
 
+void OpenCrSerial::buzzer(int frequency_hz, int duration_ms) {
+  const int frequency = std::clamp(frequency_hz, 100, 8000);
+  const int duration = std::clamp(duration_ms, 10, 2000);
+  (void)write_command("B," + std::to_string(frequency) + "," + std::to_string(duration));
+}
+
 void OpenCrSerial::set_arm_torque(bool enabled) {
   if (!enabled) {
     // 토크를 끄면 유지 목표도 버린다. 다시 켰을 때 옛 목표로 튀지 않게.
