@@ -272,21 +272,37 @@ bool RlNavController::load_policy_locked(const std::string& model, std::string& 
   try {
     ml::OnnxPolicy candidate;
     candidate.load(path);
-    const std::int64_t expected = 2LL * lookahead_.value() + lidar_rays_.value() + 5;
-    if ((candidate.inputs() != expected && candidate.inputs() != expected + 1) ||
-        candidate.outputs() != 2) {
+    // 관측 = waypoint(2*lookahead) + ray(모델마다 다름) + [v, w, gyro, a0, a1] + (선택) inflation.
+    // 정책 입력 크기에서 ray 수를 역산해 Isaac(360 rays)과 기존 rl_maze(36 rays)를 모두 지원한다.
+    const std::int64_t look = lookahead_.value();
+    const std::int64_t configured = lidar_rays_.value();
+    const std::int64_t inputs = candidate.inputs();
+    std::int64_t rays = 0;
+    bool inflation = false;
+    if (inputs == 2 * look + configured + 5) {
+      rays = configured;
+    } else if (inputs == 2 * look + configured + 6) {
+      rays = configured;
+      inflation = true;
+    } else {
+      rays = inputs - 2 * look - 5;
+    }
+    if (rays < 8 || rays > 2048 || candidate.outputs() != 2) {
       std::ostringstream stream;
-      stream << "정책 입출력이 맞지 않는다: input=" << candidate.inputs()
-             << " output=" << candidate.outputs() << " (기대 " << expected << " 또는 "
-             << expected + 1 << " → 2)";
+      stream << "정책 입출력이 맞지 않는다: input=" << inputs << " output=" << candidate.outputs()
+             << " (ray " << rays << " → 2)";
       error = stream.str();
       policy_error_ = error;
       return false;
     }
     policy_ = std::move(candidate);
+    active_rays_ = rays;
+    inflation_feature_ = inflation;
     current_model_ = model;
-    node_->logger().info("RL ONNX loaded: %s (obs %lld → %lld)", path.c_str(),
-                  static_cast<long long>(policy_.inputs()), static_cast<long long>(policy_.outputs()));
+    node_->logger().info("RL ONNX loaded: %s (obs %lld = %lld rays%s → %lld)", path.c_str(),
+                  static_cast<long long>(policy_.inputs()), static_cast<long long>(active_rays_),
+                  inflation_feature_ ? " + inflation" : "",
+                  static_cast<long long>(policy_.outputs()));
     return true;
   } catch (const std::exception& exception) {
     error = exception.what();
@@ -364,7 +380,8 @@ std::vector<float> RlNavController::waypoints(const Pose2& pose,
 
 std::vector<float> RlNavController::scan_rays(const krosc::msgs::LaserScan& scan, double laser_yaw,
                                                double inflation) const {
-  const std::int64_t rays = lidar_rays_.value();
+  // 모델 입력 크기에 맞춰 ray 수를 정한다. 파라미터(기본 36)와 다르면 로드 시 계산된 값을 쓴다.
+  const std::int64_t rays = active_rays_ > 0 ? active_rays_ : lidar_rays_.value();
   const double max_range = lidar_max_.value();
   std::vector<float> out;
   out.reserve(static_cast<std::size_t>(rays));
@@ -412,7 +429,9 @@ void RlNavController::publish_status_locked(const Velocity& command, int reason,
     stream << "enable=" << (enable_.value() ? 1 : 0)
            << ";fallback=" << fallback_controller_.value()
            << ";model=" << (current_model_.empty() ? "-" : current_model_)
-           << ";policy=" << (policy_.loaded() ? 1 : 0) << ";scan=" << (scan_ok ? 1 : 0)
+           << ";policy=" << (policy_.loaded() ? 1 : 0)
+           << ";rays=" << (active_rays_ > 0 ? active_rays_ : lidar_rays_.value())
+           << ";scan=" << (scan_ok ? 1 : 0)
            << ";scan_age=" << scan_age << ";scan_min=" << minimum
            << ";odom=1;plan=1"
            << ";v=" << command.linear << ";w=" << command.angular << ";a0=" << prev_action_[0]
@@ -537,7 +556,7 @@ RlNavController::Velocity RlNavController::compute_velocity_commands(
   observation.push_back(static_cast<float>(gyro / max_angular));
   observation.push_back(prev_action_[0]);
   observation.push_back(prev_action_[1]);
-  if (policy_.inputs() >= 52) {
+  if (inflation_feature_) {
     observation.push_back(static_cast<float>(inflation / inflation_scale_.value()));
   }
   if (static_cast<std::int64_t>(observation.size()) != policy_.inputs()) {

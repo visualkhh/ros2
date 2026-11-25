@@ -90,6 +90,9 @@ class RlNavController final : public krosc::nodes::nav2::NavControllerPlugin {
   ml::OnnxPolicy policy_;
   std::string policy_error_;
   std::string current_model_;
+  // 정책 입력 크기에서 역산한 관측 구성 (모델마다 lidar ray 수가 다를 수 있다).
+  std::int64_t active_rays_ = 0;
+  bool inflation_feature_ = false;
   std::vector<std::string> model_names_;
   std::shared_ptr<const krosc::msgs::LaserScan> scan_;
   double scan_time_ = -1e18;
