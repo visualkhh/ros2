@@ -58,7 +58,22 @@ export function init(host) {
     ];
   }
 
-  // 쿼터니언 → 3x3 회전행렬 (목표 자세의 평면에 링을 그리기 위해)
+  // 로컬 입력값(위치/pitch)으로 목표 자세 행렬을 만든다.
+  // 드래그 중에는 서버 응답을 기다리지 않고 이 값으로 원반을 즉시 회전시킨다.
+  function localRotation(x, y, pitchDegrees) {
+    const pitch = pitchDegrees * Math.PI / 180.0;
+    const yaw = Math.atan2(y + 0.000230, x - 0.059985);
+    const cy = Math.cos(yaw);
+    const sy = Math.sin(yaw);
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+    // Rz(yaw) * Ry(pitch)
+    return [
+      [cy * cp, -sy, cy * sp],
+      [sy * cp, cy, sy * sp],
+      [-sp, 0, cp],
+    ];
+  }
   function quatToMatrix(quaternion) {
     if (!quaternion || ![quaternion.x, quaternion.y, quaternion.z, quaternion.w].every(Number.isFinite)) {
       return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -256,7 +271,8 @@ export function init(host) {
       // 드래그 중에는 네트워크 왕복을 기다리지 않고 입력값으로 즉시 그린다 (Qt와 동일한 반응).
       let pose = target ? target.pose.position : null;
       let orientation = target ? target.pose.orientation : null;
-      if (draggingTarget || performance.now() - lastLocalEdit < 250) {
+      const local = draggingTarget || performance.now() - lastLocalEdit < 250;
+      if (local) {
         pose = { x: Number(xInput.value), y: Number(yInput.value), z: Number(zInput.value) };
       }
       if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y) && Number.isFinite(pose.z)) {
@@ -264,7 +280,9 @@ export function init(host) {
         if (point) {
           targetScreenPoint = point;
           // Qt Viz처럼 목표 자세 평면에 놓인 동그란 판(링) + 3축으로 그린다.
-          const r = quatToMatrix(orientation);
+          // 드래그/입력 중에는 로컬 pitch로 즉시 회전한다 (응답 대기 없음).
+          const r = local ? localRotation(pose.x, pose.y, Number(pitchInput.value) || 0)
+                          : quatToMatrix(orientation);
           const toWorld = (local) => ({
             x: pose.x + r[0][0] * local[0] + r[0][1] * local[1] + r[0][2] * local[2],
             y: pose.y + r[1][0] * local[0] + r[1][1] * local[1] + r[1][2] * local[2],
@@ -407,7 +425,7 @@ export function init(host) {
     const localX = event.clientX - rect.left;
     const localY = event.clientY - rect.top;
     const hit = targetScreenPoint !== null &&
-      Math.hypot(localX - targetScreenPoint.x, localY - targetScreenPoint.y) <= 20;
+      Math.hypot(localX - targetScreenPoint.x, localY - targetScreenPoint.y) <= 34;
     dragView = true;
     dragMode = event.button === 2 || !hit ? 'orbit'
       : event.altKey ? 'grip'
