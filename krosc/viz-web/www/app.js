@@ -1727,7 +1727,7 @@ function draw3dOdometry() {
 }
 
 // 3D 바닥에 occupancy grid/costmap을 그린다. 타일별 affine으로 원근을 근사한다.
-function draw3dGrid(name, builder, alpha) {
+function draw3dOccupancyGrid(name, builder, alpha) {
   const grid = topic(name);
   if (!grid || !grid.width || !grid.height || !grid.resolution) return;
   const frame = frameTransform(grid.header.frame);
@@ -1795,9 +1795,9 @@ function draw3d() {
     }
   }
   draw3dGrid();
-  if (state.settings.map) draw3dGrid('map', mapCanvas, 1.0);
-  if (state.settings.global_costmap) draw3dGrid('global_costmap/costmap', costmapCanvas, 0.6);
-  if (state.settings.local_costmap) draw3dGrid('local_costmap/costmap', costmapCanvas, 0.7);
+  if (state.settings.map) draw3dOccupancyGrid('map', mapCanvas, 1.0);
+  if (state.settings.global_costmap) draw3dOccupancyGrid('global_costmap/costmap', costmapCanvas, 0.6);
+  if (state.settings.local_costmap) draw3dOccupancyGrid('local_costmap/costmap', costmapCanvas, 0.7);
   draw3dAxes();
   draw3dTfAxes();
   draw3dLinkAxes();
