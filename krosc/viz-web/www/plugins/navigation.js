@@ -60,10 +60,14 @@ export function init(host) {
     host.setMultiGoal(multi);
     updateUi();
   });
-  button(multiRow, 'Send', () => {
+  const sendButton = button(multiRow, 'Send', () => {
+    if (!multi) {
+      setLevel(status, '단일 goal은 2D Goal을 켜고 맵을 클릭', 'warn');
+      return;
+    }
     const count = host.waypointCount();
     if (count === 0) {
-      setLevel(status, 'waypoint가 없다', 'warn');
+      setLevel(status, 'waypoint가 없다 — 맵을 클릭해 추가', 'warn');
       return;
     }
     if (slamMode !== 'localization') {
@@ -74,7 +78,7 @@ export function init(host) {
     setLevel(status, preview ? `preview ${count} goals (경로만 표시)` : `sent ${count} goals`,
              preview ? 'warn' : 'ok');
   }, 'primary');
-  button(multiRow, 'Clear', () => {
+  const clearButton = button(multiRow, 'Clear', () => {
     host.clearWaypoints();
     host.sendBool('cancel_goal', true);
     setLevel(status, 'goals cleared', 'warn');
@@ -88,6 +92,8 @@ export function init(host) {
     poseButton.className = poseArmed ? 'primary' : '';
     goalButton.className = armed ? 'primary' : '';
     multiButton.className = multi ? 'primary' : '';
+    sendButton.disabled = !multi;
+    clearButton.disabled = !multi;
     if (multi) {
       hint.textContent =
         '맵을 누른 채 드래그 = waypoint + 방향 · 클릭만 하면 방향 0 · Backspace = 마지막 취소 · Send로 전송';
