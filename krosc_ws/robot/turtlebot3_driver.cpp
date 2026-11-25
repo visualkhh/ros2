@@ -144,6 +144,32 @@ void TurtleBot3Driver::publish_arm_status() {
       text += std::to_string(static_cast<int>(std::lround(arm.temperature[i])));
     }
   }
+  text += ";pos=";
+  for (std::size_t i = 0; i < arm.position.size(); ++i) {
+    if (i != 0) {
+      text += ",";
+    }
+    char buffer[24];
+    if (!std::isfinite(arm.position[i])) {
+      text += "x";
+    } else {
+      std::snprintf(buffer, sizeof(buffer), "%.3f", arm.position[i]);
+      text += buffer;
+    }
+  }
+  text += ";cur=";
+  for (std::size_t i = 0; i < arm.current.size(); ++i) {
+    if (i != 0) {
+      text += ",";
+    }
+    char buffer[24];
+    if (!std::isfinite(arm.current[i])) {
+      text += "x";
+    } else {
+      std::snprintf(buffer, sizeof(buffer), "%.2f", arm.current[i]);
+      text += buffer;
+    }
+  }
   publish("arm_status", krosc::msgs::String{text}, krosc::QOS_DEFAULT);
 }
 
