@@ -58,47 +58,6 @@ button, select, input, label, .view-tab, .view-tool, .btn-row, .panel h2, .field
 .btn-row button { touch-action: none; }
 #scene, #scene3d { touch-action: none; }
 
-/* 모바일 가상 조이스틱 */
-.joystick {
-  display: none;
-  position: absolute;
-  left: 20px;
-  bottom: 56px;
-  width: 132px;
-  height: 132px;
-  border-radius: 50%;
-  background: rgba(20, 28, 40, 0.6);
-  border: 2px solid rgba(120, 160, 220, 0.55);
-  touch-action: none;
-  z-index: 6;
-}
-.joystick-knob {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 54px;
-  height: 54px;
-  margin: -27px 0 0 -27px;
-  border-radius: 50%;
-  background: rgba(84, 209, 140, 0.75);
-  border: 2px solid #54d18c;
-  pointer-events: none;
-}
-.joystick-stop {
-  display: none;
-  position: absolute;
-  left: 56px;
-  bottom: 200px;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: #7a2a2a;
-  border: 2px solid #9c3a3a;
-  color: #fff;
-  font-weight: 700;
-  touch-action: none;
-  z-index: 6;
-}
 button.primary { background: #1f6b43; border-color: #2f8a59; }
 button.danger { background: #7a2a2a; border-color: #9c3a3a; }
 input[type="checkbox"] { accent-color: var(--accent); }
@@ -363,6 +322,10 @@ aside {
     left: auto;
     max-width: calc(100% - 20px);
   }
+}
+@media (pointer: coarse) {
+  /* 텔레옵 버튼을 모바일에서 누르기 쉽게 */
+  .btn-row button { min-height: 46px; font-size: 16px; }
 }
 @media (max-width: 720px) {
   header { height: auto; min-height: 48px; flex-wrap: wrap; padding: 6px 10px; gap: 8px; }

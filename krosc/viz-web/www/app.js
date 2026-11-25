@@ -1077,85 +1077,6 @@ canvas3d.id = 'scene3d';
 view3d.panel.append(canvas3d);
 const context3d = canvas3d.getContext('2d');
 
-// 모바일(터치)용 가상 조이스틱 — 3D/맵 뷰 위에서 주행
-function setupJoystick() {
-  const container = document.getElementById('view-panels');
-  if (!container) return;
-  const stick = document.createElement('div');
-  stick.className = 'joystick';
-  const knob = document.createElement('div');
-  knob.className = 'joystick-knob';
-  stick.append(knob);
-  const stop = document.createElement('button');
-  stop.type = 'button';
-  stop.className = 'joystick-stop';
-  stop.textContent = 'STOP';
-  container.append(stick, stop);
-  if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) {
-    return;  // 데스크톱은 키보드 사용
-  }
-  stick.style.display = 'block';
-  stop.style.display = 'block';
-
-  let active = false;
-  let pointerId = null;
-  let timer = null;
-  let linear = 0;
-  let angular = 0;
-  const radius = 44;
-
-  const send = () => sendTwist('cmd_vel', linear, angular);
-  const stopMotion = () => {
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-    linear = 0;
-    angular = 0;
-    knob.style.transform = 'translate(0px, 0px)';
-    sendTwist('cmd_vel', 0, 0);
-  };
-  const update = (event) => {
-    const rect = stick.getBoundingClientRect();
-    let dx = event.clientX - (rect.left + rect.width / 2);
-    let dy = event.clientY - (rect.top + rect.height / 2);
-    const distance = Math.hypot(dx, dy);
-    if (distance > radius) {
-      dx = dx * radius / distance;
-      dy = dy * radius / distance;
-    }
-    knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    linear = -(dy / radius) * 0.18;   // 최대 0.18 m/s
-    angular = -(dx / radius) * 0.9;   // 최대 0.9 rad/s
-  };
-  stick.addEventListener('pointerdown', (event) => {
-    active = true;
-    pointerId = event.pointerId;
-    try { stick.setPointerCapture(event.pointerId); } catch (error) { /* 합성 이벤트 */ }
-    update(event);
-    if (!timer) timer = setInterval(send, 50);
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  stick.addEventListener('pointermove', (event) => {
-    if (!active || event.pointerId !== pointerId) return;
-    update(event);
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  const end = (event) => {
-    if (!active) return;
-    active = false;
-    pointerId = null;
-    stopMotion();
-    event.preventDefault();
-  };
-  stick.addEventListener('pointerup', end);
-  stick.addEventListener('pointercancel', end);
-  stop.addEventListener('click', () => stopMotion());
-  window.addEventListener('blur', stopMotion);
-}
-setupJoystick();
 
 const view = { cx: 0, cy: 0, scale: 60 };
 const camera3d = { yaw: -0.55, pitch: 0.62, distance: 2.4, tx: 0, ty: 0 };
@@ -2287,7 +2208,11 @@ canvas3d.addEventListener('pointerdown', (event) => {
   try { canvas3d.setPointerCapture(event.pointerId); } catch (error) { /* 합성 이벤트 */ }
   if (pointers3d.size === 2) {
     const [a, b] = [...pointers3d.values()];
-    pinch3d = { distance: Math.hypot(a.x - b.x, a.y - b.y) };
+    pinch3d = {
+      distance: Math.hypot(a.x - b.x, a.y - b.y),
+      midX: (a.x + b.x) / 2,
+      midY: (a.y + b.y) / 2,
+    };
     drag3d = false;
     event.preventDefault();
     return;
@@ -2310,6 +2235,22 @@ canvas3d.addEventListener('pointermove', (event) => {
       camera3d.distance = Math.max(0.6, Math.min(12.0, camera3d.distance * (pinch3d.distance / distance)));
     }
     pinch3d.distance = distance;
+    // 두 손가락 중점 이동 = 화면(맵) pan
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    if (Number.isFinite(pinch3d.midX) && Number.isFinite(pinch3d.midY)) {
+      const dx = midX - pinch3d.midX;
+      const dy = midY - pinch3d.midY;
+      const step = camera3d.distance * 0.0016;
+      const cy = Math.cos(camera3d.yaw);
+      const sy = Math.sin(camera3d.yaw);
+      camera3d.tx -= (cy * dx + sy * dy) * step;
+      camera3d.ty -= (sy * dx - cy * dy) * step;
+      const follow = document.getElementById('follow');
+      if (follow) follow.checked = false;
+    }
+    pinch3d.midX = midX;
+    pinch3d.midY = midY;
     event.preventDefault();
     return;
   }
