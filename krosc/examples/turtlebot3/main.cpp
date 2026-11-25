@@ -14,7 +14,6 @@
 #include "krosc/context.hpp"
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
-#include "krosc/net.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/sim/maze_world.hpp"
 #include "krosc/sim/runner.hpp"
@@ -93,7 +92,16 @@ int main(int argc, char** argv) {
   krosc::Context::Options options;
   options.time_source = time_source;
   options.name = "krosc_turtlebot3";
+  if (server_port > 0) {
+    // 원격 Viz는 PeerNetwork로 붙는다 (net::Server 아님).
+    options.network.name = "krosc_turtlebot3";
+    options.network.host = "0.0.0.0";
+    options.network.port = static_cast<std::uint16_t>(server_port);
+  }
   krosc::Context context(options);
+  if (const auto* peer = context.peer_network()) {
+    std::printf("[krosc] network peer listen: 0.0.0.0:%d\n", static_cast<int>(peer->port()));
+  }
 
   krosc::sim::MazeWorld world(10, 42);
   auto robot_holder = std::make_unique<krosc::sim::TurtleBot3>(noisy, 42);
@@ -102,16 +110,6 @@ int main(int argc, char** argv) {
   const std::string urdf = read_text(KROSC_TURTLEBOT3_URDF);
   if (urdf.empty()) {
     std::cerr << "URDF를 읽지 못했다: " << KROSC_TURTLEBOT3_URDF << "\n";
-  }
-
-  std::unique_ptr<krosc::net::Server> server;
-  if (server_port > 0) {
-    try {
-      server = std::make_unique<krosc::net::Server>(context, static_cast<std::uint16_t>(server_port));
-      std::printf("[krosc] network server: 0.0.0.0:%d\n", static_cast<int>(server->port()));
-    } catch (const std::exception& error) {
-      std::fprintf(stderr, "[krosc] network server failed: %s\n", error.what());
-    }
   }
 
   krosc::examples::RobotBridge bridge(context, *robot);
@@ -189,9 +187,6 @@ int main(int argc, char** argv) {
 
   const int result = application.exec();
   runner.stop();
-  if (server) {
-    server->shutdown();
-  }
   context.shutdown();
   return result;
 }

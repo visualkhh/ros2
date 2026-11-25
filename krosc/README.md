@@ -8,7 +8,7 @@
 | `core/` | ROS 프레임워크: Node, 토픽+QoS, TF, 타이머, 파라미터, 서비스, 메시지, URDF, 기본 노드, **PeerNetwork 토픽 mesh(9000)** |
 | `sim/` | **진실 시뮬레이션**: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, Snapshot, **Qt SimWindow** |
 | `viz/` | **토픽 뷰어**: rviz 스타일 Qt 화면 (TF, map, costmap, scan, odom/filtered, 경로, 로그, 패널, teleop, **URDF visual STL 메시**) + **원격 `--server` 모드** |
-| `web/` | **브라우저 Viz**: 로봇에서 HTTP+WebSocket으로 프레임을 중계하고, `www/plugins/*.js`로 패널을 붙이는 경량 웹 게이트웨이 |
+| `viz-web/` | **브라우저 Viz**: 로봇과 `PeerNetwork`로 토픽을 주고받고 HTTP+WebSocket으로 브라우저에 넘기는 경량 웹 게이트웨이. `www/plugins/*.js`로 패널을 붙인다 |
 | `examples/turtlebot3/` | sim + viz + EKF를 한 프로세스에서 같이 돌리는 데모 (`--server`로 원격 viz 테스트 가능) |
 | `../krosc_ws/` | **실기 Pi 워크스페이스**: OpenCR/LDS-03 C++ 드라이버, EKF, 원격 viz 서버 (`krosc`를 링크) |
 
@@ -59,6 +59,7 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 ```bash
 ./krosc_real --port 9000                    # 로봇 앱 (PeerNetwork listen)
 ./krosc_viz_web --robot 127.0.0.1:9000 --port 8080
+# krosc_ws 워크스페이스에서는 프로젝트 플러그인이 붙은 krosc_ws_viz_web을 쓴다 (run-viz-web.sh)
 ```
 
 - Viz/VizWeb은 자기 `Context`/`net::Client`를 만들지 않는다. app main이 `Krosc`를 만들고
@@ -138,7 +139,7 @@ MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed
 
 ```
 krosc/
-├── CMakeLists.txt                 # 최상위 (engine, sim, web, viz, examples)
+├── CMakeLists.txt                 # 최상위 (engine, sim, viz-web, viz, examples)
 ├── engine/                        # krosc_core (표준 라이브러리만)
 │   ├── CMakeLists.txt
 │   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/action/msgs
@@ -146,7 +147,7 @@ krosc/
 │   │   ├── ros2_control/          # controller_manager, JSB/JTC/forward/diff_drive
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 43 tests (nav2/ros2_control/MoveIt 포함)
+│   ├── tests/                     # core 51 tests (nav2/ros2_control/MoveIt/net 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp
 ├── sim/                           # krosc_sim (+ krosc_sim_qt)
 │   ├── CMakeLists.txt
@@ -307,7 +308,7 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)와 `kros/benchmarks/nav2_ben
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 43 + sim 3 = 46 tests, 2 executables
+# core 51 + sim 3 = 54 tests, 2 executables
 ```
 
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver

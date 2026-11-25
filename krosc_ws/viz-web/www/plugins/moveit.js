@@ -488,8 +488,17 @@ export function init(host) {
     } else if (dragMode === 'pitch') {
       pitchInput.value = clamp(Number(pitchInput.value) + dx * 0.25, -90, 90).toFixed(2);
     } else {
-      xInput.value = clamp(Number(xInput.value) + dx * step, -0.15, 0.55).toFixed(4);
-      yInput.value = clamp(Number(yInput.value) - dy * step, -0.35, 0.35).toFixed(4);
+      // 화면에서 끈 방향 그대로 TCP가 따라오도록 현재 카메라 yaw/pitch 기준으로
+      // 월드 XY를 계산한다. 카메라를 돌린 뒤에도 '보고 있는 화면' 기준으로 움직인다.
+      const cy = Math.cos(camera.yaw);
+      const sy = Math.sin(camera.yaw);
+      const cp = Math.cos(camera.pitch);
+      const right = dx * step;
+      const down = (dy / Math.max(0.2, cp)) * step;
+      const moveX = cy * right + sy * down;
+      const moveY = sy * right - cy * down;
+      xInput.value = clamp(Number(xInput.value) + moveX, -0.15, 0.55).toFixed(4);
+      yInput.value = clamp(Number(yInput.value) + moveY, -0.35, 0.35).toFixed(4);
     }
     // 드래그 중에는 네트워크로 보내지 않는다. 마커는 로컬 입력값으로 즉시 움직이고
     // (draw()가 draggingTarget일 때 입력값을 그린다), 손을 뗄 때 한 번만 보낸다.

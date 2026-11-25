@@ -61,9 +61,9 @@ SLAM/Map, Navigation, MoveIt, RL 도킹이 기본으로 붙는다. 텔레옵/매
 `--teleop`, `--manipulator`, `--manual`로 추가한다. 추가 인자는 그대로 viz에 넘긴다:
 `./run-viz.sh --screenshot /tmp/viz.png --duration 3`, `./run-viz.sh --no-moveit`.
 
-기본 플러그인은 `project_panel,slam,navigation,moveit,rl_nav`이며
+기본 플러그인은 `project_panel,slam,navigation,moveit,rl_nav,opencr`이며
 `KROSC_VIZ_PLUGINS`로 바꿀 수 있다. 코어 플러그인은 `teleop`, `slam`, `navigation`,
-`manipulator`이고 프로젝트 플러그인은 `project_panel`, `moveit`, `rl_nav`다.
+`manipulator`이고 프로젝트 플러그인은 `project_panel`, `moveit`, `rl_nav`, `opencr`다.
 
 Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 
@@ -243,7 +243,7 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 
 ### 웹 Viz (krosc_ws/viz-web)
 
-`krosc/viz-web` 코어를 링크하고 프로젝트 플러그인(`moveit`, `rl_nav`)을 추가한다.
+`krosc/viz-web` 코어를 링크하고 프로젝트 플러그인(`opencr`, `moveit`, `rl_nav`, `manipulator`)을 추가한다.
 
 ```bash
 ./run-viz-web.sh                 # http://localhost:8080/, robot pak.local:9000
@@ -255,7 +255,8 @@ KROSC_VIZ_HOST=10.2.150.138 ./run-viz-web.sh
 - `krosc_ws_viz_web` = `krosc::viz_web` 코어 + 프로젝트 레지스트리
 - 내보낼 토픽은 `VizWebOptions::forward_topics`로 정한다. 코어 기본 목록 +
   프로젝트 main이 추가한 `moveit_*`/`rl_nav_*` 토픽이 브라우저로 간다.
-- 프로젝트 JS: `krosc_ws/viz-web/www/plugins/{moveit,rl_nav}.js`
+- 프로젝트 JS: `krosc_ws/viz-web/www/plugins/{opencr,moveit,rl_nav,manipulator}.js`
+  (OpenCR 패널은 이 로봇 전용이라 코어 www가 아니라 프로젝트 www에 둔다)
 - 정적 파일은 프로젝트 www → 코어 www 순으로 찾는다 (`VizWebOptions::overlay_root`)
 - `/plugins.json`은 main이 등록한 레지스트리에서 동적으로 생성된다
 - 코어 Viz 플러그인: `krosc/viz/plugins/teleop_plugin.cpp`(주행 텔레옵),

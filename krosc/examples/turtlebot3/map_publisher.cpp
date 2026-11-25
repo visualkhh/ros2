@@ -19,6 +19,9 @@ constexpr double kMargin = 0.25;
 MapPublisher::MapPublisher(krosc::Context& context, const std::vector<krosc::sim::Wall>& walls, std::string name)
     : Node(context, std::move(name)), static_tf_(*this) {
   publish_map(walls);
+  // 데모는 미리 아는 지도 + map→odom 정적 TF를 쓰므로 localization 상태로 알린다.
+  // (Viz/웹은 slam_status가 idle이면 래치된 옛 지도를 숨긴다.)
+  publish("slam_status", krosc::msgs::String{"localization"}, krosc::QOS_LATCHED);
   krosc::msgs::TransformStamped map_to_odom;
   map_to_odom.header.stamp = now();
   map_to_odom.header.frame_id = "map";
