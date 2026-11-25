@@ -105,6 +105,7 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   splitter->setChildrenCollapsible(false);
   splitter->setHandleWidth(5);
   tabs_ = new QTabWidget(splitter);
+  tabs_->setObjectName("view-panel");
   auto* tabs = tabs_;
   scene_ = new SceneView(model_, tabs);
   scene_->setObjectName("scene");
@@ -125,9 +126,17 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   panel_scroll->setWidget(panel);
   splitter->addWidget(panel_scroll);
   splitter->addWidget(tabs);
+  control_tabs_ = new QTabWidget(splitter);
+  control_tabs_->setObjectName("control-panel");
+  control_tabs_->setMinimumWidth(320);
+  control_tabs_->setMaximumWidth(760);
+  control_tabs_->setDocumentMode(true);
+  control_tabs_->hide();
+  splitter->addWidget(control_tabs_);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
-  splitter->setSizes({390, 1050});
+  splitter->setStretchFactor(2, 0);
+  splitter->setSizes({360, 780, 360});
   layout->addWidget(splitter, 1);
   setCentralWidget(central);
   statusBar()->showMessage(scene_->help_text());
@@ -312,18 +321,28 @@ void VizWindow::build_panel(QWidget* panel) {
 
 
 void VizWindow::add_dock(QDockWidget* dock, Qt::DockWidgetArea area) {
+  (void)area;
   if (dock == nullptr) {
     return;
   }
-  // 플러그인 패널이 세로로 길어도 창 자체는 자유롭게 줄일 수 있게 스크롤로 감싼다.
-  if (auto* content = dock->widget();
-      content != nullptr && qobject_cast<QScrollArea*>(content) == nullptr) {
-    auto* scroll = new QScrollArea(dock);
+  if (control_tabs_ != nullptr) {
+    // 플러그인 dock은 오른쪽 control-panel 탭으로 옮긴다. dock 객체는 플러그인이
+    // shutdown에서 deleteLater()할 수 있게 빈 껍데기로 남겨 둔다.
+    QWidget* content = dock->widget();
+    if (content == nullptr) {
+      return;
+    }
+    auto* scroll = new QScrollArea(control_tabs_);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->setWidget(content);
-    dock->setWidget(scroll);
+    const int index = control_tabs_->addTab(scroll, dock->windowTitle());
+    control_tabs_->setCurrentIndex(index);
+    control_tabs_->show();
+    dock->hide();
+    dock->setParent(this);
+    return;
   }
   addDockWidget(area, dock);
 }
@@ -356,6 +375,9 @@ void VizWindow::load_plugins(VizPluginRegistry& registry, const std::vector<std:
                  info.version.c_str());
     plugin->initialize(*this);
     plugins_.push_back(std::move(plugin));
+  }
+  if (control_tabs_ != nullptr && control_tabs_->count() > 0) {
+    control_tabs_->setCurrentIndex(0);
   }
 }
 

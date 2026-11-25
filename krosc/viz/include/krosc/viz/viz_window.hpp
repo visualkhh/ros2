@@ -59,6 +59,7 @@ class VizWindow : public QMainWindow, public VizHost {
   std::vector<std::unique_ptr<IVizPlugin>> plugins_;
   SceneView* scene_ = nullptr;
   QTabWidget* tabs_ = nullptr;
+  QTabWidget* control_tabs_ = nullptr;
   MapView2D* map_view_ = nullptr;
   QComboBox* fixed_frame_ = nullptr;
   QTableWidget* table_ = nullptr;

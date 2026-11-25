@@ -332,6 +332,18 @@ function sendBool(topicName, value) {
 function sendEmpty(topicName) {
   return sendBinary(topicName, 14, []);
 }
+function sendJointState(topicName, names, positions) {
+  const writer = new Writer();
+  writer.f64(Date.now() / 1000);
+  writer.str('');
+  writer.u32(names.length);
+  for (const name of names) writer.str(name);
+  writer.u32(positions.length);
+  for (const position of positions) writer.f64(position);
+  writer.u32(0);
+  writer.u32(0);
+  return sendBinary(topicName, 7, writer.data);
+}
 function sendTwist(topicName, linear, angular) {
   const writer = new Writer();
   writer.f64(linear); writer.f64(0); writer.f64(0);
@@ -374,6 +386,26 @@ function toast(message) {
 }
 
 let currentPluginView = null;
+const viewRegistry = new Map();
+let activeView = null;
+
+function activateView(id) {
+  const selected = viewRegistry.get(id);
+  if (!selected) {
+    return;
+  }
+  activeView = id;
+  for (const item of viewRegistry.values()) {
+    item.tab.classList.toggle('active', item.id === id);
+    item.panel.classList.toggle('active', item.id === id);
+  }
+  $('hint').textContent = id === '3d'
+    ? 'left drag orbit · right/shift drag pan · wheel zoom · WASD teleop'
+    : 'drag pan · wheel zoom · click 2D goal · WASD teleop';
+  if (typeof resizeCanvas === 'function') {
+    resizeCanvas();
+  }
+}
 
 const host = {
   onTopic,
@@ -382,11 +414,40 @@ const host = {
   sendBool,
   sendEmpty,
   sendTwist,
+  sendJointState,
   sendGoal,
   setGoalTopic(topicName) { state.goalTopic = topicName; },
   toast,
   robotPose,
   lookup,
+  settings: state.settings,
+  addView({ id, title }) {
+    const viewId = id || title;
+    if (!viewId) {
+      throw new Error('addView: id가 필요하다');
+    }
+    if (viewRegistry.has(viewId)) {
+      return viewRegistry.get(viewId);
+    }
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'view-tab';
+    tab.dataset.view = viewId;
+    tab.textContent = title || viewId;
+    const panel = document.createElement('div');
+    panel.className = 'view-panel';
+    $('view-tabs').append(tab);
+    $('view-panels').append(panel);
+    const view = {
+      id: viewId,
+      tab,
+      panel,
+      activate() { activateView(viewId); },
+    };
+    tab.addEventListener('click', view.activate);
+    viewRegistry.set(viewId, view);
+    return view;
+  },
   addPanel(title) {
     const section = document.createElement('section');
     section.className = 'panel';
@@ -395,7 +456,7 @@ const host = {
     const bodyElement = document.createElement('div');
     bodyElement.className = 'body';
     section.append(heading, bodyElement);
-    (currentPluginView ?? $('plugin-panels')).append(section);
+    (currentPluginView ?? $('control-panel-panels')).append(section);
     return bodyElement;
   },
   addRow(parent, left, right) {
@@ -529,10 +590,21 @@ updateWsStatus();
 updateRobotStatus();
 connect();
 
-// canvas
-const canvas = $('scene');
+// canvas/view composition: 플러그인(내장 뷰 포함)이 addView로 탭을 만든다.
+const mapView = host.addView({ id: 'map', title: 'Map' });
+const canvas = document.createElement('canvas');
+canvas.id = 'scene';
+mapView.panel.append(canvas);
 const context = canvas.getContext('2d');
+
+const view3d = host.addView({ id: '3d', title: '3D' });
+const canvas3d = document.createElement('canvas');
+canvas3d.id = 'scene3d';
+view3d.panel.append(canvas3d);
+const context3d = canvas3d.getContext('2d');
+
 const view = { cx: 0, cy: 0, scale: 60 };
+const camera3d = { yaw: -0.55, pitch: 0.62, distance: 3.3, tx: 0, ty: 0 };
 let dragging = false;
 let dragged = false;
 let dragStart = { x: 0, y: 0 };
@@ -540,12 +612,15 @@ let lastPointer = { x: 0, y: 0 };
 
 function resizeCanvas() {
   const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(canvas.clientWidth * ratio));
-  canvas.height = Math.max(1, Math.floor(canvas.clientHeight * ratio));
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  for (const [element, elementContext] of [[canvas, context], [canvas3d, context3d]]) {
+    element.width = Math.max(1, Math.floor(element.clientWidth * ratio));
+    element.height = Math.max(1, Math.floor(element.clientHeight * ratio));
+    elementContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+activateView('map');
 
 function screenToWorld(x, y) {
   return {
@@ -663,7 +738,7 @@ function mapCanvas(grid) {
       } else if (value >= 65) {
         pixels[index] = 28; pixels[index + 1] = 34; pixels[index + 2] = 44; pixels[index + 3] = 255;
       } else {
-        pixels[index] = 150; pixels[index + 1] = 170; pixels[index + 2] = 190; pixels[index + 3] = 255;
+        pixels[index] = 150; pixels[index + 1] = 160; pixels[index + 2] = 172; pixels[index + 3] = 255;
       }
     }
   }
@@ -688,10 +763,10 @@ function costmapCanvas(grid) {
       continue;
     }
     const intensity = Math.min(1, value / 254);
-    pixels[offset] = 230;
-    pixels[offset + 1] = 70 + Math.round(100 * (1 - intensity));
-    pixels[offset + 2] = 60;
-    pixels[offset + 3] = Math.round(30 + 110 * intensity);
+    pixels[offset] = Math.round(150 * (1 - intensity));
+    pixels[offset + 1] = Math.round(220 * intensity);
+    pixels[offset + 2] = 255;
+    pixels[offset + 3] = Math.round(25 + 125 * intensity);
   }
   imageContext.putImageData(imageData, 0, 0);
   grid._costCanvas = image;
@@ -739,7 +814,7 @@ function drawScan() {
   if (!scan) return;
   const transform = frameTransform(scan.header.frame);
   if (!transform) return;
-  context.fillStyle = 'rgba(120,190,255,0.8)';
+  context.fillStyle = 'rgba(0, 230, 255, 0.85)';
   const count = scan.ranges.length;
   const stride = count > 720 ? 2 : 1;
   const cosYaw = Math.cos(transform.yaw);
@@ -804,7 +879,242 @@ function drawGoal() {
   }
 }
 
+function project3d(x, y, z) {
+  const width = canvas3d.clientWidth;
+  const height = canvas3d.clientHeight;
+  if (width < 2 || height < 2) return null;
+  const dx = x - camera3d.tx;
+  const dy = y - camera3d.ty;
+  const cy = Math.cos(camera3d.yaw);
+  const sy = Math.sin(camera3d.yaw);
+  const rx = cy * dx + sy * dy;
+  const ry = -sy * dx + cy * dy;
+  const cp = Math.cos(camera3d.pitch);
+  const sp = Math.sin(camera3d.pitch);
+  const depth = ry * sp - z * cp + camera3d.distance;
+  if (depth <= 0.08) return null;
+  const scale = Math.min(width, height) * 0.95 / depth;
+  return {
+    x: width * 0.5 + rx * scale,
+    y: height * 0.56 - (ry * cp + z * sp) * scale,
+    depth,
+  };
+}
+
+function draw3dGrid() {
+  context3d.lineWidth = 1;
+  const extent = 5;
+  for (let i = -extent; i <= extent; ++i) {
+    const a = project3d(i, -extent, 0);
+    const b = project3d(i, extent, 0);
+    const c = project3d(-extent, i, 0);
+    const d = project3d(extent, i, 0);
+    context3d.strokeStyle = i === 0 ? '#2a3850' : '#141c27';
+    if (a && b) {
+      context3d.beginPath();
+      context3d.moveTo(a.x, a.y);
+      context3d.lineTo(b.x, b.y);
+      context3d.stroke();
+    }
+    if (c && d) {
+      context3d.beginPath();
+      context3d.moveTo(c.x, c.y);
+      context3d.lineTo(d.x, d.y);
+      context3d.stroke();
+    }
+  }
+}
+
+function draw3dScan() {
+  if (!state.settings.scan) return;
+  const scan = topic('scan');
+  if (!scan) return;
+  const transform = frameTransform(scan.header.frame);
+  if (!transform) return;
+  context3d.fillStyle = 'rgba(0, 230, 255, 0.85)';
+  const count = scan.ranges.length;
+  const stride = count > 720 ? 2 : 1;
+  const cy = Math.cos(transform.yaw);
+  const sy = Math.sin(transform.yaw);
+  for (let index = 0; index < count; index += stride) {
+    const range = scan.ranges[index];
+    if (!Number.isFinite(range) || range < scan.range_min || range > scan.range_max) continue;
+    const angle = scan.angle_min + index * scan.angle_increment;
+    const localX = Math.cos(angle) * range;
+    const localY = Math.sin(angle) * range;
+    const worldX = transform.x + cy * localX - sy * localY;
+    const worldY = transform.y + sy * localX + cy * localY;
+    const point = project3d(worldX, worldY, 0.05);
+    if (point) {
+      const size = Math.max(1, Math.min(3, 90 / point.depth));
+      context3d.fillRect(point.x - size * 0.5, point.y - size * 0.5, size, size);
+    }
+  }
+}
+
+function draw3dBox(cx, cy, yaw, width, length, height, color) {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  const corners = [
+    [-width / 2, -length / 2], [width / 2, -length / 2],
+    [width / 2, length / 2], [-width / 2, length / 2],
+  ];
+  const bottom = corners.map(([x, y]) => project3d(cx + c * x - s * y, cy + s * x + c * y, 0));
+  const top = corners.map(([x, y]) => project3d(cx + c * x - s * y, cy + s * x + c * y, height));
+  context3d.strokeStyle = color;
+  context3d.lineWidth = 1.5;
+  for (let i = 0; i < 4; ++i) {
+    const a = bottom[i];
+    const b = bottom[(i + 1) % 4];
+    const t = top[i];
+    if (a && b) {
+      context3d.beginPath(); context3d.moveTo(a.x, a.y); context3d.lineTo(b.x, b.y); context3d.stroke();
+    }
+    if (a && t) {
+      context3d.beginPath(); context3d.moveTo(a.x, a.y); context3d.lineTo(t.x, t.y); context3d.stroke();
+    }
+  }
+  context3d.fillStyle = 'rgba(160, 180, 200, 0.18)';
+  context3d.beginPath();
+  let started = false;
+  for (const point of top) {
+    if (!point) continue;
+    if (!started) { context3d.moveTo(point.x, point.y); started = true; }
+    else context3d.lineTo(point.x, point.y);
+  }
+  if (started) {
+    context3d.closePath();
+    context3d.fill();
+  }
+}
+
+function draw3dRobot() {
+  if (!state.settings.robot) return;
+  const pose = robotPose();
+  if (!pose) return;
+  draw3dBox(pose.x, pose.y, pose.yaw, 0.28, 0.24, 0.22, '#7f899b');
+}
+
+function draw3dArm() {
+  const arm = topic('moveit_arm');
+  if (!arm || arm.poses.length === 0) return;
+  const transform = frameTransform(arm.header.frame);
+  if (!transform) return;
+  const points = [];
+  const c = Math.cos(transform.yaw);
+  const s = Math.sin(transform.yaw);
+  for (const pose of arm.poses) {
+    const x = transform.x + c * pose.pose.position.x - s * pose.pose.position.y;
+    const y = transform.y + s * pose.pose.position.x + c * pose.pose.position.y;
+    const point = project3d(x, y, pose.pose.position.z);
+    if (point) points.push(point);
+  }
+  if (points.length > 1) {
+    context3d.strokeStyle = '#9aa6b9';
+    context3d.lineWidth = 4;
+    context3d.beginPath();
+    context3d.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; ++i) context3d.lineTo(points[i].x, points[i].y);
+    context3d.stroke();
+    const tcp = points[points.length - 1];
+    context3d.fillStyle = '#ffb36b';
+    context3d.beginPath();
+    context3d.arc(tcp.x, tcp.y, 5, 0, Math.PI * 2);
+    context3d.fill();
+  }
+}
+
+function draw3dGoal() {
+  const goal = topic('goal_pose');
+  if (!goal) return;
+  const transform = frameTransform(goal.header.frame);
+  if (!transform) return;
+  const x = transform.x + Math.cos(transform.yaw) * goal.pose.position.x -
+            Math.sin(transform.yaw) * goal.pose.position.y;
+  const y = transform.y + Math.sin(transform.yaw) * goal.pose.position.x +
+            Math.cos(transform.yaw) * goal.pose.position.y;
+  const bottom = project3d(x, y, 0);
+  const top = project3d(x, y, 0.5);
+  if (bottom && top) {
+    context3d.strokeStyle = '#54d18c';
+    context3d.lineWidth = 2;
+    context3d.beginPath();
+    context3d.moveTo(bottom.x, bottom.y);
+    context3d.lineTo(top.x, top.y);
+    context3d.stroke();
+    context3d.fillStyle = '#54d18c';
+    context3d.beginPath();
+    context3d.arc(top.x, top.y, 4, 0, Math.PI * 2);
+    context3d.fill();
+  }
+}
+
+function draw3d() {
+  const width = canvas3d.clientWidth;
+  const height = canvas3d.clientHeight;
+  if (width < 2 || height < 2) return;
+  context3d.clearRect(0, 0, width, height);
+  if ($('follow').checked) {
+    const pose = robotPose();
+    if (pose) {
+      camera3d.tx += (pose.x - camera3d.tx) * 0.05;
+      camera3d.ty += (pose.y - camera3d.ty) * 0.05;
+    }
+  }
+  draw3dGrid();
+  draw3dScan();
+  draw3dRobot();
+  draw3dArm();
+  draw3dGoal();
+}
+
+let drag3d = false;
+let drag3dMode = 'orbit';
+let drag3dLast = { x: 0, y: 0 };
+canvas3d.addEventListener('contextmenu', (event) => event.preventDefault());
+canvas3d.addEventListener('pointerdown', (event) => {
+  drag3d = true;
+  drag3dMode = event.button === 2 || event.shiftKey ? 'pan' : 'orbit';
+  drag3dLast = { x: event.clientX, y: event.clientY };
+  canvas3d.setPointerCapture(event.pointerId);
+});
+canvas3d.addEventListener('pointermove', (event) => {
+  if (!drag3d) return;
+  const dx = event.clientX - drag3dLast.x;
+  const dy = event.clientY - drag3dLast.y;
+  drag3dLast = { x: event.clientX, y: event.clientY };
+  if (drag3dMode === 'pan') {
+    const step = camera3d.distance * 0.0016;
+    const cy = Math.cos(camera3d.yaw);
+    const sy = Math.sin(camera3d.yaw);
+    camera3d.tx -= (cy * dx - sy * dy) * step;
+    camera3d.ty -= (sy * dx + cy * dy) * step;
+    $('follow').checked = false;
+  } else {
+    camera3d.yaw -= dx * 0.008;
+    camera3d.pitch = Math.max(0.12, Math.min(1.25, camera3d.pitch + dy * 0.008));
+  }
+});
+canvas3d.addEventListener('pointerup', () => { drag3d = false; });
+canvas3d.addEventListener('dblclick', () => {
+  camera3d.tx = 0;
+  camera3d.ty = 0;
+  camera3d.distance = 3.3;
+  camera3d.yaw = -0.55;
+  camera3d.pitch = 0.62;
+  $('follow').checked = true;
+});
+canvas3d.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  camera3d.distance = Math.max(0.6, Math.min(12.0, camera3d.distance * (event.deltaY < 0 ? 0.9 : 1.1)));
+}, { passive: false });
+
 function render() {
+  if (activeView === '3d') {
+    draw3d();
+    requestAnimationFrame(render);
+    return;
+  }
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   context.clearRect(0, 0, width, height);
@@ -876,8 +1186,8 @@ async function loadPlugins() {
     toast(`plugins.json: ${error.message}`);
     return;
   }
-  const tabs = $('plugin-tabs');
-  const panels = $('plugin-panels');
+  const tabs = $('control-panel-tabs');
+  const panels = $('control-panel-panels');
   const views = [];
   const activate = (selected) => {
     for (const item of views) {

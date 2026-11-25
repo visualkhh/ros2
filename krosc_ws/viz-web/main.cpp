@@ -31,6 +31,7 @@ int main(int argc, char** argv) {
                                             {"slam", "navigation", "teleop", "diagnostics"});
   registry.add("moveit", "MoveIt", "/plugins/moveit.js");
   registry.add("rl_nav", "RL Nav", "/plugins/rl_nav.js");
+  registry.add("manipulator", "Manipulator", "/plugins/manipulator.js");
 
   // 프로젝트 플러그인이 쓰는 토픽. 코어 웹 게이트웨이는 기본 토픽만 안다.
   options.forward_topics = {
