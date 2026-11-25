@@ -58,6 +58,23 @@ export function init(host) {
     ];
   }
 
+  // 쿼터니언 → 3x3 회전행렬 (목표 자세의 평면에 링을 그리기 위해)
+  function quatToMatrix(quaternion) {
+    if (!quaternion || ![quaternion.x, quaternion.y, quaternion.z, quaternion.w].every(Number.isFinite)) {
+      return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    }
+    const length = Math.hypot(quaternion.x, quaternion.y, quaternion.z, quaternion.w) || 1;
+    const x = quaternion.x / length;
+    const y = quaternion.y / length;
+    const z = quaternion.z / length;
+    const w = quaternion.w / length;
+    return [
+      [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+      [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+      [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ];
+  }
+
   function drawPrimitive(primitive, width, height) {
     if (primitive.type === 'box') {
       drawBox(primitive, width, height);
@@ -120,7 +137,8 @@ export function init(host) {
       context.clearRect(0, 0, width, height);
       context.fillStyle = '#5f7188';
       context.font = '12px system-ui';
-      context.fillText('TCP 마커를 클릭해 드래그 · Shift+Z · Ctrl+Pitch · Alt+Grip · 빈 곳/우드래그 orbit', 12, 20);
+      context.fillText('TCP 마커를 클릭해 드래그 · Shift+Z · Ctrl+Pitch · Alt+Grip · 빈 곳/우드래그 orbit',
+                       12, height - 12);
 
       context.strokeStyle = '#141c27';
       context.lineWidth = 1;
@@ -237,6 +255,7 @@ export function init(host) {
       targetScreenPoint = null;
       // 드래그 중에는 네트워크 왕복을 기다리지 않고 입력값으로 즉시 그린다 (Qt와 동일한 반응).
       let pose = target ? target.pose.position : null;
+      let orientation = target ? target.pose.orientation : null;
       if (draggingTarget || performance.now() - lastLocalEdit < 250) {
         pose = { x: Number(xInput.value), y: Number(yInput.value), z: Number(zInput.value) };
       }
@@ -244,22 +263,50 @@ export function init(host) {
         const point = project(pose, width, height);
         if (point) {
           targetScreenPoint = point;
-          context.strokeStyle = '#ffb36b';
-          context.lineWidth = 2;
-          context.beginPath(); context.arc(point.x, point.y, 8, 0, Math.PI * 2); context.stroke();
-          context.beginPath(); context.moveTo(point.x - 12, point.y); context.lineTo(point.x + 12, point.y);
-          context.moveTo(point.x, point.y - 12); context.lineTo(point.x, point.y + 12); context.stroke();
-          const axes = [
-            [{ x: pose.x + 0.05, y: pose.y, z: pose.z }, '#ff6b6b'],
-            [{ x: pose.x, y: pose.y + 0.05, z: pose.z }, '#54d18c'],
-            [{ x: pose.x, y: pose.y, z: pose.z + 0.05 }, '#6aa9ff'],
-          ];
-          for (const [axis, color] of axes) {
-            const end = project(axis, width, height);
-            if (!end) continue;
-            context.strokeStyle = color;
-            context.beginPath(); context.moveTo(point.x, point.y); context.lineTo(end.x, end.y); context.stroke();
+          // Qt Viz처럼 목표 자세 평면에 놓인 동그란 판(링) + 3축으로 그린다.
+          const r = quatToMatrix(orientation);
+          const toWorld = (local) => ({
+            x: pose.x + r[0][0] * local[0] + r[0][1] * local[1] + r[0][2] * local[2],
+            y: pose.y + r[1][0] * local[0] + r[1][1] * local[1] + r[1][2] * local[2],
+            z: pose.z + r[2][0] * local[0] + r[2][1] * local[1] + r[2][2] * local[2],
+          });
+          const ring = [];
+          for (let i = 0; i <= 32; ++i) {
+            const angle = (i / 32) * Math.PI * 2;
+            ring.push(project(toWorld([0.042 * Math.cos(angle), 0.042 * Math.sin(angle), 0]),
+                              width, height));
           }
+          if (ring.every(Boolean)) {
+            context.beginPath();
+            context.moveTo(ring[0].x, ring[0].y);
+            for (const item of ring.slice(1)) context.lineTo(item.x, item.y);
+            context.closePath();
+            context.fillStyle = 'rgba(255, 220, 90, 0.16)';
+            context.fill();
+            context.strokeStyle = 'rgba(255, 220, 90, 0.85)';
+            context.lineWidth = 1.8;
+            context.stroke();
+          }
+          const axes = [
+            [toWorld([0.055, 0, 0]), '#ff6b6b'],
+            [toWorld([0, 0.055, 0]), '#54d18c'],
+            [toWorld([0, 0, 0.055]), '#6aa9ff'],
+          ];
+          context.lineWidth = 1.6;
+          for (const [end, color] of axes) {
+            const projected = project(end, width, height);
+            if (!projected) continue;
+            context.strokeStyle = color;
+            context.beginPath(); context.moveTo(point.x, point.y); context.lineTo(projected.x, projected.y);
+            context.stroke();
+          }
+          context.strokeStyle = '#ffdc5a';
+          context.lineWidth = 1.6;
+          context.beginPath(); context.moveTo(point.x - 6, point.y); context.lineTo(point.x + 6, point.y);
+          context.moveTo(point.x, point.y - 6); context.lineTo(point.x, point.y + 6); context.stroke();
+          context.fillStyle = '#ffe178';
+          context.font = '11px system-ui';
+          context.fillText('TCP target', point.x + 14, point.y - 10);
         }
       }
 
