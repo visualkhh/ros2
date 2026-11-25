@@ -101,6 +101,36 @@ KROSC_TEST(map_catalog_loads_map_by_name) {
   fs::remove_all(directory);
 }
 
+KROSC_TEST(map_catalog_clears_map_name_on_unload) {
+  const fs::path directory = temp_dir("catalog_unload");
+  const krosc::msgs::OccupancyGrid grid = make_grid(20, 10);
+  krosc::nodes::save_map(grid, (directory / "src" / "map").string());
+
+  krosc::Context context;
+  krosc::nodes::MapServer server(context, "map_server",
+                                 {{"maps_directory", directory.string()},
+                                  {"topic_name", std::string("map")},
+                                  {"frame_id", std::string("map")}});
+  krosc::nodes::MapCatalog catalog(context, "map_catalog",
+                                   {{"maps_directory", directory.string()},
+                                    {"map_frame", std::string("map")},
+                                    {"map_server", std::string("map_server")},
+                                    {"map_saver", std::string("map_saver")},
+                                    {"list_period", 10.0}});
+  krosc::Node monitor(context, "monitor");
+  krosc::msgs::String latest;
+  monitor.subscribe<krosc::msgs::String>(
+      "map_name", [&](const krosc::msgs::String& message) { latest = message; },
+      krosc::QOS_LATCHED);
+
+  monitor.publish("map_change", krosc::msgs::String{"src"});
+  CHECK_EQ(std::string("src"), latest.data);
+  // unload 뒤에는 웹/Qt가 옛 지도 이름을 계속 보여주지 않도록 map_name을 비워 발행해야 한다.
+  monitor.publish("map_unload", krosc::msgs::Empty{});
+  CHECK(latest.data.empty());
+  fs::remove_all(directory);
+}
+
 KROSC_TEST(map_saver_saves_latched_map) {
   const fs::path directory = temp_dir("saver");
   krosc::Context context;

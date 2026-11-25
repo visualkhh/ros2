@@ -230,6 +230,7 @@ void MapCatalog::on_map_unload(const msgs::Empty&) {
     logger().warn("map_server unload 실패: %s", error.what());
   }
   publish_slam_mode("idle");
+  publish_map_name();
   publish_status("map unloaded");
   refresh();
 }
@@ -265,6 +266,7 @@ void MapCatalog::on_map_delete(const msgs::String& message) {
       logger().warn("map_server unload 실패: %s", exception.what());
     }
     publish_slam_mode("idle");
+    publish_map_name();
   }
   publish_status("deleted " + name);
   refresh();

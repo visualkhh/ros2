@@ -16,7 +16,10 @@ namespace krosc::nodes {
 // map_server(nav2)와 map_saver(nav2) 서비스에 맡긴다.
 // - map_change (String): 지도 이름을 불러오고 localization 모드로. 빈 이름이면 지금 지도를 내리고 그 폴더를 지운다.
 // - map_save (String): map_saver/save_map으로 maps_directory/<이름>/map.yaml + map.pgm 저장. 빈 이름이면 날짜/시각.
+// - map_delete (String): maps_directory/<이름> 폴더를 지운다. 불러온 지도면 map_server에서 내린다.
+// - map_unload (Empty): 지도만 내리고 폴더는 남긴다.
 // - map_list (String, latch): maps_directory 아래 지도 이름들 (한 줄에 하나)
+// - map_name (String, latch): 지금 불러온 지도 이름. 없으면 빈 문자열
 // - map_status (String, latch): 마지막 결과
 // - slam_mode (String, latch): map_change가 localization/idle을 알려 Cartographer가 따라간다.
 class MapCatalog final : public Node {
