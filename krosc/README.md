@@ -176,6 +176,31 @@ Docker 설정은 저장소 루트의 `../docker/`에 있다.
 - `viz_web`: 표준 라이브러리 + pthread만 (Qt/Node 없음). `VizWeb`이 로봇 TCP 프레임을 WebSocket으로 중계
 - `examples`: `core` + `sim_qt` + `viz`
 
+## Peer 네트워크 (다른 Krosc와 토픽 공유)
+
+`Context::Options::network`로 peer mesh를 켠다. 서로 다른 프로세스/네트워크의 Krosc가
+로컬 토픽을 discover/subscribe해서 주고받는다.
+
+```cpp
+krosc::Context::Options options;
+options.network.name = "robot_a";
+options.network.listen = true;
+options.network.port = 9100;                       // 0이면 임시 포트
+options.network.peers = {"192.168.0.12:9100"};     // 상대 Krosc
+
+krosc::Krosc app([](krosc::Context& context) {
+  // ...
+  return std::vector<std::unique_ptr<krosc::Node>>{};
+}, options);
+```
+
+- 로컬 토픽 publish가 자동으로 peer에게 전송된다.
+- peer에서 온 토픽은 로컬 토픽으로 다시 발행된다 (재브로드캐스트 방지).
+- 상대가 구독한 토픽만 보낸다 (`subscribe` 필터).
+- latched 토픽은 나중에 구독한 peer에게도 재전송한다.
+- 현재는 **토픽 mesh 1차**다. 서비스/액션은 같은 peer 연결 위에 다음 단계로 올린다.
+  C++ 액션은 서비스+토픽으로 구현되어 있어 서비스 포워딩이 들어가면 함께 동작할 수 있다.
+
 ## API 맛보기
 
 ### 노드, 토픽, 타이머, 파라미터
@@ -346,6 +371,7 @@ ROS 2와 맞춘 노드 이름:
 - [x] `viz` Qt `VizWindow`: 격자, TF 축, URDF, 라이다, odom/filtered, map/costmap, 경로, 궤적, 로그
 - [x] `viz` 코어 플러그인: `teleop`, `slam`, `navigation`, `manipulator` (VizWindow는 기반 UI만)
 - [x] TCP 원격 토픽(9000): 텔레메트리 + `cmd_vel`, latched 다중 tf_static, Mac `krosc_viz_app --server`
+- [x] Peer mesh(`Context::Options::network`): 다른 Krosc와 임의 토픽 discover/subscribe + latched 공유 (서비스/액션은 다음 단계)
 - [x] noVNC: Docker Ubuntu 26.04 안의 sim+viz 두 창을 맥 브라우저로 본다
 - [x] `viz-web`: HTTP + WebSocket 게이트웨이, 동적 `/plugins.json`, 지도/스캔/TF/경로/상태 뷰
 - [x] 오프스크린 스크린샷 검증 (`docs/`)

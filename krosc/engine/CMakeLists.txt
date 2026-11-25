@@ -7,6 +7,7 @@ add_library(krosc_core STATIC
   core/log.cpp
   core/net.cpp
   core/net_protocol.cpp
+  core/net_peer.cpp
   core/node.cpp
   core/parameter.cpp
   core/service.cpp

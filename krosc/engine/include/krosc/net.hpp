@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <typeindex>
+#include <vector>
 
 #include "krosc/net_protocol.hpp"
 
@@ -11,6 +13,13 @@ class Context;
 }
 
 namespace krosc::net {
+
+// 로컬 토픽 메시지를 타입 소거 상태로 인코딩/디코딩한다. peer 네트워크가 임의 토픽 이름을
+// 고정 인터페이스(type_index/Kind)로 주고받기 위해 쓴다. 등록되지 않은 타입이면 빈 값.
+[[nodiscard]] std::optional<Kind> message_kind(std::type_index type);
+[[nodiscard]] std::vector<std::uint8_t> encode_message(std::type_index type, const void* message);
+[[nodiscard]] std::shared_ptr<const void> decode_message(Kind kind, const std::uint8_t* data,
+                                                         std::size_t size);
 
 // 실기(Pi) 쪽: 로컬 토픽을 TCP(9000)로 내보내고, 원격 viz의 cmd_vel을 로컬 토픽으로 넣는다.
 // 한 번에 한 클라이언트만 붙는다 (Mac viz 하나). 클라이언트가 끊기면 다시 기다린다.

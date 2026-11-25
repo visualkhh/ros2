@@ -44,6 +44,7 @@ void SubscriptionBase::cancel() {
     return;
   }
   auto state = state_.lock();
+  SubscriptionHook subscription_hook;
   if (state) {
     std::lock_guard<std::mutex> lock(state->mutex);
     for (auto& [name, channel] : state->channels) {
@@ -56,9 +57,15 @@ void SubscriptionBase::cancel() {
                          subscribers->end());
       channel->subscribers = std::move(subscribers);
     }
+    subscription_hook = state->subscription_hook;
   }
-  std::lock_guard<std::mutex> lock(mutex_);
-  clear_queue_locked();
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    clear_queue_locked();
+  }
+  if (subscription_hook) {
+    subscription_hook();
+  }
 }
 
 }  // namespace detail

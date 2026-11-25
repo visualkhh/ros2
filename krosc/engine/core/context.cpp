@@ -15,6 +15,9 @@ Context::Context(Options options)
       services_(std::make_unique<ServiceRegistry>()),
       timers_(std::make_unique<TimerManager>(*time_source_, *executor_)),
       parameters_(std::make_unique<ParameterManager>(std::move(options.parameters))) {
+  if (options.network.listen || options.network.port != 0 || !options.network.peers.empty()) {
+    peer_network_ = std::make_unique<net::PeerNetwork>(*this, std::move(options.network));
+  }
   if (options.publish_parameter_events) {
     parameters_->set_event_callback([this](const ParameterEvent& event) {
       topics_->publish("parameter_events", event);
@@ -41,6 +44,9 @@ void Context::shutdown() {
     return;
   }
   shutdown_ = true;
+  if (peer_network_) {
+    peer_network_->shutdown();
+  }
   // 콜백이 더 이상 새 일을 만들지 못하게 한 뒤, 큐에 남은 실행을 기다린다.
   timers_->shutdown();
   services_->shutdown();

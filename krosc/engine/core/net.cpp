@@ -1496,4 +1496,119 @@ void Client::shutdown() {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// 타입 소거 메시지 코덱 (peer 네트워크용)
+// ---------------------------------------------------------------------------
+
+std::optional<Kind> message_kind(std::type_index type) {
+  if (type == typeid(msgs::Twist)) return Kind::Twist;
+  if (type == typeid(msgs::String)) return Kind::String;
+  if (type == typeid(msgs::TFMessage)) return Kind::TF;
+  if (type == typeid(msgs::LaserScan)) return Kind::Scan;
+  if (type == typeid(msgs::Imu)) return Kind::Imu;
+  if (type == typeid(msgs::Odometry)) return Kind::Odometry;
+  if (type == typeid(msgs::JointState)) return Kind::JointState;
+  if (type == typeid(msgs::OccupancyGrid)) return Kind::Grid;
+  if (type == typeid(msgs::Path)) return Kind::Path;
+  if (type == typeid(msgs::DiagnosticArray)) return Kind::Diagnostics;
+  if (type == typeid(msgs::Log)) return Kind::Log;
+  if (type == typeid(msgs::PoseStamped)) return Kind::Pose;
+  if (type == typeid(msgs::PoseWithCovarianceStamped)) return Kind::PoseCov;
+  if (type == typeid(msgs::Bool)) return Kind::Bool;
+  if (type == typeid(msgs::Empty)) return Kind::Empty;
+  return std::nullopt;
+}
+
+std::vector<std::uint8_t> encode_message(std::type_index type, const void* message) {
+  Writer writer;
+  if (type == typeid(msgs::Twist)) {
+    encode(writer, *static_cast<const msgs::Twist*>(message));
+  } else if (type == typeid(msgs::String)) {
+    encode(writer, *static_cast<const msgs::String*>(message));
+  } else if (type == typeid(msgs::TFMessage)) {
+    encode(writer, *static_cast<const msgs::TFMessage*>(message));
+  } else if (type == typeid(msgs::LaserScan)) {
+    encode(writer, *static_cast<const msgs::LaserScan*>(message));
+  } else if (type == typeid(msgs::Imu)) {
+    encode(writer, *static_cast<const msgs::Imu*>(message));
+  } else if (type == typeid(msgs::Odometry)) {
+    encode(writer, *static_cast<const msgs::Odometry*>(message));
+  } else if (type == typeid(msgs::JointState)) {
+    encode(writer, *static_cast<const msgs::JointState*>(message));
+  } else if (type == typeid(msgs::OccupancyGrid)) {
+    encode(writer, *static_cast<const msgs::OccupancyGrid*>(message));
+  } else if (type == typeid(msgs::Path)) {
+    encode(writer, *static_cast<const msgs::Path*>(message));
+  } else if (type == typeid(msgs::DiagnosticArray)) {
+    encode(writer, *static_cast<const msgs::DiagnosticArray*>(message));
+  } else if (type == typeid(msgs::Log)) {
+    encode(writer, *static_cast<const msgs::Log*>(message));
+  } else if (type == typeid(msgs::PoseStamped)) {
+    encode(writer, *static_cast<const msgs::PoseStamped*>(message));
+  } else if (type == typeid(msgs::PoseWithCovarianceStamped)) {
+    encode(writer, *static_cast<const msgs::PoseWithCovarianceStamped*>(message));
+  } else if (type == typeid(msgs::Bool)) {
+    encode(writer, *static_cast<const msgs::Bool*>(message));
+  } else if (type == typeid(msgs::Empty)) {
+    encode(writer, *static_cast<const msgs::Empty*>(message));
+  }
+  return writer.data;
+}
+
+std::shared_ptr<const void> decode_message(Kind kind, const std::uint8_t* data, std::size_t size) {
+  Reader reader(data, size);
+  switch (kind) {
+    case Kind::Twist:
+      if (const auto message = decode_twist(reader); reader.ok()) {
+        return std::make_shared<const msgs::Twist>(message);
+      }
+      break;
+    case Kind::String:
+      if (auto message = decode_string(reader)) return std::make_shared<const msgs::String>(std::move(*message));
+      break;
+    case Kind::TF:
+      if (auto message = decode_tf(reader)) return std::make_shared<const msgs::TFMessage>(std::move(*message));
+      break;
+    case Kind::Scan:
+      if (auto message = decode_scan(reader)) return std::make_shared<const msgs::LaserScan>(std::move(*message));
+      break;
+    case Kind::Imu:
+      if (auto message = decode_imu(reader)) return std::make_shared<const msgs::Imu>(std::move(*message));
+      break;
+    case Kind::Odometry:
+      if (auto message = decode_odometry(reader)) return std::make_shared<const msgs::Odometry>(std::move(*message));
+      break;
+    case Kind::JointState:
+      if (auto message = decode_joint_state(reader)) return std::make_shared<const msgs::JointState>(std::move(*message));
+      break;
+    case Kind::Grid:
+      if (auto message = decode_grid(reader)) return std::make_shared<const msgs::OccupancyGrid>(std::move(*message));
+      break;
+    case Kind::Path:
+      if (auto message = decode_path(reader)) return std::make_shared<const msgs::Path>(std::move(*message));
+      break;
+    case Kind::Diagnostics:
+      if (auto message = decode_diagnostics(reader)) return std::make_shared<const msgs::DiagnosticArray>(std::move(*message));
+      break;
+    case Kind::Log:
+      if (auto message = decode_log(reader)) return std::make_shared<const msgs::Log>(std::move(*message));
+      break;
+    case Kind::Pose:
+      if (auto message = decode_pose_stamped(reader)) return std::make_shared<const msgs::PoseStamped>(std::move(*message));
+      break;
+    case Kind::PoseCov:
+      if (auto message = decode_pose_covariance(reader)) return std::make_shared<const msgs::PoseWithCovarianceStamped>(std::move(*message));
+      break;
+    case Kind::Bool:
+      if (auto message = decode_bool(reader)) return std::make_shared<const msgs::Bool>(*message);
+      break;
+    case Kind::Empty:
+      return std::make_shared<const msgs::Empty>();
+    default:
+      break;
+  }
+  return {};
+}
+
 }  // namespace krosc::net

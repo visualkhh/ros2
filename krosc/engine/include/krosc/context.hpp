@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "krosc/executor.hpp"
+#include "krosc/net_peer.hpp"
 #include "krosc/parameter.hpp"
 #include "krosc/service.hpp"
 #include "krosc/time.hpp"
@@ -25,6 +26,8 @@ class Context {
     ParameterManager::Overrides parameters;
     bool publish_parameter_events = true;
     std::string name = "krosc";
+    // 다른 Krosc 프로세스와 토픽을 주고받는 peer mesh. 기본은 비활성.
+    net::PeerNetworkOptions network;
   };
 
   Context();
@@ -40,6 +43,8 @@ class Context {
   [[nodiscard]] TimerManager& timers() { return *timers_; }
   [[nodiscard]] ParameterManager& parameters() { return *parameters_; }
   [[nodiscard]] TimeSource& time_source() { return *time_source_; }
+  [[nodiscard]] net::PeerNetwork* peer_network() { return peer_network_.get(); }
+  [[nodiscard]] const net::PeerNetwork* peer_network() const { return peer_network_.get(); }
   [[nodiscard]] double now() const { return time_source_->now(); }
   [[nodiscard]] const std::string& name() const { return name_; }
 
@@ -57,6 +62,8 @@ class Context {
   std::unique_ptr<ServiceRegistry> services_;
   std::unique_ptr<TimerManager> timers_;
   std::unique_ptr<ParameterManager> parameters_;
+  // 네트워크가 다른 멤버들보다 먼저 멈추도록 마지막에 선언한다.
+  std::unique_ptr<net::PeerNetwork> peer_network_;
   mutable std::mutex node_mutex_;
   std::set<std::string> node_names_;
   bool shutdown_ = false;

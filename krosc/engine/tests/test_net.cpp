@@ -41,6 +41,26 @@ KROSC_TEST(net_protocol_frame_roundtrip) {
                (static_cast<std::uint32_t>(encoded[3]) << 24));
 }
 
+KROSC_TEST(net_message_codec_roundtrip) {
+  krosc::msgs::Path path;
+  path.header = krosc::msgs::Header{12.5, "map"};
+  krosc::msgs::PoseStamped pose;
+  pose.header = path.header;
+  pose.pose.position = {1.0, 2.0, 0.0};
+  path.poses.push_back(pose);
+
+  const auto kind = krosc::net::message_kind(std::type_index(typeid(krosc::msgs::Path)));
+  CHECK(kind.has_value());
+  const auto bytes = krosc::net::encode_message(std::type_index(typeid(krosc::msgs::Path)), &path);
+  CHECK(!bytes.empty());
+  const auto decoded = krosc::net::decode_message(*kind, bytes.data(), bytes.size());
+  CHECK(decoded != nullptr);
+  const auto typed = std::static_pointer_cast<const krosc::msgs::Path>(decoded);
+  CHECK_EQ(1U, typed->poses.size());
+  CHECK_NEAR(1.0, typed->poses[0].pose.position.x, 1e-9);
+  CHECK_EQ(std::string("map"), typed->header.frame_id);
+}
+
 KROSC_TEST(net_roundtrip_topics_and_teleop) {
   krosc::Context server_context;
   krosc::net::Server server(server_context, 0);
@@ -206,4 +226,61 @@ KROSC_TEST(net_latched_map_replays_for_late_subscriber) {
       krosc::QOS_LATCHED);
   std::unique_lock<std::mutex> lock(mutex);
   CHECK(cv.wait_for(lock, 2s, [&] { return got_map.load(); }));
+}
+
+KROSC_TEST(net_peer_topic_mesh_and_latched) {
+  krosc::Context::Options server_options;
+  server_options.network.name = "peer_server";
+  server_options.network.listen = true;
+  server_options.network.port = 0;
+  krosc::Context server(server_options);
+  CHECK(server.peer_network() != nullptr);
+  CHECK(server.peer_network()->port() != 0);
+
+  krosc::Context::Options client_options;
+  client_options.network.name = "peer_client";
+  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  krosc::Context client(client_options);
+  CHECK(client.peer_network() != nullptr);
+
+  std::atomic<bool> got{false};
+  std::mutex mutex;
+  std::condition_variable cv;
+  client.topics().subscribe<krosc::msgs::String>(
+      "chatter",
+      [&](const krosc::msgs::String& message) {
+        if (message.data == "hello peer") {
+          got.store(true);
+        }
+        cv.notify_all();
+      },
+      krosc::QOS_DEFAULT);
+
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 3s, [&] { return !client.peer_network()->peer_endpoints().empty(); }));
+  // discover/subscribe가 오갈 시간을 준다.
+  std::this_thread::sleep_for(200ms);
+  for (int i = 0; i < 10 && !got.load(); ++i) {
+    server.topics().publish("chatter", krosc::msgs::String{"hello peer"}, krosc::QOS_DEFAULT);
+    cv.wait_for(lock, 50ms);
+  }
+  CHECK(got.load());
+
+  // latched: 구독 전에 발행된 값도 새 구독자에게 재전송되어야 한다.
+  server.topics().publish("map_status", krosc::msgs::String{"ready"}, krosc::QOS_LATCHED);
+  std::atomic<bool> latched{false};
+  client.topics().subscribe<krosc::msgs::String>(
+      "map_status",
+      [&](const krosc::msgs::String& message) {
+        if (message.data == "ready") {
+          latched.store(true);
+        }
+        cv.notify_all();
+      },
+      krosc::QOS_LATCHED);
+  CHECK(cv.wait_for(lock, 3s, [&] { return latched.load(); }));
+
+  lock.unlock();
+  client.shutdown();
+  server.shutdown();
 }

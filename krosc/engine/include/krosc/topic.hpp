@@ -156,9 +156,15 @@ struct Channel final : ChannelBase {
   std::deque<std::shared_ptr<const T>> history;
 };
 
+using PublishHook = std::function<void(const std::string&, std::type_index,
+                                      const std::shared_ptr<const void>&, QoS)>;
+using SubscriptionHook = std::function<void()>;
+
 struct TopicState {
   mutable std::mutex mutex;
   std::unordered_map<std::string, std::shared_ptr<ChannelBase>> channels;
+  PublishHook publish_hook;
+  SubscriptionHook subscription_hook;
   bool stopping = false;
 };
 
@@ -202,6 +208,7 @@ class TopicRegistry {
   Subscription<T> subscribe(const std::string& topic, std::function<void(const T&)> callback, QoS qos = QOS_DEFAULT) {
     auto state = state_;
     std::shared_ptr<detail::SubscriptionImpl<T>> impl;
+    detail::SubscriptionHook subscription_hook;
     {
       std::lock_guard<std::mutex> lock(state->mutex);
       if (state->stopping) {
@@ -221,8 +228,12 @@ class TopicRegistry {
           impl->push_void(channel->history[i]);  // paused 상태라 큐에만 쌓인다
         }
       }
+      subscription_hook = state->subscription_hook;
     }
     impl->start();
+    if (subscription_hook) {
+      subscription_hook();
+    }
     return Subscription<T>(std::move(impl));
   }
 
@@ -238,6 +249,7 @@ class TopicRegistry {
     }
     auto state = state_;
     std::shared_ptr<const detail::SubscriberList> subscribers;
+    detail::PublishHook publish_hook;
     {
       std::lock_guard<std::mutex> lock(state->mutex);
       if (state->stopping) {
@@ -253,10 +265,25 @@ class TopicRegistry {
         }
       }
       subscribers = channel->subscribers;
+      publish_hook = state->publish_hook;
     }
     for (const auto& subscriber : *subscribers) {
       subscriber->push_void(message);
     }
+    if (publish_hook) {
+      publish_hook(topic, std::type_index(typeid(T)),
+                   std::shared_ptr<const void>(message), qos);
+    }
+  }
+
+  void set_publish_hook(detail::PublishHook hook) {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    state_->publish_hook = std::move(hook);
+  }
+
+  void set_subscription_hook(detail::SubscriptionHook hook) {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    state_->subscription_hook = std::move(hook);
   }
 
   void shutdown();
