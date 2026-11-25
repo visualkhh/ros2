@@ -8,6 +8,7 @@ const RANGES = [[-180, 180], [-126, 126], [-114, 114], [-114, 126]];
 export function init(host) {
   const body = host.addPanel('Manipulator');
   const status = row(body, 'arm');
+  status.classList.add('nowrap');
 
   const actions = buttonRow(body);
   let torqueOn = true;
@@ -178,9 +179,10 @@ export function init(host) {
       gripperValue.textContent = `${(grip * 1000).toFixed(1)} mm`;
       updating = false;
     }
-    setLevel(status, `j1 ${(output[0] * DEG).toFixed(0)}°  j2 ${(output[1] * DEG).toFixed(0)}°  ` +
-                        `j3 ${(output[2] * DEG).toFixed(0)}°  j4 ${(output[3] * DEG).toFixed(0)}°  ` +
-                        `grip ${(output[4] * 1000).toFixed(1)} mm`);
+    const angle = (value) => `${Math.round(value * DEG)}`.padStart(4, ' ');
+    const gripText = `${(output[4] * 1000).toFixed(1)}`.padStart(5, ' ');
+    setLevel(status, `j1 ${angle(output[0])}°  j2 ${angle(output[1])}°  ` +
+                     `j3 ${angle(output[2])}°  j4 ${angle(output[3])}°  grip ${gripText} mm`);
   }
 
   host.onTopic('joint_states', applyJointStates);

@@ -254,6 +254,14 @@ aside {
 .field { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px; align-items: center; }
 .field label { color: var(--muted); }
 .value { color: #b9c6d8; word-break: break-all; }
+/* 상태 줄이 길어져도 줄바꿈으로 높이가 변하지 않게 (숫자 폭 고정) */
+.value.nowrap {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  min-height: 18px;
+}
 .value.ok { color: var(--accent); }
 .value.warn { color: var(--warn); }
 .value.bad { color: var(--bad); }
