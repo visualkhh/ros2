@@ -14,6 +14,33 @@
 
 using namespace std::chrono_literals;
 
+KROSC_TEST(net_protocol_frame_roundtrip) {
+  // Qt Viz는 net::Client, 웹 Viz는 net::Frame을 쓰지만 body 포맷은 이 정의 하나를 공유한다.
+  krosc::net::Frame frame;
+  frame.type = krosc::net::kFrameTopic;
+  frame.topic = "moveit_target";
+  frame.kind = krosc::net::Kind::String;
+  frame.payload = {1, 2, 3, 4};
+
+  const auto body = krosc::net::encode_body(frame);
+  CHECK_EQ(body.size(), 3U + frame.topic.size() + 1U + frame.payload.size());
+  const auto decoded = krosc::net::decode_body(body);
+  CHECK(decoded.has_value());
+  CHECK_EQ(frame.type, decoded->type);
+  CHECK_EQ(frame.topic, decoded->topic);
+  CHECK(frame.kind == decoded->kind);
+  CHECK(frame.payload == decoded->payload);
+  CHECK_EQ(frame.topic, krosc::net::frame_topic(body).value());
+
+  const auto encoded = krosc::net::encode_frame(frame);
+  CHECK_EQ(encoded.size(), body.size() + 4U);
+  CHECK_EQ(static_cast<std::uint32_t>(body.size()),
+           static_cast<std::uint32_t>(encoded[0]) |
+               (static_cast<std::uint32_t>(encoded[1]) << 8) |
+               (static_cast<std::uint32_t>(encoded[2]) << 16) |
+               (static_cast<std::uint32_t>(encoded[3]) << 24));
+}
+
 KROSC_TEST(net_roundtrip_topics_and_teleop) {
   krosc::Context server_context;
   krosc::net::Server server(server_context, 0);

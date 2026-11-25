@@ -61,8 +61,10 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 ./krosc_viz_web --robot 127.0.0.1:9000 --port 8080
 ```
 
+- TCP 프레임 포맷은 `krosc/engine/include/krosc/net_protocol.hpp` 하나로 공유한다.
+  Qt Viz는 `net::Client`, 웹 Viz는 `net::Frame`을 쓰고, 프레임 body는 동일하다.
 - `krosc_viz_web`은 Qt/Node 없이 표준 라이브러리만 쓰는 **프레임 게이트웨이**다.
-  `main.cpp`는 인자만 `VizWebOptions`로 넘기고, `krosc::viz_web::VizWeb`이 RobotLink/HttpServer/
+  `main.cpp`는 인자만 `VizWebOptions`로 넘기고, `krosc::viz_web::VizWeb`이 FrameClient/HttpServer/
   시그널/종료를 소유한다. 로봇 TCP의 `4바이트 길이 + 본문`을 WebSocket 바이너리 프레임으로 그대로 넘긴다.
 - 브라우저는 `www/app.js`에서 프레임을 해석해 지도/스캔/TF/경로를 Canvas에 그린다.
 - 웹 플러그인은 main이 `VizWebPluginRegistry`에 등록하고, 게이트웨이가 `/plugins.json`을 **동적으로** 만든다.
@@ -156,7 +158,7 @@ krosc/
 │   └── plugins/                   # 코어 Viz 플러그인
 ├── viz-web/                       # krosc_viz_web (HTTP + WebSocket, Qt 없음)
 │   ├── main.cpp                   # krosc_viz_web 실행기 (파라미터 → VizWeb)
-│   ├── include/krosc/viz_web/     # VizWeb, HttpServer, RobotLink, WebSocket
+│   ├── include/krosc/viz_web/     # VizWeb, HttpServer, WebSocket
 │   ├── core/                      # VizWeb/게이트웨이 소스
 │   └── www/                       # index.html/app.js/style + JS 플러그인
 ├── examples/turtlebot3/           # krosc_turtlebot3

@@ -40,29 +40,8 @@ namespace krosc::net {
 
 namespace {
 
-constexpr std::uint8_t kFrameTopic = 1;
-constexpr std::uint8_t kFramePublish = 2;
-constexpr std::uint32_t kMaxFrame = 4u * 1024u * 1024u;
 constexpr std::size_t kMaxQueue = 512;
 constexpr std::size_t kMaxClients = 8;
-
-enum class Kind : std::uint8_t {
-  Twist = 1,
-  String = 2,
-  TF = 3,
-  Scan = 4,
-  Imu = 5,
-  Odometry = 6,
-  JointState = 7,
-  Grid = 8,
-  Path = 9,
-  Diagnostics = 10,
-  Log = 11,
-  Pose = 12,
-  PoseCov = 13,
-  Empty = 14,
-  Bool = 15,
-};
 
 class Writer {
  public:
@@ -572,33 +551,7 @@ std::optional<msgs::Log> decode_log(Reader& r) {
 
 std::vector<std::uint8_t> make_frame(std::uint8_t type, const std::string& topic, Kind kind,
                                      const std::vector<std::uint8_t>& payload) {
-  Writer body;
-  body.u8(type);
-  body.str(topic);
-  body.u8(static_cast<std::uint8_t>(kind));
-  body.bytes(payload.data(), payload.size());
-  Writer frame;
-  frame.u32(static_cast<std::uint32_t>(body.data.size()));
-  frame.bytes(body.data.data(), body.data.size());
-  return frame.data;
-}
-
-bool read_exact(int fd, std::uint8_t* buffer, std::size_t size) {
-  std::size_t offset = 0;
-  while (offset < size) {
-    const ssize_t received = ::recv(fd, buffer + offset, size - offset, 0);
-    if (received == 0) {
-      return false;
-    }
-    if (received < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return false;
-    }
-    offset += static_cast<std::size_t>(received);
-  }
-  return true;
+  return encode_frame(Frame{type, topic, kind, payload});
 }
 
 bool send_all(int fd, const std::vector<std::uint8_t>& data) {
@@ -616,30 +569,16 @@ bool send_all(int fd, const std::vector<std::uint8_t>& data) {
   return true;
 }
 
-bool read_frame(int fd, std::uint8_t& type, std::string& topic, Kind& kind, std::vector<std::uint8_t>& payload) {
-  std::uint8_t length_buffer[4];
-  if (!read_exact(fd, length_buffer, sizeof(length_buffer))) {
+bool read_frame(int fd, std::uint8_t& type, std::string& topic, Kind& kind,
+                std::vector<std::uint8_t>& payload) {
+  Frame frame;
+  if (!krosc::net::read_frame(fd, frame)) {
     return false;
   }
-  const std::uint32_t length = static_cast<std::uint32_t>(length_buffer[0]) |
-                               (static_cast<std::uint32_t>(length_buffer[1]) << 8) |
-                               (static_cast<std::uint32_t>(length_buffer[2]) << 16) |
-                               (static_cast<std::uint32_t>(length_buffer[3]) << 24);
-  if (length == 0 || length > kMaxFrame) {
-    return false;
-  }
-  std::vector<std::uint8_t> body(length);
-  if (!read_exact(fd, body.data(), body.size())) {
-    return false;
-  }
-  Reader reader(body);
-  type = reader.u8();
-  topic = reader.str();
-  kind = static_cast<Kind>(reader.u8());
-  if (!reader.ok()) {
-    return false;
-  }
-  payload.assign(reader.rest(), reader.rest() + reader.remaining());
+  type = frame.type;
+  topic = std::move(frame.topic);
+  kind = frame.kind;
+  payload = std::move(frame.payload);
   return true;
 }
 

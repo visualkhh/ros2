@@ -10,9 +10,11 @@
 #include <thread>
 #include <vector>
 
-namespace krosc::viz_web {
+namespace krosc::net {
+class FrameClient;
+}
 
-class RobotLink;
+namespace krosc::viz_web {
 
 // HTTP 정적 파일 + /ws WebSocket. 브라우저와 로봇 TCP 사이에서 프레임만 중계한다.
 class HttpServer {
@@ -20,7 +22,7 @@ class HttpServer {
   using ManifestHandler = std::function<std::string()>;
 
   HttpServer(std::string bind_address, std::uint16_t port, std::vector<std::string> www_roots,
-             RobotLink& robot, ManifestHandler manifest = {});
+             net::FrameClient& robot, ManifestHandler manifest = {});
   ~HttpServer();
 
   HttpServer(const HttpServer&) = delete;
@@ -43,7 +45,7 @@ class HttpServer {
   std::uint16_t port_ = 8080;
   std::uint16_t bound_port_ = 0;
   std::vector<std::string> www_roots_;
-  RobotLink& robot_;
+  net::FrameClient& robot_;
   ManifestHandler manifest_;
   std::atomic<bool> stopping_{false};
   int listen_fd_ = -1;

@@ -23,7 +23,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "krosc/viz_web/robot_link.hpp"
+#include "krosc/net.hpp"
 #include "krosc/viz_web/websocket.hpp"
 
 #ifndef MSG_NOSIGNAL
@@ -67,15 +67,7 @@ std::string trim(std::string text) {
 }
 
 std::optional<std::string> frame_topic(const std::vector<std::uint8_t>& body) {
-  if (body.size() < 3) {
-    return std::nullopt;
-  }
-  const std::size_t length = static_cast<std::size_t>(body[1]) |
-                             (static_cast<std::size_t>(body[2]) << 8);
-  if (length == 0 || length + 3 > body.size()) {
-    return std::nullopt;
-  }
-  return std::string(reinterpret_cast<const char*>(body.data() + 3), length);
+  return net::frame_topic(body);
 }
 
 bool cacheable(const std::string& topic) {
@@ -206,7 +198,7 @@ struct HttpServer::Client {
 };
 
 HttpServer::HttpServer(std::string bind_address, std::uint16_t port,
-                       std::vector<std::string> www_roots, RobotLink& robot,
+                       std::vector<std::string> www_roots, net::FrameClient& robot,
                        ManifestHandler manifest)
     : bind_address_(std::move(bind_address)),
       port_(port),
@@ -369,7 +361,9 @@ void HttpServer::handle_client(int fd) {
         continue;
       }
       if (opcode == 0x2) {
-        robot_.send(payload);
+        if (const auto frame = net::decode_body(payload)) {
+          (void)robot_.send(*frame);
+        }
       } else if (opcode == 0x8) {
         break;
       } else if (opcode == 0x9) {

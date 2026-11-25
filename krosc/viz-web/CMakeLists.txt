@@ -6,7 +6,6 @@ add_library(krosc_viz_web_core STATIC
   core/viz_web_cli.cpp
   core/viz_web_plugins.cpp
   core/http_server.cpp
-  core/robot_link.cpp
   core/websocket.cpp
 )
 add_library(krosc::viz_web ALIAS krosc_viz_web_core)
@@ -16,7 +15,7 @@ target_include_directories(krosc_viz_web_core
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(krosc_viz_web_core PUBLIC Threads::Threads)
+target_link_libraries(krosc_viz_web_core PUBLIC Threads::Threads krosc::core)
 target_compile_definitions(krosc_viz_web_core PUBLIC
   KROSC_VIZ_WEB_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/www")
 target_compile_options(krosc_viz_web_core PRIVATE -Wall -Wextra -Wpedantic)

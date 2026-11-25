@@ -7,8 +7,8 @@
 #include <thread>
 #include <utility>
 
+#include "krosc/net.hpp"
 #include "krosc/viz_web/http_server.hpp"
-#include "krosc/viz_web/robot_link.hpp"
 
 namespace krosc::viz_web {
 
@@ -29,7 +29,7 @@ bool VizWeb::initialize(std::string& error) {
   if (initialized_) {
     return true;
   }
-  link_ = std::make_unique<RobotLink>(options_.robot_host, options_.robot_port);
+  link_ = std::make_unique<net::FrameClient>(options_.robot_host, options_.robot_port);
   std::vector<std::string> roots;
   if (!options_.overlay_root.empty()) {
     roots.push_back(options_.overlay_root);
@@ -38,10 +38,13 @@ bool VizWeb::initialize(std::string& error) {
   server_ = std::make_unique<HttpServer>(options_.bind_address, options_.port, std::move(roots),
                                          *link_,
                                          [this] { return registry_.manifest_json(); });
-  link_->set_frame_handler([this](const std::vector<std::uint8_t>& body) {
-    server_->broadcast_binary(body);
+  link_->set_frame_handler([this](const net::Frame& frame) {
+    server_->broadcast_binary(net::encode_body(frame));
   });
   link_->set_status_handler([this](bool connected) {
+    std::printf("[viz-web] robot %s: %s\n", connected ? "connected" : "disconnected",
+                link_->endpoint().c_str());
+    std::fflush(stdout);
     server_->broadcast_text(std::string("{\"type\":\"robot\",\"connected\":") +
                             (connected ? "true" : "false") + "}");
   });

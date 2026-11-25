@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 
+#include "krosc/net_protocol.hpp"
+
 namespace krosc {
 class Context;
 }

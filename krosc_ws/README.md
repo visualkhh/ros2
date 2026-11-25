@@ -242,6 +242,8 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 KROSC_VIZ_HOST=10.2.150.138 ./run-viz-web.sh
 ```
 
+- TCP 프레임은 코어 `krosc::net`(`net_protocol.hpp`)을 그대로 쓴다.
+  Qt Viz는 `net::Client`, 웹 Viz는 `net::Frame`으로 같은 프로토콜을 공유한다.
 - `krosc_ws_viz_web` = `krosc::viz_web` 코어 + 프로젝트 레지스트리
 - 프로젝트 JS: `krosc_ws/viz-web/www/plugins/{moveit,rl_nav}.js`
 - 정적 파일은 프로젝트 www → 코어 www 순으로 찾는다 (`VizWebOptions::overlay_root`)
