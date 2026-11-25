@@ -299,6 +299,40 @@ KROSC_TEST(net_peer_topic_mesh_and_latched) {
   server.shutdown();
 }
 
+KROSC_TEST(net_peer_replays_latched_published_before_connect) {
+  // 로봇이 먼저 뜨고 Viz가 나중에 붙는 실제 순서. map/robot_description은 연결 전에
+  // 한 번만 발행되므로, 새 peer가 구독할 때 latched 캐시에서 재전송되어야 한다.
+  krosc::Context::Options server_options;
+  server_options.network.name = "late_server";
+  server_options.network.listen = true;
+  server_options.network.port = 0;
+  krosc::Context server(server_options);
+  server.topics().publish("map_status", krosc::msgs::String{"ready-before"}, krosc::QOS_LATCHED);
+
+  krosc::Context::Options client_options;
+  client_options.network.name = "late_client";
+  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  krosc::Context client(client_options);
+
+  std::atomic<bool> got{false};
+  std::mutex mutex;
+  std::condition_variable cv;
+  client.topics().subscribe<krosc::msgs::String>(
+      "map_status",
+      [&](const krosc::msgs::String& message) {
+        if (message.data == "ready-before") {
+          got.store(true);
+        }
+        cv.notify_all();
+      },
+      krosc::QOS_LATCHED);
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 3s, [&] { return got.load(); }));
+  lock.unlock();
+  client.shutdown();
+  server.shutdown();
+}
+
 KROSC_TEST(net_peer_receive_remap_cmd_vel) {
   krosc::Context::Options robot_options;
   robot_options.network.name = "remap_robot";
