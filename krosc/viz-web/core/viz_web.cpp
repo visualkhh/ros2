@@ -142,6 +142,8 @@ void VizWeb::stop() { stop_.store(true); }
 
 void VizWeb::shutdown() {
   if (link_) {
+    link_->set_frame_handler({});
+    link_->set_status_handler({});
     link_->shutdown();
   }
   server_.reset();
