@@ -8,118 +8,135 @@ export function init(host) {
   body.append(hint);
 
   let slamMode = 'idle';
-  let preview = false;
-  let multi = false;
-  let armed = false;
-  let poseArmed = false;
+  let mode = '';  // '', 'pose', 'preview', 'move', 'waypoint'
 
-  const buttons = buttonRow(body);
-  const poseButton = button(buttons, '2D Pose', () => {
-    poseArmed = !poseArmed;
-    if (poseArmed) {
-      armed = false;
-      multi = false;
-      host.setGoalArmed(false);
-      host.setMultiGoal(false);
-    }
-    host.setPoseArmed(poseArmed);
-    updateUi();
-  });
-  const goalButton = button(buttons, '2D Goal', () => {
-    armed = !armed;
-    if (armed) {
-      poseArmed = false;
-      multi = false;
-      host.setPoseArmed(false);
-      host.setMultiGoal(false);
-    }
-    host.setGoalArmed(armed);
-    updateUi();
-  });
-  button(buttons, 'Cancel', () => {
+  // ---- 위치 ----
+  const poseTitle = document.createElement('div');
+  poseTitle.className = 'muted';
+  poseTitle.textContent = '위치 (Localization)';
+  body.append(poseTitle);
+  const poseRow = buttonRow(body);
+  const poseButton = button(poseRow, '2D Pose Estimate', () => toggle('pose'));
+  const cancelButton = button(poseRow, '취소 / 정지', () => {
     host.clearWaypoints();
     host.sendBool('cancel_goal', true);
     setLevel(status, 'cancel requested', 'warn');
   }, 'danger');
-  const previewButton = button(buttons, 'Preview OFF', () => {
-    preview = !preview;
-    previewButton.textContent = preview ? 'Preview ON' : 'Preview OFF';
-    previewButton.className = preview ? 'primary' : '';
-    host.setGoalTopic(preview ? 'preview_goal' : 'goal_pose');
-  });
 
+  // ---- 단일 목표 ----
+  const singleTitle = document.createElement('div');
+  singleTitle.className = 'muted';
+  singleTitle.textContent = '단일 목표 (맵 클릭)';
+  body.append(singleTitle);
+  const singleRow = buttonRow(body);
+  const previewButton = button(singleRow, '경로 미리보기', () => toggle('preview'));
+  const moveButton = button(singleRow, '이동', () => toggle('move'), 'primary');
+
+  // ---- 멀티 목표 ----
+  const multiTitle = document.createElement('div');
+  multiTitle.className = 'muted';
+  multiTitle.textContent = '멀티 목표 (웨이포인트)';
+  body.append(multiTitle);
   const multiRow = buttonRow(body);
-  const multiButton = button(multiRow, 'Multi Goal', () => {
-    multi = !multi;
-    if (multi) {
-      armed = false;
-      poseArmed = false;
-      host.setGoalArmed(false);
-      host.setPoseArmed(false);
-    }
-    host.setMultiGoal(multi);
-    updateUi();
-  });
-  const sendButton = button(multiRow, 'Send', () => {
-    if (!multi) {
-      setLevel(status, '단일 goal은 2D Goal을 켜고 맵을 클릭', 'warn');
-      return;
-    }
-    const count = host.waypointCount();
-    if (count === 0) {
-      setLevel(status, 'waypoint가 없다 — 맵을 클릭해 추가', 'warn');
-      return;
-    }
-    if (slamMode !== 'localization') {
-      setLevel(status, 'load a map first (localization)', 'warn');
-      return;
-    }
-    host.sendWaypoints(preview);
-    setLevel(status, preview ? `preview ${count} goals (경로만 표시)` : `sent ${count} goals`,
-             preview ? 'warn' : 'ok');
-  }, 'primary');
-  const clearButton = button(multiRow, 'Clear', () => {
+  const waypointButton = button(multiRow, '웨이포인트 추가', () => toggle('waypoint'));
+  const multiPreview = button(multiRow, '경로 미리보기', () => sendMulti(true));
+  const multiGo = button(multiRow, '이동 시작', () => sendMulti(false), 'primary');
+  const clearButton = button(multiRow, '비우기', () => {
     host.clearWaypoints();
     host.sendBool('cancel_goal', true);
-    setLevel(status, 'goals cleared', 'warn');
+    setLevel(status, 'waypoints cleared', 'warn');
+    updateUi();
   });
-
   const countLabel = document.createElement('div');
   countLabel.className = 'muted';
   body.append(countLabel);
 
-  function updateUi() {
-    poseButton.className = poseArmed ? 'primary' : '';
-    goalButton.className = armed ? 'primary' : '';
-    multiButton.className = multi ? 'primary' : '';
-    sendButton.disabled = !multi;
-    clearButton.disabled = !multi;
-    if (multi) {
-      hint.textContent =
-        '맵을 누른 채 드래그 = waypoint + 방향 · 클릭만 하면 방향 0 · Backspace = 마지막 취소 · Send로 전송';
-    } else if (armed) {
-      hint.textContent = '맵을 클릭하면 goal을 전송한다 (1회, 자동 해제)';
-    } else if (poseArmed) {
-      hint.textContent = '맵을 누른 채 드래그 = 위치+방향(initialpose) · 클릭만 하면 방향 0';
-    } else {
-      hint.textContent = '2D Goal을 켠 뒤 맵을 클릭하면 이동한다. (그냥 클릭해도 안 움직임)';
-    }
-  }
-  updateUi();
-
-  // goal을 한 번 보내면 자동으로 해제 (실수로 계속 보내는 것 방지)
-  host.onGoalSent(() => {
-    armed = false;
+  function disarm() {
+    host.setPoseArmed(false);
     host.setGoalArmed(false);
+    host.setMultiGoal(false);
+  }
+
+  function toggle(next) {
+    const same = mode === next;
+    disarm();
+    mode = same ? '' : next;
+    if (mode === 'pose') {
+      host.setPoseArmed(true);
+    } else if (mode === 'preview' || mode === 'move') {
+      host.setGoalTopic(mode === 'preview' ? 'preview_goal' : 'goal_pose');
+      host.setGoalArmed(true);
+    } else if (mode === 'waypoint') {
+      host.setMultiGoal(true);
+    }
+    updateUi();
+  }
+
+  function sendMulti(preview) {
+    const count = host.waypointCount();
+    if (count === 0) {
+      setLevel(status, '웨이포인트가 없다 — [웨이포인트 추가] 후 맵을 클릭', 'warn');
+      return;
+    }
+    if (slamMode !== 'localization') {
+      setLevel(status, '지도를 먼저 load 하세요 (localization)', 'warn');
+      return;
+    }
+    host.sendWaypoints(preview);
+    setLevel(status, preview ? `미리보기 ${count}개 (주행 안 함)` : `이동 시작: ${count}개`,
+             preview ? 'warn' : 'ok');
+  }
+
+  function updateUi() {
+    poseButton.className = mode === 'pose' ? 'primary' : '';
+    previewButton.className = mode === 'preview' ? 'primary' : '';
+    moveButton.className = mode === 'move' ? 'primary' : '';
+    waypointButton.className = mode === 'waypoint' ? 'primary' : '';
+    const count = host.waypointCount();
+    multiPreview.disabled = count === 0;
+    multiGo.disabled = count === 0;
+    clearButton.disabled = count === 0;
+
+    if (mode === 'pose') {
+      hint.textContent = '맵을 누른 채 드래그 = 로봇 위치 + 방향 (1회)';
+    } else if (mode === 'preview') {
+      hint.textContent = '맵을 클릭 = 경로만 계산해 표시 (로봇 안 움직임)';
+    } else if (mode === 'move') {
+      hint.textContent = '맵을 클릭 = 그 목표로 이동 시작';
+    } else if (mode === 'waypoint') {
+      hint.textContent = '맵 클릭 = 웨이포인트 추가 · 드래그 = 방향 · Backspace = 마지막 취소';
+    } else {
+      hint.textContent = '모드를 고르세요: 위치 / 단일(미리보기·이동) / 멀티(웨이포인트)';
+    }
+    countLabel.textContent = `웨이포인트: ${count}개` +
+      (slamMode === 'localization' ? '' : ` · SLAM: ${slamMode}`);
+  }
+
+  host.onGoalSent(() => {
+    mode = '';
+    disarm();
     updateUi();
   });
   host.onPoseSent(() => {
-    poseArmed = false;
-    host.setPoseArmed(false);
+    mode = '';
+    disarm();
     updateUi();
   });
 
-  // costmap inflation / scaling (로봇에서 5Hz로 갱신되는 값을 읽고, Apply로 즉시 변경)
+  setInterval(updateUi, 300);
+
+  host.onTopic('slam_status', (message) => {
+    slamMode = String(message.data || 'idle');
+    updateUi();
+  });
+  host.onTopic('goal_status', (message) => {
+    const text = message.data || '-';
+    const level = /fail|error|abort|cancel/i.test(text) ? 'bad'
+      : /succeed|reached|done|preview/i.test(text) ? 'ok' : 'warn';
+    setLevel(status, text, level);
+  });
+
+  // ---- costmap ----
   const costmapTitle = document.createElement('div');
   costmapTitle.className = 'muted';
   costmapTitle.textContent = 'COSTMAP (inflation / scaling)';
@@ -146,12 +163,11 @@ export function init(host) {
   const localScaling = numberField('local scale', 3.0, 0.5);
   const costmapRow = buttonRow(body);
   button(costmapRow, 'Apply costmap', () => {
-    const text =
+    host.sendString('costmap_params',
       `global,inflation_radius,${globalInflation.value};` +
       `global,cost_scaling_factor,${globalScaling.value};` +
       `local,inflation_radius,${localInflation.value};` +
-      `local,cost_scaling_factor,${localScaling.value}`;
-    host.sendString('costmap_params', text);
+      `local,cost_scaling_factor,${localScaling.value}`);
     setLevel(status, 'costmap applied', 'ok');
   }, 'primary');
   const costmapState = document.createElement('div');
@@ -167,9 +183,7 @@ export function init(host) {
     }
     const assign = (field, key) => {
       const value = values.get(key);
-      if (value !== undefined && document.activeElement !== field) {
-        field.value = value;
-      }
+      if (value !== undefined && document.activeElement !== field) field.value = value;
     };
     assign(globalInflation, 'global.inflation_radius');
     assign(globalScaling, 'global.cost_scaling_factor');
@@ -180,17 +194,5 @@ export function init(host) {
       `l ${values.get('local.inflation_radius') || '-'} m / ${values.get('local.cost_scaling_factor') || '-'}`;
   });
 
-  setInterval(() => {
-    countLabel.textContent = `multi goals: ${host.waypointCount()}`;
-  }, 300);
-
-  host.onTopic('slam_status', (message) => {
-    slamMode = String(message.data || 'idle');
-  });
-  host.onTopic('goal_status', (message) => {
-    const text = message.data || '-';
-    const level = /fail|error|abort|cancel/i.test(text) ? 'bad'
-      : /succeed|reached|done/i.test(text) ? 'ok' : 'warn';
-    setLevel(status, text, level);
-  });
+  updateUi();
 }
