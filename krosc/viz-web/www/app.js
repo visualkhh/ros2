@@ -1002,6 +1002,9 @@ let dragged = false;
 let dragStart = { x: 0, y: 0 };
 let lastPointer = { x: 0, y: 0 };
 let waypointDraft = null;  // {x, y, cx, cy}: 누른 지점 + 현재 드래그 지점
+const mapPointers = new Map();  // 모바일 핀치용 활성 포인터
+let mapPinch = null;            // {distance}
+let mapPinchLinger = false;     // 핀치가 끝난 뒤 클릭/goal 오발 방지
 
 function resizeCanvas() {
   const ratio = window.devicePixelRatio || 1;
@@ -1030,20 +1033,54 @@ function worldToScreen(x, y) {
 }
 
 canvas.addEventListener('pointerdown', (event) => {
+  mapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  try { canvas.setPointerCapture(event.pointerId); } catch (error) { /* 합성 이벤트 */ }
+  if (mapPointers.size === 2) {
+    // 두 손가락: 핀치 줌 시작. 진행 중이던 waypoint/pan은 취소.
+    const [a, b] = [...mapPointers.values()];
+    mapPinch = { distance: Math.hypot(a.x - b.x, a.y - b.y) };
+    mapPinchLinger = true;
+    waypointDraft = null;
+    dragging = false;
+    dragged = true;
+    event.preventDefault();
+    return;
+  }
+  if (mapPointers.size > 2) {
+    return;
+  }
   if (state.multiGoal && event.button === 0) {
     const rect = canvas.getBoundingClientRect();
     const world = screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
     waypointDraft = { x: world.x, y: world.y, cx: world.x, cy: world.y };
-    canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
     return;
   }
   dragging = true;
   dragged = false;
   dragStart = { x: event.clientX, y: event.clientY };
-  canvas.setPointerCapture(event.pointerId);
 });
 canvas.addEventListener('pointermove', (event) => {
+  if (mapPointers.has(event.pointerId)) {
+    mapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }
+  if (mapPinch && mapPointers.size >= 2) {
+    const [a, b] = [...mapPointers.values()];
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    if (mapPinch.distance > 1 && distance > 1) {
+      const rect = canvas.getBoundingClientRect();
+      const midX = (a.x + b.x) / 2 - rect.left;
+      const midY = (a.y + b.y) / 2 - rect.top;
+      const before = screenToWorld(midX, midY);
+      view.scale = Math.min(400, Math.max(5, view.scale * (distance / mapPinch.distance)));
+      const after = screenToWorld(midX, midY);
+      view.cx += before.x - after.x;
+      view.cy += before.y - after.y;
+    }
+    mapPinch.distance = distance;
+    event.preventDefault();
+    return;
+  }
   const world = screenToWorld(event.clientX - canvas.getBoundingClientRect().left,
                               event.clientY - canvas.getBoundingClientRect().top);
   $('cursor').textContent = `${world.x.toFixed(2)}, ${world.y.toFixed(2)}`;
@@ -1062,6 +1099,16 @@ canvas.addEventListener('pointermove', (event) => {
   }
 });
 canvas.addEventListener('pointerup', (event) => {
+  mapPointers.delete(event.pointerId);
+  if (mapPinchLinger) {
+    if (mapPointers.size < 2) {
+      mapPinch = null;
+    }
+    if (mapPointers.size === 0) {
+      mapPinchLinger = false;
+    }
+    return;  // 핀치 후에는 클릭/goal/waypoint 처리 안 함
+  }
   if (waypointDraft) {
     const dx = waypointDraft.cx - waypointDraft.x;
     const dy = waypointDraft.cy - waypointDraft.y;
@@ -1080,6 +1127,15 @@ canvas.addEventListener('pointerup', (event) => {
     for (const listener of goalSentListeners) {
       try { listener(); } catch (error) { console.error(error); }
     }
+  }
+});
+canvas.addEventListener('pointercancel', (event) => {
+  mapPointers.delete(event.pointerId);
+  if (mapPointers.size < 2) {
+    mapPinch = null;
+  }
+  if (mapPointers.size === 0) {
+    mapPinchLinger = false;
   }
 });
 canvas.addEventListener('wheel', (event) => {
@@ -2044,14 +2100,40 @@ function draw3d() {
 let drag3d = false;
 let drag3dMode = 'orbit';
 let drag3dLast = { x: 0, y: 0 };
+const pointers3d = new Map();
+let pinch3d = null;
 canvas3d.addEventListener('contextmenu', (event) => event.preventDefault());
 canvas3d.addEventListener('pointerdown', (event) => {
+  pointers3d.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  try { canvas3d.setPointerCapture(event.pointerId); } catch (error) { /* 합성 이벤트 */ }
+  if (pointers3d.size === 2) {
+    const [a, b] = [...pointers3d.values()];
+    pinch3d = { distance: Math.hypot(a.x - b.x, a.y - b.y) };
+    drag3d = false;
+    event.preventDefault();
+    return;
+  }
+  if (pointers3d.size > 2) {
+    return;
+  }
   drag3d = true;
   drag3dMode = event.button === 2 || event.shiftKey ? 'pan' : 'orbit';
   drag3dLast = { x: event.clientX, y: event.clientY };
-  canvas3d.setPointerCapture(event.pointerId);
 });
 canvas3d.addEventListener('pointermove', (event) => {
+  if (pointers3d.has(event.pointerId)) {
+    pointers3d.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }
+  if (pinch3d && pointers3d.size >= 2) {
+    const [a, b] = [...pointers3d.values()];
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch3d.distance > 1 && distance > 1) {
+      camera3d.distance = Math.max(0.6, Math.min(12.0, camera3d.distance * (pinch3d.distance / distance)));
+    }
+    pinch3d.distance = distance;
+    event.preventDefault();
+    return;
+  }
   if (!drag3d) return;
   const dx = event.clientX - drag3dLast.x;
   const dy = event.clientY - drag3dLast.y;
@@ -2068,7 +2150,20 @@ canvas3d.addEventListener('pointermove', (event) => {
     camera3d.pitch = Math.max(0.12, Math.min(1.25, camera3d.pitch - dy * 0.008));
   }
 });
-canvas3d.addEventListener('pointerup', () => { drag3d = false; });
+canvas3d.addEventListener('pointerup', (event) => {
+  pointers3d.delete(event.pointerId);
+  if (pinch3d) {
+    if (pointers3d.size < 2) pinch3d = null;
+    drag3d = false;
+    return;
+  }
+  drag3d = false;
+});
+canvas3d.addEventListener('pointercancel', (event) => {
+  pointers3d.delete(event.pointerId);
+  if (pointers3d.size < 2) pinch3d = null;
+  drag3d = false;
+});
 canvas3d.addEventListener('dblclick', () => {
   camera3d.tx = 0;
   camera3d.ty = 0;
