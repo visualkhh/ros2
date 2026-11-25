@@ -40,6 +40,37 @@ const state = {
   },
 };
 
+// ---- URL 상태 (SPA): 새로고침해도 보던 탭/표시 그대로 ----
+const urlParams = new URLSearchParams(location.search);
+{
+  const requested = urlParams.get('displays');
+  if (requested !== null) {
+    const enabled = new Set(requested.split(',').filter(Boolean));
+    for (const key of Object.keys(state.settings)) {
+      state.settings[key] = enabled.has(key);
+    }
+  }
+}
+let activeControlTab = null;
+let urlStateReady = false;
+let urlStateTimer = null;
+
+function scheduleUrlState() {
+  if (!urlStateReady) return;
+  if (urlStateTimer) clearTimeout(urlStateTimer);
+  urlStateTimer = setTimeout(() => {
+    urlStateTimer = null;
+    const params = new URLSearchParams();
+    if (activeView) params.set('view', activeView);
+    if (activeControlTab) params.set('tab', activeControlTab);
+    const enabled = Object.keys(state.settings).filter((key) => state.settings[key]);
+    params.set('displays', enabled.join(','));
+    const follow = document.getElementById('follow');
+    params.set('follow', follow && follow.checked ? '1' : '0');
+    history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+  }, 120);
+}
+
 class Reader {
   constructor(buffer, offset = 0) {
     this.view = new DataView(buffer);
@@ -762,6 +793,7 @@ function activateView(id) {
     tools.style.display = id === '3d' || id === 'moveit' ? 'flex' : 'none';
   }
   syncViewTools();
+  scheduleUrlState();
   if (typeof resizeCanvas === 'function') {
     resizeCanvas();
   }
@@ -784,6 +816,7 @@ function syncViewTools() {
 
 function applyViewSetting(key, value) {
   state.settings[key] = value;
+  scheduleUrlState();
   const checkbox = document.querySelector(`#displays input[data-key="${key}"]`);
   if (checkbox) {
     checkbox.checked = value;
@@ -886,6 +919,14 @@ const host = {
   },
 };
 
+{
+  const follow = document.getElementById('follow');
+  if (follow) {
+    if (urlParams.get('follow') === '0') follow.checked = false;
+    follow.addEventListener('change', scheduleUrlState);
+  }
+}
+
 const displays = [
   ['grid', 'Grid'],
   ['map', 'Map'],
@@ -911,6 +952,7 @@ for (const [key, label] of displays) {
   checkbox.addEventListener('change', () => {
     state.settings[key] = checkbox.checked;
     syncViewTools();
+    scheduleUrlState();
   });
   wrapper.append(checkbox, document.createTextNode(label));
   $('displays').append(wrapper);
@@ -2341,6 +2383,8 @@ async function loadPlugins() {
       item.view.classList.toggle('active', active);
       item.tab.setAttribute('aria-selected', active ? 'true' : 'false');
     }
+    activeControlTab = selected ? selected.tab.dataset.tab : null;
+    scheduleUrlState();
   };
 
   for (const entry of manifest) {
@@ -2348,6 +2392,7 @@ async function loadPlugins() {
     const tab = document.createElement('button');
     tab.type = 'button';
     tab.className = 'plugin-tab';
+    tab.dataset.tab = entry.name;
     tab.textContent = label;
     tab.title = label;
     tab.setAttribute('role', 'tab');
@@ -2380,7 +2425,16 @@ async function loadPlugins() {
   }
 
   if (views.length > 0) {
-    activate(views[0]);
+    const requestedTab = urlParams.get('tab');
+    activate(views.find((item) => item.tab.dataset.tab === requestedTab) || views[0]);
   }
+
+  // 플러그인이 만든 view 탭까지 모두 등록된 뒤 요청한 view를 연다.
+  const requestedView = urlParams.get('view');
+  if (requestedView && viewRegistry.has(requestedView)) {
+    activateView(requestedView);
+  }
+  urlStateReady = true;
+  scheduleUrlState();
 }
 loadPlugins();
