@@ -648,7 +648,7 @@ function activateView(id) {
   $('hint').textContent = id === '3d'
     ? 'left drag orbit · right/shift drag pan · wheel zoom · WASD teleop'
     : id === 'moveit'
-      ? 'drag X/Y · Shift+Z · Ctrl+Pitch · Plan/Execute는 control-panel에서'
+      ? 'TCP 마커 드래그 X/Y · Shift+Z · Ctrl+Pitch · Plan/Execute는 control-panel'
       : 'drag pan · wheel zoom · click 2D goal · WASD teleop';
   if (typeof resizeCanvas === 'function') {
     resizeCanvas();
@@ -855,7 +855,7 @@ view3d.panel.append(canvas3d);
 const context3d = canvas3d.getContext('2d');
 
 const view = { cx: 0, cy: 0, scale: 60 };
-const camera3d = { yaw: -0.55, pitch: 0.62, distance: 3.3, tx: 0, ty: 0 };
+const camera3d = { yaw: -0.55, pitch: 0.62, distance: 2.4, tx: 0, ty: 0 };
 let dragging = false;
 let dragged = false;
 let dragStart = { x: 0, y: 0 };
@@ -1243,7 +1243,7 @@ function draw3dRobot() {
   if (!state.settings.robot) return;
   const pose = robotPose();
   if (pose) {
-    draw3dBox(pose.x, pose.y, pose.yaw, 0.28, 0.24, 0.22, '#7f899b');
+    draw3dBox(pose.x, pose.y, pose.yaw, 0.28, 0.24, 0.13, '#7f899b');
   }
   const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
   const c = Math.cos(transform.yaw);
@@ -1364,7 +1364,7 @@ canvas3d.addEventListener('pointerup', () => { drag3d = false; });
 canvas3d.addEventListener('dblclick', () => {
   camera3d.tx = 0;
   camera3d.ty = 0;
-  camera3d.distance = 3.3;
+  camera3d.distance = 2.4;
   camera3d.yaw = -0.55;
   camera3d.pitch = 0.62;
   $('follow').checked = true;

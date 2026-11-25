@@ -8,6 +8,7 @@ export function init(host) {
   const context = canvas.getContext('2d');
 
   const camera = { yaw: -0.6, pitch: 0.45, distance: 1.05, tx: 0.15, ty: 0.0, tz: 0.18 };
+  let targetScreenPoint = null;
 
   function project(point, width, height) {
     const dx = (Number(point.x) || 0) - camera.tx;
@@ -60,7 +61,7 @@ export function init(host) {
       context.clearRect(0, 0, width, height);
       context.fillStyle = '#5f7188';
       context.font = '12px system-ui';
-      context.fillText('drag TCP X/Y · Shift+Z · Ctrl+Pitch · Alt+Grip · right drag orbit', 12, 20);
+      context.fillText('TCP 마커를 클릭해 드래그 · Shift+Z · Ctrl+Pitch · Alt+Grip · 빈 곳/우드래그 orbit', 12, 20);
 
       context.strokeStyle = '#141c27';
       context.lineWidth = 1;
@@ -77,10 +78,12 @@ export function init(host) {
       for (const box of boxes) drawBox(box, width, height);
 
       const target = host.latest('moveit_target_pose');
+      targetScreenPoint = null;
       if (target) {
         const pose = target.pose.position;
         const point = project(pose, width, height);
         if (point) {
+          targetScreenPoint = point;
           context.strokeStyle = '#ffb36b';
           context.lineWidth = 2;
           context.beginPath(); context.arc(point.x, point.y, 8, 0, Math.PI * 2); context.stroke();
@@ -191,8 +194,13 @@ export function init(host) {
   canvas.style.touchAction = 'none';
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   canvas.addEventListener('pointerdown', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const hit = targetScreenPoint !== null &&
+      Math.hypot(localX - targetScreenPoint.x, localY - targetScreenPoint.y) <= 20;
     dragView = true;
-    dragMode = event.button === 2 ? 'orbit'
+    dragMode = event.button === 2 || !hit ? 'orbit'
       : event.altKey ? 'grip'
       : event.shiftKey ? 'z'
       : event.ctrlKey || event.metaKey ? 'pitch' : 'xy';

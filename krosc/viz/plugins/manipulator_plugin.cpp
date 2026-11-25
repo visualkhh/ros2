@@ -191,11 +191,12 @@ void ManipulatorPlugin::initialize(VizHost& host) {
   connect(home, &QPushButton::clicked, this, [this, set_preset, apply_torque] {
     cancel_moveit_if_executing();
     apply_torque(true);
-    set_preset({0.0, 0.0, 0.0, 0.0, 0.0});
+    // 로봇의 home 프리셋은 바닥에 걸리지 않는 STOW 자세다. UI도 같은 값을 보여준다.
+    set_preset({0.0, -1.9024, 1.3440, 0.9023, 0.0});
     host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
     host_->model().node().publish("moveit_preset", msgs::String{"home"}, QOS_DEFAULT);
     host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
-    status_->setText("HOME → MoveIt 실행");
+    status_->setText("HOME (safe STOW) → MoveIt 실행");
   });
   connect(estop, &QPushButton::clicked, this, [this] {
     cancel_moveit_if_executing();
