@@ -373,6 +373,8 @@ function toast(message) {
   toast.timer = setTimeout(() => element.classList.remove('show'), 4000);
 }
 
+let currentPluginView = null;
+
 const host = {
   onTopic,
   latest: topic,
@@ -393,7 +395,7 @@ const host = {
     const bodyElement = document.createElement('div');
     bodyElement.className = 'body';
     section.append(heading, bodyElement);
-    $('right').append(section);
+    (currentPluginView ?? $('plugin-panels')).append(section);
     return bodyElement;
   },
   addRow(parent, left, right) {
@@ -874,14 +876,56 @@ async function loadPlugins() {
     toast(`plugins.json: ${error.message}`);
     return;
   }
+  const tabs = $('plugin-tabs');
+  const panels = $('plugin-panels');
+  const views = [];
+  const activate = (selected) => {
+    for (const item of views) {
+      const active = item === selected;
+      item.tab.classList.toggle('active', active);
+      item.view.classList.toggle('active', active);
+      item.tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    }
+  };
+
   for (const entry of manifest) {
+    const label = entry.title || entry.name;
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'plugin-tab';
+    tab.textContent = label;
+    tab.title = label;
+    tab.setAttribute('role', 'tab');
+    const view = document.createElement('div');
+    view.className = 'plugin-view';
+    view.setAttribute('role', 'tabpanel');
+    tabs.append(tab);
+    panels.append(view);
+
+    const previous = currentPluginView;
+    currentPluginView = view;
     try {
       const module = await import(entry.module);
       if (typeof module.init === 'function') await module.init(host, entry);
     } catch (error) {
       console.error(`plugin ${entry.name}`, error);
       toast(`plugin ${entry.name}: ${error.message}`);
+    } finally {
+      currentPluginView = previous;
     }
+
+    if (view.childElementCount === 0) {
+      tab.remove();
+      view.remove();
+      continue;
+    }
+    const item = { tab, view };
+    views.push(item);
+    tab.addEventListener('click', () => activate(item));
+  }
+
+  if (views.length > 0) {
+    activate(views[0]);
   }
 }
 loadPlugins();
