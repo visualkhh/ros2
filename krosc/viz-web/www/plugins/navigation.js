@@ -5,14 +5,23 @@ export function init(host) {
   const status = row(body, 'goal');
   const hint = document.createElement('div');
   hint.className = 'muted';
-  hint.textContent = '맵을 클릭하면 2D goal을 보낸다.';
   body.append(hint);
 
   let slamMode = 'idle';
   let preview = false;
   let multi = false;
+  let armed = false;
 
   const buttons = buttonRow(body);
+  const goalButton = button(buttons, '2D Goal', () => {
+    armed = !armed;
+    if (armed && multi) {
+      multi = false;
+      host.setMultiGoal(false);
+    }
+    host.setGoalArmed(armed);
+    updateUi();
+  });
   button(buttons, 'Cancel', () => {
     host.clearWaypoints();
     host.sendBool('cancel_goal', true);
@@ -28,11 +37,12 @@ export function init(host) {
   const multiRow = buttonRow(body);
   const multiButton = button(multiRow, 'Multi Goal', () => {
     multi = !multi;
+    if (multi && armed) {
+      armed = false;
+      host.setGoalArmed(false);
+    }
     host.setMultiGoal(multi);
-    multiButton.className = multi ? 'primary' : '';
-    hint.textContent = multi
-      ? '맵을 누른 채 드래그 = waypoint + 방향 · 클릭만 하면 방향 0 · Backspace = 마지막 취소 · Send로 전송'
-      : '맵을 클릭하면 2D goal을 보낸다.';
+    updateUi();
   });
   button(multiRow, 'Send', () => {
     const count = host.waypointCount();
@@ -55,8 +65,29 @@ export function init(host) {
 
   const countLabel = document.createElement('div');
   countLabel.className = 'muted';
-  countLabel.textContent = 'multi goals: 0';
   body.append(countLabel);
+
+  function updateUi() {
+    goalButton.className = armed ? 'primary' : '';
+    multiButton.className = multi ? 'primary' : '';
+    if (multi) {
+      hint.textContent =
+        '맵을 누른 채 드래그 = waypoint + 방향 · 클릭만 하면 방향 0 · Backspace = 마지막 취소 · Send로 전송';
+    } else if (armed) {
+      hint.textContent = '맵을 클릭하면 goal을 전송한다 (1회, 자동 해제)';
+    } else {
+      hint.textContent = '2D Goal을 켠 뒤 맵을 클릭하면 이동한다. (그냥 클릭해도 안 움직임)';
+    }
+  }
+  updateUi();
+
+  // goal을 한 번 보내면 자동으로 해제 (실수로 계속 보내는 것 방지)
+  host.onGoalSent(() => {
+    armed = false;
+    host.setGoalArmed(false);
+    updateUi();
+  });
+
   setInterval(() => {
     countLabel.textContent = `multi goals: ${host.waypointCount()}`;
   }, 300);

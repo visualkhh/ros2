@@ -19,6 +19,7 @@ const state = {
   goalTopic: 'goal_pose',
   waypoints: [],
   multiGoal: false,
+  goalArmed: false,
   settings: {
     grid: true,
     map: true,
@@ -672,6 +673,9 @@ function sendPath(topicName, points) {
   return sendBinary(topicName, 9, writer.data);
 }
 
+const goalSentListeners = [];
+function addGoalSentListener(listener) { goalSentListeners.push(listener); }
+
 function sendGoal(x, y, yaw = 0) {
   const writer = new Writer();
   writer.f64(Date.now() / 1000);
@@ -787,6 +791,8 @@ const host = {
   setGoalTopic(topicName) { state.goalTopic = topicName; },
   fitMap: fitToMap,
   setMultiGoal(enabled) { state.multiGoal = Boolean(enabled); },
+  setGoalArmed(enabled) { state.goalArmed = Boolean(enabled); },
+  onGoalSent(listener) { addGoalSentListener(listener); },
   waypointCount() { return state.waypoints.length; },
   clearWaypoints() { state.waypoints = []; },
   sendWaypoints() { return sendPath('goal_poses', state.waypoints); },
@@ -1066,10 +1072,14 @@ canvas.addEventListener('pointerup', (event) => {
     return;
   }
   dragging = false;
-  if (!dragged && !state.multiGoal) {
+  if (!dragged && !state.multiGoal && state.goalArmed) {
     const world = screenToWorld(event.clientX - canvas.getBoundingClientRect().left,
                                 event.clientY - canvas.getBoundingClientRect().top);
     sendGoal(world.x, world.y);
+    state.goalArmed = false;
+    for (const listener of goalSentListeners) {
+      try { listener(); } catch (error) { console.error(error); }
+    }
   }
 });
 canvas.addEventListener('wheel', (event) => {
