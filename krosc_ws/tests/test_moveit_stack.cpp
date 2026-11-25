@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "krosc/action.hpp"
+#include "krosc/manipulation/arm_chain.hpp"
 #include "krosc/context.hpp"
 #include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/msgs.hpp"
@@ -229,4 +230,33 @@ KROSC_TEST(moveit_ros2_control_real_arm_pipeline) {
   CHECK_EQ(krosc::msgs::moveit::MoveGroupResult::NONE,
            std::any_cast<krosc::msgs::moveit::MoveGroupResult>(action_result.result).error_code);
   CHECK(wait_until([&] { return std::abs(hardware->command("joint1")) < 1e-6; }, 2.0));
+}
+
+KROSC_TEST(moveit_cartesian_failure_falls_back_quickly) {
+  // 어제 Cartesian planner가 도달 불가능한 경로에서 모든 IK seed를 매 스텝
+  // 전체 탐색해 수 분간 블록되던 문제의 회귀 테스트.
+  const std::string urdf = read_text(KROSC_WS_URDF_PATH);
+  CHECK(!urdf.empty());
+  std::string chain_error;
+  const auto robot = krosc::parse_urdf(urdf);
+  auto chain = krosc::manipulation::ArmChain::from_urdf(
+      robot, "base_link", "end_effector_link",
+      {"joint1", "joint2", "joint3", "joint4"}, chain_error);
+  CHECK(chain.has_value());
+  if (!chain) {
+    return;
+  }
+  const std::array<double, 4> start{0.0, 0.0, 0.0, 0.0};
+  const std::array<double, 4> stow{0.0, -1.9024, 1.3440, 0.9023};
+  krosc::manipulation::PlanOptions options;
+  std::string error;
+  const auto began = std::chrono::steady_clock::now();
+  const auto trajectory = krosc::manipulation::plan_trajectory(*chain, start, stow, options, error);
+  const double elapsed_ms = std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - began)
+                                .count();
+  CHECK(trajectory.has_value());
+  CHECK(!trajectory->points.empty());
+  CHECK(trajectory->fallback);
+  CHECK(elapsed_ms < 2000.0);
 }

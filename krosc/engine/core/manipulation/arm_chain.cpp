@@ -250,6 +250,13 @@ bool plan_cartesian(const ArmChain& chain, const std::array<double, 4>& start, c
   for (int retry = 0; retry < 6; ++retry) {
     double duration = std::max(profile_duration(effective_distance, speed, accel), sample_time);
     const int steps = std::max(1, static_cast<int>(std::ceil(duration / sample_time)));
+    constexpr int kMaxCartesianSteps = 4000;  // 0.05s 샘플 기준 200초. 넘으면 joint-space fallback.
+    if (steps > kMaxCartesianSteps) {
+      error = "Cartesian 경로가 너무 길다 (" + std::to_string(steps) + " steps)";
+      trajectory.note = error;
+      trajectory.points.clear();
+      return false;
+    }
     std::vector<TrajectoryPoint> points;
     points.reserve(static_cast<std::size_t>(steps) + 1);
     seed = start;
@@ -260,7 +267,10 @@ bool plan_cartesian(const ArmChain& chain, const std::array<double, 4>& start, c
       const double pitch = start_pitch + ratio * (goal_pitch - start_pitch);
       std::array<double, 4> solution{};
       std::string ik_error;
-      if (!chain.ik(target, pitch, seed, solution, ik_error)) {
+      // 경로 샘플은 이전 해(seed) 근처의 해면 충분하다. fast=false로 두면
+      // 도달 불가능한 경로에서 모든 seed×iteration을 매 스텝 반복해 수 분씩
+      // 블록될 수 있다. fast=true로 실패를 빨리 감지하고 joint-space로 대체한다.
+      if (!chain.ik(target, pitch, seed, solution, ik_error, true)) {
         std::string message = "Cartesian 경로 IK 실패 (t=" + std::to_string(time) + "s): " + ik_error;
         error = message;
         trajectory.note = message;
