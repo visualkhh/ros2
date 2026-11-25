@@ -3,6 +3,7 @@
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QAbstractSlider>
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -21,6 +22,7 @@
 #include <QSlider>
 #include <QSplitter>
 #include <QTabWidget>
+#include <QToolBar>
 #include <QStringList>
 #include <QStatusBar>
 #include <QTableWidget>
@@ -113,6 +115,22 @@ VizWindow::VizWindow(Context& context, QWidget* parent) : QMainWindow(parent), m
   tabs->addTab(scene_, "3D");
   tabs->addTab(map_view_, "Map");
   scene_->set_teleop_enabled(false);  // teleop 플러그인이 켠다
+  auto* view_tools = new QToolBar(tabs);
+  view_tools->setObjectName("view-tools");
+  view_tools->setMovable(false);
+  const auto add_tool = [this, view_tools](const char* text, const char* key, bool checked) {
+    QAction* action = view_tools->addAction(QString::fromUtf8(text));
+    action->setCheckable(true);
+    action->setChecked(checked);
+    connect(action, &QAction::toggled, this, [this, key](bool on) { scene_->set_enabled(key, on); });
+  };
+  add_tool("Visual", "model", true);
+  add_tool("Collision", "collision", false);
+  add_tool("Axes", "axes", true);
+  add_tool("Joint Axes", "joint_axes", false);
+  add_tool("Grid", "grid", true);
+  add_tool("Scan", "scan", true);
+  tabs->setCornerWidget(view_tools, Qt::TopRightCorner);
   auto* panel = new QWidget();
   panel->setMinimumWidth(300);
   panel->setMaximumWidth(760);

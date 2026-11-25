@@ -111,6 +111,7 @@ class SceneView : public QWidget {
 
   void draw_grid(QPainter& painter) const;
   void draw_axes(QPainter& painter) const;
+  void draw_joint_axes(QPainter& painter) const;
   void draw_map(QPainter& painter) const;
   void draw_grid_image(QPainter& painter, const msgs::OccupancyGrid& grid, const QImage& image) const;
   void draw_costmap(QPainter& painter, const std::shared_ptr<const msgs::OccupancyGrid>& grid, QImage& image,

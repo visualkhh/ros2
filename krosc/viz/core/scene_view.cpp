@@ -111,9 +111,12 @@ SceneView::SceneView(VizModel& model, QWidget* parent) : QWidget(parent), model_
   setMouseTracking(true);
   setMinimumSize(640, 420);
   for (const auto& key : {"grid", "tf", "model", "scan", "imu", "odom", "filtered", "map", "global_costmap",
-                          "local_costmap", "plan", "local_plan", "trail", "logs"}) {
+                          "local_costmap", "plan", "local_plan", "trail", "logs", "collision", "axes",
+                          "joint_axes"}) {
     enabled_[key] = true;
   }
+  enabled_["collision"] = false;
+  enabled_["joint_axes"] = false;
   fps_clock_.start();
   reset_camera();
   teleop_timer_ = new QTimer(this);
@@ -474,6 +477,25 @@ void SceneView::draw_axes(QPainter& painter) const {
   }
 }
 
+void SceneView::draw_joint_axes(QPainter& painter) const {
+  for (const char* name : {"wheel_left_link", "wheel_right_link", "link2", "link3", "link4", "link5",
+                           "end_effector_link"}) {
+    const auto transform = model_.transform_in_fixed(name);
+    if (!transform) {
+      continue;
+    }
+    const msgs::Transform& t = transform->transform;
+    const QVector3D origin(static_cast<float>(t.translation.x), static_cast<float>(t.translation.y),
+                           static_cast<float>(t.translation.z));
+    const msgs::Vector3 x = tfmath::rotate(t.rotation, {0.04, 0.0, 0.0});
+    const msgs::Vector3 y = tfmath::rotate(t.rotation, {0.0, 0.04, 0.0});
+    const msgs::Vector3 z = tfmath::rotate(t.rotation, {0.0, 0.0, 0.04});
+    draw_line(painter, origin, origin + QVector3D(x.x, x.y, x.z), QColor(255, 90, 90, 210), 1.4);
+    draw_line(painter, origin, origin + QVector3D(y.x, y.y, y.z), QColor(90, 235, 120, 210), 1.4);
+    draw_line(painter, origin, origin + QVector3D(z.x, z.y, z.z), QColor(110, 150, 255, 210), 1.4);
+  }
+}
+
 void SceneView::draw_grid_image(QPainter& painter, const msgs::OccupancyGrid& grid, const QImage& image) const {
   const int width = static_cast<int>(grid.info.width);
   const int height = static_cast<int>(grid.info.height);
@@ -817,6 +839,25 @@ void SceneView::draw_robot(QPainter& painter) {
           drew = true;
         }
       }
+      if (enabled("collision")) {
+        for (const auto& geometry : link.collisions) {
+          if (geometry.geometry.type == UrdfGeometryType::None || geometry.geometry.type == UrdfGeometryType::Mesh) {
+            continue;
+          }
+          const msgs::Transform transform = tfmath::compose(link_tf->transform, origin_transform(geometry));
+          const QColor fill(255, 176, 80, 34);
+          const QColor outline(255, 190, 100, 180);
+          if (geometry.geometry.type == UrdfGeometryType::Box) {
+            draw_box(painter, transform, geometry.geometry.size, fill, outline);
+          } else if (geometry.geometry.type == UrdfGeometryType::Cylinder) {
+            draw_cylinder(painter, transform, geometry.geometry.radius, geometry.geometry.length, fill, outline);
+          } else if (geometry.geometry.type == UrdfGeometryType::Sphere) {
+            draw_box(painter, transform,
+                     {geometry.geometry.radius * 2.0, geometry.geometry.radius * 2.0, geometry.geometry.radius * 2.0},
+                     fill, outline);
+          }
+        }
+      }
       drew = drew || drew_link;
     }
   }
@@ -1139,7 +1180,12 @@ void SceneView::paintEvent(QPaintEvent* event) {
     draw_path(painter, model_.local_plan(), QColor(255, 220, 90, 220));
   }
   draw_trail(painter);
-  draw_axes(painter);
+  if (enabled("axes")) {
+    draw_axes(painter);
+  }
+  if (enabled("joint_axes")) {
+    draw_joint_axes(painter);
+  }
   if (enabled("model")) {
     draw_robot(painter);
   }
