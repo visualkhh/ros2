@@ -58,6 +58,14 @@ export function init(host) {
   }
 
   function toggle(next) {
+    if (next === 'pose' && slamMode === 'idle') {
+      setLevel(status, '지도를 먼저 load 하세요 (localization) — idle에서는 2D Pose가 적용되지 않습니다', 'bad');
+      host.toast('SLAM/Map 탭에서 지도를 load 한 뒤 2D Pose를 쓰세요');
+      mode = '';
+      disarm();
+      updateUi();
+      return;
+    }
     const same = mode === next;
     disarm();
     mode = same ? '' : next;
