@@ -86,13 +86,32 @@ void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
     // 같은 목표라도 300ms마다 다시 보낸다. OpenCR은 500ms 동안 A가 없으면
     // "현재 자세 유지"로 목표를 현재 위치로 덮어쓰기 때문에, 가만히 두면
     // 중력으로 처진 위치가 새 목표가 되어 계속 내려앉는다.
-    if (same && now - last_arm_write_ < std::chrono::milliseconds(300)) {
+    if (same && now - last_arm_write_ < std::chrono::milliseconds(kArmKeepaliveMs)) {
       return;
     }
     last_arm_target_ = position;
     has_arm_target_ = true;
     last_arm_write_ = now;
   }
+  send_arm_line(position);
+}
+
+// 명령 소스가 끊겨도(UI 새로고침·노드 재시작) 목표를 계속 유지한다.
+// 이게 없으면 A가 끊긴 뒤 500ms 만에 펌웨어가 현재(처진) 자세를 새 목표로 잡는다.
+void OpenCrSerial::arm_keepalive(std::chrono::steady_clock::time_point now) {
+  std::array<double, 5> target{};
+  {
+    std::lock_guard<std::mutex> lock(arm_command_mutex_);
+    if (!has_arm_target_ || now - last_arm_write_ < std::chrono::milliseconds(kArmKeepaliveMs)) {
+      return;
+    }
+    last_arm_write_ = now;
+    target = last_arm_target_;
+  }
+  send_arm_line(target);
+}
+
+void OpenCrSerial::send_arm_line(const std::array<double, 5>& position) {
   std::string line = "A";
   char buffer[32];
   for (double value : position) {
@@ -106,6 +125,12 @@ void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
 }
 
 void OpenCrSerial::set_arm_torque(bool enabled) {
+  if (!enabled) {
+    // 토크를 끄면 유지 목표도 버린다. 다시 켰을 때 옛 목표로 튀지 않게.
+    std::lock_guard<std::mutex> lock(arm_command_mutex_);
+    has_arm_target_ = false;
+    last_arm_target_.fill(std::numeric_limits<double>::quiet_NaN());
+  }
   (void)write_command(enabled ? "AT,1" : "AT,0");
 }
 
@@ -143,6 +168,8 @@ void OpenCrSerial::write(const krosc::msgs::Twist& command) {
 
 void OpenCrSerial::tick() {
   const auto now = std::chrono::steady_clock::now();
+  // 팔 목표 유지 — 바퀴 명령 주기와 무관하게 먼저 처리한다.
+  arm_keepalive(now);
   double left = 0.0;
   double right = 0.0;
   {

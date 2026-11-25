@@ -76,6 +76,8 @@ class OpenCrSerial {
   void on_line(const std::string& line);
   void close_fd();
   bool write_command(const std::string& line);
+  void send_arm_line(const std::array<double, 5>& position);
+  void arm_keepalive(std::chrono::steady_clock::time_point now);
 
   const double wheel_radius_;
   const double wheel_separation_;
@@ -109,6 +111,8 @@ class OpenCrSerial {
 
   mutable std::mutex arm_mutex_;
   ArmStatus arm_status_;
+  // A 재전송 주기. 펌웨어 ARM_CMD_TIMEOUT_MS(500ms)보다 짧아야 한다.
+  static constexpr int kArmKeepaliveMs = 300;
   std::mutex arm_command_mutex_;
   std::array<double, 5> last_arm_target_{};
   bool has_arm_target_ = false;

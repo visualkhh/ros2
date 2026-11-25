@@ -29,8 +29,10 @@ constexpr float ARM_GOAL_HYSTERESIS_RAW = 2.0f;     // [tick] (약 0.003 rad = 0
 // 서보 자체의 속도/가속도 램프 + 위치 PID. 기본 P=800은 팔 무게에서 미세 진동이 날 수 있어 낮춘다.
 constexpr uint32_t ARM_PROFILE_VELOCITY = 30;       // 0.229 rpm/unit → 약 0.72 rad/s
 constexpr uint32_t ARM_PROFILE_ACCELERATION = 20;   // 약 7.5 rad/s²
+// P만 쓰면 중력 토크만큼 오차가 남아 자세가 천천히 처진다(정상상태 오차).
+// P는 떨림이 없던 500을 유지하고, I로 그 오차를 0으로 밀어낸다.
 constexpr uint16_t ARM_POSITION_P_GAIN = 500;
-constexpr uint16_t ARM_POSITION_I_GAIN = 0;
+constexpr uint16_t ARM_POSITION_I_GAIN = 30;
 constexpr uint16_t ARM_POSITION_D_GAIN = 0;
 
 // XM430 컨트롤 테이블 (바퀴와 겹치는 주소는 tb3_wheels.ino에 이미 있음)
