@@ -21,6 +21,9 @@ class Krosc {
   explicit Krosc(NodeCreate node_create, Context::Options options = {});
   // 다른 Krosc와 연결할 peer 목록("host:port"). port>0이면 이쪽도 listen한다.
   Krosc(NodeCreate node_create, std::vector<std::string> peers, std::uint16_t port = 0);
+  // host를 주면 그 주소로 listen하고, servers의 Krosc들과 통신한다.
+  // host/servers가 모두 비면 네트워크 없이 local-only로 동작한다.
+  Krosc(NodeCreate node_create, net::PeerNetworkOptions network);
   ~Krosc();
 
   Krosc(const Krosc&) = delete;

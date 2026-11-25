@@ -15,7 +15,7 @@ Context::Context(Options options)
       services_(std::make_unique<ServiceRegistry>()),
       timers_(std::make_unique<TimerManager>(*time_source_, *executor_)),
       parameters_(std::make_unique<ParameterManager>(std::move(options.parameters))) {
-  if (options.network.listen || options.network.port != 0 || !options.network.peers.empty()) {
+  if (options.network.enabled()) {
     peer_network_ = std::make_unique<net::PeerNetwork>(*this, std::move(options.network));
   }
   if (options.publish_parameter_events) {

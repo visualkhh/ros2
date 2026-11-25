@@ -1,6 +1,7 @@
 #include "krosc/nodes/moveit/move_group.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -111,6 +112,8 @@ MoveGroup::MoveGroup(Context& context, std::string name, std::map<std::string, P
       "arm_status", [this](const msgs::String& message) { on_arm_status(message); }, QOS_DEFAULT);
   target_subscription_ = subscribe<msgs::String>(
       "moveit_target", [this](const msgs::String& message) { on_target(message); }, QOS_DEFAULT);
+  preset_subscription_ = subscribe<msgs::String>(
+      "moveit_preset", [this](const msgs::String& message) { on_preset(message); }, QOS_DEFAULT);
   plan_subscription_ = subscribe<msgs::Empty>(
       "moveit_plan", [this](const msgs::Empty& message) { on_plan(message); }, QOS_DEFAULT);
   execute_subscription_ = subscribe<msgs::Empty>(
@@ -467,8 +470,8 @@ bool MoveGroup::plan_locked(std::string& error) {
     publish_state_locked();
     return false;
   }
-  if (!target_) {
-    publish_status_locked("Plan 실패: moveit_target이 없다");
+  if (!target_ && !joint_goal_) {
+    publish_status_locked("Plan 실패: moveit_target/moveit_preset이 없다");
     publish_state_locked();
     return false;
   }
@@ -481,29 +484,34 @@ bool MoveGroup::plan_locked(std::string& error) {
     return false;
   }
   std::array<double, 4> goal{};
-  std::string ik_error;
-  bool ik_ok = false;
-  if (goal_) {
-    ik_ok = solve_ik_locked(*target_, *goal_, goal, ik_error, true);
-  }
-  if (!ik_ok) {
-    ik_ok = solve_ik_locked(*target_, *current_, goal, ik_error, true);
-  }
-  if (!ik_ok) {
-    ik_ok = solve_ik_locked(*target_, *current_, goal, ik_error, false);
-  }
-  if (!ik_ok) {
-    trajectory_.reset();
-    goal_.reset();
-    preview_path_.clear();
-    error = ik_error;
-    publish_status_locked("Plan 실패: " + error);
-    publish_target_pose_locked();
-    publish_state_locked();
-    return false;
+  const bool joint_mode = joint_goal_.has_value();
+  if (joint_mode) {
+    goal = *joint_goal_;
+  } else {
+    std::string ik_error;
+    bool ik_ok = false;
+    if (goal_) {
+      ik_ok = solve_ik_locked(*target_, *goal_, goal, ik_error, true);
+    }
+    if (!ik_ok) {
+      ik_ok = solve_ik_locked(*target_, *current_, goal, ik_error, true);
+    }
+    if (!ik_ok) {
+      ik_ok = solve_ik_locked(*target_, *current_, goal, ik_error, false);
+    }
+    if (!ik_ok) {
+      trajectory_.reset();
+      goal_.reset();
+      preview_path_.clear();
+      error = ik_error;
+      publish_status_locked("Plan 실패: " + error);
+      publish_target_pose_locked();
+      publish_state_locked();
+      return false;
+    }
   }
   goal_ = goal;
-  if (target_->preview) {
+  if (!joint_mode && target_->preview) {
     trajectory_.reset();
     preview_path_.clear();
     const msgs::Vector3 start_tcp = chain_.tcp(*current_);
@@ -523,7 +531,7 @@ bool MoveGroup::plan_locked(std::string& error) {
   }
   preview_path_.clear();
   auto trajectory =
-      plan_trajectory_locked(*current_, goal, target_->cartesian, error);
+      plan_trajectory_locked(*current_, goal, joint_mode ? false : target_->cartesian, error);
   if (!trajectory) {
     trajectory_.reset();
     goal_.reset();
@@ -614,12 +622,47 @@ void MoveGroup::on_target(const msgs::String& message) {
     return;
   }
   target_ = target;
+  joint_goal_.reset();
   goal_.reset();
   trajectory_.reset();
   preview_index_ = 0;
   if (!plan_locked(error)) {
     return;
   }
+}
+
+void MoveGroup::on_preset(const msgs::String& message) {
+  std::string mode = message.data;
+  while (!mode.empty() && (mode.back() == ' ' || mode.back() == '\t')) {
+    mode.pop_back();
+  }
+  const std::size_t begin = mode.find_first_not_of(" \t");
+  mode = begin == std::string::npos ? std::string{} : mode.substr(begin);
+  for (char& character : mode) {
+    character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+  }
+  std::array<double, 4> goal{};
+  if (mode == "home") {
+    goal = {0.0, 0.0, 0.0, 0.0};
+  } else if (mode == "stow") {
+    goal = {0.0, -1.9024, 1.3440, 0.9023};
+  } else {
+    std::lock_guard<std::mutex> lock(mutex_);
+    publish_status_locked("Preset 오류: home|stow");
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (executing_ || busy_.load()) {
+    publish_status_locked("Preset 거부: Execute 중이다");
+    return;
+  }
+  target_.reset();
+  joint_goal_ = goal;
+  goal_.reset();
+  trajectory_.reset();
+  preview_index_ = 0;
+  std::string error;
+  (void)plan_locked(error);
 }
 
 void MoveGroup::on_plan(const msgs::Empty&) {

@@ -53,6 +53,7 @@ class MoveGroup final : public Node {
   void on_joint_states(const msgs::JointState& message);
   void on_arm_status(const msgs::String& message);
   void on_target(const msgs::String& message);
+  void on_preset(const msgs::String& message);
   void on_plan(const msgs::Empty& message);
   void on_execute(const msgs::Empty& message);
   void on_cancel(const msgs::Empty& message);
@@ -115,6 +116,7 @@ class MoveGroup final : public Node {
   std::optional<std::array<double, 4>> current_;
   double gripper_ = 0.0;
   std::optional<Target> target_;
+  std::optional<std::array<double, 4>> joint_goal_;
   std::optional<std::array<double, 4>> goal_;
   std::optional<manipulation::Trajectory> trajectory_;
   std::vector<msgs::Vector3> preview_path_;
@@ -136,6 +138,7 @@ class MoveGroup final : public Node {
   Subscription<msgs::JointState> joint_states_subscription_;
   Subscription<msgs::String> arm_status_subscription_;
   Subscription<msgs::String> target_subscription_;
+  Subscription<msgs::String> preset_subscription_;
   Subscription<msgs::Empty> plan_subscription_;
   Subscription<msgs::Empty> execute_subscription_;
   Subscription<msgs::Empty> cancel_subscription_;

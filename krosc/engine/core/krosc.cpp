@@ -17,6 +17,12 @@ Context::Options network_options(std::vector<std::string> peers, std::uint16_t p
   return options;
 }
 
+Context::Options network_options(net::PeerNetworkOptions network) {
+  Context::Options options;
+  options.network = std::move(network);
+  return options;
+}
+
 }  // namespace
 
 Krosc::Krosc(NodeCreate node_create, Context::Options options) : context_(std::make_unique<Context>(std::move(options))) {
@@ -36,6 +42,9 @@ Krosc::Krosc(NodeCreate node_create, Context::Options options) : context_(std::m
 
 Krosc::Krosc(NodeCreate node_create, std::vector<std::string> peers, std::uint16_t port)
     : Krosc(std::move(node_create), network_options(std::move(peers), port)) {}
+
+Krosc::Krosc(NodeCreate node_create, net::PeerNetworkOptions network)
+    : Krosc(std::move(node_create), network_options(std::move(network))) {}
 
 Krosc::~Krosc() { shutdown(); }
 

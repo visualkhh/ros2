@@ -209,7 +209,7 @@ struct PeerNetwork::Impl {
     }
   }
 
-  bool enabled() const { return options.listen || !options.peers.empty() || options.port != 0; }
+  bool enabled() const { return options.enabled(); }
   bool started = false;
 
   void start() {
@@ -224,7 +224,7 @@ struct PeerNetwork::Impl {
     context.topics().set_subscription_hook([this] { update_subscriptions(); });
     update_subscriptions();
 
-    if (options.listen || options.port != 0) {
+    if (options.listen_enabled()) {
       listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
       if (listen_fd < 0) {
         throw std::runtime_error("PeerNetwork: socket() failed");
@@ -234,12 +234,12 @@ struct PeerNetwork::Impl {
       sockaddr_in address{};
       address.sin_family = AF_INET;
       address.sin_addr.s_addr = htonl(INADDR_ANY);
-      if (!options.bind_address.empty() && options.bind_address != "0.0.0.0" &&
-          options.bind_address != "*") {
-        if (::inet_pton(AF_INET, options.bind_address.c_str(), &address.sin_addr) != 1) {
+      const std::string bind_address = options.effective_bind_address();
+      if (!bind_address.empty() && bind_address != "0.0.0.0" && bind_address != "*") {
+        if (::inet_pton(AF_INET, bind_address.c_str(), &address.sin_addr) != 1) {
           ::close(listen_fd);
           listen_fd = -1;
-          throw std::runtime_error("PeerNetwork: 잘못된 bind 주소: " + options.bind_address);
+          throw std::runtime_error("PeerNetwork: 잘못된 bind 주소: " + bind_address);
         }
       }
       address.sin_port = htons(options.port);
@@ -262,7 +262,7 @@ struct PeerNetwork::Impl {
       accept_thread = std::thread([this] { accept_loop(); });
     }
 
-    for (const auto& peer : options.peers) {
+    for (const auto& peer : options.all_servers()) {
       connect_threads.emplace_back([this, peer] { connect_loop(peer); });
     }
     reaper_thread = std::thread([this] { reap_loop(); });

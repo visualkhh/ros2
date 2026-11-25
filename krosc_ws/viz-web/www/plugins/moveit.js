@@ -15,6 +15,14 @@ export function init(host) {
   body.append(targetRow);
 
   const buttons = buttonRow(body);
+  button(buttons, 'HOME', () => {
+    host.sendString('moveit_preset', 'home');
+    host.sendEmpty('moveit_execute');
+  });
+  button(buttons, 'STOW', () => {
+    host.sendString('moveit_preset', 'stow');
+    host.sendEmpty('moveit_execute');
+  }, 'primary');
   button(buttons, 'Plan', () => {
     host.sendString('moveit_target', `${target.value},1,0`);
     host.sendEmpty('moveit_plan');

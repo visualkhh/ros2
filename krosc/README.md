@@ -178,24 +178,25 @@ Docker 설정은 저장소 루트의 `../docker/`에 있다.
 
 ## Peer 네트워크 (다른 Krosc와 토픽 공유)
 
-`Context::Options::network`로 peer mesh를 켠다. 서로 다른 프로세스/네트워크의 Krosc가
-로컬 토픽을 discover/subscribe해서 주고받는다.
+`host`(로컬 listen 주소)와 `servers`(원격 Krosc 목록)로 peer mesh를 켠다.
+`host`와 `servers`가 모두 비면 네트워크를 만들지 않고 **local-only**로 동작한다.
 
 ```cpp
-// 가장 간단한 형태: Krosc 생성 시 peer 목록만 준다.
-// krosc::Krosc app(create_nodes, {"192.168.0.12:9100"}, 9100);
-
-krosc::Context::Options options;
-options.network.name = "robot_a";
-options.network.listen = true;
-options.network.port = 9100;                       // 0이면 임시 포트
-options.network.peers = {"192.168.0.12:9100"};     // 상대 Krosc
+krosc::net::PeerNetworkOptions network;
+network.name = "robot_a";
+network.host = "0.0.0.0";   // 이 주소로 listen. 비우면 incoming 없음
+network.port = 9100;        // 0이면 임시 포트
+network.add_server("192.168.0.12", 9100);  // 여러 개 추가 가능
+// network.servers = {"192.168.0.12:9100", "192.168.0.13:9100"};
 
 krosc::Krosc app([](krosc::Context& context) {
   // ...
   return std::vector<std::unique_ptr<krosc::Node>>{};
-}, options);
+}, network);
 ```
+
+`Context::Options::network`로도 같은 설정을 할 수 있다. `Krosc(create, {"host:port"}, port)`는
+간단한 문자열 목록 버전이다.
 
 - 로컬 토픽 publish가 자동으로 peer에게 전송된다.
 - peer에서 온 토픽은 로컬 토픽으로 다시 발행된다 (재브로드캐스트 방지).

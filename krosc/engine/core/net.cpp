@@ -824,7 +824,9 @@ struct Server::Impl {
         }
       } else if (topic == "rl_nav_reload" && kind == Kind::Empty) {
         context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
-      } else if ((topic == "moveit_target" || topic == "moveit_scrub") && kind == Kind::String) {
+      } else if ((topic == "moveit_target" || topic == "moveit_scrub" ||
+                  topic == "moveit_preset") &&
+                 kind == Kind::String) {
         Reader reader(payload);
         if (auto message = decode_string(reader)) {
           context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
@@ -1459,6 +1461,9 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
       [](Writer& writer, const msgs::String& message) { encode(writer, message); });
   impl_->forward_topic<msgs::String>(
       "moveit_scrub", Kind::String,
+      [](Writer& writer, const msgs::String& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::String>(
+      "moveit_preset", Kind::String,
       [](Writer& writer, const msgs::String& message) { encode(writer, message); });
   impl_->forward_topic<msgs::Empty>(
       "moveit_plan", Kind::Empty, [](Writer& writer, const msgs::Empty&) { encode(writer, msgs::Empty{}); });
