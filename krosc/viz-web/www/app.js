@@ -361,6 +361,193 @@ function armPoints() {
   return points;
 }
 
+function mat4Identity() {
+  return [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+}
+function mat4Multiply(a, b) {
+  const out = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  for (let row = 0; row < 4; ++row) {
+    for (let column = 0; column < 4; ++column) {
+      for (let k = 0; k < 4; ++k) out[row][column] += a[row][k] * b[k][column];
+    }
+  }
+  return out;
+}
+function mat4Translate(x, y, z) {
+  return [[1, 0, 0, x], [0, 1, 0, y], [0, 0, 1, z], [0, 0, 0, 1]];
+}
+function mat4RotX(angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [[1, 0, 0, 0], [0, c, -s, 0], [0, s, c, 0], [0, 0, 0, 1]];
+}
+function mat4RotY(angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [[c, 0, s, 0], [0, 1, 0, 0], [-s, 0, c, 0], [0, 0, 0, 1]];
+}
+function mat4RotZ(angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [[c, -s, 0, 0], [s, c, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+}
+function mat4Rpy(roll, pitch, yaw) {
+  return mat4Multiply(mat4Multiply(mat4RotZ(yaw), mat4RotY(pitch)), mat4RotX(roll));
+}
+function mat4RotAxis(axis, angle) {
+  const length = Math.hypot(axis[0], axis[1], axis[2]) || 1;
+  const x = axis[0] / length;
+  const y = axis[1] / length;
+  const z = axis[2] / length;
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const t = 1 - c;
+  return [
+    [t * x * x + c, t * x * y - s * z, t * x * z + s * y, 0],
+    [t * x * y + s * z, t * y * y + c, t * y * z - s * x, 0],
+    [t * x * z - s * y, t * y * z + s * x, t * z * z + c, 0],
+    [0, 0, 0, 1],
+  ];
+}
+function mat4Apply(matrix, point) {
+  return [
+    matrix[0][0] * point[0] + matrix[0][1] * point[1] + matrix[0][2] * point[2] + matrix[0][3],
+    matrix[1][0] * point[0] + matrix[1][1] * point[1] + matrix[1][2] * point[2] + matrix[1][3],
+    matrix[2][0] * point[0] + matrix[2][1] * point[1] + matrix[2][2] * point[2] + matrix[2][3],
+  ];
+}
+
+let urdfCache = null;
+let urdfSource = '';
+
+function parseUrdfVector(text, fallback) {
+  if (!text) return fallback;
+  const values = text.trim().split(/\s+/).map(Number);
+  return values.length >= fallback.length && values.every(Number.isFinite) ? values : fallback;
+}
+function parseUrdfOrigin(element) {
+  const origin = element.getElementsByTagName('origin')[0];
+  return {
+    xyz: parseUrdfVector(origin?.getAttribute('xyz'), [0, 0, 0]),
+    rpy: parseUrdfVector(origin?.getAttribute('rpy'), [0, 0, 0]),
+  };
+}
+function urdfModel() {
+  const description = state.latest.get('robot_description');
+  const text = description?.data;
+  if (!text) return null;
+  if (urdfCache && urdfSource === text) return urdfCache;
+  const document = new DOMParser().parseFromString(text, 'text/xml');
+  const clean = (value) => String(value || '').replace(/\$\{namespace\}/g, '');
+  const links = new Map();
+  for (const link of document.getElementsByTagName('link')) {
+    const name = clean(link.getAttribute('name'));
+    const collisions = [];
+    for (const collision of link.getElementsByTagName('collision')) {
+      const geometry = collision.getElementsByTagName('geometry')[0];
+      const box = geometry?.getElementsByTagName('box')[0];
+      if (!box) continue;
+      collisions.push({
+        origin: parseUrdfOrigin(collision),
+        size: parseUrdfVector(box.getAttribute('size'), [0.01, 0.01, 0.01]),
+      });
+    }
+    links.set(name, { collisions });
+  }
+  const joints = [];
+  for (const joint of document.getElementsByTagName('joint')) {
+    const mimicElement = joint.getElementsByTagName('mimic')[0];
+    joints.push({
+      name: clean(joint.getAttribute('name')),
+      type: joint.getAttribute('type') || 'fixed',
+      parent: clean(joint.getElementsByTagName('parent')[0]?.getAttribute('link')),
+      child: clean(joint.getElementsByTagName('child')[0]?.getAttribute('link')),
+      origin: parseUrdfOrigin(joint),
+      axis: parseUrdfVector(joint.getElementsByTagName('axis')[0]?.getAttribute('xyz'), [0, 0, 1]),
+      mimic: mimicElement ? clean(mimicElement.getAttribute('joint')) : null,
+      multiplier: Number(mimicElement?.getAttribute('multiplier') || 1),
+    });
+  }
+  urdfSource = text;
+  urdfCache = { links, joints };
+  return urdfCache;
+}
+
+function urdfTransforms() {
+  const model = urdfModel();
+  if (!model) return null;
+  const message = state.latest.get('joint_states');
+  const positions = new Map();
+  if (message && Array.isArray(message.names) && Array.isArray(message.positions)) {
+    for (let i = 0; i < message.names.length && i < message.positions.length; ++i) {
+      positions.set(message.names[i], message.positions[i]);
+    }
+  }
+  const byParent = new Map();
+  for (const joint of model.joints) {
+    if (!joint.parent || !joint.child) continue;
+    if (!byParent.has(joint.parent)) byParent.set(joint.parent, []);
+    byParent.get(joint.parent).push(joint);
+  }
+  const transforms = new Map();
+  const visit = (link, transform, depth) => {
+    if (depth > 64 || transforms.has(link)) return;
+    transforms.set(link, transform);
+    for (const joint of byParent.get(link) || []) {
+      let position = positions.get(joint.name);
+      if (!Number.isFinite(position)) {
+        position = joint.mimic ? (positions.get(joint.mimic) || 0) * joint.multiplier : 0;
+      }
+      let local = mat4Multiply(
+          mat4Translate(joint.origin.xyz[0], joint.origin.xyz[1], joint.origin.xyz[2]),
+          mat4Rpy(joint.origin.rpy[0], joint.origin.rpy[1], joint.origin.rpy[2]));
+      if (joint.type === 'revolute' || joint.type === 'continuous') {
+        local = mat4Multiply(local, mat4RotAxis(joint.axis, position));
+      } else if (joint.type === 'prismatic') {
+        local = mat4Multiply(local, mat4Translate(
+            joint.axis[0] * position, joint.axis[1] * position, joint.axis[2] * position));
+      }
+      visit(joint.child, mat4Multiply(transform, local), depth + 1);
+    }
+  };
+  visit('base_link', mat4Identity(), 0);
+  return transforms;
+}
+
+function urdfBoxes(filter) {
+  const model = urdfModel();
+  const transforms = urdfTransforms();
+  if (!model || !transforms) return [];
+  const boxes = [];
+  for (const [name, link] of model.links) {
+    if (filter && !filter(name)) continue;
+    const linkTransform = transforms.get(name);
+    if (!linkTransform) continue;
+    for (const collision of link.collisions) {
+      const transform = mat4Multiply(
+          linkTransform,
+          mat4Multiply(
+              mat4Translate(collision.origin.xyz[0], collision.origin.xyz[1], collision.origin.xyz[2]),
+              mat4Rpy(collision.origin.rpy[0], collision.origin.rpy[1], collision.origin.rpy[2])));
+      const half = collision.size.map((value) => Math.max(0.001, value * 0.5));
+      const corners = [];
+      for (const sx of [-1, 1]) {
+        for (const sy of [-1, 1]) {
+          for (const sz of [-1, 1]) {
+            corners.push(mat4Apply(transform, [sx * half[0], sy * half[1], sz * half[2]]));
+          }
+        }
+      }
+      boxes.push({ name, corners });
+    }
+  }
+  return boxes;
+}
+
+function isArmLink(name) {
+  return name === 'end_effector_link' || /^link[1-5]$/.test(name) || name.startsWith('gripper');
+}
+
 function topic(topicName) {
   return state.latest.get(topicName);
 }
@@ -482,6 +669,8 @@ const host = {
   robotPose,
   lookup,
   armPoints,
+  urdfBoxes,
+  isArmLink,
   settings: state.settings,
   addView({ id, title }) {
     const viewId = id || title;
@@ -1053,8 +1242,35 @@ function draw3dBox(cx, cy, yaw, width, length, height, color) {
 function draw3dRobot() {
   if (!state.settings.robot) return;
   const pose = robotPose();
-  if (!pose) return;
-  draw3dBox(pose.x, pose.y, pose.yaw, 0.28, 0.24, 0.22, '#7f899b');
+  if (pose) {
+    draw3dBox(pose.x, pose.y, pose.yaw, 0.28, 0.24, 0.22, '#7f899b');
+  }
+  const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
+  const c = Math.cos(transform.yaw);
+  const s = Math.sin(transform.yaw);
+  const boxes = urdfBoxes(isArmLink);
+  const edges = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6], [3, 7],
+                 [4, 5], [4, 6], [5, 7], [6, 7]];
+  for (const box of boxes) {
+    const projected = box.corners.map((corner) => project3d(
+        transform.x + c * corner[0] - s * corner[1],
+        transform.y + s * corner[0] + c * corner[1], corner[2]));
+    if (projected.some((point) => point === null)) continue;
+    context3d.strokeStyle = '#b8c2d2';
+    context3d.lineWidth = 1;
+    context3d.beginPath();
+    for (const [a, b] of edges) {
+      context3d.moveTo(projected[a].x, projected[a].y);
+      context3d.lineTo(projected[b].x, projected[b].y);
+    }
+    context3d.stroke();
+    context3d.fillStyle = 'rgba(150, 165, 185, 0.10)';
+    context3d.beginPath();
+    context3d.moveTo(projected[0].x, projected[0].y);
+    for (const point of projected.slice(1)) context3d.lineTo(point.x, point.y);
+    context3d.closePath();
+    context3d.fill();
+  }
 }
 
 function draw3dArm() {
@@ -1063,26 +1279,14 @@ function draw3dArm() {
   const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
   const c = Math.cos(transform.yaw);
   const s = Math.sin(transform.yaw);
-  const points = [];
-  for (const pose of arm) {
-    const x = transform.x + c * pose.x - s * pose.y;
-    const y = transform.y + s * pose.x + c * pose.y;
-    const point = project3d(x, y, pose.z);
-    if (point) points.push(point);
-  }
-  if (points.length > 1) {
-    context3d.strokeStyle = '#9aa6b9';
-    context3d.lineWidth = 4;
-    context3d.beginPath();
-    context3d.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; ++i) context3d.lineTo(points[i].x, points[i].y);
-    context3d.stroke();
-    const tcp = points[points.length - 1];
-    context3d.fillStyle = '#ffb36b';
-    context3d.beginPath();
-    context3d.arc(tcp.x, tcp.y, 5, 0, Math.PI * 2);
-    context3d.fill();
-  }
+  const tcp = arm[arm.length - 1];
+  const point = project3d(transform.x + c * tcp.x - s * tcp.y,
+                          transform.y + s * tcp.x + c * tcp.y, tcp.z);
+  if (!point) return;
+  context3d.fillStyle = '#ffb36b';
+  context3d.beginPath();
+  context3d.arc(point.x, point.y, 5, 0, Math.PI * 2);
+  context3d.fill();
 }
 
 function draw3dGoal() {
@@ -1148,8 +1352,8 @@ canvas3d.addEventListener('pointermove', (event) => {
     const step = camera3d.distance * 0.0016;
     const cy = Math.cos(camera3d.yaw);
     const sy = Math.sin(camera3d.yaw);
-    camera3d.tx -= (cy * dx - sy * dy) * step;
-    camera3d.ty -= (sy * dx + cy * dy) * step;
+    camera3d.tx -= (cy * dx + sy * dy) * step;
+    camera3d.ty -= (sy * dx - cy * dy) * step;
     $('follow').checked = false;
   } else {
     camera3d.yaw -= dx * 0.008;

@@ -7,14 +7,44 @@ export function init(host) {
   view.panel.append(canvas);
   const context = canvas.getContext('2d');
 
-  function project(point, width, height, scale) {
-    const x = Number(point.x) || 0;
-    const y = Number(point.y) || 0;
-    const z = Number(point.z) || 0;
-    return {
-      x: width * 0.5 + (x - y) * scale,
-      y: height * 0.78 - (z + (x + y) * 0.35) * scale,
-    };
+  const camera = { yaw: -0.6, pitch: 0.45, distance: 1.05, tx: 0.15, ty: 0.0, tz: 0.18 };
+
+  function project(point, width, height) {
+    const dx = (Number(point.x) || 0) - camera.tx;
+    const dy = (Number(point.y) || 0) - camera.ty;
+    const dz = (Number(point.z) || 0) - camera.tz;
+    const cy = Math.cos(camera.yaw);
+    const sy = Math.sin(camera.yaw);
+    const rx = cy * dx + sy * dy;
+    const ry = -sy * dx + cy * dy;
+    const cp = Math.cos(camera.pitch);
+    const sp = Math.sin(camera.pitch);
+    const depth = ry * sp - dz * cp + camera.distance;
+    if (depth <= 0.05) return null;
+    const scale = Math.min(width, height) * 0.92 / depth;
+    return { x: width * 0.5 + rx * scale, y: height * 0.58 - (ry * cp + dz * sp) * scale, depth };
+  }
+
+  function drawBox(box, width, height) {
+    const edges = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6], [3, 7],
+                   [4, 5], [4, 6], [5, 7], [6, 7]];
+    const points = box.corners.map((corner) => project(
+        { x: corner[0], y: corner[1], z: corner[2] }, width, height));
+    if (points.some((point) => point === null)) return;
+    context.strokeStyle = '#b8c2d2';
+    context.lineWidth = 1.5;
+    context.beginPath();
+    for (const [a, b] of edges) {
+      context.moveTo(points[a].x, points[a].y);
+      context.lineTo(points[b].x, points[b].y);
+    }
+    context.stroke();
+    context.fillStyle = 'rgba(160, 175, 195, 0.12)';
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+    context.closePath();
+    context.fill();
   }
 
   function draw() {
@@ -30,49 +60,53 @@ export function init(host) {
       context.clearRect(0, 0, width, height);
       context.fillStyle = '#5f7188';
       context.font = '12px system-ui';
-      context.fillText('drag X/Y · Shift+Z · Ctrl+Pitch', 12, 20);
-      const scale = Math.min(width, height) * 0.9 / 0.9;
+      context.fillText('drag TCP X/Y · Shift+Z · Ctrl+Pitch · Alt+Grip · right drag orbit', 12, 20);
+
       context.strokeStyle = '#141c27';
       context.lineWidth = 1;
-      for (let i = -2; i <= 2; ++i) {
-        const a = project({ x: i * 0.1, y: -0.2, z: 0 }, width, height, scale);
-        const b = project({ x: i * 0.1, y: 0.2, z: 0 }, width, height, scale);
-        const c = project({ x: -0.2, y: i * 0.1, z: 0 }, width, height, scale);
-        const d = project({ x: 0.4, y: i * 0.1, z: 0 }, width, height, scale);
-        context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
-        context.beginPath(); context.moveTo(c.x, c.y); context.lineTo(d.x, d.y); context.stroke();
+      for (let i = -1; i <= 4; ++i) {
+        const a = project({ x: i * 0.1, y: -0.3, z: 0 }, width, height);
+        const b = project({ x: i * 0.1, y: 0.3, z: 0 }, width, height);
+        const c = project({ x: -0.1, y: i * 0.1, z: 0 }, width, height);
+        const d = project({ x: 0.4, y: i * 0.1, z: 0 }, width, height);
+        if (a && b) { context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke(); }
+        if (c && d) { context.beginPath(); context.moveTo(c.x, c.y); context.lineTo(d.x, d.y); context.stroke(); }
       }
+
+      const boxes = host.urdfBoxes ? host.urdfBoxes(host.isArmLink) : [];
+      for (const box of boxes) drawBox(box, width, height);
 
       const target = host.latest('moveit_target_pose');
       if (target) {
-        const point = project(target.pose.position, width, height, scale);
-        context.strokeStyle = '#ffb36b';
-        context.lineWidth = 2;
-        context.beginPath(); context.arc(point.x, point.y, 8, 0, Math.PI * 2); context.stroke();
-        context.beginPath(); context.moveTo(point.x - 12, point.y); context.lineTo(point.x + 12, point.y);
-        context.moveTo(point.x, point.y - 12); context.lineTo(point.x, point.y + 12); context.stroke();
+        const pose = target.pose.position;
+        const point = project(pose, width, height);
+        if (point) {
+          context.strokeStyle = '#ffb36b';
+          context.lineWidth = 2;
+          context.beginPath(); context.arc(point.x, point.y, 8, 0, Math.PI * 2); context.stroke();
+          context.beginPath(); context.moveTo(point.x - 12, point.y); context.lineTo(point.x + 12, point.y);
+          context.moveTo(point.x, point.y - 12); context.lineTo(point.x, point.y + 12); context.stroke();
+          const axes = [
+            [{ x: pose.x + 0.05, y: pose.y, z: pose.z }, '#ff6b6b'],
+            [{ x: pose.x, y: pose.y + 0.05, z: pose.z }, '#54d18c'],
+            [{ x: pose.x, y: pose.y, z: pose.z + 0.05 }, '#6aa9ff'],
+          ];
+          for (const [axis, color] of axes) {
+            const end = project(axis, width, height);
+            if (!end) continue;
+            context.strokeStyle = color;
+            context.beginPath(); context.moveTo(point.x, point.y); context.lineTo(end.x, end.y); context.stroke();
+          }
+        }
       }
 
       const arm = host.armPoints ? host.armPoints() : [];
-      if (arm.length > 1) {
-        const points = arm.map((point) => project(point, width, height, scale));
-        context.strokeStyle = '#9aa6b9';
-        context.lineWidth = 5;
-        context.beginPath();
-        context.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; ++i) context.lineTo(points[i].x, points[i].y);
-        context.stroke();
-        context.fillStyle = '#d7dde8';
-        for (const point of points) {
-          context.beginPath(); context.arc(point.x, point.y, 4, 0, Math.PI * 2); context.fill();
+      if (arm.length > 0) {
+        const tcp = project(arm[arm.length - 1], width, height);
+        if (tcp) {
+          context.fillStyle = '#ffb36b';
+          context.beginPath(); context.arc(tcp.x, tcp.y, 6, 0, Math.PI * 2); context.fill();
         }
-        const tcp = points[points.length - 1];
-        context.fillStyle = '#ffb36b';
-        context.beginPath(); context.arc(tcp.x, tcp.y, 6, 0, Math.PI * 2); context.fill();
-      } else {
-        context.fillStyle = '#7f899b';
-        context.font = '13px system-ui';
-        context.fillText('joint_states 대기 중', 16, 24);
       }
     }
     requestAnimationFrame(draw);
@@ -130,16 +164,38 @@ export function init(host) {
   }
   cartesian.addEventListener('change', schedulePreview);
 
-  // MoveIt 뷰에서 TCP target을 직접 드래그한다 (X/Y, Shift=Z, Ctrl=Pitch).
+  const gripRow = document.createElement('div');
+  gripRow.className = 'field';
+  const gripLabel = document.createElement('label');
+  gripLabel.textContent = 'grip';
+  const gripSlider = document.createElement('input');
+  gripSlider.type = 'range';
+  gripSlider.min = '0';
+  gripSlider.max = '27';
+  gripSlider.step = '0.1';
+  gripSlider.value = gripInput.value;
+  gripRow.append(gripLabel, gripSlider);
+  body.append(gripRow);
+  gripSlider.addEventListener('input', () => {
+    gripInput.value = gripSlider.value;
+    schedulePreview();
+  });
+  gripInput.addEventListener('input', () => { gripSlider.value = gripInput.value; });
+
+  // MoveIt 뷰에서 TCP target을 직접 드래그한다 (X/Y, Shift=Z, Ctrl=Pitch, Alt=Grip).
   let dragView = false;
   let dragMode = 'xy';
   let dragLast = { x: 0, y: 0 };
   let lastPublish = 0;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   canvas.style.touchAction = 'none';
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   canvas.addEventListener('pointerdown', (event) => {
     dragView = true;
-    dragMode = event.shiftKey ? 'z' : event.ctrlKey || event.metaKey ? 'pitch' : 'xy';
+    dragMode = event.button === 2 ? 'orbit'
+      : event.altKey ? 'grip'
+      : event.shiftKey ? 'z'
+      : event.ctrlKey || event.metaKey ? 'pitch' : 'xy';
     dragLast = { x: event.clientX, y: event.clientY };
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -150,7 +206,14 @@ export function init(host) {
     const dy = event.clientY - dragLast.y;
     dragLast = { x: event.clientX, y: event.clientY };
     const step = 0.0015;
-    if (dragMode === 'z') {
+    if (dragMode === 'orbit') {
+      camera.yaw -= dx * 0.008;
+      camera.pitch = clamp(camera.pitch - dy * 0.008, 0.12, 1.25);
+    } else if (dragMode === 'grip') {
+      gripInput.value = clamp(Number(gripInput.value) - dy * 0.1, 0, 27).toFixed(1);
+      gripSlider.value = gripInput.value;
+      schedulePreview();
+    } else if (dragMode === 'z') {
       zInput.value = clamp(Number(zInput.value) - dy * step, 0.02, 0.7).toFixed(4);
     } else if (dragMode === 'pitch') {
       pitchInput.value = clamp(Number(pitchInput.value) + dx * 0.25, -90, 90).toFixed(2);
@@ -159,20 +222,24 @@ export function init(host) {
       yInput.value = clamp(Number(yInput.value) - dy * step, -0.35, 0.35).toFixed(4);
     }
     const now = performance.now();
-    if (now - lastPublish >= 50) {
+    if (dragMode !== 'orbit' && now - lastPublish >= 50) {
       publishTarget(true);
       lastPublish = now;
     }
     event.preventDefault();
   });
   canvas.addEventListener('pointerup', (event) => {
-    if (dragView) {
+    if (dragView && dragMode !== 'orbit') {
       publishTarget(true);
     }
     dragView = false;
     event.preventDefault();
   });
   canvas.addEventListener('pointercancel', () => { dragView = false; });
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    camera.distance = clamp(camera.distance * (event.deltaY < 0 ? 0.9 : 1.1), 0.35, 4.0);
+  }, { passive: false });
 
   const presetRow = buttonRow(body);
   const preset = (mode) => {
