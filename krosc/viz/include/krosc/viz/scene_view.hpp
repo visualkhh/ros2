@@ -27,6 +27,8 @@ class QFocusEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPainter;
+class QResizeEvent;
+class QToolBar;
 class QWheelEvent;
 
 namespace krosc::viz {
@@ -86,6 +88,7 @@ class SceneView : public QWidget {
   void keyReleaseEvent(QKeyEvent* event) override;
   void focusOutEvent(QFocusEvent* event) override;
   void leaveEvent(QEvent* event) override;
+  void resizeEvent(QResizeEvent* event) override;
 
  private:
   struct Camera {
@@ -145,6 +148,7 @@ class SceneView : public QWidget {
   VizModel& model_;
   Camera camera_;
   QMatrix4x4 matrix_;
+  QToolBar* view_tools_ = nullptr;
   int view_width_ = 1;
   int view_height_ = 1;
   std::map<std::string, bool> enabled_;

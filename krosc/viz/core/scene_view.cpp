@@ -3,6 +3,7 @@
 #include "krosc/viz/costmap_color.hpp"
 #include "krosc/viz/key_bindings.hpp"
 
+#include <QAction>
 #include <QFocusEvent>
 #include <QFont>
 #include <QKeyEvent>
@@ -10,7 +11,9 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPolygonF>
+#include <QResizeEvent>
 #include <QStringList>
+#include <QToolBar>
 #include <QTransform>
 #include <QVector4D>
 #include <QWheelEvent>
@@ -117,6 +120,30 @@ SceneView::SceneView(VizModel& model, QWidget* parent) : QWidget(parent), model_
   }
   enabled_["collision"] = false;
   enabled_["joint_axes"] = false;
+  view_tools_ = new QToolBar(this);
+  view_tools_->setObjectName("view-tools");
+  view_tools_->setMovable(false);
+  view_tools_->setFloatable(false);
+  view_tools_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+  view_tools_->setStyleSheet(
+      "QToolBar{background:rgba(8,11,16,0.86);border:1px solid #2a3242;border-radius:6px;padding:2px;}"
+      "QToolButton{color:#d7dde8;padding:3px 8px;border:1px solid transparent;border-radius:4px;}"
+      "QToolButton:checked{background:#173d2a;border-color:#2f8a59;color:#eafff3;}");
+  const auto add_tool = [this](const char* text, const char* key, bool checked) {
+    QAction* action = view_tools_->addAction(QString::fromUtf8(text));
+    action->setCheckable(true);
+    action->setChecked(checked);
+    connect(action, &QAction::toggled, this, [this, key](bool on) { set_enabled(key, on); });
+  };
+  add_tool("Visual", "model", true);
+  add_tool("Collision", "collision", false);
+  add_tool("Axes", "axes", true);
+  add_tool("Joint Axes", "joint_axes", false);
+  add_tool("Grid", "grid", true);
+  add_tool("Scan", "scan", true);
+  view_tools_->adjustSize();
+  view_tools_->move(std::max(8, width() - view_tools_->width() - 8), 8);
+  view_tools_->raise();
   fps_clock_.start();
   reset_camera();
   teleop_timer_ = new QTimer(this);
@@ -1585,6 +1612,15 @@ void SceneView::focusOutEvent(QFocusEvent* event) {
 
 void SceneView::leaveEvent(QEvent* event) {
   (void)event;
+}
+
+void SceneView::resizeEvent(QResizeEvent* event) {
+  QWidget::resizeEvent(event);
+  if (view_tools_ != nullptr) {
+    view_tools_->adjustSize();
+    view_tools_->move(std::max(8, width() - view_tools_->width() - 8), 8);
+    view_tools_->raise();
+  }
 }
 
 void SceneView::set_teleop_key(int key, bool pressed) {
