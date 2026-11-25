@@ -13,6 +13,11 @@ export function init(host) {
   const mapSelect = document.createElement('select');
   mapRow.append(mapLabel, mapSelect);
   body.append(mapRow);
+  mapSelect.addEventListener('change', () => {
+    if (mapSelect.value) {
+      host.toast(`map 선택: ${mapSelect.value} — load를 눌러 적용`);
+    }
+  });
 
   const buttons = buttonRow(body);
   let slamMode = 'idle';

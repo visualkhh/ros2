@@ -36,9 +36,18 @@ export function init(host) {
     toggle.className = enabled ? 'primary' : 'danger';
   }
 
-  fallback.addEventListener('change', () => host.sendString('rl_nav_fallback', fallback.value));
+  let requestedFallback = null;
+  let requestedModel = null;
+  fallback.addEventListener('change', () => {
+    requestedFallback = fallback.value;
+    host.sendString('rl_nav_fallback', fallback.value);
+    host.toast(`fallback → ${fallback.value} 요청`);
+  });
   model.addEventListener('change', () => {
-    if (model.value) host.sendString('rl_nav_model', model.value);
+    if (!model.value) return;
+    requestedModel = model.value;
+    host.sendString('rl_nav_model', model.value);
+    host.toast(`model → ${model.value} 요청`);
   });
 
   host.onTopic('rl_nav_model_list', (message) => {
@@ -71,8 +80,18 @@ export function init(host) {
              `policy ${values.get('policy') || '0'} · infer ${values.get('infer_ms') || '-'}ms · ` +
              `scan ${values.get('scan') || '0'} · fallback ${values.get('fallback') || '-'}`,
              values.get('error') ? 'bad' : '');
-    if (values.get('fallback')) fallback.value = values.get('fallback');
-    if (values.get('model') && values.get('model') !== '-') model.value = values.get('model');
+    const currentFallback = values.get('fallback');
+    if (currentFallback) fallback.value = currentFallback;
+    if (requestedFallback && currentFallback === requestedFallback) {
+      host.toast(`fallback 적용됨: ${currentFallback}`);
+      requestedFallback = null;
+    }
+    const currentModel = values.get('model');
+    if (currentModel && currentModel !== '-') model.value = currentModel;
+    if (requestedModel && currentModel === requestedModel) {
+      host.toast(`model 적용됨: ${currentModel}`);
+      requestedModel = null;
+    }
     if (values.get('error')) detail.title = values.get('error');
   });
 }
