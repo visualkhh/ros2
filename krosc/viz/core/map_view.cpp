@@ -25,7 +25,7 @@
 namespace krosc::viz {
 
 MapView2D::MapView2D(VizModel& model, QWidget* parent) : QWidget(parent), model_(model) {
-  setMinimumSize(240, 200);
+  setMinimumSize(180, 150);
   setMouseTracking(true);
   setFocusPolicy(Qt::StrongFocus);
   setAttribute(Qt::WA_InputMethodEnabled, false);

@@ -276,23 +276,37 @@ aside {
 @media (max-width: 980px) {
   body { overflow-y: auto; }
   main {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: minmax(320px, 58vh) auto;
+    display: flex;
+    flex-direction: column;
     height: auto;
     min-height: calc(100vh - 48px);
   }
-  #stage { grid-column: 1 / -1; order: 1; min-height: 320px; }
-  #right { order: 2; max-height: 46vh; border-left: 0; border-top: 1px solid var(--line); }
-  #left { order: 3; max-height: 46vh; border-right: 0; border-top: 1px solid var(--line); }
-  #plugin-tabs { position: sticky; top: 0; z-index: 2; }
+  #stage {
+    order: 1;
+    width: 100%;
+    height: 52vh;
+    min-height: 280px;
+    flex: 0 0 auto;
+  }
+  #right {
+    order: 2;
+    width: 100%;
+    max-height: 45vh;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  #left {
+    order: 3;
+    width: 100%;
+    max-height: 40vh;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+  #control-panel-tabs { position: sticky; top: 0; z-index: 2; }
 }
 @media (max-width: 720px) {
   header { height: auto; min-height: 48px; flex-wrap: wrap; padding: 6px 10px; gap: 8px; }
-  main {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(280px, 52vh) auto auto;
-  }
-  #stage { grid-column: auto; }
-  #right { order: 2; max-height: 48vh; }
-  #left { order: 3; max-height: 40vh; }
+  #stage { height: 45vh; min-height: 240px; }
+  #right { max-height: 45vh; }
+  #left { max-height: 38vh; }
 }

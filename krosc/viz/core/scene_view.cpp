@@ -109,7 +109,7 @@ SceneView::SceneView(VizModel& model, QWidget* parent) : QWidget(parent), model_
   // 한글 IME가 키를 조합해 버리지 않게 한다 (W/A/S/D가 ㅈ/ㅁ/ㄴ/ㅇ으로 바뀌어도 key_bindings가 복원).
   setAttribute(Qt::WA_InputMethodEnabled, false);
   setMouseTracking(true);
-  setMinimumSize(640, 420);
+  setMinimumSize(320, 240);
   for (const auto& key : {"grid", "tf", "model", "scan", "imu", "odom", "filtered", "map", "global_costmap",
                           "local_costmap", "plan", "local_plan", "trail", "logs", "collision", "axes",
                           "joint_axes"}) {

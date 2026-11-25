@@ -48,6 +48,63 @@ export function init(host) {
     context.fill();
   }
 
+  function applyMatrix(matrix, point) {
+    return [
+      matrix[0][0] * point[0] + matrix[0][1] * point[1] + matrix[0][2] * point[2] + matrix[0][3],
+      matrix[1][0] * point[0] + matrix[1][1] * point[1] + matrix[1][2] * point[2] + matrix[1][3],
+      matrix[2][0] * point[0] + matrix[2][1] * point[1] + matrix[2][2] * point[2] + matrix[2][3],
+    ];
+  }
+
+  function drawPrimitive(primitive, width, height) {
+    if (primitive.type === 'box') {
+      drawBox(primitive, width, height);
+      return;
+    }
+    if (primitive.type === 'cylinder') {
+      const count = 12;
+      const top = [];
+      const bottom = [];
+      for (let i = 0; i < count; ++i) {
+        const angle = (i / count) * Math.PI * 2;
+        const x = Math.cos(angle) * primitive.radius;
+        const y = Math.sin(angle) * primitive.radius;
+        top.push(applyMatrix(primitive.transform, [x, y, primitive.length / 2]));
+        bottom.push(applyMatrix(primitive.transform, [x, y, -primitive.length / 2]));
+      }
+      const projectedTop = top.map((point) => project({ x: point[0], y: point[1], z: point[2] }, width, height));
+      const projectedBottom = bottom.map((point) => project({ x: point[0], y: point[1], z: point[2] }, width, height));
+      if (projectedTop.some((point) => !point) || projectedBottom.some((point) => !point)) return;
+      context.strokeStyle = '#b8c2d2';
+      context.lineWidth = 1.2;
+      context.beginPath();
+      for (let i = 0; i < count; ++i) {
+        const next = (i + 1) % count;
+        context.moveTo(projectedTop[i].x, projectedTop[i].y);
+        context.lineTo(projectedTop[next].x, projectedTop[next].y);
+        context.moveTo(projectedBottom[i].x, projectedBottom[i].y);
+        context.lineTo(projectedBottom[next].x, projectedBottom[next].y);
+        context.moveTo(projectedTop[i].x, projectedTop[i].y);
+        context.lineTo(projectedBottom[i].x, projectedBottom[i].y);
+      }
+      context.stroke();
+      return;
+    }
+    if (primitive.type === 'sphere') {
+      const center = project({ x: primitive.center[0], y: primitive.center[1], z: primitive.center[2] }, width, height);
+      const edge = project({
+        x: primitive.center[0] + primitive.radius,
+        y: primitive.center[1],
+        z: primitive.center[2],
+      }, width, height);
+      if (!center || !edge) return;
+      context.strokeStyle = '#b8c2d2';
+      context.beginPath();
+      context.arc(center.x, center.y, Math.max(1, Math.hypot(edge.x - center.x, edge.y - center.y)), 0, Math.PI * 2);
+      context.stroke();
+    }
+  }
+
   function draw() {
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.clientWidth;
@@ -75,10 +132,14 @@ export function init(host) {
       }
 
       if (host.settings.urdf_collision) {
-        const boxes = host.urdfBoxes ? host.urdfBoxes(host.isArmLink) : [];
-        for (const box of boxes) drawBox(box, width, height);
+        for (const primitive of (host.urdfPrimitives ? host.urdfPrimitives() : [])) {
+          drawPrimitive(primitive, width, height);
+        }
       }
       if (host.settings.urdf_visual) {
+        for (const primitive of (host.urdfPrimitives ? host.urdfPrimitives((name) => !host.isArmLink(name), true) : [])) {
+          drawPrimitive(primitive, width, height);
+        }
         const arm = host.armPoints ? host.armPoints() : [];
         const points = arm.map((point) => project(point, width, height)).filter(Boolean);
         if (points.length > 1) {
