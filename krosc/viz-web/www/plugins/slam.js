@@ -63,7 +63,12 @@ export function init(host) {
     setLevel(mode, slamMode, slamMode === 'mapping' ? 'ok' : '');
     updateSlamButton();  // 이미 매핑 중이면 버튼이 'stop SLAM'으로 보여야 한다
   });
-  host.onTopic('map_status', (message) => setLevel(mapStatus, message.data || '-'));
+  host.onTopic('map_status', (message) => {
+    const text = message.data || '-';
+    setLevel(mapStatus, text);
+    // 지도 load 직후에는 지도 전체가 보이게 맞춘다 (새로고침 없이 바로 보이도록)
+    if (text.startsWith('loaded ') && host.fitMap) host.fitMap();
+  });
   host.onTopic('map_list', (message) => {
     const current = mapSelect.value;
     const names = String(message.data || '').split('\n').filter(Boolean);

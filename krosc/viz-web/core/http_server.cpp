@@ -89,6 +89,14 @@ int throttle_period_ms(const std::string& topic) {
   return 0;
 }
 
+// 큐가 밀려도 절대 먼저 버리면 안 되는 프레임(지도/모델/이벤트). 고주기 표시 토픽을 먼저 버린다.
+bool keep_frame(const std::string& topic) {
+  return topic == "map" || topic == "global_costmap/costmap" ||
+         topic == "local_costmap/costmap" || topic == "robot_description" ||
+         topic == "tf_static" || topic == "map_list" || topic == "moveit_path" ||
+         topic == "moveit_arm";
+}
+
 bool cacheable(const std::string& topic) {
   return topic == "map" || topic == "global_costmap/costmap" || topic == "local_costmap/costmap" ||
          topic == "map_list" || topic == "map_status" || topic == "slam_status" ||
@@ -187,7 +195,12 @@ struct HttpServer::Client {
       }
       queue.push_back(Item{frame_opcode, std::move(topic), std::move(frame)});
       while (queue.size() > kMaxQueue) {
-        queue.pop_front();
+        auto victim = std::find_if(queue.begin(), queue.end(),
+                                   [](const Item& item) { return !keep_frame(item.topic); });
+        if (victim == queue.end()) {
+          victim = queue.begin();
+        }
+        queue.erase(victim);
       }
     }
     queue_cv.notify_one();

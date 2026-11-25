@@ -291,7 +291,11 @@ function transformPoint(transform, x, y) {
 
 function frameTransform(frame) {
   if (!frame || frame === 'map') return { x: 0, y: 0, yaw: 0 };
-  return lookup('map', frame);
+  const inMap = lookup('map', frame);
+  if (inMap) return inMap;
+  // SLAM이 idle이라 map→odom이 없을 때: odom을 화면 기준으로 사용한다.
+  // (안 그러면 로봇/스캔/TF가 전부 사라진다)
+  return lookup('odom', frame);
 }
 
 function robotPose() {
@@ -763,6 +767,7 @@ const host = {
   sendJointState,
   sendGoal,
   setGoalTopic(topicName) { state.goalTopic = topicName; },
+  fitMap: fitToMap,
   toast,
   robotPose,
   lookup,
@@ -1046,6 +1051,18 @@ $('fit').addEventListener('click', () => {
   view.cx = 0; view.cy = 0; view.scale = 60;
 });
 
+// 지도 전체가 보이도록 뷰를 맞춘다 (지도 load 직후).
+function fitToMap() {
+  const map = topic('map');
+  if (!map || !map.width || !map.height) return;
+  view.cx = map.origin.position.x + map.width * map.resolution / 2;
+  view.cy = map.origin.position.y + map.height * map.resolution / 2;
+  const bounds = Math.max(map.width * map.resolution, map.height * map.resolution, 1);
+  view.scale = Math.min(canvas.clientWidth, canvas.clientHeight) / bounds * 0.9;
+  const follow = document.getElementById('follow');
+  if (follow) follow.checked = false;
+}
+
 function drawGrid() {
   if (!state.settings.grid) return;
   const width = canvas.clientWidth;
@@ -1228,7 +1245,7 @@ function drawTfAxes() {
   if (!state.settings.tf) return;
   context.lineWidth = 1.2;
   for (const frame of state.tf.keys()) {
-    const pose = lookup('map', frame);
+    const pose = frameTransform(frame);
     if (!pose) continue;
     const origin = worldToScreen(pose.x, pose.y);
     const cos = Math.cos(pose.yaw);
@@ -1667,7 +1684,7 @@ function draw3dTfAxes() {
   if (!state.settings.tf) return;
   context3d.lineWidth = 1.4;
   for (const frame of state.tf.keys()) {
-    const pose = lookup('map', frame);
+    const pose = frameTransform(frame);
     if (!pose) continue;
     const z = 0.04;
     const origin = project3d(pose.x, pose.y, z);
