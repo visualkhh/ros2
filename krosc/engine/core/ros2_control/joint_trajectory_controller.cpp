@@ -98,8 +98,10 @@ std::vector<std::string> JointTrajectoryController::command_interface_names() co
 
 void JointTrajectoryController::apply_hold() {
   std::lock_guard<std::mutex> lock(mutex_);
+  hold_.resize(commands_.size());
   for (std::size_t i = 0; i < commands_.size(); ++i) {
-    commands_[i]->set(states_[i]->get());
+    hold_[i] = states_[i]->get();
+    commands_[i]->set(hold_[i]);
   }
 }
 
@@ -193,10 +195,17 @@ void JointTrajectoryController::update(double time, double period) {
       return;
     }
     if (!running_.load()) {
-      // 궤적이 없을 때는 현재 위치를 계속 hold한다 (전원을 켠 직후 0으로 튀지 않게).
-      for (std::size_t i = 0; i < commands_.size() && i < actual_.size(); ++i) {
-        commands_[i]->set(actual_[i]);
+      // 궤적이 없을 때는 hold_ 위치를 유지한다. 측정값(actual)을 계속 목표로 넣으면
+      // 중력으로 처진 위치가 곧 새 목표가 되어 조금씩 내려앉는다(래칫).
+      // hold_는 활성화/취소 시 현재 위치, 궤적 완료 시 마지막 궤적 목표로 갱신된다.
+      if (hold_.size() != commands_.size()) {
+        hold_.assign(actual_.begin(), actual_.begin() + static_cast<std::ptrdiff_t>(
+                                                      std::min(actual_.size(), commands_.size())));
       }
+      for (std::size_t i = 0; i < commands_.size() && i < hold_.size(); ++i) {
+        commands_[i]->set(hold_[i]);
+      }
+      desired_ = hold_;
       publish_state(time, desired_, actual_, false);
       return;
     }
@@ -212,6 +221,13 @@ void JointTrajectoryController::update(double time, double period) {
     if (finished) {
       running_.store(false);
       done_.store(true);
+      // 완료 후에는 "궤적의 마지막 목표"를 유지한다 (측정값 아님).
+      hold_.resize(commands_.size());
+      for (std::size_t i = 0; i < hold_.size() && i < trajectory_.positions.size(); ++i) {
+        if (!trajectory_.positions[i].empty()) {
+          hold_[i] = trajectory_.positions[i].back();
+        }
+      }
     }
   }
   publish_state(time, desired, actual_, finished);

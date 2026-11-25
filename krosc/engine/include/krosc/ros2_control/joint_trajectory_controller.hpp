@@ -60,6 +60,7 @@ class JointTrajectoryController final : public ControllerInterface {
   double start_time_ = 0.0;
   std::vector<double> actual_;
   std::vector<double> desired_;
+  std::vector<double> hold_;  // 궤적이 없을 때 유지할 목표 (측정값이 아니라 마지막 목표)
   std::atomic<bool> active_{false};
   std::atomic<bool> running_{false};
   std::atomic<bool> done_{false};
