@@ -16,10 +16,12 @@ export function init(host) {
 
   const buttons = buttonRow(body);
   button(buttons, 'HOME', () => {
+    host.sendBool('arm_torque', true);
     host.sendString('moveit_preset', 'home');
     host.sendEmpty('moveit_execute');
   });
   button(buttons, 'STOW', () => {
+    host.sendBool('arm_torque', true);
     host.sendString('moveit_preset', 'stow');
     host.sendEmpty('moveit_execute');
   }, 'primary');

@@ -21,8 +21,10 @@
 #include <vector>
 
 #include "krosc/context.hpp"
+#include "krosc/msgs.hpp"
 #include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/net.hpp"
+#include "krosc/qos.hpp"
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
 #include "krosc/nodes/ekf.hpp"
@@ -237,6 +239,23 @@ int main(int argc, char** argv) {
        {"arm_command_controller.command_topic", std::string("arm_joint_command")},
        {"arm_command_controller.auto_activate", false}},
       hardware_registry);
+  // 수동 조작(Viz 슬라이더/STOW 수동 경로)과 MoveIt은 같은 관절 command interface를 공유할 수
+  // 없으므로, Viz가 arm_manual로 모드를 알려오면 컨트롤러를 맞바꾼다.
+  [[maybe_unused]] auto arm_manual_switch = controller_manager.subscribe<krosc::msgs::Bool>(
+      "arm_manual",
+      [&controller_manager](const krosc::msgs::Bool& message) {
+        const bool manual = message.data;
+        const bool ok =
+            manual ? controller_manager.switch_controller({"arm_command_controller"},
+                                                          {"joint_trajectory_controller"}, 1)
+                   : controller_manager.switch_controller({"joint_trajectory_controller"},
+                                                          {"arm_command_controller"}, 1);
+        if (!ok) {
+          controller_manager.logger().warn("arm_manual: %s 컨트롤러 전환 실패",
+                                           manual ? "manual" : "trajectory");
+        }
+      },
+      krosc::QOS_DEFAULT);
   // MoveIt move_group: kinematics/planner/controller_manager 플러그인을 골라 조립한다.
   // 기존 Viz의 moveit_target/moveit_plan/moveit_execute/moveit_cancel/moveit_scrub 토픽도 그대로 받는다.
   krosc::moveit::MoveGroup move_group(

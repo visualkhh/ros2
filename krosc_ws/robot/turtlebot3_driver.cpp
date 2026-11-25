@@ -36,9 +36,14 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
       diagnostics_period_(declare_parameter<double>("diagnostics_period", 1.0,
                                                     [](double value) { return value > 0.0; })),
       data_timeout_(declare_parameter<double>("data_timeout", 2.0,
-                                              [](double value) { return value > 0.0; })) {
+                                              [](double value) { return value > 0.0; })),
+      arm_torque_on_start_(declare_parameter<bool>("arm_torque_on_start", true)) {
   last_diagnostics_ = now();
   last_arm_status_ = now();
+  // 부팅 직후 토크가 꺼져 있으면 팔이 중력으로 떨어진다. 기본은 현재 자세를 잡게 한다.
+  if (arm_torque_on_start_.value()) {
+    robot_.opencr().set_arm_torque(true);
+  }
   arm_torque_subscription_ = subscribe<krosc::msgs::Bool>(
       "arm_torque", [this](const krosc::msgs::Bool& message) { robot_.opencr().set_arm_torque(message.data); },
       krosc::QOS_DEFAULT);

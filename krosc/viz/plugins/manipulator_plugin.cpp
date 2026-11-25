@@ -71,13 +71,16 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     torque_->setText(torque_on_ ? "Torque ON" : "Torque OFF");
     torque_->setStyleSheet(torque_on_ ? "background:#1f6b43;" : "background:#7a2a2a;");
   };
-  connect(torque_, &QPushButton::clicked, this, [this, set_torque_button] {
-    torque_on_ = !torque_on_;
+  const auto apply_torque = [this, set_torque_button](bool on) {
+    torque_on_ = on;
     if (!torque_on_) {
       moving_ = false;
     }
     host_->model().node().publish("arm_torque", msgs::Bool{torque_on_}, QOS_DEFAULT);
     set_torque_button();
+  };
+  connect(torque_, &QPushButton::clicked, this, [this, apply_torque] {
+    apply_torque(!torque_on_);
     status_->setText(torque_on_ ? "torque ON" : "torque OFF (arm relaxed)");
   });
   set_torque_button();
@@ -99,12 +102,16 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     layout->addLayout(row);
     sliders_[static_cast<std::size_t>(i)] = slider;
     value_labels_[static_cast<std::size_t>(i)] = value;
-    connect(slider, &QSlider::valueChanged, this, [this, i, value](int degrees) {
+    connect(slider, &QSlider::valueChanged, this, [this, i, value, apply_torque](int degrees) {
       value->setText(QString::number(degrees, 'f', 1) + "°");
       if (updating_) {
         return;
       }
       cancel_moveit_if_executing();
+      if (!torque_on_) {
+        apply_torque(true);
+      }
+      host_->model().node().publish("arm_manual", msgs::Bool{true}, QOS_DEFAULT);
       target_[static_cast<std::size_t>(i)] = static_cast<double>(degrees) * kPi / 180.0;
       moving_ = true;
     });
@@ -122,12 +129,16 @@ void ManipulatorPlugin::initialize(VizHost& host) {
   gripper_row->addWidget(gripper_, 1);
   gripper_row->addWidget(gripper_label_);
   layout->addLayout(gripper_row);
-  connect(gripper_, &QSlider::valueChanged, this, [this](int mm) {
+  connect(gripper_, &QSlider::valueChanged, this, [this, apply_torque](int mm) {
     gripper_label_->setText(QString::number(mm, 'f', 1) + " mm");
     if (updating_) {
       return;
     }
     cancel_moveit_if_executing();
+    if (!torque_on_) {
+      apply_torque(true);
+    }
+    host_->model().node().publish("arm_manual", msgs::Bool{true}, QOS_DEFAULT);
     target_[4] = static_cast<double>(mm) / 1000.0;
     moving_ = true;
   });
@@ -166,17 +177,25 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     }
     updating_ = false;
     target_ = positions;
-    moving_ = true;
+    moving_ = false;  // 실제 이동은 MoveIt 프리셋이 담당한다.
   };
-  connect(stow, &QPushButton::clicked, this, [this, set_preset] {
+  connect(stow, &QPushButton::clicked, this, [this, set_preset, apply_torque] {
     cancel_moveit_if_executing();
+    apply_torque(true);
     set_preset({0.0, -1.9024, 1.3440, 0.9023, 0.0});
-    status_->setText("STOW target");
+    host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
+    host_->model().node().publish("moveit_preset", msgs::String{"stow"}, QOS_DEFAULT);
+    host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
+    status_->setText("STOW → MoveIt 실행");
   });
-  connect(home, &QPushButton::clicked, this, [this, set_preset] {
+  connect(home, &QPushButton::clicked, this, [this, set_preset, apply_torque] {
     cancel_moveit_if_executing();
+    apply_torque(true);
     set_preset({0.0, 0.0, 0.0, 0.0, 0.0});
-    status_->setText("HOME target");
+    host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
+    host_->model().node().publish("moveit_preset", msgs::String{"home"}, QOS_DEFAULT);
+    host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
+    status_->setText("HOME → MoveIt 실행");
   });
   connect(estop, &QPushButton::clicked, this, [this] {
     cancel_moveit_if_executing();
@@ -360,6 +379,14 @@ void ManipulatorPlugin::reset_arm() {
   QTimer::singleShot(2000, this, [this] {
     if (reset_button_ != nullptr) {
       reset_button_->setEnabled(true);
+    }
+    if (host_ != nullptr) {
+      torque_on_ = true;
+      host_->model().node().publish("arm_torque", msgs::Bool{true}, QOS_DEFAULT);
+      if (torque_ != nullptr) {
+        torque_->setText("Torque ON");
+        torque_->setStyleSheet("background:#1f6b43;");
+      }
     }
   });
 }

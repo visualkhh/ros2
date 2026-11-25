@@ -69,6 +69,7 @@ class MoveGroup final : public Node {
   [[nodiscard]] bool solve_ik_locked(const Target& target, const std::array<double, 4>& seed,
                                      std::array<double, 4>& goal, std::string& error,
                                      bool fast) const;
+  void ensure_trajectory_controller();
   [[nodiscard]] std::optional<manipulation::Trajectory> plan_trajectory_locked(
       const std::array<double, 4>& start, const std::array<double, 4>& goal, bool cartesian,
       std::string& error) const;
@@ -101,6 +102,9 @@ class MoveGroup final : public Node {
   Parameter<std::string> kinematics_plugin_;
   Parameter<std::string> planner_plugin_;
   Parameter<std::string> controller_manager_plugin_;
+  Parameter<std::string> switch_service_;
+  Parameter<std::string> trajectory_controller_;
+  Parameter<std::string> manual_controller_;
 
   KinematicsRegistry kinematics_registry_;
   PlannerRegistry planner_registry_;

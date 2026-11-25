@@ -11,6 +11,7 @@
 
 #include "krosc/math.hpp"
 #include "krosc/qos.hpp"
+#include "krosc/ros2_control/controller_manager.hpp"
 #include "krosc/urdf.hpp"
 
 namespace krosc::moveit {
@@ -95,6 +96,12 @@ MoveGroup::MoveGroup(Context& context, std::string name, std::map<std::string, P
                                                      "krosc_moveit/CartesianPlanner")),
       controller_manager_plugin_(declare_parameter<std::string>(
           "controller_manager.plugin", "krosc_moveit/SimpleControllerManager")),
+      switch_service_(declare_parameter<std::string>(
+          "controller_manager.switch_service", "controller_manager/switch_controller")),
+      trajectory_controller_(declare_parameter<std::string>(
+          "controller_manager.trajectory_controller", "joint_trajectory_controller")),
+      manual_controller_(declare_parameter<std::string>(
+          "controller_manager.manual_controller", "arm_command_controller")),
       kinematics_registry_(std::move(kinematics)),
       planner_registry_(std::move(planners)),
       controller_registry_(std::move(controllers)) {
@@ -678,6 +685,29 @@ void MoveGroup::on_plan(const msgs::Empty&) {
   (void)plan_locked(error);
 }
 
+void MoveGroup::ensure_trajectory_controller() {
+  if (switch_service_.value().empty() || trajectory_controller_.value().empty()) {
+    return;
+  }
+  ros2_control::SwitchControllerRequest request;
+  request.start_controllers.push_back(trajectory_controller_.value());
+  if (!manual_controller_.value().empty()) {
+    request.stop_controllers.push_back(manual_controller_.value());
+  }
+  request.strictness = 1;
+  try {
+    const auto response =
+        call_service<ros2_control::SwitchControllerRequest, ros2_control::SwitchControllerResponse>(
+            switch_service_.value(), request);
+    if (!response.ok) {
+      logger().warn("MoveGroup: %s 활성화 실패: %s", trajectory_controller_.value().c_str(),
+                    response.message.c_str());
+    }
+  } catch (const std::exception& error) {
+    logger().warn("MoveGroup: controller switch 실패: %s", error.what());
+  }
+}
+
 void MoveGroup::on_execute(const msgs::Empty&) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (busy_.exchange(true)) {
@@ -714,6 +744,7 @@ void MoveGroup::on_execute(const msgs::Empty&) {
     publish_status_locked("Execute 실패: controller_manager 플러그인이 없다");
     return;
   }
+  ensure_trajectory_controller();
   follow_ = controller_manager_->send(to_message_locked(*trajectory_));
   if (!follow_ || !follow_->accepted()) {
     follow_.reset();

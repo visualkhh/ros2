@@ -29,6 +29,7 @@ class TurtleBot3Driver final : public krosc::Node {
   RealTurtleBot3& robot_;
   krosc::Parameter<double> diagnostics_period_;
   krosc::Parameter<double> data_timeout_;
+  krosc::Parameter<bool> arm_torque_on_start_;
   double last_diagnostics_ = 0.0;
   double last_arm_status_ = 0.0;
   krosc::Subscription<krosc::msgs::Bool> arm_torque_subscription_;

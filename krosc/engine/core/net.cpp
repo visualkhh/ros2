@@ -1449,6 +1449,9 @@ Client::Client(Context& context, std::string host, std::uint16_t port)
       "arm_joint_command", Kind::JointState,
       [](Writer& writer, const msgs::JointState& message) { encode(writer, message); });
   impl_->forward_topic<msgs::Bool>(
+      "arm_manual", Kind::Bool,
+      [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
+  impl_->forward_topic<msgs::Bool>(
       "arm_torque", Kind::Bool,
       [](Writer& writer, const msgs::Bool& message) { encode(writer, message); });
   impl_->forward_topic<msgs::Empty>(
