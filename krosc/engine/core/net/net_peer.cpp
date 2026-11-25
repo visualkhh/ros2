@@ -940,7 +940,7 @@ struct PeerNetwork::Impl {
         return;
       }
       ReceiveGuard guard(&peer, frame.topic);
-      context.topics().publish<ActionEvent>(frame.topic, std::move(*event), QOS_DEFAULT);
+      context.topics().publish<ActionEvent>(frame.topic, *event, QOS_DEFAULT);
       return;
     }
     if (frame.type == kPeerControl) {
