@@ -436,6 +436,28 @@ function parseUrdfOrigin(element) {
     rpy: parseUrdfVector(origin?.getAttribute('rpy'), [0, 0, 0]),
   };
 }
+function parseUrdfGeometry(element) {
+  const geometry = element.getElementsByTagName('geometry')[0];
+  if (!geometry) return { type: 'none' };
+  const box = geometry.getElementsByTagName('box')[0];
+  if (box) {
+    return { type: 'box', size: parseUrdfVector(box.getAttribute('size'), [0.01, 0.01, 0.01]) };
+  }
+  const cylinder = geometry.getElementsByTagName('cylinder')[0];
+  if (cylinder) {
+    return {
+      type: 'cylinder',
+      radius: Number(cylinder.getAttribute('radius') || 0.01),
+      length: Number(cylinder.getAttribute('length') || 0.01),
+    };
+  }
+  const sphere = geometry.getElementsByTagName('sphere')[0];
+  if (sphere) {
+    return { type: 'sphere', radius: Number(sphere.getAttribute('radius') || 0.01) };
+  }
+  return { type: 'mesh' };
+}
+
 function urdfModel() {
   const description = state.latest.get('robot_description');
   const text = description?.data;
@@ -446,17 +468,14 @@ function urdfModel() {
   const links = new Map();
   for (const link of document.getElementsByTagName('link')) {
     const name = clean(link.getAttribute('name'));
-    const collisions = [];
-    for (const collision of link.getElementsByTagName('collision')) {
-      const geometry = collision.getElementsByTagName('geometry')[0];
-      const box = geometry?.getElementsByTagName('box')[0];
-      if (!box) continue;
-      collisions.push({
-        origin: parseUrdfOrigin(collision),
-        size: parseUrdfVector(box.getAttribute('size'), [0.01, 0.01, 0.01]),
-      });
-    }
-    links.set(name, { collisions });
+    const collect = (tag) => {
+      const result = [];
+      for (const item of link.getElementsByTagName(tag)) {
+        result.push({ origin: parseUrdfOrigin(item), ...parseUrdfGeometry(item) });
+      }
+      return result;
+    };
+    links.set(name, { collisions: collect('collision'), visuals: collect('visual') });
   }
   const joints = [];
   for (const joint of document.getElementsByTagName('joint')) {
@@ -518,34 +537,53 @@ function urdfTransforms() {
   return transforms;
 }
 
-function urdfBoxes(filter) {
+function urdfPrimitives(filter, useVisual = false) {
   const model = urdfModel();
   const transforms = urdfTransforms();
   if (!model || !transforms) return [];
-  const boxes = [];
+  const primitives = [];
   for (const [name, link] of model.links) {
     if (filter && !filter(name)) continue;
     const linkTransform = transforms.get(name);
     if (!linkTransform) continue;
-    for (const collision of link.collisions) {
+    const visual = link.visuals.some((item) => item.type !== 'mesh' && item.type !== 'none');
+    const source = useVisual && visual ? link.visuals : link.collisions;
+    for (const item of source) {
+      if (item.type === 'none' || item.type === 'mesh') continue;
       const transform = mat4Multiply(
           linkTransform,
           mat4Multiply(
-              mat4Translate(collision.origin.xyz[0], collision.origin.xyz[1], collision.origin.xyz[2]),
-              mat4Rpy(collision.origin.rpy[0], collision.origin.rpy[1], collision.origin.rpy[2])));
-      const half = collision.size.map((value) => Math.max(0.001, value * 0.5));
-      const corners = [];
-      for (const sx of [-1, 1]) {
-        for (const sy of [-1, 1]) {
-          for (const sz of [-1, 1]) {
-            corners.push(mat4Apply(transform, [sx * half[0], sy * half[1], sz * half[2]]));
+              mat4Translate(item.origin.xyz[0], item.origin.xyz[1], item.origin.xyz[2]),
+              mat4Rpy(item.origin.rpy[0], item.origin.rpy[1], item.origin.rpy[2])));
+      if (item.type === 'box') {
+        const half = item.size.map((value) => Math.max(0.001, value * 0.5));
+        const corners = [];
+        for (const sx of [-1, 1]) {
+          for (const sy of [-1, 1]) {
+            for (const sz of [-1, 1]) {
+              corners.push(mat4Apply(transform, [sx * half[0], sy * half[1], sz * half[2]]));
+            }
           }
         }
+        primitives.push({ name, type: 'box', corners });
+      } else if (item.type === 'cylinder') {
+        primitives.push({
+          name, type: 'cylinder', transform,
+          radius: Math.max(0.002, item.radius), length: Math.max(0.002, item.length),
+        });
+      } else if (item.type === 'sphere') {
+        primitives.push({
+          name, type: 'sphere', center: mat4Apply(transform, [0, 0, 0]),
+          radius: Math.max(0.002, item.radius),
+        });
       }
-      boxes.push({ name, corners });
     }
   }
-  return boxes;
+  return primitives;
+}
+
+function urdfBoxes(filter) {
+  return urdfPrimitives(filter, false).filter((item) => item.type === 'box');
 }
 
 function isArmLink(name) {
@@ -718,6 +756,7 @@ const host = {
   lookup,
   armPoints,
   urdfBoxes,
+  urdfPrimitives,
   isArmLink,
   settings: state.settings,
   addView({ id, title }) {
@@ -1294,16 +1333,83 @@ function draw3dBox(cx, cy, yaw, width, length, height, color) {
   }
 }
 
+function projectBasePoint(point, transform, c, s) {
+  return project3d(transform.x + c * point[0] - s * point[1],
+                   transform.y + s * point[0] + c * point[1], point[2]);
+}
+
+function draw3dPrimitive(primitive, transform) {
+  const c = Math.cos(transform.yaw);
+  const s = Math.sin(transform.yaw);
+  if (primitive.type === 'box') {
+    const edges = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6], [3, 7],
+                   [4, 5], [4, 6], [5, 7], [6, 7]];
+    const projected = primitive.corners.map((corner) => projectBasePoint(corner, transform, c, s));
+    if (projected.some((point) => point === null)) return;
+    context3d.strokeStyle = '#b8c2d2';
+    context3d.lineWidth = 1;
+    context3d.beginPath();
+    for (const [a, b] of edges) {
+      context3d.moveTo(projected[a].x, projected[a].y);
+      context3d.lineTo(projected[b].x, projected[b].y);
+    }
+    context3d.stroke();
+    context3d.fillStyle = 'rgba(150, 165, 185, 0.12)';
+    context3d.beginPath();
+    context3d.moveTo(projected[0].x, projected[0].y);
+    for (const point of projected.slice(1)) context3d.lineTo(point.x, point.y);
+    context3d.closePath();
+    context3d.fill();
+  } else if (primitive.type === 'cylinder') {
+    const segments = 14;
+    const top = [];
+    const bottom = [];
+    for (let i = 0; i < segments; ++i) {
+      const angle = (i / segments) * Math.PI * 2;
+      const x = Math.cos(angle) * primitive.radius;
+      const y = Math.sin(angle) * primitive.radius;
+      top.push(projectBasePoint(mat4Apply(primitive.transform, [x, y, primitive.length / 2]), transform, c, s));
+      bottom.push(projectBasePoint(mat4Apply(primitive.transform, [x, y, -primitive.length / 2]), transform, c, s));
+    }
+    if (top.some((point) => point === null) || bottom.some((point) => point === null)) return;
+    context3d.strokeStyle = '#b8c2d2';
+    context3d.lineWidth = 1;
+    context3d.beginPath();
+    for (let i = 0; i < segments; ++i) {
+      const next = (i + 1) % segments;
+      context3d.moveTo(top[i].x, top[i].y); context3d.lineTo(top[next].x, top[next].y);
+      context3d.moveTo(bottom[i].x, bottom[i].y); context3d.lineTo(bottom[next].x, bottom[next].y);
+      context3d.moveTo(top[i].x, top[i].y); context3d.lineTo(bottom[i].x, bottom[i].y);
+    }
+    context3d.stroke();
+  } else if (primitive.type === 'sphere') {
+    const center = projectBasePoint(primitive.center, transform, c, s);
+    if (!center) return;
+    const edge = projectBasePoint(
+        [primitive.center[0] + primitive.radius, primitive.center[1], primitive.center[2]], transform, c, s);
+    const radius = edge ? Math.hypot(edge.x - center.x, edge.y - center.y) : 2;
+    context3d.strokeStyle = '#b8c2d2';
+    context3d.beginPath();
+    context3d.arc(center.x, center.y, Math.max(1, radius), 0, Math.PI * 2);
+    context3d.stroke();
+  }
+}
+
 function draw3dRobot() {
   if (!state.settings.robot) return;
   const pose = robotPose();
-  if (pose) {
-    draw3dBox(pose.x, pose.y, pose.yaw, 0.28, 0.24, 0.13, '#7f899b');
-  }
   const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
   const c = Math.cos(transform.yaw);
   const s = Math.sin(transform.yaw);
   if (state.settings.urdf_visual) {
+    const basePrimitives = urdfPrimitives((name) => !isArmLink(name), true);
+    if (basePrimitives.length === 0 && pose) {
+      draw3dBox(pose.x, pose.y, pose.yaw, 0.28, 0.24, 0.13, '#7f899b');
+    } else {
+      for (const primitive of basePrimitives) {
+        draw3dPrimitive(primitive, transform);
+      }
+    }
     const points = [];
     for (const point of armPoints()) {
       const projected = project3d(transform.x + c * point.x - s * point.y,
@@ -1326,22 +1432,8 @@ function draw3dRobot() {
     }
   }
   if (state.settings.urdf_collision) {
-    const boxes = urdfBoxes(isArmLink);
-    const edges = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6], [3, 7],
-                   [4, 5], [4, 6], [5, 7], [6, 7]];
-    for (const box of boxes) {
-      const projected = box.corners.map((corner) => project3d(
-          transform.x + c * corner[0] - s * corner[1],
-          transform.y + s * corner[0] + c * corner[1], corner[2]));
-      if (projected.some((point) => point === null)) continue;
-      context3d.strokeStyle = '#8fa0b7';
-      context3d.lineWidth = 1;
-      context3d.beginPath();
-      for (const [a, b] of edges) {
-        context3d.moveTo(projected[a].x, projected[a].y);
-        context3d.lineTo(projected[b].x, projected[b].y);
-      }
-      context3d.stroke();
+    for (const primitive of urdfPrimitives(isArmLink, false)) {
+      draw3dPrimitive(primitive, transform);
     }
   }
 }
@@ -1421,13 +1513,13 @@ function draw3dJointAxes() {
     const origin = project3d(toWorld(point).x, toWorld(point).y, point.z);
     if (!origin) continue;
     const axes = [
-      [project3d(toWorld({ x: point.x + 0.03, y: point.y, z: point.z }).x,
-                 toWorld({ x: point.x + 0.03, y: point.y, z: point.z }).y, point.z), '#ff6b6b'],
-      [project3d(toWorld({ x: point.x, y: point.y + 0.03, z: point.z }).x,
-                 toWorld({ x: point.x, y: point.y + 0.03, z: point.z }).y, point.z), '#54d18c'],
-      [project3d(toWorld(point).x, toWorld(point).y, point.z + 0.03), '#6aa9ff'],
+      [project3d(toWorld({ x: point.x + 0.06, y: point.y, z: point.z }).x,
+                 toWorld({ x: point.x + 0.06, y: point.y, z: point.z }).y, point.z), '#ff6b6b'],
+      [project3d(toWorld({ x: point.x, y: point.y + 0.06, z: point.z }).x,
+                 toWorld({ x: point.x, y: point.y + 0.06, z: point.z }).y, point.z), '#54d18c'],
+      [project3d(toWorld(point).x, toWorld(point).y, point.z + 0.06), '#6aa9ff'],
     ];
-    context3d.lineWidth = 1;
+    context3d.lineWidth = 1.5;
     for (const [end, color] of axes) {
       if (!end) continue;
       context3d.strokeStyle = color;
