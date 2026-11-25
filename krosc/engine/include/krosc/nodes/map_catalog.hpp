@@ -39,6 +39,7 @@ class MapCatalog final : public Node {
   void on_map_delete(const msgs::String& message);
   void on_map_unload(const msgs::Empty& message);
   void publish_status(const std::string& text);
+  void publish_map_name();
   void publish_list();
   void publish_slam_mode(const std::string& mode);
   [[nodiscard]] std::filesystem::path directory() const;
@@ -55,6 +56,7 @@ class MapCatalog final : public Node {
   Parameter<std::string> map_delete_topic_;
   Parameter<std::string> map_unload_topic_;
   Parameter<std::string> map_list_topic_;
+  Parameter<std::string> map_name_topic_;
   Parameter<std::string> map_status_topic_;
   Parameter<std::string> slam_mode_topic_;
 

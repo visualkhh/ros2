@@ -2,16 +2,20 @@
 
 #include <QAbstractSpinBox>
 #include <QApplication>
+#include <QDoubleSpinBox>
 #include <QDockWidget>
 #include <QGridLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QTimer>
 #include <QStringList>
 #include <QWidget>
 
 #include <cmath>
+#include <map>
+#include <sstream>
 
 #include "krosc/math.hpp"
 #include "krosc/msgs.hpp"
@@ -44,63 +48,114 @@ void NavigationPlugin::initialize(VizHost& host) {
   grid->setHorizontalSpacing(6);
   grid->setVerticalSpacing(5);
 
+  const auto section = [&](int row, const QString& text) {
+    auto* label = new QLabel(text, panel);
+    label->setStyleSheet("color:#8f9bb0;");
+    grid->addWidget(label, row, 0, 1, 4);
+  };
+
+  // ---- 위치 ----
+  section(0, "위치 (Localization)");
   pose_button_ = new QPushButton("2D Pose Estimate", panel);
-  goal_button_ = new QPushButton("2D Goal Pose", panel);
-  grid->addWidget(pose_button_, 0, 0, 1, 2);
-  grid->addWidget(goal_button_, 0, 2, 1, 2);
+  auto* cancel = new QPushButton("취소 / 정지", panel);
+  grid->addWidget(pose_button_, 1, 0, 1, 2);
+  grid->addWidget(cancel, 1, 2, 1, 2);
   connect(pose_button_, &QPushButton::clicked, this,
           [this] { set_tool(active_tool_ == "initialpose" ? "" : "initialpose"); });
-  connect(goal_button_, &QPushButton::clicked, this,
-          [this] { set_tool(active_tool_ == "goal" ? "" : "goal"); });
-
-  multi_button_ = new QPushButton("Multi Goal", panel);
-  auto* send = new QPushButton("Send", panel);
-  auto* clear = new QPushButton("Clear", panel);
-  auto* cancel = new QPushButton("Cancel", panel);
-  grid->addWidget(multi_button_, 1, 0);
-  grid->addWidget(send, 1, 1);
-  grid->addWidget(clear, 1, 2);
-  grid->addWidget(cancel, 1, 3);
-  connect(multi_button_, &QPushButton::clicked, this,
-          [this] { set_tool(active_tool_ == "multi" ? "" : "multi"); });
-  connect(send, &QPushButton::clicked, this, [this] { publish_multi(preview_mode_); });
-  connect(clear, &QPushButton::clicked, this, [this] {
-    multi_goals_.clear();
-    sync_waypoints();
-    update_multi_label();
-    host_->model().node().publish("cancel_goal", msgs::Bool{true}, QOS_DEFAULT);
-    status_->setText("goals cleared");
-  });
   connect(cancel, &QPushButton::clicked, this, [this] {
     multi_goals_.clear();
     sync_waypoints();
     update_multi_label();
     host_->model().node().publish("cancel_goal", msgs::Bool{true}, QOS_DEFAULT);
     status_->setText("cancel requested");
+    update_buttons();
   });
 
-  multi_label_ = new QLabel("multi goals: 0", panel);
-  multi_label_->setWordWrap(true);
-  grid->addWidget(multi_label_, 2, 0, 1, 4);
-
-  preview_button_ = new QPushButton("Preview OFF", panel);
-  preview_button_->setCheckable(true);
-  auto* go = new QPushButton("Go", panel);
+  // ---- 단일 목표 ----
+  section(2, "단일 목표 (맵 클릭)");
+  preview_button_ = new QPushButton("경로 미리보기", panel);
+  move_button_ = new QPushButton("이동", panel);
   grid->addWidget(preview_button_, 3, 0, 1, 2);
-  grid->addWidget(go, 3, 2, 1, 2);
-  connect(preview_button_, &QPushButton::toggled, this, [this](bool checked) {
-    preview_mode_ = checked;
-    preview_button_->setText(checked ? "Preview ON" : "Preview OFF");
+  grid->addWidget(move_button_, 3, 2, 1, 2);
+  connect(preview_button_, &QPushButton::clicked, this, [this] {
+    single_preview_ = true;
+    set_tool(active_tool_ == "goal" ? "" : "goal");
   });
-  connect(go, &QPushButton::clicked, this, [this] { send_pending(); });
+  connect(move_button_, &QPushButton::clicked, this, [this] {
+    single_preview_ = false;
+    set_tool(active_tool_ == "goal" ? "" : "goal");
+  });
+
+  // ---- 멀티 목표 ----
+  section(4, "멀티 목표 (웨이포인트)");
+  multi_button_ = new QPushButton("웨이포인트 추가", panel);
+  clear_button_ = new QPushButton("비우기", panel);
+  multi_preview_button_ = new QPushButton("경로 미리보기", panel);
+  multi_go_button_ = new QPushButton("이동 시작", panel);
+  grid->addWidget(multi_button_, 5, 0, 1, 2);
+  grid->addWidget(clear_button_, 5, 2, 1, 2);
+  grid->addWidget(multi_preview_button_, 6, 0, 1, 2);
+  grid->addWidget(multi_go_button_, 6, 2, 1, 2);
+  connect(multi_button_, &QPushButton::clicked, this,
+          [this] { set_tool(active_tool_ == "multi" ? "" : "multi"); });
+  connect(multi_preview_button_, &QPushButton::clicked, this, [this] { publish_multi(true); });
+  connect(multi_go_button_, &QPushButton::clicked, this, [this] { publish_multi(false); });
+  connect(clear_button_, &QPushButton::clicked, this, [this] {
+    multi_goals_.clear();
+    sync_waypoints();
+    update_multi_label();
+    host_->model().node().publish("cancel_goal", msgs::Bool{true}, QOS_DEFAULT);
+    status_->setText("waypoints cleared");
+    update_buttons();
+  });
+
+  multi_label_ = new QLabel("웨이포인트: 0개", panel);
+  multi_label_->setWordWrap(true);
+  grid->addWidget(multi_label_, 7, 0, 1, 4);
 
   status_ = new QLabel("", panel);
   status_->setWordWrap(true);
   status_->setMinimumHeight(28);
-  grid->addWidget(status_, 4, 0, 1, 4);
+  grid->addWidget(status_, 8, 0, 1, 4);
+
+  // ---- costmap ----
+  section(9, "COSTMAP (inflation / scaling)");
+  const auto add_spin = [&](int row, int column, const QString& text, double value,
+                            double minimum, double maximum, double step) {
+    grid->addWidget(new QLabel(text, panel), row, column);
+    auto* spin = new QDoubleSpinBox(panel);
+    spin->setDecimals(2);
+    spin->setRange(minimum, maximum);
+    spin->setSingleStep(step);
+    spin->setValue(value);
+    grid->addWidget(spin, row, column + 1);
+    return spin;
+  };
+  global_inflation_ = add_spin(10, 0, "g infl (m)", 0.55, 0.05, 2.0, 0.05);
+  global_scaling_ = add_spin(10, 2, "g scale", 3.0, 0.5, 10.0, 0.5);
+  local_inflation_ = add_spin(11, 0, "l infl (m)", 0.55, 0.05, 2.0, 0.05);
+  local_scaling_ = add_spin(11, 2, "l scale", 3.0, 0.5, 10.0, 0.5);
+  costmap_apply_ = new QPushButton("Apply costmap", panel);
+  grid->addWidget(costmap_apply_, 12, 0, 1, 4);
+  connect(costmap_apply_, &QPushButton::clicked, this, [this] { apply_costmap_params(); });
+  costmap_label_ = new QLabel("-", panel);
+  costmap_label_->setWordWrap(true);
+  grid->addWidget(costmap_label_, 13, 0, 1, 4);
 
   dock_->setWidget(panel);
   host.add_dock(dock_, Qt::RightDockWidgetArea);
+
+  costmap_subscription_ = host_->model().node().subscribe<msgs::String>(
+      "costmap_params_state",
+      [this](const msgs::String& message) {
+        std::lock_guard<std::mutex> lock(costmap_mutex_);
+        costmap_state_ = message.data;
+        costmap_dirty_ = true;
+      },
+      QOS_LATCHED);
+  costmap_timer_ = new QTimer(dock_);
+  QObject::connect(costmap_timer_, &QTimer::timeout, dock_, [this] { refresh_costmap_state(); });
+  costmap_timer_->start(300);
 
   connect(&host.scene(), &SceneView::tool_pose, this,
           [this](double x, double y, double yaw) { handle_tool_pose(x, y, yaw, false); });
@@ -119,6 +174,10 @@ void NavigationPlugin::shutdown() {
   }
   active_ = false;
   qApp->removeEventFilter(this);
+  if (costmap_timer_ != nullptr) {
+    costmap_timer_->stop();
+  }
+  costmap_subscription_.cancel();
   if (host_ != nullptr) {
     set_tool("");
     multi_goals_.clear();
@@ -148,10 +207,15 @@ void NavigationPlugin::update_buttons() {
     button->setStyleSheet(active ? "background:#8a5a1a;" : "");
   };
   style(pose_button_, "2D Pose Estimate", active_tool_ == "initialpose");
-  style(goal_button_, "2D Goal Pose", active_tool_ == "goal");
-  style(multi_button_, "Multi Goal", active_tool_ == "multi");
-  if (preview_button_ != nullptr) {
-    preview_button_->setText(preview_mode_ ? "Preview ON" : "Preview OFF");
+  const bool goal_tool = active_tool_ == "goal";
+  style(preview_button_, "경로 미리보기", goal_tool && single_preview_);
+  style(move_button_, "이동", goal_tool && !single_preview_);
+  style(multi_button_, "웨이포인트 추가", active_tool_ == "multi");
+  if (multi_preview_button_ != nullptr) {
+    const bool has = !multi_goals_.empty();
+    multi_preview_button_->setEnabled(has);
+    multi_go_button_->setEnabled(has);
+    clear_button_->setEnabled(has);
   }
 }
 
@@ -168,7 +232,7 @@ void NavigationPlugin::update_multi_label() {
     return;
   }
   if (multi_goals_.empty()) {
-    multi_label_->setText("multi goals: 0");
+    multi_label_->setText("웨이포인트: 0개");
     return;
   }
   QStringList parts;
@@ -178,7 +242,7 @@ void NavigationPlugin::update_multi_label() {
                  .arg(std::get<0>(multi_goals_[index]), 0, 'f', 2)
                  .arg(std::get<1>(multi_goals_[index]), 0, 'f', 2);
   }
-  multi_label_->setText(QString("multi goals: %1  %2").arg(multi_goals_.size()).arg(parts.join("  ")));
+  multi_label_->setText(QString("웨이포인트: %1개  %2").arg(multi_goals_.size()).arg(parts.join("  ")));
 }
 
 void NavigationPlugin::remove_last_multi_goal() {
@@ -188,9 +252,7 @@ void NavigationPlugin::remove_last_multi_goal() {
   multi_goals_.pop_back();
   sync_waypoints();
   update_multi_label();
-  if (preview_mode_) {
-    publish_multi(true);
-  }
+  update_buttons();
 }
 
 bool NavigationPlugin::eventFilter(QObject* watched, QEvent* event) {
@@ -249,10 +311,14 @@ void NavigationPlugin::handle_tool_pose(double x, double y, double yaw, bool fro
     return;
   }
   if (active_tool_ == "initialpose") {
+    if (slam_status_text() == "idle") {
+      status_->setText("지도를 먼저 load 하세요 (localization) — idle에서는 2D Pose 무효");
+      set_tool("");
+      return;
+    }
     publish_pose("initialpose", x, y, yaw, from_map);
   } else if (active_tool_ == "goal") {
-    last_single_goal_ = std::make_tuple(x, y, yaw);
-    publish_pose(preview_mode_ ? "preview_goal" : "goal_pose", x, y, yaw, from_map);
+    publish_pose(single_preview_ ? "preview_goal" : "goal_pose", x, y, yaw, from_map);
   }
   set_tool("");
 }
@@ -311,7 +377,7 @@ void NavigationPlugin::publish_multi(bool preview) {
       empty.header = msgs::Header{host_->model().node().now(), "map"};
       host_->model().node().publish("preview_goals", empty, QOS_DEFAULT);
     }
-    status_->setText("multi goals: 0");
+    status_->setText("웨이포인트가 없다");
     return;
   }
   if (!preview && slam_status_text() != "localization") {
@@ -332,17 +398,63 @@ void NavigationPlugin::publish_multi(bool preview) {
     path.poses.push_back(std::move(pose));
   }
   host_->model().node().publish(preview ? "preview_goals" : "goal_poses", path, QOS_DEFAULT);
-  status_->setText(QString("sent %1 goals").arg(multi_goals_.size()));
+  status_->setText(preview ? QString("미리보기 %1개 (주행 안 함)").arg(multi_goals_.size())
+                           : QString("이동 시작: %1개").arg(multi_goals_.size()));
 }
 
-void NavigationPlugin::send_pending() {
-  if (last_single_goal_) {
-    publish_pose("goal_pose", std::get<0>(*last_single_goal_), std::get<1>(*last_single_goal_),
-                 std::get<2>(*last_single_goal_), true);
+void NavigationPlugin::apply_costmap_params() {
+  if (host_ == nullptr || global_inflation_ == nullptr) {
+    return;
   }
-  if (!multi_goals_.empty()) {
-    publish_multi(preview_mode_);
+  const std::string text =
+      "global,inflation_radius," + std::to_string(global_inflation_->value()) +
+      ";global,cost_scaling_factor," + std::to_string(global_scaling_->value()) +
+      ";local,inflation_radius," + std::to_string(local_inflation_->value()) +
+      ";local,cost_scaling_factor," + std::to_string(local_scaling_->value());
+  host_->model().node().publish("costmap_params", msgs::String{text}, QOS_DEFAULT);
+  status_->setText("costmap applied");
+}
+
+void NavigationPlugin::refresh_costmap_state() {
+  if (costmap_label_ == nullptr) {
+    return;
   }
+  std::string text;
+  {
+    std::lock_guard<std::mutex> lock(costmap_mutex_);
+    if (!costmap_dirty_) {
+      return;
+    }
+    costmap_dirty_ = false;
+    text = costmap_state_;
+  }
+  std::map<std::string, std::string> values;
+  std::stringstream stream(text);
+  std::string item;
+  while (std::getline(stream, item, ';')) {
+    const auto equal = item.find('=');
+    if (equal != std::string::npos) {
+      values[item.substr(0, equal)] = item.substr(equal + 1);
+    }
+  }
+  const auto set_spin = [&](QDoubleSpinBox* spin, const std::string& key) {
+    const auto found = values.find(key);
+    if (found != values.end() && spin != nullptr && !spin->hasFocus()) {
+      try {
+        spin->setValue(std::stod(found->second));
+      } catch (const std::exception&) {
+      }
+    }
+  };
+  set_spin(global_inflation_, "global.inflation_radius");
+  set_spin(global_scaling_, "global.cost_scaling_factor");
+  set_spin(local_inflation_, "local.inflation_radius");
+  set_spin(local_scaling_, "local.cost_scaling_factor");
+  costmap_label_->setText(QString("g %1 m / %2 · l %3 m / %4")
+                              .arg(QString::fromStdString(values["global.inflation_radius"]))
+                              .arg(QString::fromStdString(values["global.cost_scaling_factor"]))
+                              .arg(QString::fromStdString(values["local.inflation_radius"]))
+                              .arg(QString::fromStdString(values["local.cost_scaling_factor"])));
 }
 
 }  // namespace krosc::viz

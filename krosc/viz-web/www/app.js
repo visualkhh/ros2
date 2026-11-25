@@ -328,8 +328,13 @@ function frameTransform(frame) {
   if (!frame || frame === 'map') return { x: 0, y: 0, yaw: 0 };
   const inMap = lookup('map', frame);
   if (inMap) return inMap;
-  // SLAM이 idle이라 map→odom이 없을 때: odom을 화면 기준으로 사용한다.
-  // (안 그러면 로봇/스캔/TF가 전부 사라진다)
+  const slam = state.latest.get('slam_status');
+  const mode = slam && typeof slam.data === 'string' ? slam.data : '';
+  if (mode === 'localization') {
+    // 아직 map→odom이 없다 = 위치를 잡는 중. odom 기준으로 그리면 엉뚱한 곳에 보이므로 숨긴다.
+    return null;
+  }
+  // idle/mapping: map→odom이 없을 때는 odom 기준으로 그린다.
   return lookup('odom', frame);
 }
 
@@ -2289,8 +2294,12 @@ function render() {
     }
   }
   drawGrid();
+  // SLAM이 idle이면 지도 토픽의 옛(래치) 프레임이 남아 있을 수 있으므로 그리지 않는다.
+  const slam = state.latest.get('slam_status');
+  const slamMode = slam && typeof slam.data === 'string' ? slam.data : '';
+  const showMap = slamMode === 'mapping' || slamMode === 'localization';
   // 지도를 먼저 깔고 그 위에 costmap을 그린다. (순서가 반대면 불투명한 지도가 costmap을 가린다)
-  if (state.settings.map) drawGridMessage('map', mapCanvas, 1.0);
+  if (state.settings.map && showMap) drawGridMessage('map', mapCanvas, 1.0);
   if (state.settings.global_costmap) drawGridMessage('global_costmap/costmap', costmapCanvas, 0.55);
   if (state.settings.local_costmap) drawGridMessage('local_costmap/costmap', costmapCanvas, 0.6);
   if (state.settings.path) drawPath(topic('plan'), '#6aa9ff', 2);
@@ -2301,6 +2310,15 @@ function render() {
   drawGoal();
   drawWaypoints2d();
   drawRobot();
+  {
+    const slam = state.latest.get('slam_status');
+    const mode = slam && typeof slam.data === 'string' ? slam.data : '';
+    if (mode === 'localization' && !lookup('map', 'odom')) {
+      context.fillStyle = 'rgba(255, 179, 107, 0.95)';
+      context.font = '13px system-ui';
+      context.fillText('위치 잡는 중… 2D Pose로 즉시 지정할 수 있습니다', 14, 24);
+    }
+  }
   } catch (error) {
     console.error('render', error);
   }

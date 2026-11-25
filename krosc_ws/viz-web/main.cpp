@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
   options.forward_topics = {
       {"arm_status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"costmap_params_state", krosc::net::Kind::String, krosc::QOS_LATCHED},
+      {"map_name", krosc::net::Kind::String, krosc::QOS_LATCHED},
       {"moveit_status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"moveit_state", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"moveit_target_pose", krosc::net::Kind::Pose, krosc::QOS_DEFAULT},

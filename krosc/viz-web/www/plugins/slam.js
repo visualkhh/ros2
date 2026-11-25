@@ -3,6 +3,7 @@ import { button, buttonRow, row, select, setLevel } from './util.js';
 export function init(host) {
   const body = host.addPanel('SLAM / Map');
   const mode = row(body, 'SLAM');
+  const loadedName = row(body, 'loaded map');
   const mapStatus = row(body, 'map');
   const collision = row(body, 'collision');
 
@@ -86,6 +87,15 @@ export function init(host) {
     slamMode = message.data || 'idle';
     setLevel(mode, slamMode, slamMode === 'mapping' ? 'ok' : '');
     updateSlamButton();  // 이미 매핑 중이면 버튼이 'stop SLAM'으로 보여야 한다
+  });
+  host.onTopic('map_name', (message) => {
+    const name = String(message.data || '');
+    setLevel(loadedName, name || '(없음)', name ? 'ok' : '');
+    if (name) {
+      mapSelect.value = name;
+    } else {
+      mapSelect.value = '';
+    }
   });
   host.onTopic('map_status', (message) => {
     const text = message.data || '-';

@@ -44,6 +44,7 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
       declare_parameter<std::string>("map_delete_topic", std::string("map_delete"));
   map_unload_topic_ = declare_parameter<std::string>("map_unload_topic", std::string("map_unload"));
   map_list_topic_ = declare_parameter<std::string>("map_list_topic", std::string("map_list"));
+  map_name_topic_ = declare_parameter<std::string>("map_name_topic", std::string("map_name"));
   map_status_topic_ = declare_parameter<std::string>("map_status_topic", std::string("map_status"));
   slam_mode_topic_ = declare_parameter<std::string>("slam_mode_topic", std::string("slam_mode"));
 
@@ -58,6 +59,7 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
   create_timer(list_period_.value(), [this] { refresh(); });
   refresh();
   publish_status("ready");
+  publish_map_name();
   logger().info("MapCatalog: maps=%s", directory().string().c_str());
 }
 
@@ -138,6 +140,10 @@ void MapCatalog::publish_list() {
   publish(map_list_topic_.value(), msgs::String{text.str()}, QOS_LATCHED);
 }
 
+void MapCatalog::publish_map_name() {
+  publish(map_name_topic_.value(), msgs::String{loaded_name()}, QOS_LATCHED);
+}
+
 void MapCatalog::publish_status(const std::string& text) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -176,6 +182,7 @@ void MapCatalog::on_map_change(const msgs::String& message) {
     } catch (const std::exception& error) {
       logger().warn("map_server unload 실패: %s", error.what());
     }
+    publish_map_name();
     publish_slam_mode("idle");
     refresh();
     return;
@@ -204,6 +211,7 @@ void MapCatalog::on_map_change(const msgs::String& message) {
       loaded_name_ = requested;
     }
     publish_slam_mode("localization");
+    publish_map_name();
     publish_status("loaded " + requested);
     refresh();
   } catch (const std::exception& error) {
@@ -285,6 +293,7 @@ void MapCatalog::on_map_save(const msgs::String& message) {
       std::lock_guard<std::mutex> lock(mutex_);
       loaded_name_ = name;
     }
+    publish_map_name();
     publish_status("saved " + name);
     refresh();
   } catch (const std::exception& error) {

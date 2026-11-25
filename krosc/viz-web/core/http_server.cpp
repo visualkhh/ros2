@@ -99,7 +99,8 @@ bool keep_frame(const std::string& topic) {
 
 bool cacheable(const std::string& topic) {
   return topic == "map" || topic == "global_costmap/costmap" || topic == "local_costmap/costmap" ||
-         topic == "map_list" || topic == "map_status" || topic == "slam_status" ||
+         topic == "map_list" || topic == "map_status" || topic == "map_name" ||
+         topic == "slam_status" ||
          topic == "goal_status" || topic == "collision_status" || topic == "robot_description" ||
          topic == "rl_nav_model_list" || topic == "rl_nav_status" || topic == "moveit_status" ||
          topic == "moveit_state" || topic == "moveit_target_pose" || topic == "moveit_arm" ||
