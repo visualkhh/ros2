@@ -18,14 +18,10 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  // 기본 웹 Viz 플러그인. 필요한 것만 추가/제거하면 /plugins.json에 바로 반영된다.
+  // 코어 웹 Viz 플러그인. 프로젝트 전용 플러그인은 각 프로젝트 viz-web main이 추가한다.
   krosc::viz_web::VizWebPluginRegistry registry;
-  registry.add("slam", "SLAM / Map", "/plugins/slam.js");
-  registry.add("navigation", "Navigation", "/plugins/navigation.js");
-  registry.add("teleop", "Teleop", "/plugins/teleop.js");
-  registry.add("rl_nav", "RL Nav", "/plugins/rl_nav.js");
-  registry.add("moveit", "MoveIt", "/plugins/moveit.js");
-  registry.add("diagnostics", "Diagnostics", "/plugins/diagnostics.js");
+  krosc::viz_web::register_core_web_plugins(registry,
+                                            {"slam", "navigation", "teleop", "diagnostics"});
 
   krosc::viz_web::VizWeb app(std::move(options), std::move(registry));
   if (!app.initialize(error)) {

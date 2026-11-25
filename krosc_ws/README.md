@@ -232,6 +232,20 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 - 플러그인은 프로젝트 안에서 자유롭게 작성/빌드한다.
 - 코어 `krosc_viz_app`은 공통/최소 앱(디스플레이 토글/토픽/TF)으로 남아 있고,
   `run-viz.sh`는 프로젝트 앱을 사용한다.
+
+### 웹 Viz (krosc_ws/viz-web)
+
+`krosc/viz-web` 코어를 링크하고 프로젝트 플러그인(`moveit`, `rl_nav`)을 추가한다.
+
+```bash
+./run-viz-web.sh                 # http://localhost:8080/, robot pak.local:9000
+KROSC_VIZ_HOST=10.2.150.138 ./run-viz-web.sh
+```
+
+- `krosc_ws_viz_web` = `krosc::viz_web` 코어 + 프로젝트 레지스트리
+- 프로젝트 JS: `krosc_ws/viz-web/www/plugins/{moveit,rl_nav}.js`
+- 정적 파일은 프로젝트 www → 코어 www 순으로 찾는다 (`VizWebOptions::overlay_root`)
+- `/plugins.json`은 main이 등록한 레지스트리에서 동적으로 생성된다
 - 코어 Viz 플러그인: `krosc/viz/plugins/teleop_plugin.cpp`(주행 텔레옵),
   `slam_plugin.cpp`(SLAM/지도), `navigation_plugin.cpp`(2D Pose/Goal/Multi Goal),
   `manipulator_plugin.cpp`(수동 관절).
@@ -344,10 +358,14 @@ krosc_ws/
 │   │   └── lds03/
 │   │       └── lds03.cpp/.hpp       # SensorInterface(read-only) + 패킷 파서 + 몸통 필터
 │   └── description/urdf/turtlebot3_real.urdf
-├── viz/                         # PC Viz 앱 + 프로젝트 플러그인
+├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp
 │   ├── CMakeLists.txt
 │   └── plugins/
+├── viz-web/                     # PC 웹 Viz 앱 + 프로젝트 JS 플러그인
+│   ├── main.cpp
+│   ├── CMakeLists.txt
+│   └── www/plugins/             # moveit.js, rl_nav.js
 ├── artifacts/models/rl_nav_controller/<name>/  # policy.onnx + policy.onnx.data
 ├── firmware/opencr/             # 이 프로젝트 전용 OpenCR 펌웨어 사본
 │   ├── turtlebot_opencr/turtlebot_opencr.ino

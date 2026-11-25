@@ -30,7 +30,12 @@ bool VizWeb::initialize(std::string& error) {
     return true;
   }
   link_ = std::make_unique<RobotLink>(options_.robot_host, options_.robot_port);
-  server_ = std::make_unique<HttpServer>(options_.bind_address, options_.port, options_.www_root,
+  std::vector<std::string> roots;
+  if (!options_.overlay_root.empty()) {
+    roots.push_back(options_.overlay_root);
+  }
+  roots.push_back(options_.www_root);
+  server_ = std::make_unique<HttpServer>(options_.bind_address, options_.port, std::move(roots),
                                          *link_,
                                          [this] { return registry_.manifest_json(); });
   link_->set_frame_handler([this](const std::vector<std::uint8_t>& body) {

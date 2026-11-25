@@ -19,7 +19,7 @@ class HttpServer {
  public:
   using ManifestHandler = std::function<std::string()>;
 
-  HttpServer(std::string bind_address, std::uint16_t port, std::string www_root,
+  HttpServer(std::string bind_address, std::uint16_t port, std::vector<std::string> www_roots,
              RobotLink& robot, ManifestHandler manifest = {});
   ~HttpServer();
 
@@ -42,7 +42,7 @@ class HttpServer {
   std::string bind_address_;
   std::uint16_t port_ = 8080;
   std::uint16_t bound_port_ = 0;
-  std::string www_root_;
+  std::vector<std::string> www_roots_;
   RobotLink& robot_;
   ManifestHandler manifest_;
   std::atomic<bool> stopping_{false};

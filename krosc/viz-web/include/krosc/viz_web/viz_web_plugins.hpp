@@ -39,4 +39,8 @@ class VizWebPluginRegistry {
   std::vector<VizWebPluginInfo> plugins_;
 };
 
+// ids에 해당하는 코어 웹 플러그인(slam/navigation/teleop/diagnostics)만 등록한다.
+// 빈 목록이면 아무것도 등록하지 않는다. 프로젝트 플러그인은 프로젝트 main이 추가한다.
+void register_core_web_plugins(VizWebPluginRegistry& registry, const std::vector<std::string>& ids);
+
 }  // namespace krosc::viz_web

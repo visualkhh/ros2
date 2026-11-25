@@ -205,11 +205,12 @@ struct HttpServer::Client {
   std::thread writer;
 };
 
-HttpServer::HttpServer(std::string bind_address, std::uint16_t port, std::string www_root,
-                       RobotLink& robot, ManifestHandler manifest)
+HttpServer::HttpServer(std::string bind_address, std::uint16_t port,
+                       std::vector<std::string> www_roots, RobotLink& robot,
+                       ManifestHandler manifest)
     : bind_address_(std::move(bind_address)),
       port_(port),
-      www_root_(std::move(www_root)),
+      www_roots_(std::move(www_roots)),
       robot_(robot),
       manifest_(std::move(manifest)) {}
 
@@ -407,15 +408,18 @@ bool HttpServer::serve_static(int fd, const std::string& target) {
   if (target == "/plugins.json" && manifest_) {
     return send_response(fd, 200, "OK", manifest_(), "application/json; charset=utf-8");
   }
-  std::filesystem::path path = std::filesystem::path(www_root_) / target.substr(1);
-  std::ifstream file(path, std::ios::binary);
-  if (!file) {
-    return false;
+  for (const auto& root : www_roots_) {
+    std::filesystem::path path = std::filesystem::path(root) / target.substr(1);
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+      continue;
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string body = buffer.str();
+    return send_response(fd, 200, "OK", body, content_type(path.string()));
   }
-  std::ostringstream buffer;
-  buffer << file.rdbuf();
-  const std::string body = buffer.str();
-  return send_response(fd, 200, "OK", body, content_type(path.string()));
+  return false;
 }
 
 void HttpServer::broadcast_binary(const std::vector<std::uint8_t>& body) {

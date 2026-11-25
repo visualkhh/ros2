@@ -23,6 +23,8 @@ struct VizWebOptions {
   std::string bind_address = "0.0.0.0";
   std::uint16_t port = 8080;
   std::string www_root = KROSC_VIZ_WEB_ROOT;
+  // 프로젝트 www. core www보다 먼저 찾는다 (프로젝트 JS/파일 우선).
+  std::string overlay_root;
 };
 
 // 웹 Viz 게이트웨이의 조립/수명주기. main.cpp는 인자만 파싱해서 이 클래스를 실행한다.

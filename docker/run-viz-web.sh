@@ -4,15 +4,16 @@
 set -euo pipefail
 cd /workspace/krosc
 
-echo "[viz-web] build krosc_viz_web..."
+echo "[viz-web] build krosc_ws_viz_web..."
 cmake -S . -B /tmp/krosc-viz-web-build -G Ninja \
       -DCMAKE_BUILD_TYPE=RelWithDebInfo \
       -DKROSC_BUILD_VIZ_WEB=ON \
       -DKROSC_BUILD_TESTS=OFF \
       -DKROSC_BUILD_BENCH=OFF \
       -DKROSC_BUILD_VIZ=OFF \
-      -DKROSC_BUILD_EXAMPLES=OFF >/tmp/krosc-viz-web-cmake.log 2>&1
-cmake --build /tmp/krosc-viz-web-build --target krosc_viz_web -j"$(nproc)" >/tmp/krosc-viz-web-build.log 2>&1
+      -DKROSC_BUILD_EXAMPLES=OFF \
+      -DKROSC_VIZ_WEB_PROJECT_DIR=/workspace/krosc_ws/viz-web >/tmp/krosc-viz-web-cmake.log 2>&1
+cmake --build /tmp/krosc-viz-web-build --target krosc_ws_viz_web -j"$(nproc)" >/tmp/krosc-viz-web-build.log 2>&1
 
 echo "[viz-web] build krosc_real..."
 cmake -S /workspace/krosc_ws -B /tmp/krosc-ws-web-build -G Ninja \
@@ -25,4 +26,4 @@ echo "[viz-web] robot + gateway"
 cd /workspace/krosc_ws
 /tmp/krosc-ws-web-build/krosc_real --opencr /dev/null --no-lidar --port 9000 >/tmp/krosc_real.log 2>&1 &
 sleep 2
-exec /tmp/krosc-viz-web-build/viz-web/krosc_viz_web --robot 127.0.0.1:9000 --port 8080
+exec /tmp/krosc-viz-web-build/viz-web/krosc_ws_viz_web --robot 127.0.0.1:9000 --port 8080

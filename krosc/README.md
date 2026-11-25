@@ -66,7 +66,8 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
   시그널/종료를 소유한다. 로봇 TCP의 `4바이트 길이 + 본문`을 WebSocket 바이너리 프레임으로 그대로 넘긴다.
 - 브라우저는 `www/app.js`에서 프레임을 해석해 지도/스캔/TF/경로를 Canvas에 그린다.
 - 웹 플러그인은 main이 `VizWebPluginRegistry`에 등록하고, 게이트웨이가 `/plugins.json`을 **동적으로** 만든다.
-  JS 모듈은 `www/plugins/*.js`다. SLAM/Navigation/Teleop/RL/MoveIt/Diagnostics가 기본.
+  코어 앱은 SLAM/Navigation/Teleop/Diagnostics를 기본으로 하고, 프로젝트 앱(`krosc_ws/viz-web`)이
+  MoveIt/RL Nav를 추가한다. JS 모듈은 `www/plugins/*.js`다.
 - 늦게 접속한 브라우저를 위해 지도/상태/모델 목록 등 최신 프레임을 캐시했다가 새 연결에 보낸다.
 
 ## 빌드/테스트 (Docker, 화면 없이)
