@@ -1,4 +1,4 @@
-#include "krosc/web/robot_link.hpp"
+#include "krosc/viz_web/robot_link.hpp"
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -17,7 +17,7 @@
 #define MSG_NOSIGNAL 0
 #endif
 
-namespace krosc::web {
+namespace krosc::viz_web {
 
 namespace {
 
@@ -192,4 +192,4 @@ void RobotLink::run() {
   }
 }
 
-}  // namespace krosc::web
+}  // namespace krosc::viz_web

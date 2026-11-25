@@ -5,4 +5,4 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 echo "web: http://localhost:8080/"
-exec docker compose -f "$here/docker-compose.yml" up krosc-web
+exec docker compose -f "$here/docker-compose.yml" up krosc-viz-web

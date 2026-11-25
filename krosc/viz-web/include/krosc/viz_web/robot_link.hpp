@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-namespace krosc::web {
+namespace krosc::viz_web {
 
 // 로봇의 TCP(9000) 프로토콜에 그대로 붙는다. 4바이트 길이 + 본문을 읽어 콜백으로 넘기고,
 // 브라우저가 보낸 본문에 길이를 붙여 보낸다. 메시지 해석은 하지 않는다 (프론트엔드 담당).
@@ -47,4 +47,4 @@ class RobotLink {
   StatusHandler status_handler_;
 };
 
-}  // namespace krosc::web
+}  // namespace krosc::viz_web

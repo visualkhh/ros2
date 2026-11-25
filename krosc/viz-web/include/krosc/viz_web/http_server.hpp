@@ -2,23 +2,25 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
-#include <cstdint>
 
-namespace krosc::web {
+namespace krosc::viz_web {
 
 class RobotLink;
 
 // HTTP 정적 파일 + /ws WebSocket. 브라우저와 로봇 TCP 사이에서 프레임만 중계한다.
 class HttpServer {
  public:
+  using ManifestHandler = std::function<std::string()>;
+
   HttpServer(std::string bind_address, std::uint16_t port, std::string www_root,
-             RobotLink& robot);
+             RobotLink& robot, ManifestHandler manifest = {});
   ~HttpServer();
 
   HttpServer(const HttpServer&) = delete;
@@ -42,6 +44,7 @@ class HttpServer {
   std::uint16_t bound_port_ = 0;
   std::string www_root_;
   RobotLink& robot_;
+  ManifestHandler manifest_;
   std::atomic<bool> stopping_{false};
   int listen_fd_ = -1;
   std::thread accept_thread_;
@@ -55,4 +58,4 @@ class HttpServer {
   std::map<std::string, std::vector<std::uint8_t>> cache_;
 };
 
-}  // namespace krosc::web
+}  // namespace krosc::viz_web

@@ -31,7 +31,7 @@ struct VizOptions {
 // Context/Net Client/VizWindow/플러그인 로드/상태 타이머/스크린샷을 모두 소유한다.
 class Viz {
  public:
-  Viz(VizOptions options, VizPluginRegistry registry);
+  explicit Viz(VizOptions options, VizPluginRegistry registry = {});
   ~Viz();
 
   Viz(const Viz&) = delete;

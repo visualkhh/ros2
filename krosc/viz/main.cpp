@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
   }
 
   krosc::viz::VizPluginRegistry registry;
-  krosc::viz::register_core_plugins(registry);
+  krosc::viz::register_core_plugins(registry, options.plugins);
 
   krosc::viz::Viz viz(std::move(options), std::move(registry));
   if (!viz.initialize(error)) {

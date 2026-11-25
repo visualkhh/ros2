@@ -210,11 +210,11 @@ class MyPlugin final : public krosc::viz::VizPlugin {
 };
 ```
 
-코어 플러그인은 `register_core_plugins()`로 한 번에 등록하고, 프로젝트 플러그인만 추가한다:
+레지스트리는 기본으로 비어 있고, main이 필요한 코어 플러그인만 등록한다:
 
 ```cpp
 krosc::viz::VizPluginRegistry registry;
-krosc::viz::register_core_plugins(registry);
+krosc::viz::register_core_plugins(registry, {"slam", "navigation"});
 registry.add("my_plugin", [] { return std::make_unique<MyPlugin>(); });
 
 krosc::viz::VizOptions options;

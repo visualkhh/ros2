@@ -1,4 +1,4 @@
-#include "krosc/web/websocket.hpp"
+#include "krosc/viz_web/websocket.hpp"
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -13,7 +13,7 @@
 #define MSG_NOSIGNAL 0
 #endif
 
-namespace krosc::web {
+namespace krosc::viz_web {
 
 namespace {
 
@@ -224,4 +224,4 @@ bool websocket_send_frame(int fd, std::uint8_t opcode, const std::vector<std::ui
   return websocket_send_frame(fd, opcode, payload.data(), payload.size());
 }
 
-}  // namespace krosc::web
+}  // namespace krosc::viz_web

@@ -38,7 +38,7 @@ ctest --test-dir build --output-on-failure
 
 ## 3. 웹 Viz (브라우저)
 
-로봇 앱 + `krosc_web`(HTTP/WebSocket)을 한 컨테이너에서 띄운다.
+로봇 앱 + `krosc_viz_web`(HTTP/WebSocket)을 한 컨테이너에서 띄운다.
 
 ```bash
 # ros2/ 에서
@@ -51,10 +51,10 @@ ctest --test-dir build --output-on-failure
 http://localhost:8080/
 ```
 
-- `krosc_web`은 로봇 TCP(127.0.0.1:9000)에 붙어 프레임을 **그대로** WebSocket으로 중계한다.
+- `krosc_viz_web`은 로봇 TCP(127.0.0.1:9000)에 붙어 프레임을 **그대로** WebSocket으로 중계한다.
   메시지 해석/렌더링은 브라우저 JS가 한다 (JSON 변환 없음).
-- `web/www/plugins.json`에 JS 플러그인을 나열한다. `web/www/plugins/*.js`를 추가하고
-  매니페스트에 한 줄 넣으면 패널이 붙는다 (viz의 플러그인과 같은 개념).
+- 웹 플러그인은 `viz-web/main.cpp`의 `VizWebPluginRegistry`에 추가한다. 게이트웨이가
+  `/plugins.json`을 동적으로 만들고, JS 모듈은 `viz-web/www/plugins/*.js`에 둔다.
 - 지도/상태/모델 목록처럼 늦게 붙은 브라우저에 필요한 토픽은 게이트웨이가 최신 프레임을
   캐시했다가 새 WebSocket 클라이언트에 보낸다.
 - RL은 Docker에 ONNX Runtime이 없어 `no-ort` + RPP fallback으로 표시된다.

@@ -19,7 +19,7 @@
 
 ```cpp
 krosc::viz::VizPluginRegistry registry;
-krosc::viz::register_core_plugins(registry);   // teleop/slam/navigation/manipulator
+krosc::viz::register_core_plugins(registry, {"slam", "navigation"});
 registry.add("my_plugin", [] { return std::make_unique<MyPlugin>(); });
 
 krosc::viz::VizOptions options;

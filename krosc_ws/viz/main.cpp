@@ -57,11 +57,20 @@ int main(int argc, char** argv) {
   }
 
   krosc::viz::VizPluginRegistry registry;
-  krosc::viz::register_core_plugins(registry);
-  registry.add("project_panel",
-               [] { return std::make_unique<krosc_ws::viz::ProjectPanelPlugin>(); });
-  registry.add("moveit", [] { return std::make_unique<krosc_ws::viz::MoveItPlugin>(); });
-  registry.add("rl_nav", [] { return std::make_unique<krosc_ws::viz::RlNavPlugin>(); });
+  krosc::viz::register_core_plugins(registry, options.plugins);
+  const auto selected = [&options](const std::string& id) {
+    return std::find(options.plugins.begin(), options.plugins.end(), id) != options.plugins.end();
+  };
+  if (selected("project_panel")) {
+    registry.add("project_panel",
+                 [] { return std::make_unique<krosc_ws::viz::ProjectPanelPlugin>(); });
+  }
+  if (selected("moveit")) {
+    registry.add("moveit", [] { return std::make_unique<krosc_ws::viz::MoveItPlugin>(); });
+  }
+  if (selected("rl_nav")) {
+    registry.add("rl_nav", [] { return std::make_unique<krosc_ws::viz::RlNavPlugin>(); });
+  }
 
   krosc::viz::Viz viz(std::move(options), std::move(registry));
   if (!viz.initialize(error)) {

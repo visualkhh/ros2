@@ -1,4 +1,4 @@
-#include "krosc/web/http_server.hpp"
+#include "krosc/viz_web/http_server.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -23,14 +23,14 @@
 #include <stdexcept>
 #include <utility>
 
-#include "krosc/web/robot_link.hpp"
-#include "krosc/web/websocket.hpp"
+#include "krosc/viz_web/robot_link.hpp"
+#include "krosc/viz_web/websocket.hpp"
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
 #endif
 
-namespace krosc::web {
+namespace krosc::viz_web {
 
 namespace {
 
@@ -206,11 +206,12 @@ struct HttpServer::Client {
 };
 
 HttpServer::HttpServer(std::string bind_address, std::uint16_t port, std::string www_root,
-                       RobotLink& robot)
+                       RobotLink& robot, ManifestHandler manifest)
     : bind_address_(std::move(bind_address)),
       port_(port),
       www_root_(std::move(www_root)),
-      robot_(robot) {}
+      robot_(robot),
+      manifest_(std::move(manifest)) {}
 
 HttpServer::~HttpServer() {
   if (stopping_.exchange(true)) {
@@ -403,6 +404,9 @@ void HttpServer::handle_client(int fd) {
 }
 
 bool HttpServer::serve_static(int fd, const std::string& target) {
+  if (target == "/plugins.json" && manifest_) {
+    return send_response(fd, 200, "OK", manifest_(), "application/json; charset=utf-8");
+  }
   std::filesystem::path path = std::filesystem::path(www_root_) / target.substr(1);
   std::ifstream file(path, std::ios::binary);
   if (!file) {
@@ -452,4 +456,4 @@ void HttpServer::broadcast_text(const std::string& text) {
   }
 }
 
-}  // namespace krosc::web
+}  // namespace krosc::viz_web

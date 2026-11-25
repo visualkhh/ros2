@@ -58,13 +58,15 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 
 ```bash
 ./krosc_real --port 9000                    # 로봇 앱 (TCP 서버)
-./krosc_web --robot 127.0.0.1:9000 --port 8080
+./krosc_viz_web --robot 127.0.0.1:9000 --port 8080
 ```
 
-- `krosc_web`은 Qt/Node 없이 표준 라이브러리만 쓰는 **프레임 게이트웨이**다.
-  로봇 TCP의 `4바이트 길이 + 본문`을 WebSocket 바이너리 프레임으로 그대로 넘긴다.
+- `krosc_viz_web`은 Qt/Node 없이 표준 라이브러리만 쓰는 **프레임 게이트웨이**다.
+  `main.cpp`는 인자만 `VizWebOptions`로 넘기고, `krosc::viz_web::VizWeb`이 RobotLink/HttpServer/
+  시그널/종료를 소유한다. 로봇 TCP의 `4바이트 길이 + 본문`을 WebSocket 바이너리 프레임으로 그대로 넘긴다.
 - 브라우저는 `www/app.js`에서 프레임을 해석해 지도/스캔/TF/경로를 Canvas에 그린다.
-- 플러그인은 `www/plugins.json` + `www/plugins/*.js`다. SLAM/Navigation/Teleop/RL/MoveIt/Diagnostics가 기본.
+- 웹 플러그인은 main이 `VizWebPluginRegistry`에 등록하고, 게이트웨이가 `/plugins.json`을 **동적으로** 만든다.
+  JS 모듈은 `www/plugins/*.js`다. SLAM/Navigation/Teleop/RL/MoveIt/Diagnostics가 기본.
 - 늦게 접속한 브라우저를 위해 지도/상태/모델 목록 등 최신 프레임을 캐시했다가 새 연결에 보낸다.
 
 ## 빌드/테스트 (Docker, 화면 없이)
@@ -151,11 +153,11 @@ krosc/
 │   ├── include/krosc/viz/         # VizModel, SceneView, VizWindow, plugin API
 │   ├── core/                      # Viz shell/렌더 소스
 │   └── plugins/                   # 코어 Viz 플러그인
-├── web/                           # krosc_web (HTTP + WebSocket, Qt 없음)
-│   ├── main.cpp                   # krosc_web 실행기
-│   ├── include/krosc/web/         # HttpServer, RobotLink, WebSocket
-│   ├── core/                      # 게이트웨이 소스
-│   └── www/                       # index.html/app.js/plugins.json + JS 플러그인
+├── viz-web/                       # krosc_viz_web (HTTP + WebSocket, Qt 없음)
+│   ├── main.cpp                   # krosc_viz_web 실행기 (파라미터 → VizWeb)
+│   ├── include/krosc/viz_web/     # VizWeb, HttpServer, RobotLink, WebSocket
+│   ├── core/                      # VizWeb/게이트웨이 소스
+│   └── www/                       # index.html/app.js/style + JS 플러그인
 ├── examples/turtlebot3/           # krosc_turtlebot3
 └── docs/                          # 검증 스크린샷 (vnc.png, screenshot.png, simulation.png)
 ```
@@ -168,7 +170,7 @@ Docker 설정은 저장소 루트의 `../docker/`에 있다.
 - `sim`: `core`의 메시지 타입 + pthread. **Qt가 없어도 물리/테스트는 빌드된다.**
 - `sim_qt`: `sim` + Qt6 Widgets (`SimWindow`)
 - `viz`: `core` + Qt6 Widgets (`VizWindow`)
-- `web`: 표준 라이브러리 + pthread만 (Qt/Node 없음). 로봇 TCP 프레임을 WebSocket으로 중계
+- `viz_web`: 표준 라이브러리 + pthread만 (Qt/Node 없음). `VizWeb`이 로봇 TCP 프레임을 WebSocket으로 중계
 - `examples`: `core` + `sim_qt` + `viz`
 
 ## API 맛보기
@@ -342,7 +344,7 @@ ROS 2와 맞춘 노드 이름:
 - [x] `viz` 코어 플러그인: `teleop`, `slam`, `navigation`, `manipulator` (VizWindow는 기반 UI만)
 - [x] TCP 원격 토픽(9000): 텔레메트리 + `cmd_vel`, latched 다중 tf_static, Mac `krosc_viz_app --server`
 - [x] noVNC: Docker Ubuntu 26.04 안의 sim+viz 두 창을 맥 브라우저로 본다
-- [x] `web`: HTTP + WebSocket 게이트웨이, `www/plugins.json` JS 플러그인, 지도/스캔/TF/경로/상태 뷰
+- [x] `viz-web`: HTTP + WebSocket 게이트웨이, 동적 `/plugins.json`, 지도/스캔/TF/경로/상태 뷰
 - [x] 오프스크린 스크린샷 검증 (`docs/`)
 - [x] `../krosc_ws/`: OpenCR/LDS-03 C++ 드라이버 + EKF + 원격 viz를 붙인 실기 Pi용 워크스페이스 (하드웨어 실측은 Pi에서 해야 함)
 
