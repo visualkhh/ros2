@@ -112,6 +112,7 @@ class OpenCrSerial {
   std::mutex arm_command_mutex_;
   std::array<double, 5> last_arm_target_{};
   bool has_arm_target_ = false;
+  std::chrono::steady_clock::time_point last_arm_write_{};
 
   std::mutex command_mutex_;
   double target_left_ = 0.0;

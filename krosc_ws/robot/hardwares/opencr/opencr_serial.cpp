@@ -72,6 +72,7 @@ void OpenCrSerial::stop() {
 }
 
 void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
+  const auto now = std::chrono::steady_clock::now();
   {
     std::lock_guard<std::mutex> lock(arm_command_mutex_);
     bool same = has_arm_target_;
@@ -82,11 +83,15 @@ void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
       same = std::isfinite(last_arm_target_[i]) &&
              std::abs(position[i] - last_arm_target_[i]) <= (i == 4 ? 0.0005 : 0.001);
     }
-    if (same) {
-      return;  // 같은 목표는 다시 보내지 않는다
+    // 같은 목표라도 300ms마다 다시 보낸다. OpenCR은 500ms 동안 A가 없으면
+    // "현재 자세 유지"로 목표를 현재 위치로 덮어쓰기 때문에, 가만히 두면
+    // 중력으로 처진 위치가 새 목표가 되어 계속 내려앉는다.
+    if (same && now - last_arm_write_ < std::chrono::milliseconds(300)) {
+      return;
     }
     last_arm_target_ = position;
     has_arm_target_ = true;
+    last_arm_write_ = now;
   }
   std::string line = "A";
   char buffer[32];
