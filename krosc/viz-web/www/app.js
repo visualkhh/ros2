@@ -2182,7 +2182,13 @@ function draw3d() {
     }
   }
   draw3dGrid();
-  if (state.settings.map) draw3dMapPoints();
+  // 2D와 동일하게 SLAM이 idle이면 래치된 옛 지도를 그리지 않는다.
+  {
+    const slam = state.latest.get('slam_status');
+    const slamMode = slam && typeof slam.data === 'string' ? slam.data : '';
+    const showMap = slamMode === 'mapping' || slamMode === 'localization';
+    if (state.settings.map && showMap) draw3dMapPoints();
+  }
   if (state.settings.global_costmap) draw3dOccupancyGrid('global_costmap/costmap', costmapCanvas, 0.6);
   if (state.settings.local_costmap) draw3dOccupancyGrid('local_costmap/costmap', costmapCanvas, 0.7);
   draw3dAxes();
