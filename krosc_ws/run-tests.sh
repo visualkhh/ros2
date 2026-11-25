@@ -1,18 +1,28 @@
 #!/usr/bin/env bash
-# krosc(core/sim)와 krosc_ws 테스트를 빌드하고 실행한다.
+# krosc(core/sim)와 krosc_ws 테스트를 최신 빌드한 뒤 실행한다.
 #   ./run-tests.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
-jobs="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
 
-echo "[tests] krosc core/sim"
-cmake -S "$root/krosc" -B "$root/krosc/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-      -DKROSC_BUILD_VIZ=OFF -DKROSC_BUILD_EXAMPLES=OFF -DKROSC_BUILD_BENCH=OFF
-cmake --build "$root/krosc/build" -j"$jobs"
-ctest --test-dir "$root/krosc/build" --output-on-failure
+"$here/build.sh" tests
 
-echo "[tests] krosc_ws"
-cmake -S "$here" -B "$here/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DKROSC_WS_BUILD_TESTS=ON
-cmake --build "$here/build" -j"$jobs"
-ctest --test-dir "$here/build" --output-on-failure
+status=0
+run_test() {
+  local binary="$1"
+  if [ ! -x "$binary" ]; then
+    echo "[tests] 없음: $binary" >&2
+    status=1
+    return
+  fi
+  echo "[tests] $(basename "$binary")"
+  if ! "$binary"; then
+    status=1
+  fi
+}
+
+run_test "$root/krosc/build/engine/krosc_core_tests"
+run_test "$root/krosc/build/sim/krosc_sim_tests"
+run_test "$here/build/krosc_ws_tests"
+
+exit "$status"
