@@ -1170,7 +1170,7 @@ function drawScan() {
   if (!scan) return;
   const transform = frameTransform(scan.header.frame);
   if (!transform) return;
-  context.fillStyle = 'rgba(0, 230, 255, 0.85)';
+  context.fillStyle = 'rgba(255, 85, 85, 0.9)';  // Qt Viz/RViz와 같은 빨강
   const count = scan.ranges.length;
   const stride = count > 720 ? 2 : 1;
   const cosYaw = Math.cos(transform.yaw);
@@ -1287,7 +1287,7 @@ function draw3dScan() {
   if (!scan) return;
   const transform = frameTransform(scan.header.frame);
   if (!transform) return;
-  context3d.fillStyle = 'rgba(0, 230, 255, 0.85)';
+  context3d.fillStyle = 'rgba(255, 85, 85, 0.9)';  // Qt Viz/RViz와 같은 빨강
   const count = scan.ranges.length;
   const stride = count > 720 ? 2 : 1;
   const cy = Math.cos(transform.yaw);
