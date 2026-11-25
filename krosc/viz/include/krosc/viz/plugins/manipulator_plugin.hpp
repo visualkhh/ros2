@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QString>
 
 #include <array>
 #include <string>
@@ -31,6 +32,7 @@ class ManipulatorPlugin final : public QObject, public VizPlugin {
  private:
   void send_target();
   void refresh();
+  void set_status(const QString& text);
   void set_slider_values(const std::array<double, 5>& positions);
   void cancel_moveit_if_executing();
   void reset_arm();

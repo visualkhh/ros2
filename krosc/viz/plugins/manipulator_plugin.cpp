@@ -81,7 +81,7 @@ void ManipulatorPlugin::initialize(VizHost& host) {
   };
   connect(torque_, &QPushButton::clicked, this, [this, apply_torque] {
     apply_torque(!torque_on_);
-    status_->setText(torque_on_ ? "torque ON" : "torque OFF (arm relaxed)");
+    set_status(torque_on_ ? "torque ON" : "torque OFF (arm relaxed)");
   });
   set_torque_button();
 
@@ -162,8 +162,10 @@ void ManipulatorPlugin::initialize(VizHost& host) {
   });
 
   status_ = new QLabel("arm: waiting for joint_states", panel);
-  status_->setWordWrap(true);
-  status_->setMinimumHeight(36);
+  // 상태 줄이 길어져도 줄바꿈으로 높이가 변해 아래 컨트롤이 밀리지 않게 한 줄 고정.
+  status_->setWordWrap(false);
+  status_->setFixedHeight(20);
+  status_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
   layout->addWidget(status_);
 
   const auto set_preset = [this](const std::array<double, 5>& positions) {
@@ -186,7 +188,7 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
     host_->model().node().publish("moveit_preset", msgs::String{"stow"}, QOS_DEFAULT);
     host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
-    status_->setText("STOW → MoveIt 실행");
+    set_status("STOW → MoveIt 실행");
   });
   connect(home, &QPushButton::clicked, this, [this, set_preset, apply_torque] {
     cancel_moveit_if_executing();
@@ -195,13 +197,13 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
     host_->model().node().publish("moveit_preset", msgs::String{"home"}, QOS_DEFAULT);
     host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
-    status_->setText("HOME (safe) → MoveIt 실행");
+    set_status("HOME (safe) → MoveIt 실행");
   });
   connect(estop, &QPushButton::clicked, this, [this] {
     cancel_moveit_if_executing();
     host_->model().node().publish("arm_stop", msgs::Empty{}, QOS_DEFAULT);
     moving_ = false;
-    status_->setText("E-STOP: hold current pose");
+    set_status("E-STOP: hold current pose");
   });
   connect(reset_button_, &QPushButton::clicked, this, [this] { reset_arm(); });
 
@@ -315,13 +317,21 @@ void ManipulatorPlugin::set_slider_values(const std::array<double, 5>& positions
   updating_ = false;
 }
 
+void ManipulatorPlugin::set_status(const QString& text) {
+  if (status_ == nullptr) {
+    return;
+  }
+  status_->setText(text);
+  status_->setToolTip(text);  // 잘린 전체 내용은 툴팁으로
+}
+
 void ManipulatorPlugin::refresh() {
   if (host_ == nullptr || status_ == nullptr) {
     return;
   }
   const auto states = host_->model().joint_states();
   if (!states) {
-    status_->setText("arm: no joint_states");
+    set_status("arm: no joint_states");
     return;
   }
   std::map<std::string, double> values;
@@ -362,7 +372,7 @@ void ManipulatorPlugin::refresh() {
   } else {
     status_->setStyleSheet("");
   }
-  status_->setText(text);
+  set_status(text);
 }
 
 void ManipulatorPlugin::reset_arm() {
@@ -373,7 +383,7 @@ void ManipulatorPlugin::reset_arm() {
   cancel_moveit_if_executing();
   moving_ = false;
   host_->model().node().publish("arm_reset", msgs::String{target.toStdString()}, QOS_DEFAULT);
-  status_->setText(QString("reset(AR) 요청: %1 — 서보 재부팅 후 토크 복구").arg(target));
+  set_status(QString("reset(AR) 요청: %1 — 서보 재부팅 후 토크 복구").arg(target));
   status_->setStyleSheet("color:#ffd166;");
   reset_button_->setEnabled(false);
   QTimer::singleShot(2000, this, [this] {

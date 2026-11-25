@@ -58,7 +58,10 @@ export function parseFields(text) {
 
 export function setLevel(node, text, level = '') {
   node.textContent = text;
-  node.className = `value ${level}`;
+  // nowrap 등 다른 클래스를 지우지 않고 레벨 클래스만 교체한다.
+  node.classList.add('value');
+  node.classList.remove('ok', 'warn', 'bad');
+  if (level) node.classList.add(level);
 }
 
 export function number(value, digits = 3) {
