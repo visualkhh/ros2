@@ -1,5 +1,6 @@
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -296,4 +297,46 @@ KROSC_TEST(net_peer_topic_mesh_and_latched) {
   lock.unlock();
   client.shutdown();
   server.shutdown();
+}
+
+KROSC_TEST(net_peer_receive_remap_cmd_vel) {
+  krosc::Context::Options robot_options;
+  robot_options.network.name = "remap_robot";
+  robot_options.network.host = "127.0.0.1";
+  robot_options.network.port = 0;
+  robot_options.network.receive_remap["cmd_vel"] = "cmd_vel_teleop";
+  krosc::Context robot(robot_options);
+  CHECK(robot.peer_network() != nullptr);
+
+  krosc::Context::Options viz_options;
+  viz_options.network.name = "remap_viz";
+  viz_options.network.add_server("127.0.0.1", robot.peer_network()->port());
+  krosc::Context viz(viz_options);
+  CHECK(viz.peer_network() != nullptr);
+
+  std::atomic<double> teleop_linear{0.0};
+  std::mutex mutex;
+  std::condition_variable cv;
+  robot.topics().subscribe<krosc::msgs::Twist>(
+      "cmd_vel_teleop",
+      [&](const krosc::msgs::Twist& message) {
+        teleop_linear.store(message.linear.x);
+        cv.notify_all();
+      },
+      krosc::QOS_COMMAND);
+
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 3s, [&] { return !viz.peer_network()->peer_endpoints().empty(); }));
+  std::this_thread::sleep_for(300ms);
+  krosc::msgs::Twist twist;
+  twist.linear.x = 0.23;
+  for (int i = 0; i < 20 && std::abs(teleop_linear.load() - 0.23) > 1e-9; ++i) {
+    viz.topics().publish("cmd_vel", twist, krosc::QOS_COMMAND);
+    cv.wait_for(lock, 100ms);
+  }
+  CHECK_NEAR(0.23, teleop_linear.load(), 1e-9);
+
+  lock.unlock();
+  viz.shutdown();
+  robot.shutdown();
 }

@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "krosc/krosc.hpp"
 #include "krosc/viz/plugins/registry.hpp"
 #include "krosc/viz/viz.hpp"
 #include "krosc/viz/viz_cli.hpp"
@@ -72,7 +73,9 @@ int main(int argc, char** argv) {
     registry.add("rl_nav", [] { return std::make_unique<krosc_ws::viz::RlNavPlugin>(); });
   }
 
-  krosc::viz::Viz viz(std::move(options), std::move(registry));
+  // 원격 Viz도 별도 net::Client 대신 Krosc+PeerNetwork를 쓴다.
+  krosc::Krosc app(nullptr, krosc::viz::peer_network_options(options));
+  krosc::viz::Viz viz(app.context(), std::move(options), std::move(registry));
   if (!viz.initialize(error)) {
     std::fprintf(stderr, "[viz] %s\n", error.c_str());
     return 1;

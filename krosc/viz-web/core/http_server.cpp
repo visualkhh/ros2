@@ -198,12 +198,12 @@ struct HttpServer::Client {
 };
 
 HttpServer::HttpServer(std::string bind_address, std::uint16_t port,
-                       std::vector<std::string> www_roots, net::FrameClient& robot,
+                       std::vector<std::string> www_roots, SendHandler send_frame,
                        ManifestHandler manifest)
     : bind_address_(std::move(bind_address)),
       port_(port),
       www_roots_(std::move(www_roots)),
-      robot_(robot),
+      send_frame_(std::move(send_frame)),
       manifest_(std::move(manifest)) {}
 
 HttpServer::~HttpServer() {
@@ -362,7 +362,9 @@ void HttpServer::handle_client(int fd) {
       }
       if (opcode == 0x2) {
         if (const auto frame = net::decode_body(payload)) {
-          (void)robot_.send(*frame);
+          if (send_frame_) {
+            send_frame_(*frame);
+          }
         }
       } else if (opcode == 0x8) {
         break;

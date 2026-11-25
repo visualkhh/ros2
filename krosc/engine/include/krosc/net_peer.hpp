@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -23,6 +24,10 @@ struct PeerNetworkOptions {
   std::uint16_t port = 0;  // host가 있을 때 listen 포트. 0이면 임시 포트.
   // 연결할 원격 Krosc 서버 목록. "host:port" 또는 add_server(host, port) 사용.
   std::vector<std::string> servers;
+
+  // 원격에서 받은 토픽 이름을 로컬 이름으로 바꾼다.
+  // 예: teleop Viz의 cmd_vel → 로봇의 cmd_vel_teleop
+  std::map<std::string, std::string> receive_remap;
 
   // 기존 옵션 호환용. 새 코드는 host/servers를 쓴다.
   std::string bind_address = "0.0.0.0";

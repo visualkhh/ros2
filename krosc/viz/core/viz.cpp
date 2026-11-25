@@ -6,19 +6,11 @@
 #include <cstdio>
 #include <utility>
 
-#include "krosc/net.hpp"
-#include "krosc/time.hpp"
 #include "krosc/viz/viz_window.hpp"
 
 namespace krosc::viz {
 
 namespace {
-
-Context::Options context_options() {
-  Context::Options options;
-  options.time_source = std::make_shared<SystemTimeSource>();
-  return options;
-}
 
 struct ServerAddress {
   std::string host;
@@ -43,51 +35,44 @@ ServerAddress parse_server(const std::string& text) {
 
 }  // namespace
 
-Viz::Viz(VizOptions options, VizPluginRegistry registry)
-    : options_(std::move(options)), registry_(std::move(registry)), context_(context_options()) {}
+net::PeerNetworkOptions peer_network_options(const VizOptions& options) {
+  net::PeerNetworkOptions network;
+  network.name = "krosc_viz";
+  if (!options.server.empty()) {
+    const ServerAddress address = parse_server(options.server);
+    network.add_server(address.host, address.port);
+  }
+  return network;
+}
+
+Viz::Viz(Context& context, VizOptions options, VizPluginRegistry registry)
+    : context_(&context), options_(std::move(options)), registry_(std::move(registry)) {}
 
 Viz::~Viz() {
   if (status_timer_ != nullptr) {
     status_timer_->stop();
   }
-  client_.reset();
   window_.reset();
-  context_.shutdown();
 }
 
 bool Viz::initialize(std::string& error) {
   if (initialized_) {
     return true;
   }
-  if (!options_.server.empty()) {
-    const ServerAddress address = parse_server(options_.server);
-    try {
-      client_ = std::make_unique<net::Client>(context_, address.host, address.port);
-    } catch (const std::exception& exception) {
-      error = std::string("network client: ") + exception.what();
-      return false;
-    }
-  }
-
-  window_ = std::make_unique<VizWindow>(context_);
+  window_ = std::make_unique<VizWindow>(*context_);
   window_->set_fixed_frame(options_.fixed_frame);
   window_->load_plugins(registry_, options_.plugins);
   window_->set_tab(options_.tab);
   if (options_.distance > 0.0) {
     window_->set_camera_distance(options_.distance);
   }
-  if (client_) {
-    window_->set_connection_status(client_->connected(), client_->endpoint());
-  }
+  update_connection_status();
   window_->show();
 
   status_timer_ = new QTimer(window_.get());
-  if (client_) {
-    QObject::connect(status_timer_, &QTimer::timeout, window_.get(), [this] {
-      window_->set_connection_status(client_->connected(), client_->endpoint());
-    });
-    status_timer_->start(1000);
-  }
+  QObject::connect(status_timer_, &QTimer::timeout, window_.get(),
+                   [this] { update_connection_status(); });
+  status_timer_->start(1000);
 
   if (!options_.screenshot.empty()) {
     QTimer::singleShot(static_cast<int>(options_.duration * 1000.0), window_.get(), [this] {
@@ -100,6 +85,30 @@ bool Viz::initialize(std::string& error) {
   initialized_ = true;
   error.clear();
   return true;
+}
+
+void Viz::update_connection_status() {
+  if (window_ == nullptr || context_ == nullptr) {
+    return;
+  }
+  bool connected = true;
+  std::string endpoint = "local";
+  if (const auto* peer = context_->peer_network()) {
+    const auto endpoints = peer->peer_endpoints();
+    connected = !endpoints.empty();
+    if (endpoints.empty()) {
+      endpoint = "peer: waiting";
+    } else {
+      endpoint = "peer: ";
+      for (std::size_t i = 0; i < endpoints.size(); ++i) {
+        if (i != 0) {
+          endpoint += ",";
+        }
+        endpoint += endpoints[i];
+      }
+    }
+  }
+  window_->set_connection_status(connected, endpoint);
 }
 
 int Viz::run() {

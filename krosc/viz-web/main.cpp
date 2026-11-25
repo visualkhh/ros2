@@ -2,6 +2,7 @@
 #include <string>
 #include <utility>
 
+#include "krosc/krosc.hpp"
 #include "krosc/viz_web/viz_web.hpp"
 #include "krosc/viz_web/viz_web_cli.hpp"
 #include "krosc/viz_web/viz_web_plugins.hpp"
@@ -23,10 +24,16 @@ int main(int argc, char** argv) {
   krosc::viz_web::register_core_web_plugins(registry,
                                             {"slam", "navigation", "teleop", "diagnostics"});
 
-  krosc::viz_web::VizWeb app(std::move(options), std::move(registry));
-  if (!app.initialize(error)) {
+  krosc::net::PeerNetworkOptions network;
+  network.name = "krosc_viz_web";
+  if (!options.robot_host.empty()) {
+    network.add_server(options.robot_host, options.robot_port);
+  }
+  krosc::Krosc app(nullptr, network);
+  krosc::viz_web::VizWeb web(std::move(options), std::move(registry), app.context());
+  if (!web.initialize(error)) {
     std::fprintf(stderr, "[viz-web] %s\n", error.c_str());
     return 1;
   }
-  return app.run();
+  return web.run();
 }

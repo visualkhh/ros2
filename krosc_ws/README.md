@@ -1,7 +1,7 @@
 # krosc_ws — 실기 TurtleBot3 (C++ krosc)
 
 라즈베리파이에서 **OpenCR + LDS-03를 직접 돌리는 C++ 워크스페이스**다.
-시뮬레이터/월드/Qt 창은 없다. Pi는 하드웨어와 토픽만 돌리고, 맥의 C++ `viz`가 TCP(9000)로 붙어서 본다.
+시뮬레이터/월드/Qt 창은 없다. Pi는 하드웨어와 토픽만 돌리고, 맥의 C++ `viz`/웹 Viz가 PeerNetwork(9000)로 붙어서 본다.
 
 ```
 [라즈베리파이] krosc_real
@@ -18,8 +18,8 @@
                                     ├─ ekf_filter_node ─ odometry/filtered + odom->base_footprint TF
                                     ├─ map_server / map_saver / map_catalog
                                     ├─ nav2: planner/controller/behavior/bt_navigator
-                                    └─ net::Server (TCP 9000) ──> [맥] krosc_ws_viz_app
-                                             ^ cmd_vel / goal / moveit_*
+                                    └─ PeerNetwork (listen 9000) ──> [맥] Viz / 웹 Viz
+                                             ^ 구독 토픽 / cmd_vel / goal / moveit_*
 ```
 
 ## 준비 (라즈베리파이)
@@ -92,13 +92,13 @@ KROSC_MAPS_DIR=/home/pak/ros2/krosc_ws/artifacts/maps ./run-slam.sh
 
 ```bash
 cd ~/ros2
-./krosc_ws/run.sh                                      # 빌드 + 실행, TCP 9000
+./krosc_ws/run.sh                                      # 빌드 + 실행, PeerNetwork 9000
 ./krosc_ws/run-slam.sh                                 # 빌드 + SLAM(mapping)
 KROSC_SERVER_PORT=0 ./krosc_ws/run.sh                  # 네트워크 없이
 OPENCR_PORT=/dev/opencr LIDAR_PORT=/dev/tb3_lidar ./krosc_ws/run.sh
 ```
 
-- 시작 로그에 접속 주소가 나온다: `[krosc_ws] connect: 192.168.x.x:9000`.
+- 시작 로그에 접속 주소가 나온다: `[krosc_ws] peer: 192.168.x.x:9000`.
 - **OpenCR IMU는 켠 뒤 2초 동안 가만히** 둬야 자이로 편향을 잡는다.
 - Ctrl+C/SIGTERM → 마지막 `C,0,0`을 보내고 시리얼을 닫는다.
 - 펌웨어 watchdog: 500ms 동안 `C`가 없으면 바퀴 정지. 앱도 0.5초 동안 `cmd_vel`이 없으면 0을 보낸다.
@@ -115,16 +115,15 @@ cmake --build build -j
 ```
 
 - Pi 로그의 IP를 그대로 써도 된다: `--server 192.168.x.x:9000`.
-- 아직 SLAM/지도가 없으므로 기준 프레임은 **`odom`**을 쓴다.
-- 창 왼쪽 패널 위에 `remote: <ip>:9000 · connected`가 뜨면 연결된 것이다.
-- 원격 viz의 `W/A/S/D` → TCP로 `cmd_vel` → OpenCR. 텔레옵 속도는 `Q/Z`.
-- 한 번에 viz 하나만 붙는다. 새 클라이언트가 붙으면 기존 연결을 교체한다.
+- 아직 SLAM/지도가 없으면 기준 프레임은 **`odom`**을 쓴다.
+- 창 왼쪽 패널 위에 `peer: <ip>:9000`이 뜨면 연결된 것이다.
+- 원격 viz의 `W/A/S/D` → `cmd_vel` 토픽 → Pi의 `cmd_vel_teleop` → OpenCR. 텔레옵 속도는 `Q/Z`.
+- 여러 Viz가 동시에 붙을 수 있다 (PeerNetwork mesh).
 - 네트워크는 신뢰할 수 있는 LAN 전용이다 (인증 없음). 포트 9000을 외부에 열지 마라.
 
-원격 토픽: `tf`, `tf_static`, `robot_description`, `scan`, `imu`, `odom`, `odometry/filtered`,
-`joint_states`, `arm_status`, `diagnostics`, `rosout`, `rl_nav_model_list`
-(+ `cmd_vel`, `goal_*`, `moveit_*`, `rl_nav_model`, `arm_joint_command`, `arm_manual`, `arm_torque`,
-`arm_stop`, `arm_reset` 역방향).
+원격 토픽은 고정 목록이 아니라 **Viz/플러그인이 실제로 구독한 토픽**만 PeerNetwork로 흐른다.
+`tf`, `tf_static`, `robot_description`, `scan`, `imu`, `odom`, `joint_states`, `arm_status`,
+`diagnostics`, `rosout`, `moveit_*`, `rl_nav_*` 등은 필요한 쪽이 구독하면 자동으로 전달된다.
 
 ## 매니퓰레이터 (OpenMANIPULATOR-X 4축 + 그리퍼)
 
@@ -197,9 +196,12 @@ krosc/viz/
 
 `Viz`가 소유/처리하는 것:
 
-- `Context`, `net::Client`, `VizWindow`
-- 플러그인 로드와 시작 탭/고정 프레임/카메라 거리
+- `VizWindow`, 플러그인 로드/수명주기
+- 시작 탭/고정 프레임/카메라 거리
 - 접속 상태 타이머, 스크린샷, 종료 시 정리
+
+`Context`/`Krosc`는 app main이 소유하고 `Viz`는 빌려 쓴다. 원격 연결은 `Krosc`의 `PeerNetwork`가
+담당하며, 플러그인은 로컬 노드처럼 `context.topics()`/`Node`를 쓴다.
 
 코어 API는 `krosc/viz/include/krosc/viz/viz_plugin.hpp`에 있다.
 
@@ -248,9 +250,11 @@ KROSC_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 KROSC_VIZ_HOST=10.2.150.138 ./run-viz-web.sh
 ```
 
-- TCP 프레임은 코어 `krosc::net`(`net_protocol.hpp`)을 그대로 쓴다.
-  Qt Viz는 `net::Client`, 웹 Viz는 `net::Frame`으로 같은 프로토콜을 공유한다.
+- 프레임 포맷은 코어 `krosc::net`(`net_protocol.hpp`)을 그대로 쓴다.
+  브라우저 ↔ 로컬 토픽 브리지는 viz-web 전용 `ContextLink`가 맡는다 (engine/core에는 없음).
 - `krosc_ws_viz_web` = `krosc::viz_web` 코어 + 프로젝트 레지스트리
+- 내보낼 토픽은 `VizWebOptions::forward_topics`로 정한다. 코어 기본 목록 +
+  프로젝트 main이 추가한 `moveit_*`/`rl_nav_*` 토픽이 브라우저로 간다.
 - 프로젝트 JS: `krosc_ws/viz-web/www/plugins/{moveit,rl_nav}.js`
 - 정적 파일은 프로젝트 www → 코어 www 순으로 찾는다 (`VizWebOptions::overlay_root`)
 - `/plugins.json`은 main이 등록한 레지스트리에서 동적으로 생성된다

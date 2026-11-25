@@ -5,6 +5,7 @@ add_library(krosc_viz_web_core STATIC
   core/viz_web.cpp
   core/viz_web_cli.cpp
   core/viz_web_plugins.cpp
+  core/context_link.cpp
   core/http_server.cpp
   core/websocket.cpp
 )

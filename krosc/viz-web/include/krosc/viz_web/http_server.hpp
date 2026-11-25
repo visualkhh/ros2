@@ -11,18 +11,19 @@
 #include <vector>
 
 namespace krosc::net {
-class FrameClient;
+struct Frame;
 }
 
 namespace krosc::viz_web {
 
-// HTTP 정적 파일 + /ws WebSocket. 브라우저와 로봇 TCP 사이에서 프레임만 중계한다.
+// HTTP 정적 파일 + /ws WebSocket. 브라우저와 로컬 토픽(ContextLink) 사이에서 프레임만 중계한다.
 class HttpServer {
  public:
   using ManifestHandler = std::function<std::string()>;
+  using SendHandler = std::function<void(const krosc::net::Frame&)>;
 
   HttpServer(std::string bind_address, std::uint16_t port, std::vector<std::string> www_roots,
-             net::FrameClient& robot, ManifestHandler manifest = {});
+             SendHandler send_frame, ManifestHandler manifest = {});
   ~HttpServer();
 
   HttpServer(const HttpServer&) = delete;
@@ -45,7 +46,7 @@ class HttpServer {
   std::uint16_t port_ = 8080;
   std::uint16_t bound_port_ = 0;
   std::vector<std::string> www_roots_;
-  net::FrameClient& robot_;
+  SendHandler send_frame_;
   ManifestHandler manifest_;
   std::atomic<bool> stopping_{false};
   int listen_fd_ = -1;

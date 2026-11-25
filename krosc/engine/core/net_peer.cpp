@@ -140,6 +140,9 @@ QoS qos_for_remote_topic(const std::string& topic, bool latched) {
       topic == "local_plan") {
     return QOS_SENSOR_DATA;
   }
+  if (topic == "cmd_vel" || topic == "cmd_vel_teleop") {
+    return QOS_COMMAND;
+  }
   return QOS_DEFAULT;
 }
 
@@ -467,9 +470,16 @@ struct PeerNetwork::Impl {
     for (const auto& info : context.topics().topic_info()) {
       if (info.subscribers > 0) {
         topics.push_back(info.topic);
+        // receive_remap: 로컬 cmd_vel_teleop을 구독해도 peer에게는 cmd_vel을 달라고 해야 한다.
+        for (const auto& [remote, local] : options.receive_remap) {
+          if (local == info.topic && remote != info.topic) {
+            topics.push_back(remote);
+          }
+        }
       }
     }
     std::sort(topics.begin(), topics.end());
+    topics.erase(std::unique(topics.begin(), topics.end()), topics.end());
     {
       std::lock_guard<std::mutex> lock(subscriptions_mutex);
       if (topics == subscriptions) {
@@ -581,68 +591,73 @@ struct PeerNetwork::Impl {
     if (!message) {
       return;
     }
-    const QoS qos = qos_for_remote_topic(frame.topic, frame.type == kPeerTopicLatched);
+    std::string topic = frame.topic;
+    if (const auto remapped = options.receive_remap.find(topic);
+        remapped != options.receive_remap.end()) {
+      topic = remapped->second;
+    }
+    const QoS qos = qos_for_remote_topic(topic, frame.type == kPeerTopicLatched);
     ReceiveGuard guard;
     switch (frame.kind) {
       case Kind::Twist:
         context.topics().publish<msgs::Twist>(
-            frame.topic, std::static_pointer_cast<const msgs::Twist>(message), qos);
+            topic, std::static_pointer_cast<const msgs::Twist>(message), qos);
         break;
       case Kind::String:
         context.topics().publish<msgs::String>(
-            frame.topic, std::static_pointer_cast<const msgs::String>(message), qos);
+            topic, std::static_pointer_cast<const msgs::String>(message), qos);
         break;
       case Kind::TF:
         context.topics().publish<msgs::TFMessage>(
-            frame.topic, std::static_pointer_cast<const msgs::TFMessage>(message), qos);
+            topic, std::static_pointer_cast<const msgs::TFMessage>(message), qos);
         break;
       case Kind::Scan:
         context.topics().publish<msgs::LaserScan>(
-            frame.topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
+            topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
         break;
       case Kind::Imu:
         context.topics().publish<msgs::Imu>(
-            frame.topic, std::static_pointer_cast<const msgs::Imu>(message), qos);
+            topic, std::static_pointer_cast<const msgs::Imu>(message), qos);
         break;
       case Kind::Odometry:
         context.topics().publish<msgs::Odometry>(
-            frame.topic, std::static_pointer_cast<const msgs::Odometry>(message), qos);
+            topic, std::static_pointer_cast<const msgs::Odometry>(message), qos);
         break;
       case Kind::JointState:
         context.topics().publish<msgs::JointState>(
-            frame.topic, std::static_pointer_cast<const msgs::JointState>(message), qos);
+            topic, std::static_pointer_cast<const msgs::JointState>(message), qos);
         break;
       case Kind::Grid:
         context.topics().publish<msgs::OccupancyGrid>(
-            frame.topic, std::static_pointer_cast<const msgs::OccupancyGrid>(message), qos);
+            topic, std::static_pointer_cast<const msgs::OccupancyGrid>(message), qos);
         break;
       case Kind::Path:
         context.topics().publish<msgs::Path>(
-            frame.topic, std::static_pointer_cast<const msgs::Path>(message), qos);
+            topic, std::static_pointer_cast<const msgs::Path>(message), qos);
         break;
       case Kind::Diagnostics:
         context.topics().publish<msgs::DiagnosticArray>(
-            frame.topic, std::static_pointer_cast<const msgs::DiagnosticArray>(message), qos);
+            topic, std::static_pointer_cast<const msgs::DiagnosticArray>(message), qos);
         break;
       case Kind::Log:
         context.topics().publish<msgs::Log>(
-            frame.topic, std::static_pointer_cast<const msgs::Log>(message), qos);
+            topic, std::static_pointer_cast<const msgs::Log>(message), qos);
         break;
       case Kind::Pose:
         context.topics().publish<msgs::PoseStamped>(
-            frame.topic, std::static_pointer_cast<const msgs::PoseStamped>(message), qos);
+            topic, std::static_pointer_cast<const msgs::PoseStamped>(message), qos);
         break;
       case Kind::PoseCov:
         context.topics().publish<msgs::PoseWithCovarianceStamped>(
-            frame.topic, std::static_pointer_cast<const msgs::PoseWithCovarianceStamped>(message), qos);
+            topic, std::static_pointer_cast<const msgs::PoseWithCovarianceStamped>(message), qos);
         break;
       case Kind::Bool:
         context.topics().publish<msgs::Bool>(
-            frame.topic, std::static_pointer_cast<const msgs::Bool>(message), qos);
+            topic, std::static_pointer_cast<const msgs::Bool>(message), qos);
         break;
       case Kind::Empty:
         context.topics().publish<msgs::Empty>(
-            frame.topic, std::static_pointer_cast<const msgs::Empty>(message), qos);
+            topic, std::static_pointer_cast<const msgs::Empty>(message), qos);
         break;
       default:
         break;

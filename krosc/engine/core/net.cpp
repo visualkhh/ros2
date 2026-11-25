@@ -624,6 +624,88 @@ QoS qos_for_topic(const std::string& topic) {
   return QOS_DEFAULT;
 }
 
+// 클라이언트(웹/레거시 TCP)가 보낸 publish 프레임을 Kind에 따라 로컬 토픽으로 반영한다.
+// 토픽 이름 화이트리스트는 두지 않는다. 어떤 토픽을 구독/노출할지는 Viz/VizWeb/플러그인이 정한다.
+bool publish_frame(Context& context, const Frame& frame, bool remap_cmd_vel) {
+  if (frame.type != kFramePublish) {
+    return false;
+  }
+  const auto message = decode_message(frame.kind, frame.payload.data(), frame.payload.size());
+  if (!message) {
+    return false;
+  }
+  std::string topic = frame.topic;
+  if (remap_cmd_vel && topic == "cmd_vel") {
+    topic = "cmd_vel_teleop";
+  }
+  const QoS qos = frame.kind == Kind::Twist ? QOS_COMMAND : QOS_DEFAULT;
+  switch (frame.kind) {
+    case Kind::Twist:
+      context.topics().publish<msgs::Twist>(
+          topic, std::static_pointer_cast<const msgs::Twist>(message), qos);
+      break;
+    case Kind::String:
+      context.topics().publish<msgs::String>(
+          topic, std::static_pointer_cast<const msgs::String>(message), qos);
+      break;
+    case Kind::TF:
+      context.topics().publish<msgs::TFMessage>(
+          topic, std::static_pointer_cast<const msgs::TFMessage>(message), qos);
+      break;
+    case Kind::Scan:
+      context.topics().publish<msgs::LaserScan>(
+          topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
+      break;
+    case Kind::Imu:
+      context.topics().publish<msgs::Imu>(
+          topic, std::static_pointer_cast<const msgs::Imu>(message), qos);
+      break;
+    case Kind::Odometry:
+      context.topics().publish<msgs::Odometry>(
+          topic, std::static_pointer_cast<const msgs::Odometry>(message), qos);
+      break;
+    case Kind::JointState:
+      context.topics().publish<msgs::JointState>(
+          topic, std::static_pointer_cast<const msgs::JointState>(message), qos);
+      break;
+    case Kind::Grid:
+      context.topics().publish<msgs::OccupancyGrid>(
+          topic, std::static_pointer_cast<const msgs::OccupancyGrid>(message), qos);
+      break;
+    case Kind::Path:
+      context.topics().publish<msgs::Path>(
+          topic, std::static_pointer_cast<const msgs::Path>(message), qos);
+      break;
+    case Kind::Diagnostics:
+      context.topics().publish<msgs::DiagnosticArray>(
+          topic, std::static_pointer_cast<const msgs::DiagnosticArray>(message), qos);
+      break;
+    case Kind::Log:
+      context.topics().publish<msgs::Log>(
+          topic, std::static_pointer_cast<const msgs::Log>(message), qos);
+      break;
+    case Kind::Pose:
+      context.topics().publish<msgs::PoseStamped>(
+          topic, std::static_pointer_cast<const msgs::PoseStamped>(message), qos);
+      break;
+    case Kind::PoseCov:
+      context.topics().publish<msgs::PoseWithCovarianceStamped>(
+          topic, std::static_pointer_cast<const msgs::PoseWithCovarianceStamped>(message), qos);
+      break;
+    case Kind::Bool:
+      context.topics().publish<msgs::Bool>(
+          topic, std::static_pointer_cast<const msgs::Bool>(message), qos);
+      break;
+    case Kind::Empty:
+      context.topics().publish<msgs::Empty>(
+          topic, std::static_pointer_cast<const msgs::Empty>(message), qos);
+      break;
+    default:
+      return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 // ============================================================================
@@ -762,79 +844,12 @@ struct Server::Impl {
       if (type != kFramePublish) {
         continue;
       }
-      if (topic == "cmd_vel" && kind == Kind::Twist) {
-        Reader reader(payload);
-        if (const auto twist = decode_twist(reader); reader.ok()) {
-          context.topics().publish("cmd_vel_teleop", twist, QOS_COMMAND);
-        }
-      } else if (topic == "initialpose" && kind == Kind::PoseCov) {
-        Reader reader(payload);
-        if (auto message = decode_pose_covariance(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if ((topic == "goal_pose" || topic == "preview_goal") && kind == Kind::Pose) {
-        Reader reader(payload);
-        if (auto message = decode_pose_stamped(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if ((topic == "goal_poses" || topic == "preview_goals") && kind == Kind::Path) {
-        Reader reader(payload);
-        if (auto message = decode_path(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if (topic == "arm_joint_command" && kind == Kind::JointState) {
-        Reader reader(payload);
-        if (auto message = decode_joint_state(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if ((topic == "map_change" || topic == "map_save" || topic == "slam_mode") &&
-                 kind == Kind::String) {
-        Reader reader(payload);
-        if (auto message = decode_string(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if (topic == "map_unload" && kind == Kind::Empty) {
-        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
-      } else if ((topic == "cancel_goal" || topic == "collision_set_enabled") && kind == Kind::Bool) {
-        Reader reader(payload);
-        if (auto message = decode_bool(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if (topic == "arm_torque" && kind == Kind::Bool) {
-        Reader reader(payload);
-        if (auto message = decode_bool(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if (topic == "arm_stop" && kind == Kind::Empty) {
-        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
-      } else if (topic == "arm_reset" && kind == Kind::String) {
-        Reader reader(payload);
-        if (auto message = decode_string(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if (topic == "rl_nav_enable" && kind == Kind::Bool) {
-        Reader reader(payload);
-        if (auto message = decode_bool(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if ((topic == "rl_nav_fallback" || topic == "rl_nav_model") && kind == Kind::String) {
-        Reader reader(payload);
-        if (auto message = decode_string(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if (topic == "rl_nav_reload" && kind == Kind::Empty) {
-        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
-      } else if ((topic == "moveit_target" || topic == "moveit_scrub" ||
-                  topic == "moveit_preset") &&
-                 kind == Kind::String) {
-        Reader reader(payload);
-        if (auto message = decode_string(reader)) {
-          context.topics().publish(topic, std::move(*message), QOS_DEFAULT);
-        }
-      } else if ((topic == "moveit_plan" || topic == "moveit_execute" || topic == "moveit_cancel") &&
-                 kind == Kind::Empty) {
-        context.topics().publish(topic, msgs::Empty{}, QOS_DEFAULT);
-      }
+      Frame frame;
+      frame.type = type;
+      frame.topic = std::move(topic);
+      frame.kind = kind;
+      frame.payload = std::move(payload);
+      (void)publish_frame(context, frame, true);
     }
     close_client(connection);
   }

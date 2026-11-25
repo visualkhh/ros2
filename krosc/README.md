@@ -5,7 +5,7 @@
 
 | 패키지 | 내용 |
 |---|---|
-| `core/` | ROS 프레임워크: Node, 토픽+QoS, TF, 타이머, 파라미터, 서비스, 메시지, URDF, 기본 노드, **TCP 원격 토픽(9000)** |
+| `core/` | ROS 프레임워크: Node, 토픽+QoS, TF, 타이머, 파라미터, 서비스, 메시지, URDF, 기본 노드, **PeerNetwork 토픽 mesh(9000)** |
 | `sim/` | **진실 시뮬레이션**: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, Snapshot, **Qt SimWindow** |
 | `viz/` | **토픽 뷰어**: rviz 스타일 Qt 화면 (TF, map, costmap, scan, odom/filtered, 경로, 로그, 패널, teleop, **URDF visual STL 메시**) + **원격 `--server` 모드** |
 | `web/` | **브라우저 Viz**: 로봇에서 HTTP+WebSocket으로 프레임을 중계하고, `www/plugins/*.js`로 패널을 붙이는 경량 웹 게이트웨이 |
@@ -57,15 +57,18 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 실기(Pi)에서는 두 프로세스로 띄운다:
 
 ```bash
-./krosc_real --port 9000                    # 로봇 앱 (TCP 서버)
+./krosc_real --port 9000                    # 로봇 앱 (PeerNetwork listen)
 ./krosc_viz_web --robot 127.0.0.1:9000 --port 8080
 ```
 
-- TCP 프레임 포맷은 `krosc/engine/include/krosc/net_protocol.hpp` 하나로 공유한다.
-  Qt Viz는 `net::Client`, 웹 Viz는 `net::Frame`을 쓰고, 프레임 body는 동일하다.
-- `krosc_viz_web`은 Qt/Node 없이 표준 라이브러리만 쓰는 **프레임 게이트웨이**다.
-  `main.cpp`는 인자만 `VizWebOptions`로 넘기고, `krosc::viz_web::VizWeb`이 FrameClient/HttpServer/
-  시그널/종료를 소유한다. 로봇 TCP의 `4바이트 길이 + 본문`을 WebSocket 바이너리 프레임으로 그대로 넘긴다.
+- Viz/VizWeb은 자기 `Context`/`net::Client`를 만들지 않는다. app main이 `Krosc`를 만들고
+  `Krosc::context()`를 넘긴다. 원격 연결은 `PeerNetwork`가 토픽 단위로 처리한다.
+- 웹 게이트웨이의 브라우저 프레임 ↔ 토픽 브리지는 `krosc/viz-web/core/context_link.cpp`에 있다.
+  코어(`engine/`)는 브라우저 프레임이나 웹 구독 정책을 모른다.
+- `main.cpp`는 인자만 `VizWebOptions`로 넘기고, `krosc::viz_web::VizWeb`이 ContextLink/HttpServer/
+  시그널/종료를 소유한다. 브라우저에는 `4바이트 길이 + 본문` 프레임을 WebSocket 바이너리로 넘긴다.
+- 웹으로 내보낼 토픽은 `VizWebOptions::forward_topics`로 정한다. 기본은 코어 웹 앱 토픽이고,
+  프로젝트 main/플러그인이 자기 토픽(`moveit_*`, `rl_nav_*`)을 추가한다.
 - 브라우저는 `www/app.js`에서 프레임을 해석해 지도/스캔/TF/경로를 Canvas에 그린다.
 - 웹 플러그인은 main이 `VizWebPluginRegistry`에 등록하고, 게이트웨이가 `/plugins.json`을 **동적으로** 만든다.
   코어 앱은 SLAM/Navigation/Teleop/Diagnostics를 기본으로 하고, 프로젝트 앱(`krosc_ws/viz-web`)이

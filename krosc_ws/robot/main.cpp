@@ -174,27 +174,28 @@ int main(int argc, char** argv) {
   krosc::Context::Options options;
   options.name = "krosc_ws";
   options.time_source = std::make_shared<krosc::SystemTimeSource>();
+  if (server_port > 0) {
+    options.network.name = "krosc_ws";
+    options.network.host = "0.0.0.0";
+    options.network.port = static_cast<std::uint16_t>(server_port);
+    // Viz의 텔레옵은 cmd_vel로 오지만 로봇에서는 cmd_vel_teleop으로 받아야 한다.
+    options.network.receive_remap["cmd_vel"] = "cmd_vel_teleop";
+  }
   krosc::Context context(options);
 
-  std::unique_ptr<krosc::net::Server> server;
-  if (server_port > 0) {
-    try {
-      server = std::make_unique<krosc::net::Server>(context, static_cast<std::uint16_t>(server_port));
-      std::printf("[krosc_ws] host: 0.0.0.0:%d\n", static_cast<int>(server->port()));
-      const auto addresses = local_addresses();
-      if (addresses.empty()) {
-        std::printf("[krosc_ws] connect: <pi-ip>:%d\n", static_cast<int>(server->port()));
-      } else {
-        for (const auto& address : addresses) {
-          std::printf("[krosc_ws] connect: %s:%d\n", address.c_str(), static_cast<int>(server->port()));
-        }
+  if (const auto* peer = context.peer_network()) {
+    const int port = static_cast<int>(peer->port());
+    std::printf("[krosc_ws] peer listen: 0.0.0.0:%d\n", port);
+    const auto addresses = local_addresses();
+    if (addresses.empty()) {
+      std::printf("[krosc_ws] peer: <pi-ip>:%d\n", port);
+    } else {
+      for (const auto& address : addresses) {
+        std::printf("[krosc_ws] peer: %s:%d\n", address.c_str(), port);
       }
-      std::printf("[krosc_ws] Mac: ./build/viz/krosc_viz_app --server <ip>:%d --fixed-frame odom\n",
-                  static_cast<int>(server->port()));
-      std::fflush(stdout);
-    } catch (const std::exception& error) {
-      std::fprintf(stderr, "[krosc_ws] network server를 열지 못했다: %s\n", error.what());
     }
+    std::printf("[krosc_ws] Viz: --server <ip>:%d\n", port);
+    std::fflush(stdout);
   }
 
   krosc_ws::RealTurtleBot3 robot(opencr_port, lidar_port, enable_lidar);
@@ -429,9 +430,6 @@ int main(int argc, char** argv) {
   std::printf("[krosc_ws] 정지 중...\n");
   std::fflush(stdout);
   robot.stop();
-  if (server) {
-    server->shutdown();
-  }
   context.shutdown();
   std::printf("[krosc_ws] 종료\n");
   return 0;
