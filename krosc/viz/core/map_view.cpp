@@ -212,7 +212,9 @@ void MapView2D::paintEvent(QPaintEvent* event) {
   QPainter painter(this);
   painter.fillRect(rect(), QColor(10, 12, 17));
   rebuild_image();
-  if (image_.isNull()) {
+  const auto slam = model_.slam_status();
+  const bool map_shown = !slam || slam->data != "idle";  // idle이면 옛 지도 숨김
+  if (image_.isNull() || !map_shown) {
     painter.setPen(QColor(150, 160, 175));
     painter.drawText(rect(), Qt::AlignCenter, "no map");
     return;

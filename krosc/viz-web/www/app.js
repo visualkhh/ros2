@@ -1287,6 +1287,7 @@ function drawGrid() {
   let step = 1;
   if (view.scale < 15) step = 5;
   else if (view.scale > 120) step = 0.5;
+  if (!Number.isFinite(step) || step <= 0) return;
   context.lineWidth = 1;
   context.strokeStyle = '#141c27';
   context.beginPath();
@@ -2309,6 +2310,9 @@ function render() {
     draw3d();
     requestAnimationFrame(render);
     return;
+  }
+  if (!Number.isFinite(view.scale) || view.scale <= 0) {
+    view.scale = 60;  // 어떤 이유로든 scale이 깨지면 복구
   }
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;

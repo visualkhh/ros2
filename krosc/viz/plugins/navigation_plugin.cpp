@@ -135,12 +135,14 @@ void NavigationPlugin::initialize(VizHost& host) {
   global_scaling_ = add_spin(10, 2, "g scale", 3.0, 0.5, 10.0, 0.5);
   local_inflation_ = add_spin(11, 0, "l infl (m)", 0.55, 0.05, 2.0, 0.05);
   local_scaling_ = add_spin(11, 2, "l scale", 3.0, 0.5, 10.0, 0.5);
+  local_width_ = add_spin(12, 0, "l width (m)", 4.0, 1.0, 20.0, 0.5);
+  local_height_ = add_spin(12, 2, "l height (m)", 4.0, 1.0, 20.0, 0.5);
   costmap_apply_ = new QPushButton("Apply costmap", panel);
-  grid->addWidget(costmap_apply_, 12, 0, 1, 4);
+  grid->addWidget(costmap_apply_, 13, 0, 1, 4);
   connect(costmap_apply_, &QPushButton::clicked, this, [this] { apply_costmap_params(); });
   costmap_label_ = new QLabel("-", panel);
   costmap_label_->setWordWrap(true);
-  grid->addWidget(costmap_label_, 13, 0, 1, 4);
+  grid->addWidget(costmap_label_, 14, 0, 1, 4);
 
   dock_->setWidget(panel);
   host.add_dock(dock_, Qt::RightDockWidgetArea);
@@ -410,7 +412,9 @@ void NavigationPlugin::apply_costmap_params() {
       "global,inflation_radius," + std::to_string(global_inflation_->value()) +
       ";global,cost_scaling_factor," + std::to_string(global_scaling_->value()) +
       ";local,inflation_radius," + std::to_string(local_inflation_->value()) +
-      ";local,cost_scaling_factor," + std::to_string(local_scaling_->value());
+      ";local,cost_scaling_factor," + std::to_string(local_scaling_->value()) +
+      ";local,width," + std::to_string(local_width_->value()) +
+      ";local,height," + std::to_string(local_height_->value());
   host_->model().node().publish("costmap_params", msgs::String{text}, QOS_DEFAULT);
   status_->setText("costmap applied");
 }
@@ -450,11 +454,16 @@ void NavigationPlugin::refresh_costmap_state() {
   set_spin(global_scaling_, "global.cost_scaling_factor");
   set_spin(local_inflation_, "local.inflation_radius");
   set_spin(local_scaling_, "local.cost_scaling_factor");
+  set_spin(local_width_, "local.width");
+  set_spin(local_height_, "local.height");
   costmap_label_->setText(QString("g %1 m / %2 · l %3 m / %4")
                               .arg(QString::fromStdString(values["global.inflation_radius"]))
                               .arg(QString::fromStdString(values["global.cost_scaling_factor"]))
                               .arg(QString::fromStdString(values["local.inflation_radius"]))
-                              .arg(QString::fromStdString(values["local.cost_scaling_factor"])));
+                              .arg(QString::fromStdString(values["local.cost_scaling_factor"])) +
+                          QString(" / %1x%2 m")
+                              .arg(QString::fromStdString(values["local.width"]))
+                              .arg(QString::fromStdString(values["local.height"])));
 }
 
 }  // namespace krosc::viz

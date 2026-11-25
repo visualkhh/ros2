@@ -65,6 +65,8 @@ class NavigationPlugin final : public QObject, public VizPlugin {
   QDoubleSpinBox* global_scaling_ = nullptr;
   QDoubleSpinBox* local_inflation_ = nullptr;
   QDoubleSpinBox* local_scaling_ = nullptr;
+  QDoubleSpinBox* local_width_ = nullptr;
+  QDoubleSpinBox* local_height_ = nullptr;
   QTimer* costmap_timer_ = nullptr;
   std::vector<std::tuple<double, double, double>> multi_goals_;
   std::string active_tool_;

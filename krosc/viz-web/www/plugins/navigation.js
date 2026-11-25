@@ -169,13 +169,17 @@ export function init(host) {
   const globalScaling = numberField('global scale', 3.0, 0.5);
   const localInflation = numberField('local infl (m)', 0.55, 0.05);
   const localScaling = numberField('local scale', 3.0, 0.5);
+  const localWidth = numberField('local width (m)', 4.0, 0.5);
+  const localHeight = numberField('local height (m)', 4.0, 0.5);
   const costmapRow = buttonRow(body);
   button(costmapRow, 'Apply costmap', () => {
     host.sendString('costmap_params',
       `global,inflation_radius,${globalInflation.value};` +
       `global,cost_scaling_factor,${globalScaling.value};` +
       `local,inflation_radius,${localInflation.value};` +
-      `local,cost_scaling_factor,${localScaling.value}`);
+      `local,cost_scaling_factor,${localScaling.value};` +
+      `local,width,${localWidth.value};` +
+      `local,height,${localHeight.value}`);
     setLevel(status, 'costmap applied', 'ok');
   }, 'primary');
   const costmapState = document.createElement('div');
@@ -197,9 +201,12 @@ export function init(host) {
     assign(globalScaling, 'global.cost_scaling_factor');
     assign(localInflation, 'local.inflation_radius');
     assign(localScaling, 'local.cost_scaling_factor');
+    assign(localWidth, 'local.width');
+    assign(localHeight, 'local.height');
     costmapState.textContent =
       `g ${values.get('global.inflation_radius') || '-'} m / ${values.get('global.cost_scaling_factor') || '-'} · ` +
-      `l ${values.get('local.inflation_radius') || '-'} m / ${values.get('local.cost_scaling_factor') || '-'}`;
+      `l ${values.get('local.inflation_radius') || '-'} m / ${values.get('local.cost_scaling_factor') || '-'} / ` +
+      `${values.get('local.width') || '-'}x${values.get('local.height') || '-'} m`;
   });
 
   updateUi();

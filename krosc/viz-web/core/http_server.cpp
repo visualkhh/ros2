@@ -140,7 +140,7 @@ bool send_response(int fd, int status, const std::string& reason, const std::str
   header << "HTTP/1.1 " << status << ' ' << reason << "\r\n";
   header << "Content-Type: " << type << "\r\n";
   header << "Content-Length: " << body.size() << "\r\n";
-  header << "Cache-Control: no-cache\r\n";
+  header << "Cache-Control: no-store, max-age=0\r\n";
   header << "Connection: close\r\n\r\n";
   const std::string text = header.str();
   return send_all(fd, reinterpret_cast<const std::uint8_t*>(text.data()), text.size()) &&

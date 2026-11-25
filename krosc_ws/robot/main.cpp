@@ -356,7 +356,9 @@ int main(int argc, char** argv) {
           krosc::Node* node = target == "global" ? &global_costmap
                               : target == "local" ? &local_costmap
                                                   : nullptr;
-          if (node == nullptr || (key != "inflation_radius" && key != "cost_scaling_factor")) {
+          if (node == nullptr ||
+              (key != "inflation_radius" && key != "cost_scaling_factor" && key != "width" &&
+               key != "height")) {
             continue;
           }
           double number = 0.0;
@@ -377,7 +379,9 @@ int main(int argc, char** argv) {
          << global_costmap.get_parameter_as<double>("cost_scaling_factor")
          << ";local.inflation_radius=" << local_costmap.get_parameter_as<double>("inflation_radius")
          << ";local.cost_scaling_factor="
-         << local_costmap.get_parameter_as<double>("cost_scaling_factor");
+         << local_costmap.get_parameter_as<double>("cost_scaling_factor")
+         << ";local.width=" << local_costmap.get_parameter_as<double>("width")
+         << ";local.height=" << local_costmap.get_parameter_as<double>("height");
     costmap_params_node.publish("costmap_params_state", krosc::msgs::String{text.str()},
                                 krosc::QOS_LATCHED);
   });

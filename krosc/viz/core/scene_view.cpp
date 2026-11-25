@@ -573,7 +573,9 @@ void SceneView::draw_grid_image(QPainter& painter, const msgs::OccupancyGrid& gr
 
 void SceneView::draw_map(QPainter& painter) const {
   const auto grid = model_.map();
-  if (!grid || !enabled("map") || grid->info.width == 0 || grid->info.height == 0) {
+  const auto slam = model_.slam_status();
+  if (!grid || !enabled("map") || (slam && slam->data == "idle") ||
+      grid->info.width == 0 || grid->info.height == 0) {
     return;
   }
   msgs::Transform frame_transform = tfmath::kIdentity;
