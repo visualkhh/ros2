@@ -182,6 +182,9 @@ Docker 설정은 저장소 루트의 `../docker/`에 있다.
 로컬 토픽을 discover/subscribe해서 주고받는다.
 
 ```cpp
+// 가장 간단한 형태: Krosc 생성 시 peer 목록만 준다.
+// krosc::Krosc app(create_nodes, {"192.168.0.12:9100"}, 9100);
+
 krosc::Context::Options options;
 options.network.name = "robot_a";
 options.network.listen = true;

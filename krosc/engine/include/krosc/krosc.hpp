@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "krosc/context.hpp"
@@ -17,6 +19,8 @@ class Krosc {
 
   Krosc();
   explicit Krosc(NodeCreate node_create, Context::Options options = {});
+  // 다른 Krosc와 연결할 peer 목록("host:port"). port>0이면 이쪽도 listen한다.
+  Krosc(NodeCreate node_create, std::vector<std::string> peers, std::uint16_t port = 0);
   ~Krosc();
 
   Krosc(const Krosc&) = delete;
