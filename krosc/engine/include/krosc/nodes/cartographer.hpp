@@ -67,7 +67,7 @@ class Cartographer final : public Node {
 
   // 상태
   mutable std::mutex mutex_;
-  std::string mode_str_ = "idle";
+  std::string mode_str_;  // ""로 시작해 첫 set_mode에서 slam_status를 반드시 발행한다
   std::unique_ptr<cartographer::ProbabilityGrid> grid_;
   std::optional<msgs::OccupancyGrid> external_map_;
   cartographer::Pose2 map_to_odom_{0.0, 0.0, 0.0};

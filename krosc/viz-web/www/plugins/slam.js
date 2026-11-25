@@ -96,7 +96,10 @@ export function init(host) {
       pending = null;
     }
     // 지도 load 직후에는 지도 전체가 보이게 맞춘다 (새로고침 없이 바로 보이도록)
-    if (text.startsWith('loaded ') && host.fitMap) host.fitMap();
+    if (text.startsWith('loaded ')) {
+      if (host.fitMap) host.fitMap();
+      host.toast(`${text} — localization 시작 (필요하면 2D Pose로 보정)`);
+    }
   });
   host.onTopic('map_list', (message) => {
     const current = mapSelect.value;

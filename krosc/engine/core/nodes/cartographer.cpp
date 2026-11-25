@@ -20,7 +20,7 @@ namespace {
 constexpr double kDegreesToRadians = std::numbers::pi / 180.0;
 constexpr double kMatchMinLinear = 0.01;  // m: 이만큼도 안 움직였으면 스캔 매칭을 건너뛴다
 constexpr double kMatchMinAngular = 0.5 * kDegreesToRadians;
-constexpr double kRelocalizeScale = 3.0;  // /initialpose 뒤 첫 매칭은 탐색 범위를 이만큼 넓힌다
+constexpr double kRelocalizeScale = 5.0;  // 지도 load/initialpose 뒤 첫 매칭은 탐색 범위를 이만큼 넓힌다
 
 }  // namespace
 
@@ -120,10 +120,21 @@ void Cartographer::set_mode(const std::string& mode) {
     dirty_ = false;
     if (mode == "mapping") {
       grid_ = std::make_unique<cartographer::ProbabilityGrid>(resolution_.value());
+      // 새 지도는 출발점 기준으로 다시 만든다.
+      map_to_odom_ = {0.0, 0.0, 0.0};
+      localized_ = false;
+      has_last_match_ = false;
+      relocalize_ = true;
     } else if (mode == "localization") {
       grid_ = external_map_ ? std::make_unique<cartographer::ProbabilityGrid>(
                                   cartographer::ProbabilityGrid::from_message(*external_map_))
                             : std::make_unique<cartographer::ProbabilityGrid>(resolution_.value());
+      // 지도 원점 = 저장 당시 출발점이라는 가정으로 재출발하고, 첫 매칭은 넓게 찾는다.
+      // (2D Pose를 주지 않아도 몇 스캔 안에 붙게 하기 위함)
+      map_to_odom_ = {0.0, 0.0, 0.0};
+      localized_ = false;
+      has_last_match_ = false;
+      relocalize_ = true;
     }
   }
   logger().info("Cartographer mode: %s", mode.c_str());
