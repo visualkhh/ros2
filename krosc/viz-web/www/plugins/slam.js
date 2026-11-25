@@ -2,6 +2,7 @@ import { button, buttonRow, row, select, setLevel } from './util.js';
 
 export function init(host) {
   const body = host.addPanel('SLAM / Map');
+  let lastLoadedToast = '';
   const mode = row(body, 'SLAM');
   const loadedName = row(body, 'loaded map');
   const mapStatus = row(body, 'map');
@@ -108,7 +109,10 @@ export function init(host) {
     // 지도 load 직후에는 지도 전체가 보이게 맞춘다 (새로고침 없이 바로 보이도록)
     if (text.startsWith('loaded ')) {
       if (host.fitMap) host.fitMap();
-      host.toast(`${text} — localization 시작 (필요하면 2D Pose로 보정)`);
+      // 래치 메시지가 재전송될 때마다 토스트가 반복되지 않게 한 번만
+      if (lastLoadedToast !== text) {
+        lastLoadedToast = text;
+      }
     }
   });
   host.onTopic('map_list', (message) => {
