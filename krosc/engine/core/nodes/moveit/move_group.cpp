@@ -650,7 +650,8 @@ void MoveGroup::on_preset(const msgs::String& message) {
   }
   std::array<double, 4> goal{};
   if (mode == "home") {
-    goal = {0.0, 0.0, 0.0, 0.0};
+    // 이 마운트에서 all-zero는 팔이 바닥을 향해 걸린다. 안전한 STOW 자세를 HOME으로 쓴다.
+    goal = {0.0, -1.9024, 1.3440, 0.9023};
   } else if (mode == "stow") {
     goal = {0.0, -1.9024, 1.3440, 0.9023};
   } else {

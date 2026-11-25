@@ -53,9 +53,9 @@ export function init(host) {
         context.moveTo(point.x, point.y - 12); context.lineTo(point.x, point.y + 12); context.stroke();
       }
 
-      const arm = host.latest('moveit_arm');
-      if (arm && Array.isArray(arm.poses) && arm.poses.length > 0) {
-        const points = arm.poses.map((pose) => project(pose.pose.position, width, height, scale));
+      const arm = host.armPoints ? host.armPoints() : [];
+      if (arm.length > 1) {
+        const points = arm.map((point) => project(point, width, height, scale));
         context.strokeStyle = '#9aa6b9';
         context.lineWidth = 5;
         context.beginPath();
@@ -72,7 +72,7 @@ export function init(host) {
       } else {
         context.fillStyle = '#7f899b';
         context.font = '13px system-ui';
-        context.fillText('moveit_arm 대기 중', 16, 24);
+        context.fillText('joint_states 대기 중', 16, 24);
       }
     }
     requestAnimationFrame(draw);

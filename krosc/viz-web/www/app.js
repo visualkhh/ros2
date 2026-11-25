@@ -302,6 +302,65 @@ function robotPose() {
   return odomMap ? compose(odomMap, pose) : pose;
 }
 
+function rotationY(angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [[c, 0, s], [0, 1, 0], [-s, 0, c]];
+}
+function rotationZ(angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
+}
+function multiply(a, b) {
+  const out = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let row = 0; row < 3; ++row) {
+    for (let column = 0; column < 3; ++column) {
+      for (let k = 0; k < 3; ++k) out[row][column] += a[row][k] * b[k][column];
+    }
+  }
+  return out;
+}
+function applyRotation(matrix, vector) {
+  return [
+    matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
+    matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
+    matrix[2][0] * vector[0] + matrix[2][1] * vector[1] + matrix[2][2] * vector[2],
+  ];
+}
+
+// URDF(turtlebot3_real)의 4축 체인을 joint_states로 순방향 계산한다.
+// link1 mount -> joint1(z) -> joint2(y) -> joint3(y) -> joint4(y) -> end.
+function armPoints() {
+  const message = state.latest.get('joint_states');
+  const values = new Map();
+  if (message && Array.isArray(message.names) && Array.isArray(message.positions)) {
+    for (let i = 0; i < message.names.length && i < message.positions.length; ++i) {
+      values.set(message.names[i], message.positions[i]);
+    }
+  }
+  const q = [values.get('joint1') || 0, values.get('joint2') || 0,
+             values.get('joint3') || 0, values.get('joint4') || 0];
+  const points = [];
+  let position = [0.047985, -0.00023, 0.130175];
+  let rotation = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  const advance = (offset) => {
+    const moved = applyRotation(rotation, offset);
+    position = [position[0] + moved[0], position[1] + moved[1], position[2] + moved[2]];
+    points.push({ x: position[0], y: position[1], z: position[2] });
+  };
+  advance([0.012, 0, 0]);
+  rotation = multiply(rotation, rotationZ(q[0]));
+  advance([0, 0, 0.0595]);
+  rotation = multiply(rotation, rotationY(q[1]));
+  advance([0.024, 0, 0.128]);
+  rotation = multiply(rotation, rotationY(q[2]));
+  advance([0.124, 0, 0]);
+  rotation = multiply(rotation, rotationY(q[3]));
+  advance([0.126, 0, 0]);
+  return points;
+}
+
 function topic(topicName) {
   return state.latest.get(topicName);
 }
@@ -422,6 +481,7 @@ const host = {
   toast,
   robotPose,
   lookup,
+  armPoints,
   settings: state.settings,
   addView({ id, title }) {
     const viewId = id || title;
@@ -998,17 +1058,16 @@ function draw3dRobot() {
 }
 
 function draw3dArm() {
-  const arm = topic('moveit_arm');
-  if (!arm || arm.poses.length === 0) return;
-  const transform = frameTransform(arm.header.frame);
-  if (!transform) return;
-  const points = [];
+  const arm = armPoints();
+  if (arm.length === 0) return;
+  const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
   const c = Math.cos(transform.yaw);
   const s = Math.sin(transform.yaw);
-  for (const pose of arm.poses) {
-    const x = transform.x + c * pose.pose.position.x - s * pose.pose.position.y;
-    const y = transform.y + s * pose.pose.position.x + c * pose.pose.position.y;
-    const point = project3d(x, y, pose.pose.position.z);
+  const points = [];
+  for (const pose of arm) {
+    const x = transform.x + c * pose.x - s * pose.y;
+    const y = transform.y + s * pose.x + c * pose.y;
+    const point = project3d(x, y, pose.z);
     if (point) points.push(point);
   }
   if (points.length > 1) {
