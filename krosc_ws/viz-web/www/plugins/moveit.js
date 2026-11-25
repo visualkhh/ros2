@@ -431,9 +431,25 @@ export function init(host) {
   });
   gripInput.addEventListener('input', () => { gripSlider.value = gripInput.value; });
 
+  const modeRow = buttonRow(body);
+  const modeHint = document.createElement('div');
+  modeHint.className = 'muted';
+  modeHint.textContent = '드래그 모드: 원하는 항목을 고른 뒤 TCP 마커를 드래그';
+  body.append(modeHint);
+  const modeButtons = new Map();
+  for (const [label, mode] of [['XY', 'xy'], ['Z', 'z'], ['Pitch', 'pitch'], ['Grip', 'grip']]) {
+    const modeButton = button(modeRow, label, () => {
+      dragOverride = mode;
+      for (const [key, item] of modeButtons) item.className = key === mode ? 'primary' : '';
+    });
+    if (mode === 'xy') modeButton.className = 'primary';
+    modeButtons.set(mode, modeButton);
+  }
+
   // MoveIt 뷰에서 TCP target을 직접 드래그한다 (X/Y, Shift=Z, Ctrl=Pitch, Alt=Grip).
   let dragView = false;
   let dragMode = 'xy';
+  let dragOverride = 'xy';  // 모바일용: XY/Z/Pitch/Grip 모드 버튼
   let dragLast = { x: 0, y: 0 };
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   canvas.style.touchAction = 'none';
@@ -448,7 +464,7 @@ export function init(host) {
     dragMode = event.button === 2 || !hit ? 'orbit'
       : event.altKey ? 'grip'
       : event.shiftKey ? 'z'
-      : event.ctrlKey || event.metaKey ? 'pitch' : 'xy';
+      : event.ctrlKey || event.metaKey ? 'pitch' : dragOverride;
     dragLast = { x: event.clientX, y: event.clientY };
     draggingTarget = dragMode !== 'orbit';
     canvas.setPointerCapture(event.pointerId);
