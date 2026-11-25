@@ -17,6 +17,10 @@ struct MoveGroupGoal {
   std::string controller;
   bool cartesian = true;
   bool plan_only = false;
+  // <0이면 현재 그리퍼 위치 유지. 단위 m (0~0.03).
+  double grip = -1.0;
+  // "home" | "stow" | 빈 문자열. preset이 있으면 target_pose/joint_goal보다 우선한다.
+  std::string preset;
 };
 
 struct MoveGroupFeedback {

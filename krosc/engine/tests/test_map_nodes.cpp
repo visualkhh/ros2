@@ -94,8 +94,11 @@ KROSC_TEST(map_catalog_loads_map_by_name) {
       "map", [&](const krosc::msgs::OccupancyGrid& message) { latest = message; },
       krosc::QOS_LATCHED);
 
-  // MapCatalog는 이름만 받고, map_server에는 <이름>/map.yaml로 넘겨야 한다.
-  monitor.publish("map_change", krosc::msgs::String{"src"});
+  // MapCatalog는 서비스로 이름을 받고, map_server에는 <이름>/map.yaml로 넘겨야 한다.
+  const auto loaded = monitor.call_service<krosc::msgs::nav2::LoadMapRequest,
+                                           krosc::msgs::nav2::LoadMapResponse>(
+      "map_catalog/load_map", krosc::msgs::nav2::LoadMapRequest{"src"});
+  CHECK_EQ(krosc::msgs::nav2::LoadMapResponse::RESULT_SUCCESS, loaded.result);
   CHECK_EQ(20u, latest.info.width);
   CHECK_EQ(10u, latest.info.height);
   fs::remove_all(directory);
@@ -123,10 +126,14 @@ KROSC_TEST(map_catalog_clears_map_name_on_unload) {
       "map_name", [&](const krosc::msgs::String& message) { latest = message; },
       krosc::QOS_LATCHED);
 
-  monitor.publish("map_change", krosc::msgs::String{"src"});
+  const auto loaded = monitor.call_service<krosc::msgs::nav2::LoadMapRequest,
+                                           krosc::msgs::nav2::LoadMapResponse>(
+      "map_catalog/load_map", krosc::msgs::nav2::LoadMapRequest{"src"});
+  CHECK_EQ(krosc::msgs::nav2::LoadMapResponse::RESULT_SUCCESS, loaded.result);
   CHECK_EQ(std::string("src"), latest.data);
   // unload 뒤에는 웹/Qt가 옛 지도 이름을 계속 보여주지 않도록 map_name을 비워 발행해야 한다.
-  monitor.publish("map_unload", krosc::msgs::Empty{});
+  monitor.call_service<krosc::msgs::Empty, krosc::msgs::Empty>(
+      "map_catalog/unload_map", krosc::msgs::Empty{});
   CHECK(latest.data.empty());
   fs::remove_all(directory);
 }

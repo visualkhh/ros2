@@ -120,6 +120,8 @@ class Node {
   }
 
  private:
+  void create_parameter_services();
+
   Context& context_;
   std::string name_;
   Parameter<std::string> log_level_;

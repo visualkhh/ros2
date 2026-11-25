@@ -1,7 +1,7 @@
 #pragma once
 
 // krosc 액션: ROS 2 action처럼 Goal / Feedback / Result를 가진 장기 실행 작업.
-// 지금은 한 프로세스 안에서만 동작한다 (토픽/서비스 위에 올라가지만 네트워크 액션은 아직 없다).
+// 로컬에서는 서비스+이벤트 토픽으로, 원격에서는 PeerNetwork RPC가 같은 API를 포워딩한다.
 //
 // ActionServer: goal을 큐에 넣고 전용 워커 스레드가 하나씩 실행한다 (ROS action server처럼).
 // ActionClient: goal을 보내고 결과를 future로 기다린다. 피드백은 콜백으로 받는다.
@@ -24,41 +24,11 @@
 #include <unordered_map>
 #include <utility>
 
+#include "krosc/action_types.hpp"
 #include "krosc/context.hpp"
 #include "krosc/service.hpp"
 
 namespace krosc {
-
-enum class GoalStatus {
-  Accepted,
-  Succeeded,
-  Canceled,
-  Aborted,
-  Rejected,
-};
-
-struct SendGoalRequest {
-  std::string goal_id;
-  std::any goal;
-};
-struct SendGoalResponse {
-  bool accepted = false;
-};
-struct CancelGoalRequest {
-  std::string goal_id;
-};
-struct CancelGoalResponse {
-  bool canceled = false;
-};
-
-struct ActionEvent {
-  std::string goal_id;
-  bool has_feedback = false;
-  bool has_result = false;
-  std::any feedback;
-  std::any result;
-  GoalStatus status = GoalStatus::Accepted;
-};
 
 struct ActionResult {
   GoalStatus status = GoalStatus::Accepted;

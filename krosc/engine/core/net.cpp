@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "krosc/context.hpp"
+#include "net_codec.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/topic.hpp"
@@ -38,118 +39,13 @@
 
 namespace krosc::net {
 
+using detail::Reader;
+using detail::Writer;
+
 namespace {
 
 constexpr std::size_t kMaxQueue = 512;
 constexpr std::size_t kMaxClients = 8;
-
-class Writer {
- public:
-  std::vector<std::uint8_t> data;
-
-  void u8(std::uint8_t value) { data.push_back(value); }
-  void u16(std::uint16_t value) {
-    data.push_back(static_cast<std::uint8_t>(value & 0xFF));
-    data.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
-  }
-  void u32(std::uint32_t value) {
-    for (int i = 0; i < 4; ++i) {
-      data.push_back(static_cast<std::uint8_t>((value >> (8 * i)) & 0xFF));
-    }
-  }
-  void f32(float value) { u32(std::bit_cast<std::uint32_t>(value)); }
-  void f64(double value) {
-    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
-    for (int i = 0; i < 8; ++i) {
-      data.push_back(static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFF));
-    }
-  }
-  void str(const std::string& value) {
-    const auto length = static_cast<std::uint16_t>(std::min<std::size_t>(value.size(), 65535));
-    u16(length);
-    data.insert(data.end(), value.begin(), value.begin() + static_cast<std::ptrdiff_t>(length));
-  }
-  void bytes(const std::uint8_t* pointer, std::size_t count) {
-    data.insert(data.end(), pointer, pointer + count);
-  }
-};
-
-class Reader {
- public:
-  explicit Reader(const std::vector<std::uint8_t>& data) : pointer_(data.data()), size_(data.size()) {}
-  Reader(const std::uint8_t* data, std::size_t size) : pointer_(data), size_(size) {}
-
-  [[nodiscard]] bool ok() const { return ok_; }
-  [[nodiscard]] std::size_t remaining() const { return ok_ ? size_ - position_ : 0; }
-  [[nodiscard]] const std::uint8_t* rest() const { return pointer_ + position_; }
-
-  std::uint8_t u8() {
-    if (!need(1)) {
-      return 0;
-    }
-    return pointer_[position_++];
-  }
-  std::uint16_t u16() {
-    if (!need(2)) {
-      return 0;
-    }
-    const std::uint16_t value = static_cast<std::uint16_t>(pointer_[position_]) |
-                                static_cast<std::uint16_t>(pointer_[position_ + 1] << 8);
-    position_ += 2;
-    return value;
-  }
-  std::uint32_t u32() {
-    if (!need(4)) {
-      return 0;
-    }
-    std::uint32_t value = 0;
-    for (int i = 0; i < 4; ++i) {
-      value |= static_cast<std::uint32_t>(pointer_[position_ + static_cast<std::size_t>(i)]) << (8 * i);
-    }
-    position_ += 4;
-    return value;
-  }
-  float f32() { return std::bit_cast<float>(u32()); }
-  double f64() {
-    if (!need(8)) {
-      return 0.0;
-    }
-    std::uint64_t bits = 0;
-    for (int i = 0; i < 8; ++i) {
-      bits |= static_cast<std::uint64_t>(pointer_[position_ + static_cast<std::size_t>(i)]) << (8 * i);
-    }
-    position_ += 8;
-    return std::bit_cast<double>(bits);
-  }
-  std::string str() {
-    const std::uint16_t length = u16();
-    if (!ok_ || !need(length)) {
-      return {};
-    }
-    std::string value(reinterpret_cast<const char*>(pointer_ + position_), length);
-    position_ += length;
-    return value;
-  }
-  void skip(std::size_t count) {
-    if (need(count)) {
-      position_ += count;
-    }
-  }
-
- private:
-  bool need(std::size_t count) {
-    if (!ok_ || count > size_ - position_) {
-      ok_ = false;
-      return false;
-    }
-    return true;
-  }
-
-  const std::uint8_t* pointer_;
-  std::size_t size_;
-  std::size_t position_ = 0;
-  bool ok_ = true;
-};
 
 void encode(Writer& w, const msgs::Header& header) {
   w.f64(header.stamp);
@@ -746,7 +642,7 @@ struct Server::Impl {
   std::deque<std::shared_ptr<Connection>> retired;
   std::mutex latched_mutex;
   std::unordered_map<std::string, std::deque<std::vector<std::uint8_t>>> latched;
-  std::vector<std::shared_ptr<detail::SubscriptionBase>> subscriptions;
+  std::vector<std::shared_ptr<krosc::detail::SubscriptionBase>> subscriptions;
 
   template <class T, class Encode>
   void subscribe_topic(const std::string& name, Kind kind, QoS qos, bool store_latched, Encode encode_message) {
@@ -1140,8 +1036,8 @@ struct Client::Impl {
   std::mutex queue_mutex;
   std::condition_variable queue_cv;
   std::deque<std::vector<std::uint8_t>> queue;
-  std::shared_ptr<detail::SubscriptionBase> command_subscription;
-  std::vector<std::shared_ptr<detail::SubscriptionBase>> control_subscriptions;
+  std::shared_ptr<krosc::detail::SubscriptionBase> command_subscription;
+  std::vector<std::shared_ptr<krosc::detail::SubscriptionBase>> control_subscriptions;
 
   template <class T, class Encode>
   void forward_topic(const std::string& topic, Kind kind, Encode encode_message) {
@@ -1300,6 +1196,8 @@ struct Client::Impl {
         break;
       }
       case Kind::Twist:
+        break;
+      default:
         break;
     }
   }

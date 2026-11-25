@@ -57,7 +57,7 @@ class MoveGroup final : public Node {
   void on_plan(const msgs::Empty& message);
   void on_execute(const msgs::Empty& message);
   void on_cancel(const msgs::Empty& message);
-  void on_scrub(const msgs::String& message);
+  bool on_scrub(const msgs::String& message);
   void tick();
   void heartbeat();
 
@@ -120,6 +120,8 @@ class MoveGroup final : public Node {
   bool chain_ready_ = false;
   std::optional<std::array<double, 4>> current_;
   double gripper_ = 0.0;
+  // move_action goal의 grip (m). <0이면 현재 값을 쓴다.
+  double action_grip_ = -1.0;
   std::optional<Target> target_;
   std::optional<std::array<double, 4>> joint_goal_;
   std::optional<std::array<double, 4>> goal_;
@@ -142,12 +144,6 @@ class MoveGroup final : public Node {
   Subscription<msgs::String> robot_description_subscription_;
   Subscription<msgs::JointState> joint_states_subscription_;
   Subscription<msgs::String> arm_status_subscription_;
-  Subscription<msgs::String> target_subscription_;
-  Subscription<msgs::String> preset_subscription_;
-  Subscription<msgs::Empty> plan_subscription_;
-  Subscription<msgs::Empty> execute_subscription_;
-  Subscription<msgs::Empty> cancel_subscription_;
-  Subscription<msgs::String> scrub_subscription_;
   std::unique_ptr<ActionServer<msgs::moveit::MoveGroupGoal, msgs::moveit::MoveGroupFeedback,
                                msgs::moveit::MoveGroupResult>>
       action_;

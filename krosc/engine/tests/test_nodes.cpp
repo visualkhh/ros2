@@ -9,6 +9,8 @@
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/nodes/twist_mux.hpp"
+#include "krosc/msgs/rcl_interfaces.hpp"
+#include "krosc/parameter_rpc.hpp"
 #include "krosc/service.hpp"
 #include "krosc/tf_ros.hpp"
 #include "krosc/time.hpp"
@@ -66,6 +68,69 @@ KROSC_TEST(service_roundtrip_and_errors) {
   CHECK_THROWS_AS((server_node.create_service<AddRequest, AddResponse>(
                       "dup", [](const AddRequest&) { return AddResponse{}; })),
                   std::runtime_error);
+}
+
+KROSC_TEST(node_parameter_services) {
+  krosc::Context context;
+  krosc::Node node(context, "param_node");
+  auto gain = node.declare_parameter("gain", 3);
+  krosc::Node client(context, "param_client");
+
+  krosc::msgs::rcl_interfaces::GetParametersRequest get_request;
+  get_request.names = {"gain"};
+  const auto get_response = client.call_service<
+      krosc::msgs::rcl_interfaces::GetParametersRequest,
+      krosc::msgs::rcl_interfaces::GetParametersResponse>("param_node/get_parameters",
+                                                          get_request);
+  CHECK_EQ(1U, get_response.values.size());
+  CHECK_EQ(std::int64_t{3}, get_response.values[0].integer_value);
+
+  krosc::msgs::rcl_interfaces::SetParametersRequest set_request;
+  krosc::msgs::rcl_interfaces::Parameter parameter;
+  parameter.name = "gain";
+  parameter.value.type = static_cast<std::uint8_t>(
+      krosc::msgs::rcl_interfaces::ParameterType::Integer);
+  parameter.value.integer_value = 7;
+  set_request.parameters.push_back(parameter);
+  const auto set_response = client.call_service<
+      krosc::msgs::rcl_interfaces::SetParametersRequest,
+      krosc::msgs::rcl_interfaces::SetParametersResponse>("param_node/set_parameters",
+                                                          set_request);
+  CHECK_EQ(1U, set_response.results.size());
+  CHECK(set_response.results[0].successful);
+  CHECK_EQ(std::int64_t{7}, gain.value());
+
+  krosc::msgs::rcl_interfaces::ListParametersRequest list_request;
+  list_request.prefixes = {"ga"};
+  const auto list_response = client.call_service<
+      krosc::msgs::rcl_interfaces::ListParametersRequest,
+      krosc::msgs::rcl_interfaces::ListParametersResponse>("param_node/list_parameters",
+                                                           list_request);
+  CHECK(!list_response.result.empty());
+
+  krosc::msgs::rcl_interfaces::DescribeParametersRequest describe_request;
+  describe_request.names = {"gain"};
+  const auto describe_response = client.call_service<
+      krosc::msgs::rcl_interfaces::DescribeParametersRequest,
+      krosc::msgs::rcl_interfaces::DescribeParametersResponse>(
+      "param_node/describe_parameters", describe_request);
+  CHECK_EQ(1U, describe_response.descriptors.size());
+  CHECK_EQ(static_cast<std::uint8_t>(krosc::msgs::rcl_interfaces::ParameterType::Integer),
+           describe_response.descriptors[0].type);
+
+  krosc::msgs::rcl_interfaces::SetParametersRequest bad_request;
+  krosc::msgs::rcl_interfaces::Parameter bad;
+  bad.name = "missing";
+  bad.value.type = static_cast<std::uint8_t>(
+      krosc::msgs::rcl_interfaces::ParameterType::Integer);
+  bad.value.integer_value = 1;
+  bad_request.parameters.push_back(bad);
+  const auto bad_response = client.call_service<
+      krosc::msgs::rcl_interfaces::SetParametersRequest,
+      krosc::msgs::rcl_interfaces::SetParametersResponse>("param_node/set_parameters",
+                                                          bad_request);
+  CHECK_EQ(1U, bad_response.results.size());
+  CHECK(!bad_response.results[0].successful);
 }
 
 KROSC_TEST(robot_state_publisher_static_and_joint_tf) {

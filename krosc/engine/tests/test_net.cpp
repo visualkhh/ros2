@@ -5,10 +5,16 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <cstring>
 #include <thread>
 
+#include "krosc/action.hpp"
 #include "krosc/context.hpp"
+#include "krosc/msgs/rcl_interfaces.hpp"
 #include "krosc/net.hpp"
+#include "krosc/node.hpp"
+#include "krosc/parameter_rpc.hpp"
+#include "krosc/rpc.hpp"
 #include "krosc/qos.hpp"
 
 #include "test_framework.hpp"
@@ -373,4 +379,152 @@ KROSC_TEST(net_peer_receive_remap_cmd_vel) {
   lock.unlock();
   viz.shutdown();
   robot.shutdown();
+}
+
+
+namespace {
+
+void register_test_action_codec() {
+  auto encode_int = [](const std::any& value) {
+    const int number = std::any_cast<int>(value);
+    std::vector<std::uint8_t> bytes(4);
+    std::memcpy(bytes.data(), &number, sizeof(number));
+    return bytes;
+  };
+  auto decode_int = [](const std::uint8_t* data, std::size_t size) -> std::any {
+    if (size != sizeof(int)) {
+      return {};
+    }
+    int number = 0;
+    std::memcpy(&number, data, sizeof(number));
+    return std::any(number);
+  };
+  krosc::net::ActionCodec codec;
+  codec.name = "test_action";
+  codec.encode_goal = encode_int;
+  codec.decode_goal = decode_int;
+  codec.encode_feedback = encode_int;
+  codec.decode_feedback = decode_int;
+  codec.encode_result = encode_int;
+  codec.decode_result = decode_int;
+  krosc::net::register_action_codec(std::move(codec));
+}
+
+}  // namespace
+
+KROSC_TEST(net_rpc_service_and_parameter_services) {
+  register_test_action_codec();
+
+  krosc::Context::Options server_options;
+  server_options.network.name = "rpc_server";
+  server_options.network.listen = true;
+  server_options.network.port = 0;
+  krosc::Context server(server_options);
+  krosc::Node server_node(server, "rpc_param_node");
+  auto answer = server_node.declare_parameter<std::int64_t>("answer", 1);
+  auto add_service = server_node.create_service<krosc::msgs::SetBoolRequest,
+                                                krosc::msgs::SetBoolResponse>(
+      "test/add", [](const krosc::msgs::SetBoolRequest& request) {
+        return krosc::msgs::SetBoolResponse{request.data, request.data ? "yes" : "no"};
+      });
+
+  krosc::Context::Options client_options;
+  client_options.network.name = "rpc_client";
+  client_options.network.rpc_timeout_sec = 0.4;
+  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  krosc::Context client(client_options);
+
+  std::mutex mutex;
+  std::condition_variable cv;
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 3s, [&] { return !client.peer_network()->peer_endpoints().empty(); }));
+  std::this_thread::sleep_for(100ms);
+
+  const auto response = client.services().call<krosc::msgs::SetBoolRequest,
+                                               krosc::msgs::SetBoolResponse>(
+      "test/add", krosc::msgs::SetBoolRequest{true});
+  CHECK(response.success);
+  CHECK_EQ(std::string("yes"), response.message);
+
+  krosc::msgs::rcl_interfaces::SetParametersRequest update;
+  krosc::msgs::rcl_interfaces::Parameter parameter;
+  parameter.name = "answer";
+  parameter.value.type = static_cast<std::uint8_t>(
+      krosc::msgs::rcl_interfaces::ParameterType::Integer);
+  parameter.value.integer_value = 42;
+  update.parameters.push_back(parameter);
+  const auto set_response = client.services().call<
+      krosc::msgs::rcl_interfaces::SetParametersRequest,
+      krosc::msgs::rcl_interfaces::SetParametersResponse>(
+      "rpc_param_node/set_parameters", update);
+  CHECK_EQ(1U, set_response.results.size());
+  CHECK(set_response.results[0].successful);
+  CHECK_EQ(std::int64_t{42}, answer.value());
+
+  krosc::msgs::rcl_interfaces::GetParametersRequest query;
+  query.names = {"answer"};
+  const auto get_response = client.services().call<
+      krosc::msgs::rcl_interfaces::GetParametersRequest,
+      krosc::msgs::rcl_interfaces::GetParametersResponse>(
+      "rpc_param_node/get_parameters", query);
+  CHECK_EQ(1U, get_response.values.size());
+  CHECK_EQ(std::int64_t{42}, get_response.values[0].integer_value);
+
+  bool missing_failed = false;
+  try {
+    (void)client.services().call<krosc::msgs::Empty, krosc::msgs::Empty>(
+        "missing_service", krosc::msgs::Empty{});
+  } catch (const std::exception&) {
+    missing_failed = true;
+  }
+  CHECK(missing_failed);
+
+  lock.unlock();
+  client.shutdown();
+  server.shutdown();
+}
+
+KROSC_TEST(net_rpc_action_roundtrip) {
+  register_test_action_codec();
+
+  krosc::Context::Options server_options;
+  server_options.network.name = "action_server";
+  server_options.network.listen = true;
+  server_options.network.port = 0;
+  krosc::Context server(server_options);
+  krosc::ActionServer<int, int, int> action_server(
+      server, "test_action", [](krosc::ServerGoalHandle<int, int>& handle) {
+        handle.publish_feedback(handle.goal() * 2);
+        return handle.goal() + 1;
+      });
+
+  krosc::Context::Options client_options;
+  client_options.network.name = "action_client";
+  client_options.network.rpc_timeout_sec = 1.0;
+  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  krosc::Context client(client_options);
+  std::atomic<int> feedback{0};
+  krosc::ActionClient<int, int, int> action_client(client, "test_action");
+
+  std::mutex mutex;
+  std::condition_variable cv;
+  std::unique_lock<std::mutex> lock(mutex);
+  CHECK(cv.wait_for(lock, 3s, [&] { return !client.peer_network()->peer_endpoints().empty(); }));
+  std::this_thread::sleep_for(100ms);
+
+  auto handle = action_client.send_goal(7, [&](const int& value) {
+    feedback.store(value);
+    cv.notify_all();
+  });
+  const auto result = handle->result(3.0);
+  CHECK(result.status == krosc::GoalStatus::Succeeded);
+  CHECK(result.result.has_value());
+  CHECK_EQ(8, std::any_cast<int>(result.result));
+  CHECK_EQ(14, feedback.load());
+
+  lock.unlock();
+  action_client.shutdown();
+  action_server.shutdown();
+  client.shutdown();
+  server.shutdown();
 }

@@ -29,6 +29,21 @@ std::string trim(const std::string& text) {
   return text.substr(begin, end - begin + 1);
 }
 
+std::optional<std::array<double, 4>> preset_goal(const std::string& text) {
+  std::string mode = trim(text);
+  for (char& character : mode) {
+    character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+  }
+  if (mode == "home") {
+    // all-zero는 바닥을 향하고, STOW와 구분되는 안전한 기본 자세.
+    return std::array<double, 4>{0.5000, -1.8000, 1.4000, 0.8000};
+  }
+  if (mode == "stow") {
+    return std::array<double, 4>{0.0, -1.9024, 1.3440, 0.9023};
+  }
+  return std::nullopt;
+}
+
 bool parse_double(const std::string& text, double& value) {
   try {
     std::size_t used = 0;
@@ -118,18 +133,9 @@ MoveGroup::MoveGroup(Context& context, std::string name, std::map<std::string, P
       QOS_DEFAULT);
   arm_status_subscription_ = subscribe<msgs::String>(
       "arm_status", [this](const msgs::String& message) { on_arm_status(message); }, QOS_DEFAULT);
-  target_subscription_ = subscribe<msgs::String>(
-      "moveit_target", [this](const msgs::String& message) { on_target(message); }, QOS_DEFAULT);
-  preset_subscription_ = subscribe<msgs::String>(
-      "moveit_preset", [this](const msgs::String& message) { on_preset(message); }, QOS_DEFAULT);
-  plan_subscription_ = subscribe<msgs::Empty>(
-      "moveit_plan", [this](const msgs::Empty& message) { on_plan(message); }, QOS_DEFAULT);
-  execute_subscription_ = subscribe<msgs::Empty>(
-      "moveit_execute", [this](const msgs::Empty& message) { on_execute(message); }, QOS_DEFAULT);
-  cancel_subscription_ = subscribe<msgs::Empty>(
-      "moveit_cancel", [this](const msgs::Empty& message) { on_cancel(message); }, QOS_DEFAULT);
-  scrub_subscription_ = subscribe<msgs::String>(
-      "moveit_scrub", [this](const msgs::String& message) { on_scrub(message); }, QOS_DEFAULT);
+  create_service<msgs::String, msgs::Bool>(
+      Node::name() + "/scrub",
+      [this](const msgs::String& message) { return msgs::Bool{on_scrub(message)}; });
   action_ = std::make_unique<ActionServer<msgs::moveit::MoveGroupGoal,
                                           msgs::moveit::MoveGroupFeedback,
                                           msgs::moveit::MoveGroupResult>>(
@@ -418,7 +424,7 @@ void MoveGroup::publish_target_pose_locked() {
     const msgs::Vector3 proximal = tfmath::apply(tfmath::inverse(chain_.base_to_proximal), point);
     const double yaw =
         std::atan2(proximal.y, proximal.x - chain_.proximal_joint_origin.translation.x);
-    transform = {{target_->x, target_->y, target_->z}, tfmath::from_rpy(0.0, target_->pitch, yaw)};
+    transform = {{target_->x, target_->y, target_->z}, tfmath::from_rpy(0.0, -target_->pitch, yaw)};
   }
   publish("moveit_target_pose", make_pose(base_link_.value(), transform, now()), QOS_DEFAULT);
 }
@@ -574,6 +580,10 @@ bool MoveGroup::goal_from_request_locked(const msgs::moveit::MoveGroupGoal& requ
     error = "joint_states가 없다";
     return false;
   }
+  if (const auto preset = preset_goal(request.preset)) {
+    goal = *preset;
+    return true;
+  }
   if (request.joint_goal.size() == 4) {
     for (std::size_t i = 0; i < 4; ++i) {
       if (request.joint_goal[i] < chain_.lower[i] - 1e-6 ||
@@ -595,7 +605,7 @@ bool MoveGroup::goal_from_request_locked(const msgs::moveit::MoveGroupGoal& requ
   }
   const auto rpy = tfmath::to_rpy(request.target_pose.pose.orientation);
   target.pitch = -rpy.pitch;
-  target.grip = gripper_;
+  target.grip = request.grip >= 0.0 ? std::clamp(request.grip, 0.0, 0.03) : gripper_;
   target.cartesian = request.cartesian;
   target.preview = false;
   std::string ik_error;
@@ -612,7 +622,7 @@ msgs::control::JointTrajectory MoveGroup::to_message_locked(
   message.header = msgs::Header{now(), base_link_.value()};
   message.joint_names = joint_names_.value();
   message.joint_names.push_back("gripper_left_joint");
-  const double grip = target_ ? target_->grip : gripper_;
+  const double grip = action_grip_ >= 0.0 ? action_grip_ : (target_ ? target_->grip : gripper_);
   message.points.reserve(trajectory.points.size());
   for (const auto& point : trajectory.points) {
     msgs::control::JointTrajectoryPoint target;
@@ -643,6 +653,7 @@ void MoveGroup::on_target(const msgs::String& message) {
     publish_status_locked("Target 거부: Execute 중이다");
     return;
   }
+  action_grip_ = -1.0;
   target_ = target;
   joint_goal_.reset();
   goal_.reset();
@@ -654,22 +665,8 @@ void MoveGroup::on_target(const msgs::String& message) {
 }
 
 void MoveGroup::on_preset(const msgs::String& message) {
-  std::string mode = message.data;
-  while (!mode.empty() && (mode.back() == ' ' || mode.back() == '\t')) {
-    mode.pop_back();
-  }
-  const std::size_t begin = mode.find_first_not_of(" \t");
-  mode = begin == std::string::npos ? std::string{} : mode.substr(begin);
-  for (char& character : mode) {
-    character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-  }
-  std::array<double, 4> goal{};
-  if (mode == "home") {
-    // all-zero는 바닥을 향하고, STOW와 구분되는 안전한 기본 자세.
-    goal = {0.5000, -1.8000, 1.4000, 0.8000};
-  } else if (mode == "stow") {
-    goal = {0.0, -1.9024, 1.3440, 0.9023};
-  } else {
+  const auto goal = preset_goal(message.data);
+  if (!goal) {
     std::lock_guard<std::mutex> lock(mutex_);
     publish_status_locked("Preset 오류: home|stow");
     return;
@@ -679,8 +676,9 @@ void MoveGroup::on_preset(const msgs::String& message) {
     publish_status_locked("Preset 거부: Execute 중이다");
     return;
   }
+  action_grip_ = -1.0;
   target_.reset();
-  joint_goal_ = goal;
+  joint_goal_ = *goal;
   goal_.reset();
   trajectory_.reset();
   preview_index_ = 0;
@@ -725,6 +723,7 @@ void MoveGroup::ensure_trajectory_controller() {
 }
 
 void MoveGroup::on_execute(const msgs::Empty&) {
+  action_grip_ = -1.0;
   // controller_manager 서비스는 MoveGroup mutex 밖에서 호출한다.
   // 반대로 잡으면 controller_manager update(자기 mutex) -> joint_states publish ->
   // MoveGroup mutex 대기와 락 순서가 뒤집혀 데드락이 난다.
@@ -802,22 +801,22 @@ void MoveGroup::on_cancel(const msgs::Empty&) {
   }
 }
 
-void MoveGroup::on_scrub(const msgs::String& message) {
+bool MoveGroup::on_scrub(const msgs::String& message) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (executing_ || busy_.load()) {
     publish_status_locked("Preview: Execute 중에는 scrub할 수 없다");
-    return;
+    return false;
   }
   if (!trajectory_ || trajectory_->points.empty()) {
     publish_status_locked("Preview: 계획이 없다");
-    return;
+    return false;
   }
   int index = 0;
   try {
     index = std::stoi(trim(message.data));
   } catch (...) {
     publish_status_locked("Preview: index를 읽을 수 없다");
-    return;
+    return false;
   }
   index = std::clamp(index, 0, static_cast<int>(trajectory_->points.size()) - 1);
   preview_index_ = index;
@@ -828,6 +827,7 @@ void MoveGroup::on_scrub(const msgs::String& message) {
   status.precision(2);
   status << std::fixed << trajectory_->points[static_cast<std::size_t>(index)].time << " s";
   publish_status_locked(status.str());
+  return true;
 }
 
 void MoveGroup::tick() {
@@ -916,6 +916,7 @@ void MoveGroup::heartbeat() {
 
 msgs::moveit::MoveGroupResult MoveGroup::execute_move(const msgs::moveit::MoveGroupGoal& request,
                                                       MoveHandle* handle) {
+  action_grip_ = request.grip >= 0.0 ? std::clamp(request.grip, 0.0, 0.03) : -1.0;
   msgs::moveit::MoveGroupResult result;
   if (busy_.exchange(true)) {
     result.error_code = msgs::moveit::MoveGroupResult::CONTROLLER_FAILED;

@@ -38,24 +38,21 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
   list_period_ = declare_parameter<double>("list_period", 1.0, positive);
   map_server_ = declare_parameter<std::string>("map_server", std::string("map_server"));
   map_saver_ = declare_parameter<std::string>("map_saver", std::string("map_saver"));
-  map_change_topic_ = declare_parameter<std::string>("map_change_topic", std::string("map_change"));
-  map_save_topic_ = declare_parameter<std::string>("map_save_topic", std::string("map_save"));
-  map_delete_topic_ =
-      declare_parameter<std::string>("map_delete_topic", std::string("map_delete"));
-  map_unload_topic_ = declare_parameter<std::string>("map_unload_topic", std::string("map_unload"));
   map_list_topic_ = declare_parameter<std::string>("map_list_topic", std::string("map_list"));
   map_name_topic_ = declare_parameter<std::string>("map_name_topic", std::string("map_name"));
   map_status_topic_ = declare_parameter<std::string>("map_status_topic", std::string("map_status"));
   slam_mode_topic_ = declare_parameter<std::string>("slam_mode_topic", std::string("slam_mode"));
 
-  subscribe<msgs::String>(
-      map_change_topic_.value(), [this](const msgs::String& message) { on_map_change(message); });
-  subscribe<msgs::String>(
-      map_save_topic_.value(), [this](const msgs::String& message) { on_map_save(message); });
-  subscribe<msgs::String>(
-      map_delete_topic_.value(), [this](const msgs::String& message) { on_map_delete(message); });
-  subscribe<msgs::Empty>(
-      map_unload_topic_.value(), [this](const msgs::Empty& message) { on_map_unload(message); });
+  create_service<msgs::nav2::LoadMapRequest, msgs::nav2::LoadMapResponse>(
+      this->name() + "/load_map", [this](const msgs::nav2::LoadMapRequest& request) { return on_load(request); });
+  create_service<msgs::nav2::SaveMapRequest, msgs::nav2::SaveMapResponse>(
+      this->name() + "/save_map", [this](const msgs::nav2::SaveMapRequest& request) { return on_save(request); });
+  create_service<msgs::nav2::DeleteMapRequest, msgs::nav2::DeleteMapResponse>(
+      this->name() + "/delete_map", [this](const msgs::nav2::DeleteMapRequest& request) { return on_delete(request); });
+  create_service<msgs::Empty, msgs::Empty>(
+      this->name() + "/unload_map", [this](const msgs::Empty& request) { return on_unload(request); });
+  create_service<msgs::String, msgs::Bool>(
+      this->name() + "/set_slam_mode", [this](const msgs::String& request) { return on_set_slam_mode(request); });
   create_timer(list_period_.value(), [this] { refresh(); });
   refresh();
   publish_status("ready");
@@ -157,69 +154,133 @@ void MapCatalog::publish_slam_mode(const std::string& mode) {
 }
 
 
-void MapCatalog::on_map_change(const msgs::String& message) {
-  const std::string requested = message.data;
-  if (requested.empty()) {
-    std::string loaded;
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      loaded = loaded_name_;
-      loaded_name_.clear();
-    }
-    if (!loaded.empty() && safe_name(loaded)) {
-      std::error_code error;
-      std::filesystem::remove_all(directory() / loaded, error);
-      if (error) {
-        publish_status("delete failed: " + loaded + " (" + error.message() + ")");
-      } else {
-        publish_status("deleted " + loaded);
-      }
-    } else {
-      publish_status("no map loaded");
-    }
-    try {
-      call_service<msgs::Empty, msgs::Empty>(map_server_.value() + "/unload_map", msgs::Empty{});
-    } catch (const std::exception& error) {
-      logger().warn("map_server unload 실패: %s", error.what());
-    }
-    publish_map_name();
-    publish_slam_mode("idle");
-    refresh();
-    return;
+msgs::nav2::LoadMapResponse MapCatalog::on_load(const msgs::nav2::LoadMapRequest& request) {
+  msgs::nav2::LoadMapResponse response;
+  std::string name = request.map_url;
+  const std::string suffix = "/map.yaml";
+  if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+    name = name.substr(0, name.size() - suffix.size());
   }
-  if (!safe_name(requested)) {
-    publish_status("invalid map name: " + requested);
-    return;
+  if (!safe_name(name)) {
+    publish_status("invalid map name: " + name);
+    response.result = msgs::nav2::LoadMapResponse::RESULT_INVALID_MAP_DATA;
+    return response;
   }
-  const std::filesystem::path yaml = directory() / requested / "map.yaml";
+  const std::filesystem::path yaml = directory() / name / "map.yaml";
   if (!std::filesystem::exists(yaml)) {
-    publish_status("map not found: " + requested);
-    return;
+    publish_status("map not found: " + name);
+    response.result = msgs::nav2::LoadMapResponse::RESULT_MAP_DOES_NOT_EXIST;
+    return response;
   }
   try {
-    msgs::nav2::LoadMapRequest request;
-    request.map_url = requested + "/map.yaml";
-    const auto response =
-        call_service<msgs::nav2::LoadMapRequest, msgs::nav2::LoadMapResponse>(
-            map_server_.value() + "/load_map", request);
+    msgs::nav2::LoadMapRequest load;
+    load.map_url = name + "/map.yaml";
+    response = call_service<msgs::nav2::LoadMapRequest, msgs::nav2::LoadMapResponse>(
+        map_server_.value() + "/load_map", load);
     if (response.result != msgs::nav2::LoadMapResponse::RESULT_SUCCESS) {
-      publish_status("load failed: " + requested + " (" + std::to_string(response.result) + ")");
-      return;
+      publish_status("load failed: " + name + " (" + std::to_string(response.result) + ")");
+      return response;
     }
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      loaded_name_ = requested;
+      loaded_name_ = name;
     }
     publish_slam_mode("localization");
     publish_map_name();
-    publish_status("loaded " + requested);
+    publish_status("loaded " + name);
     refresh();
   } catch (const std::exception& error) {
+    response.result = msgs::nav2::LoadMapResponse::RESULT_UNDEFINED_FAILURE;
     publish_status("load failed: " + std::string(error.what()));
   }
+  return response;
 }
 
-void MapCatalog::on_map_unload(const msgs::Empty&) {
+msgs::nav2::SaveMapResponse MapCatalog::on_save(const msgs::nav2::SaveMapRequest& request) {
+  msgs::nav2::SaveMapResponse response;
+  std::string name = request.map_url;
+  const std::string suffix = "/map";
+  if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+    name = name.substr(0, name.size() - suffix.size());
+  }
+  if (name.empty()) {
+    name = timestamp_name();
+  }
+  if (!safe_name(name)) {
+    publish_status("invalid map name: " + name);
+    return response;
+  }
+  try {
+    msgs::nav2::SaveMapRequest save = request;
+    save.map_url = name + "/map";
+    response = call_service<msgs::nav2::SaveMapRequest, msgs::nav2::SaveMapResponse>(
+        map_saver_.value() + "/save_map", save);
+    if (!response.result) {
+      publish_status("save failed: " + name);
+      return response;
+    }
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      loaded_name_ = name;
+    }
+    publish_map_name();
+    publish_status("saved " + name);
+    refresh();
+  } catch (const std::exception& error) {
+    publish_status("save failed: " + std::string(error.what()));
+  }
+  return response;
+}
+
+msgs::nav2::DeleteMapResponse MapCatalog::on_delete(const msgs::nav2::DeleteMapRequest& request) {
+  msgs::nav2::DeleteMapResponse response;
+  std::string name = request.map_url;
+  const std::string suffix = "/map.yaml";
+  if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+    name = name.substr(0, name.size() - suffix.size());
+  }
+  if (!safe_name(name)) {
+    response.message = "invalid map name: " + name;
+    publish_status(response.message);
+    return response;
+  }
+  bool was_loaded = false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (loaded_name_ == name) {
+      loaded_name_.clear();
+      was_loaded = true;
+    }
+  }
+  std::error_code error;
+  const auto removed = std::filesystem::remove_all(directory() / name, error);
+  if (error) {
+    response.message = "delete failed: " + name + " (" + error.message() + ")";
+    publish_status(response.message);
+    return response;
+  }
+  if (removed == 0) {
+    response.message = "map not found: " + name;
+    publish_status(response.message);
+    return response;
+  }
+  if (was_loaded) {
+    try {
+      call_service<msgs::Empty, msgs::Empty>(map_server_.value() + "/unload_map", msgs::Empty{});
+    } catch (const std::exception& exception) {
+      logger().warn("map_server unload 실패: %s", exception.what());
+    }
+    publish_slam_mode("idle");
+    publish_map_name();
+  }
+  response.result = true;
+  response.message = "deleted " + name;
+  publish_status(response.message);
+  refresh();
+  return response;
+}
+
+msgs::Empty MapCatalog::on_unload(const msgs::Empty&) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     loaded_name_.clear();
@@ -233,74 +294,18 @@ void MapCatalog::on_map_unload(const msgs::Empty&) {
   publish_map_name();
   publish_status("map unloaded");
   refresh();
+  return msgs::Empty{};
 }
 
-void MapCatalog::on_map_delete(const msgs::String& message) {
-  const std::string name = message.data;
-  if (!safe_name(name)) {
-    publish_status("invalid map name: " + name);
-    return;
+msgs::Bool MapCatalog::on_set_slam_mode(const msgs::String& request) {
+  const std::string& mode = request.data;
+  if (mode != "mapping" && mode != "localization" && mode != "idle") {
+    publish_status("invalid slam mode: " + mode);
+    return msgs::Bool{false};
   }
-  bool was_loaded = false;
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (loaded_name_ == name) {
-      loaded_name_.clear();
-      was_loaded = true;
-    }
-  }
-  std::error_code error;
-  const auto removed = std::filesystem::remove_all(directory() / name, error);
-  if (error) {
-    publish_status("delete failed: " + name + " (" + error.message() + ")");
-    return;
-  }
-  if (removed == 0) {
-    publish_status("map not found: " + name);
-    return;
-  }
-  if (was_loaded) {
-    try {
-      call_service<msgs::Empty, msgs::Empty>(map_server_.value() + "/unload_map", msgs::Empty{});
-    } catch (const std::exception& exception) {
-      logger().warn("map_server unload 실패: %s", exception.what());
-    }
-    publish_slam_mode("idle");
-    publish_map_name();
-  }
-  publish_status("deleted " + name);
-  refresh();
-}
-
-void MapCatalog::on_map_save(const msgs::String& message) {
-  std::string name = message.data;
-  if (name.empty()) {
-    name = timestamp_name();
-  }
-  if (!safe_name(name)) {
-    publish_status("invalid map name: " + name);
-    return;
-  }
-  try {
-    msgs::nav2::SaveMapRequest request;
-    request.map_url = name + "/map";
-    const auto response =
-        call_service<msgs::nav2::SaveMapRequest, msgs::nav2::SaveMapResponse>(
-            map_saver_.value() + "/save_map", request);
-    if (!response.result) {
-      publish_status("save failed: " + name);
-      return;
-    }
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      loaded_name_ = name;
-    }
-    publish_map_name();
-    publish_status("saved " + name);
-    refresh();
-  } catch (const std::exception& error) {
-    publish_status("save failed: " + std::string(error.what()));
-  }
+  publish_slam_mode(mode);
+  publish_status("slam mode: " + mode);
+  return msgs::Bool{true};
 }
 
 }  // namespace krosc::nodes

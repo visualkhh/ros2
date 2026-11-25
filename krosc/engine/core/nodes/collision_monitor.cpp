@@ -104,7 +104,9 @@ CollisionMonitor::CollisionMonitor(Context& context, std::string name, std::map<
           declare_parameter<double>("rotation_clearance", 0.22, [](double value) { return value >= 0.0; })),
       rotation_escape_ratio_(declare_parameter<double>("rotation_escape_ratio", 0.5,
                                                       [](double value) { return value >= 0.0 && value <= 1.0; })),
-      enabled_(declare_parameter<bool>("enabled", true)),
+      enabled_(declare_parameter<bool>(
+          "enabled", true, {},
+          [this](const bool& value) { on_enabled(value); })),
       ignore_collision_during_teleop_(declare_parameter<bool>("ignore_collision_during_teleop", false)),
       polygon_names_(declare_parameter<std::vector<std::string>>("polygons",
                                                                  std::vector<std::string>{"PolygonStop", "PolygonSlow"})),
@@ -160,8 +162,6 @@ CollisionMonitor::CollisionMonitor(Context& context, std::string name, std::map<
       cmd_vel_in_topic_.value(), [this](const msgs::Twist& twist) { on_cmd_vel(twist); }, QOS_COMMAND);
   teleop_subscription_ = subscribe<msgs::Twist>(
       teleop_topic_.value(), [this](const msgs::Twist& twist) { on_teleop(twist); }, QOS_COMMAND);
-  enabled_subscription_ = subscribe<msgs::Bool>(
-      "collision_set_enabled", [this](const msgs::Bool& message) { on_enabled(message); }, QOS_DEFAULT);
   publish_status();
   logger().info("CollisionMonitor: in=%s out=%s base=%s polygons=%zu enabled=%s",
                 cmd_vel_in_topic_.value().c_str(), cmd_vel_out_topic_.value().c_str(),
@@ -288,11 +288,10 @@ void CollisionMonitor::on_teleop(const msgs::Twist& twist) {
   last_teleop_ = now();
 }
 
-void CollisionMonitor::on_enabled(const msgs::Bool& message) {
-  enabled_.set(message.data);
-  state_ = enabled_.value() ? "" : "disabled";
+void CollisionMonitor::on_enabled(bool enabled) {
+  state_ = enabled ? "" : "disabled";
   publish_status();
-  logger().info("collision monitor: %s", enabled_.value() ? "enabled" : "disabled");
+  logger().info("collision monitor: %s", enabled ? "enabled" : "disabled");
 }
 
 void CollisionMonitor::publish_status() {

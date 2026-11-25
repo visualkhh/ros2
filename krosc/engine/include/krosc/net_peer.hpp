@@ -29,6 +29,9 @@ struct PeerNetworkOptions {
   // 예: teleop Viz의 cmd_vel → 로봇의 cmd_vel_teleop
   std::map<std::string, std::string> receive_remap;
 
+  // 원격 서비스 호출 타임아웃 (초).
+  double rpc_timeout_sec = 5.0;
+
   // 기존 옵션 호환용. 새 코드는 host/servers를 쓴다.
   std::string bind_address = "0.0.0.0";
   bool listen = false;
@@ -59,8 +62,8 @@ struct PeerNetworkOptions {
 // 로컬 TopicRegistry publish를 가로채 discover/subscribe된 peer에게 보내고,
 // peer에서 온 토픽은 로컬 토픽으로 다시 발행한다 (재브로드캐스트 방지).
 //
-// 서비스/액션은 다음 단계에서 같은 peer 연결 위에 올린다. C++ 액션은 서비스+토픽으로
-// 구현되어 있어 서비스 포워딩이 들어가면 함께 동작할 수 있다.
+// 서비스/액션/파라미터 RPC도 같은 연결 위에 올라간다. 서비스는 type-erased payload로
+// 포워딩되고, 액션은 send_goal/cancel_goal 서비스 + /_action/event 이벤트로 전달된다.
 class PeerNetwork {
  public:
   struct Impl;
@@ -80,6 +83,9 @@ class PeerNetwork {
 
   // 네트워크에서 받은 토픽을 로컬로 발행하는 중인지 (재브로드캐스트 방지).
   [[nodiscard]] static bool receiving();
+
+  // 원격 피어가 광고한 서비스 이름 (디버깅/진단용).
+  [[nodiscard]] std::vector<std::string> remote_services() const;
 
  private:
   std::unique_ptr<Impl> impl_;

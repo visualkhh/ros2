@@ -1,5 +1,8 @@
 #include "krosc/parameter.hpp"
 
+#include "krosc/msgs/rcl_interfaces.hpp"
+#include "krosc/parameter_rpc.hpp"
+
 #include <algorithm>
 #include <utility>
 
@@ -192,6 +195,95 @@ void ParameterManager::publish_event(const ParameterEvent& event) const {
   }
   if (callback) {
     callback(event);
+  }
+}
+
+}  // namespace krosc
+
+namespace krosc {
+
+namespace rcl = msgs::rcl_interfaces;
+
+std::uint8_t parameter_type_id(const ParamValue& value) {
+  switch (value.index()) {
+    case 0:
+      return static_cast<std::uint8_t>(rcl::ParameterType::Bool);
+    case 1:
+      return static_cast<std::uint8_t>(rcl::ParameterType::Integer);
+    case 2:
+      return static_cast<std::uint8_t>(rcl::ParameterType::Double);
+    case 3:
+      return static_cast<std::uint8_t>(rcl::ParameterType::String);
+    case 4:
+      return static_cast<std::uint8_t>(rcl::ParameterType::BoolArray);
+    case 5:
+      return static_cast<std::uint8_t>(rcl::ParameterType::IntegerArray);
+    case 6:
+      return static_cast<std::uint8_t>(rcl::ParameterType::DoubleArray);
+    case 7:
+      return static_cast<std::uint8_t>(rcl::ParameterType::StringArray);
+    default:
+      return static_cast<std::uint8_t>(rcl::ParameterType::NotSet);
+  }
+}
+
+msgs::rcl_interfaces::ParameterValue parameter_value_message(const ParamValue& value) {
+  msgs::rcl_interfaces::ParameterValue message;
+  message.type = parameter_type_id(value);
+  switch (value.index()) {
+    case 0:
+      message.bool_value = std::get<bool>(value);
+      break;
+    case 1:
+      message.integer_value = std::get<std::int64_t>(value);
+      break;
+    case 2:
+      message.double_value = std::get<double>(value);
+      break;
+    case 3:
+      message.string_value = std::get<std::string>(value);
+      break;
+    case 4:
+      for (const bool item : std::get<std::vector<bool>>(value)) {
+        message.bool_array_value.push_back(item);
+      }
+      break;
+    case 5:
+      message.integer_array_value = std::get<std::vector<std::int64_t>>(value);
+      break;
+    case 6:
+      message.double_array_value = std::get<std::vector<double>>(value);
+      break;
+    case 7:
+      message.string_array_value = std::get<std::vector<std::string>>(value);
+      break;
+    default:
+      break;
+  }
+  return message;
+}
+
+ParamValue param_value_from_message(const msgs::rcl_interfaces::ParameterValue& value) {
+  switch (static_cast<rcl::ParameterType>(value.type)) {
+    case rcl::ParameterType::Bool:
+      return value.bool_value;
+    case rcl::ParameterType::Integer:
+      return value.integer_value;
+    case rcl::ParameterType::Double:
+      return value.double_value;
+    case rcl::ParameterType::String:
+      return value.string_value;
+    case rcl::ParameterType::BoolArray:
+      return value.bool_array_value;
+    case rcl::ParameterType::IntegerArray:
+      return value.integer_array_value;
+    case rcl::ParameterType::DoubleArray:
+      return value.double_array_value;
+    case rcl::ParameterType::StringArray:
+      return value.string_array_value;
+    case rcl::ParameterType::NotSet:
+    default:
+      throw ParameterTypeError("ParameterValue type이 설정되지 않았다");
   }
 }
 

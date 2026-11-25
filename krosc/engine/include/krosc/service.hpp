@@ -2,6 +2,7 @@
 
 #include <any>
 #include <functional>
+#include <optional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -36,9 +37,15 @@ struct ServiceBase {
   virtual std::any invoke(const std::any& request) = 0;
 };
 
+using RemoteServiceCall = std::function<std::any(
+    const std::string& name, std::type_index request_type, const void* request,
+    std::type_index response_type)>;
+
 struct ServiceState {
   mutable std::mutex mutex;
   std::unordered_map<std::string, std::shared_ptr<ServiceBase>> services;
+  RemoteServiceCall remote_call;
+  std::function<void()> change_hook;
   bool stopping = false;
 };
 
@@ -73,7 +80,8 @@ class ServiceServer {
   std::weak_ptr<detail::ServiceBase> service_;
 };
 
-// 서비스 이름 -> 서버 하나 (한 프로세스 안). 호출은 지금은 직접(동기) 실행한다.
+// 서비스 이름 -> 서버 하나. 로컬 서버가 있으면 직접(동기) 실행하고,
+// 없으면 PeerNetwork가 설정한 remote_call로 원격 피어에 포워딩한다.
 // 핸들러 예외는 호출자에게 그대로 전파된다.
 class ServiceRegistry {
  public:
@@ -102,6 +110,7 @@ class ServiceRegistry {
       }
       state->services.emplace(name, service);
     }
+    notify_change(state);
     return ServiceServer(state, service);
   }
 
@@ -109,13 +118,29 @@ class ServiceRegistry {
   Res call(const std::string& name, const Req& request) {
     auto state = state_;
     std::shared_ptr<detail::ServiceBase> service;
+    detail::RemoteServiceCall remote;
     {
       std::lock_guard<std::mutex> lock(state->mutex);
       auto it = state->services.find(name);
       if (it == state->services.end()) {
-        throw ServiceNotFoundError("no server for service '" + name + "'");
+        remote = state->remote_call;
+      } else {
+        service = it->second;
       }
-      service = it->second;
+    }
+    if (!service) {
+      if (remote) {
+        std::any response = remote(name, std::type_index(typeid(Req)), &request,
+                                   std::type_index(typeid(Res)));
+        if (!response.has_value()) {
+          throw ServiceNotFoundError("no server for service '" + name + "'");
+        }
+        if (response.type() != typeid(Res)) {
+          throw ServiceTypeError("service '" + name + "' returned " + response.type().name());
+        }
+        return std::any_cast<Res>(std::move(response));
+      }
+      throw ServiceNotFoundError("no server for service '" + name + "'");
     }
     if (service->request_type != std::type_index(typeid(Req)) ||
         service->response_type != std::type_index(typeid(Res))) {
@@ -132,9 +157,21 @@ class ServiceRegistry {
 
   [[nodiscard]] bool has_service(const std::string& name) const;
   [[nodiscard]] std::vector<std::string> names() const;
+  [[nodiscard]] std::optional<std::pair<std::type_index, std::type_index>> service_types(
+      const std::string& name) const;
+  // 네트워크에서 받은 요청을 로컬 서비스로 실행한다. 없거나 타입이 다르면 빈 any.
+  [[nodiscard]] std::any invoke_any(const std::string& name, const std::any& request) const;
+
+  // 로컬에 서비스가 없을 때 원격 피어로 넘긴다 (PeerNetwork가 설정).
+  void set_remote_call(detail::RemoteServiceCall hook);
+  // 서비스 생성/삭제 시 discovery 갱신용.
+  void set_change_hook(std::function<void()> hook);
+
   void shutdown();
 
  private:
+  static void notify_change(const std::shared_ptr<detail::ServiceState>& state);
+
   std::shared_ptr<detail::ServiceState> state_;
 };
 

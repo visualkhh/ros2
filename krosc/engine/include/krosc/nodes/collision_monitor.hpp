@@ -59,7 +59,7 @@ class CollisionMonitor final : public Node {
   void on_scan(const std::string& source, const msgs::LaserScan& scan);
   void on_cmd_vel(const msgs::Twist& twist);
   void on_teleop(const msgs::Twist& twist);
-  void on_enabled(const msgs::Bool& message);
+  void on_enabled(bool enabled);
   [[nodiscard]] std::pair<double, double> check(double linear, double angular);
   void publish_status();
 
@@ -90,7 +90,6 @@ class CollisionMonitor final : public Node {
   std::vector<Subscription<msgs::LaserScan>> scan_subscriptions_;
   Subscription<msgs::Twist> command_subscription_;
   Subscription<msgs::Twist> teleop_subscription_;
-  Subscription<msgs::Bool> enabled_subscription_;
 };
 
 }  // namespace krosc::nodes

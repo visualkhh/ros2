@@ -32,4 +32,12 @@ struct SaveMapResponse {
   bool result = false;
 };
 
+struct DeleteMapRequest {
+  std::string map_url;
+};
+struct DeleteMapResponse {
+  bool result = false;
+  std::string message;
+};
+
 }  // namespace krosc::msgs::nav2

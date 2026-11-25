@@ -20,12 +20,14 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "krosc/context.hpp"
 #include "krosc/net.hpp"
 #include "krosc/qos.hpp"
+#include "krosc/rpc.hpp"
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
@@ -192,6 +194,8 @@ struct Peer : public std::enable_shared_from_this<Peer> {
   std::deque<Frame> queue;
   std::mutex subscription_mutex;
   std::set<std::string> subscriptions;
+  std::mutex services_mutex;
+  std::set<std::string> services;
   bool discovered = false;
 };
 
@@ -221,6 +225,30 @@ struct PeerNetwork::Impl {
   std::condition_variable active_cv;
   int active_threads = 0;
 
+  // ---- RPC ----
+  std::atomic<std::uint32_t> next_rpc_id{1};
+  struct PendingRpc {
+    bool done = false;
+    bool ok = false;
+    std::string response_type;
+    std::vector<std::uint8_t> payload;
+    std::string error;
+  };
+  std::mutex rpc_mutex;
+  std::condition_variable rpc_cv;
+  std::unordered_map<std::uint32_t, PendingRpc> rpc_pending;
+  struct RpcTask {
+    std::shared_ptr<Peer> peer;
+    std::uint32_t request_id = 0;
+    std::string service;
+    std::string request_type;
+    std::vector<std::uint8_t> payload;
+  };
+  std::thread rpc_worker;
+  std::mutex rpc_queue_mutex;
+  std::condition_variable rpc_queue_cv;
+  std::deque<RpcTask> rpc_queue;
+
   void thread_started() {
     std::lock_guard<std::mutex> lock(active_mutex);
     ++active_threads;
@@ -248,6 +276,13 @@ struct PeerNetwork::Impl {
     });
     context.topics().set_subscription_hook([this] { update_subscriptions(); });
     update_subscriptions();
+    context.services().set_remote_call(
+        [this](const std::string& name, std::type_index request_type, const void* request,
+               std::type_index response_type) {
+          return remote_call(name, request_type, request, response_type);
+        });
+    context.services().set_change_hook([this] { advertise_services(); });
+    rpc_worker = std::thread([this] { rpc_loop(); });
 
     if (options.listen_enabled()) {
       listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -299,6 +334,26 @@ struct PeerNetwork::Impl {
     }
     context.topics().set_publish_hook({});
     context.topics().set_subscription_hook({});
+    context.services().set_remote_call({});
+    context.services().set_change_hook({});
+    {
+      std::lock_guard<std::mutex> lock(rpc_mutex);
+      for (auto& [id, pending] : rpc_pending) {
+        (void)id;
+        pending.done = true;
+        pending.ok = false;
+        pending.error = "PeerNetwork 종료";
+      }
+    }
+    rpc_cv.notify_all();
+    {
+      std::lock_guard<std::mutex> lock(rpc_queue_mutex);
+      rpc_queue.clear();
+    }
+    rpc_queue_cv.notify_all();
+    if (rpc_worker.joinable()) {
+      rpc_worker.join();
+    }
     if (listen_fd >= 0) {
       ::shutdown(listen_fd, SHUT_RDWR);
       ::close(listen_fd);
@@ -364,6 +419,19 @@ struct PeerNetwork::Impl {
     return result;
   }
 
+  std::vector<std::string> remote_services() const {
+    std::set<std::string> names;
+    std::lock_guard<std::mutex> lock(peers_mutex);
+    for (const auto& peer : peers) {
+      if (!peer || !peer->alive.load()) {
+        continue;
+      }
+      std::lock_guard<std::mutex> service_lock(peer->services_mutex);
+      names.insert(peer->services.begin(), peer->services.end());
+    }
+    return {names.begin(), names.end()};
+  }
+
   void accept_loop() {
     while (!stopping.load()) {
       sockaddr_in address{};
@@ -385,6 +453,7 @@ struct PeerNetwork::Impl {
       peer->start();
       send_discover(*peer);
       send_subscribe(*peer);
+      send_services(*peer);
     }
   }
 
@@ -407,6 +476,7 @@ struct PeerNetwork::Impl {
       peer->start();
       send_discover(*peer);
       send_subscribe(*peer);
+      send_services(*peer);
       while (!stopping.load() && peer->alive.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
@@ -478,6 +548,30 @@ struct PeerNetwork::Impl {
     send_control(peer, "__discover", join_lines(lines));
   }
 
+  std::vector<std::string> service_names() const {
+    return context.services().names();
+  }
+
+  void send_services(Peer& peer) {
+    send_control(peer, "__services", join_lines(service_names()));
+  }
+
+  void advertise_services() {
+    if (!started || stopping.load()) {
+      return;
+    }
+    std::vector<std::shared_ptr<Peer>> snapshot;
+    {
+      std::lock_guard<std::mutex> lock(peers_mutex);
+      snapshot = peers;
+    }
+    for (const auto& peer : snapshot) {
+      if (peer && peer->alive.load()) {
+        send_services(*peer);
+      }
+    }
+  }
+
   void send_subscribe(Peer& peer) {
     std::vector<std::string> topics;
     {
@@ -521,9 +615,228 @@ struct PeerNetwork::Impl {
     }
   }
 
+  void send_rpc_error(const std::shared_ptr<Peer>& peer, std::uint32_t request_id,
+                      const std::string& request_type, const std::string& error) {
+    if (!peer || !peer->alive.load()) {
+      return;
+    }
+    RpcEnvelope response;
+    response.request_id = request_id;
+    response.status = kRpcError;
+    response.request_type = request_type;
+    response.error = error;
+    Frame frame;
+    frame.type = kFrameRpcResponse;
+    frame.kind = Kind::Rpc;
+    frame.payload = encode_rpc_envelope(response);
+    peer->send(frame);
+  }
+
+  std::any remote_call(const std::string& service, std::type_index request_type,
+                       const void* request, std::type_index response_type) {
+    if (stopping.load()) {
+      throw std::runtime_error("PeerNetwork가 종료됐다");
+    }
+    std::string request_name;
+    if (request_type == std::type_index(typeid(SendGoalRequest))) {
+      request_name = "krosc/action/SendGoalRequest";
+    } else if (request_type == std::type_index(typeid(CancelGoalRequest))) {
+      request_name = "krosc/action/CancelGoalRequest";
+    } else {
+      const auto name = rpc_type_name(request_type);
+      if (!name) {
+        throw std::runtime_error("원격 서비스 요청 타입이 등록되지 않았다: " + service);
+      }
+      request_name = *name;
+    }
+    const auto response_name = rpc_type_name(response_type);
+    if (!response_name) {
+      throw std::runtime_error("원격 서비스 응답 타입이 등록되지 않았다: " + service);
+    }
+    std::vector<std::uint8_t> payload = encode_rpc_request(service, request_type, request);
+    if ((request_type == std::type_index(typeid(SendGoalRequest)) ||
+         request_type == std::type_index(typeid(CancelGoalRequest))) &&
+        payload.empty()) {
+      throw std::runtime_error("액션 goal을 인코딩하지 못했다: " + service);
+    }
+
+    // 서비스 광고를 보고 대상 peer를 고른다. 아직 광고 전이면 연결된 모두에게 보낸다.
+    std::vector<std::shared_ptr<Peer>> all;
+    {
+      std::lock_guard<std::mutex> lock(peers_mutex);
+      all = peers;
+    }
+    std::vector<std::shared_ptr<Peer>> targets;
+    std::vector<std::shared_ptr<Peer>> unknown;
+    for (const auto& peer : all) {
+      if (!peer || !peer->alive.load()) {
+        continue;
+      }
+      bool advertised = false;
+      bool has = false;
+      {
+        std::lock_guard<std::mutex> lock(peer->services_mutex);
+        advertised = !peer->services.empty();
+        has = peer->services.count(service) != 0;
+      }
+      if (has) {
+        targets.push_back(peer);
+      } else if (!advertised) {
+        unknown.push_back(peer);
+      }
+    }
+    if (targets.empty()) {
+      targets = std::move(unknown);
+    }
+    if (targets.empty()) {
+      throw ServiceNotFoundError("no peer serves '" + service + "'");
+    }
+
+    const std::uint32_t request_id = next_rpc_id.fetch_add(1);
+    {
+      std::lock_guard<std::mutex> lock(rpc_mutex);
+      rpc_pending[request_id] = PendingRpc{};
+    }
+    RpcEnvelope envelope;
+    envelope.request_id = request_id;
+    envelope.status = kRpcRequest;
+    envelope.request_type = request_name;
+    envelope.response_type = *response_name;
+    envelope.payload = std::move(payload);
+    Frame frame;
+    frame.type = kFrameRpcRequest;
+    frame.topic = service;
+    frame.kind = Kind::Rpc;
+    frame.payload = encode_rpc_envelope(envelope);
+    for (const auto& peer : targets) {
+      peer->send(frame);
+    }
+
+    const double timeout = options.rpc_timeout_sec > 0.0 ? options.rpc_timeout_sec : 5.0;
+    PendingRpc result;
+    {
+      std::unique_lock<std::mutex> lock(rpc_mutex);
+      auto it = rpc_pending.find(request_id);
+      if (!rpc_cv.wait_for(lock, std::chrono::duration<double>(timeout), [&] {
+            return it == rpc_pending.end() || it->second.done;
+          })) {
+        rpc_pending.erase(request_id);
+        throw std::runtime_error("service '" + service + "' timeout");
+      }
+      if (it == rpc_pending.end()) {
+        throw std::runtime_error("service '" + service + "' 취소됨");
+      }
+      result = std::move(it->second);
+      rpc_pending.erase(it);
+    }
+    if (!result.ok) {
+      throw std::runtime_error(result.error.empty() ? "remote service failed" : result.error);
+    }
+    std::any response = decode_rpc_response(service, result.response_type, result.payload.data(),
+                                            result.payload.size());
+    if (!response.has_value()) {
+      throw std::runtime_error("service '" + service + "' 응답을 디코드하지 못했다");
+    }
+    return response;
+  }
+
+  void rpc_loop() {
+    while (true) {
+      RpcTask task;
+      {
+        std::unique_lock<std::mutex> lock(rpc_queue_mutex);
+        rpc_queue_cv.wait(lock, [this] { return stopping.load() || !rpc_queue.empty(); });
+        if (rpc_queue.empty()) {
+          if (stopping.load()) {
+            return;
+          }
+          continue;
+        }
+        task = std::move(rpc_queue.front());
+        rpc_queue.pop_front();
+      }
+      if (stopping.load()) {
+        return;
+      }
+      const auto types = context.services().service_types(task.service);
+      if (!types) {
+        continue;  // 이 peer가 서비스 주인이 아니다 (broadcast 요청)
+      }
+      std::any request =
+          decode_rpc_request(task.service, task.request_type, task.payload.data(), task.payload.size());
+      if (!request.has_value()) {
+        send_rpc_error(task.peer, task.request_id, task.request_type,
+                       "service request type mismatch: " + task.service);
+        continue;
+      }
+      std::any response;
+      try {
+        response = context.services().invoke_any(task.service, request);
+      } catch (const std::exception& error) {
+        send_rpc_error(task.peer, task.request_id, task.request_type, error.what());
+        continue;
+      }
+      if (!response.has_value()) {
+        send_rpc_error(task.peer, task.request_id, task.request_type,
+                       "service handler returned no value: " + task.service);
+        continue;
+      }
+      const auto response_name = rpc_type_name(types->second);
+      if (!response_name) {
+        send_rpc_error(task.peer, task.request_id, task.request_type,
+                       "service response type is not registered: " + task.service);
+        continue;
+      }
+      const std::vector<std::uint8_t> payload = encode_rpc_any(types->second, response);
+      RpcEnvelope envelope;
+      envelope.request_id = task.request_id;
+      envelope.status = kRpcOk;
+      envelope.request_type = task.request_type;
+      envelope.response_type = *response_name;
+      envelope.payload = payload;
+      Frame frame;
+      frame.type = kFrameRpcResponse;
+      frame.kind = Kind::Rpc;
+      frame.payload = encode_rpc_envelope(envelope);
+      if (task.peer) {
+        task.peer->send(frame);
+      }
+    }
+  }
+
   void on_publish(const std::string& topic, std::type_index type,
                   const std::shared_ptr<const void>& message, QoS qos) {
     if (stopping.load()) {
+      return;
+    }
+    if (type == std::type_index(typeid(ActionEvent))) {
+      // 액션 이벤트는 피드백/결과 타입이 action 이름마다 다르다. 코덱이 없으면 로컬 전용.
+      if (t_origin_peer != nullptr) {
+        return;  // 네트워크에서 받은 이벤트를 다시 뿌리지 않는다
+      }
+      const auto* event = static_cast<const ActionEvent*>(message.get());
+      if (event == nullptr) {
+        return;
+      }
+      const std::vector<std::uint8_t> payload = encode_action_event(topic, *event);
+      if (payload.empty()) {
+        return;
+      }
+      Frame frame;
+      frame.type = kFrameActionEvent;
+      frame.topic = topic;
+      frame.kind = Kind::Rpc;
+      frame.payload = payload;
+      std::vector<std::shared_ptr<Peer>> snapshot;
+      {
+        std::lock_guard<std::mutex> lock(peers_mutex);
+        snapshot = peers;
+      }
+      for (const auto& peer : snapshot) {
+        if (peer && peer->alive.load()) {
+          peer->send(frame);
+        }
+      }
       return;
     }
     const auto kind = message_kind(type);
@@ -562,6 +875,57 @@ struct PeerNetwork::Impl {
   }
 
   void on_frame(Peer& peer, const Frame& frame) {
+    if (frame.type == kFrameRpcResponse) {
+      const auto envelope = decode_rpc_envelope(frame.payload);
+      if (!envelope) {
+        return;
+      }
+      {
+        std::lock_guard<std::mutex> lock(rpc_mutex);
+        const auto found = rpc_pending.find(envelope->request_id);
+        if (found == rpc_pending.end()) {
+          return;  // 늦게 온 응답
+        }
+        PendingRpc& pending = found->second;
+        pending.done = true;
+        pending.ok = envelope->status == kRpcOk;
+        pending.response_type = envelope->response_type;
+        pending.payload = envelope->payload;
+        pending.error = envelope->error;
+      }
+      rpc_cv.notify_all();
+      return;
+    }
+    if (frame.type == kFrameRpcRequest) {
+      const auto envelope = decode_rpc_envelope(frame.payload);
+      if (!envelope || envelope->status != kRpcRequest) {
+        return;
+      }
+      RpcTask task;
+      task.peer = peer.shared_from_this();
+      task.request_id = envelope->request_id;
+      task.service = frame.topic;
+      task.request_type = envelope->request_type;
+      task.payload = envelope->payload;
+      {
+        std::lock_guard<std::mutex> lock(rpc_queue_mutex);
+        if (rpc_queue.size() >= 256) {
+          rpc_queue.pop_front();  // RPC 폭주 시 오래된 요청을 버린다
+        }
+        rpc_queue.push_back(std::move(task));
+      }
+      rpc_queue_cv.notify_one();
+      return;
+    }
+    if (frame.type == kFrameActionEvent) {
+      const auto event = decode_action_event(frame.topic, frame.payload.data(), frame.payload.size());
+      if (!event) {
+        return;
+      }
+      ReceiveGuard guard(&peer, frame.topic);
+      context.topics().publish<ActionEvent>(frame.topic, std::move(*event), QOS_DEFAULT);
+      return;
+    }
     if (frame.type == kPeerControl) {
       if (frame.topic == "__discover") {
         const std::string text(frame.payload.begin(), frame.payload.end());
@@ -577,6 +941,16 @@ struct PeerNetwork::Impl {
             remote_topics.insert(name);
           }
         }
+      } else if (frame.topic == "__services") {
+        const std::string text(frame.payload.begin(), frame.payload.end());
+        std::set<std::string> services;
+        for (const auto& line : split_lines(text)) {
+          if (!line.empty()) {
+            services.insert(line);
+          }
+        }
+        std::lock_guard<std::mutex> lock(peer.services_mutex);
+        peer.services = std::move(services);
       } else if (frame.topic == "__subscribe") {
         const std::string text(frame.payload.begin(), frame.payload.end());
         std::set<std::string> requested;
@@ -788,6 +1162,10 @@ void PeerNetwork::shutdown() {
 }
 
 bool PeerNetwork::running() const { return impl_ && impl_->running(); }
+
+std::vector<std::string> PeerNetwork::remote_services() const {
+  return impl_ ? impl_->remote_services() : std::vector<std::string>{};
+}
 
 std::uint16_t PeerNetwork::port() const { return impl_ ? impl_->bound_port : 0; }
 

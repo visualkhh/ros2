@@ -36,6 +36,7 @@ enum class Kind : std::uint8_t {
   PoseCov = 13,
   Empty = 14,
   Bool = 15,
+  Rpc = 16,
 };
 
 struct Frame {

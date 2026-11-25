@@ -8,20 +8,22 @@
 #include <string>
 #include <vector>
 
+#include "krosc/msgs/nav2_srv.hpp"
 #include "krosc/node.hpp"
 
 namespace krosc::nodes {
 
 // krosc map_catalog: 지도 목록/선택 UI를 담당하고, 실제 로드/저장은
 // map_server(nav2)와 map_saver(nav2) 서비스에 맡긴다.
-// - map_change (String): 지도 이름을 불러오고 localization 모드로. 빈 이름이면 지금 지도를 내리고 그 폴더를 지운다.
-// - map_save (String): map_saver/save_map으로 maps_directory/<이름>/map.yaml + map.pgm 저장. 빈 이름이면 날짜/시각.
-// - map_delete (String): maps_directory/<이름> 폴더를 지운다. 불러온 지도면 map_server에서 내린다.
-// - map_unload (Empty): 지도만 내리고 폴더는 남긴다.
+// - <name>/load_map (LoadMap): 지도 이름을 불러오고 localization 모드로.
+// - <name>/save_map (SaveMap): maps_directory/<이름>/map.yaml + map.pgm 저장. 빈 이름이면 날짜/시각.
+// - <name>/delete_map (DeleteMap): maps_directory/<이름> 폴더를 지운다.
+// - <name>/unload_map (Empty): 지도만 내리고 폴더는 남긴다.
+// - <name>/set_slam_mode (String -> Bool): mapping/localization/idle 전환.
 // - map_list (String, latch): maps_directory 아래 지도 이름들 (한 줄에 하나)
 // - map_name (String, latch): 지금 불러온 지도 이름. 없으면 빈 문자열
 // - map_status (String, latch): 마지막 결과
-// - slam_mode (String, latch): map_change가 localization/idle을 알려 Cartographer가 따라간다.
+// - slam_mode (String, latch): 내부 Cartographer에 알리는 상태 토픽.
 class MapCatalog final : public Node {
  public:
   explicit MapCatalog(Context& context, std::string name = "map_catalog",
@@ -37,10 +39,11 @@ class MapCatalog final : public Node {
 
  private:
   void refresh();
-  void on_map_change(const msgs::String& message);
-  void on_map_save(const msgs::String& message);
-  void on_map_delete(const msgs::String& message);
-  void on_map_unload(const msgs::Empty& message);
+  msgs::nav2::LoadMapResponse on_load(const msgs::nav2::LoadMapRequest& request);
+  msgs::nav2::SaveMapResponse on_save(const msgs::nav2::SaveMapRequest& request);
+  msgs::nav2::DeleteMapResponse on_delete(const msgs::nav2::DeleteMapRequest& request);
+  msgs::Empty on_unload(const msgs::Empty& request);
+  msgs::Bool on_set_slam_mode(const msgs::String& request);
   void publish_status(const std::string& text);
   void publish_map_name();
   void publish_list();
@@ -54,10 +57,6 @@ class MapCatalog final : public Node {
   Parameter<double> list_period_;
   Parameter<std::string> map_server_;
   Parameter<std::string> map_saver_;
-  Parameter<std::string> map_change_topic_;
-  Parameter<std::string> map_save_topic_;
-  Parameter<std::string> map_delete_topic_;
-  Parameter<std::string> map_unload_topic_;
   Parameter<std::string> map_list_topic_;
   Parameter<std::string> map_name_topic_;
   Parameter<std::string> map_status_topic_;
