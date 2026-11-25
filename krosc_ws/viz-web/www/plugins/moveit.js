@@ -95,6 +95,40 @@ export function init(host) {
         }
       }
 
+      if (host.settings.axes) {
+        const origin = project({ x: 0, y: 0, z: 0 }, width, height);
+        const axes = [
+          [project({ x: 0.08, y: 0, z: 0 }, width, height), '#ff6b6b'],
+          [project({ x: 0, y: 0.08, z: 0 }, width, height), '#54d18c'],
+          [project({ x: 0, y: 0, z: 0.08 }, width, height), '#6aa9ff'],
+        ];
+        if (origin) {
+          context.lineWidth = 1.5;
+          for (const [end, color] of axes) {
+            if (!end) continue;
+            context.strokeStyle = color;
+            context.beginPath(); context.moveTo(origin.x, origin.y); context.lineTo(end.x, end.y); context.stroke();
+          }
+        }
+      }
+      if (host.settings.joint_axes) {
+        for (const point of (host.armPoints ? host.armPoints() : [])) {
+          const origin = project(point, width, height);
+          if (!origin) continue;
+          const axes = [
+            [project({ x: point.x + 0.025, y: point.y, z: point.z }, width, height), '#ff6b6b'],
+            [project({ x: point.x, y: point.y + 0.025, z: point.z }, width, height), '#54d18c'],
+            [project({ x: point.x, y: point.y, z: point.z + 0.025 }, width, height), '#6aa9ff'],
+          ];
+          context.lineWidth = 1;
+          for (const [end, color] of axes) {
+            if (!end) continue;
+            context.strokeStyle = color;
+            context.beginPath(); context.moveTo(origin.x, origin.y); context.lineTo(end.x, end.y); context.stroke();
+          }
+        }
+      }
+
       const target = host.latest('moveit_target_pose');
       targetScreenPoint = null;
       if (target) {

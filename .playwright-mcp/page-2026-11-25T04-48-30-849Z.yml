@@ -1,0 +1,188 @@
+- generic [ref=f43e1]:
+  - banner [ref=f43e2]:
+    - generic [ref=f43e3]: krosc web
+    - generic [ref=f43e4]: websocket
+    - generic [ref=f43e7]: robot connected
+    - button "Fit" [ref=f43e10] [cursor=pointer]
+    - generic [ref=f43e11]:
+      - checkbox "follow robot" [checked] [ref=f43e12]
+      - text: follow robot
+    - generic [ref=f43e13]: 0.00, 0.00
+  - main [ref=f43e14]:
+    - complementary [ref=f43e15]:
+      - generic [ref=f43e16]:
+        - heading "Displays" [level=2] [ref=f43e17]
+        - generic [ref=f43e18]:
+          - generic [ref=f43e19]:
+            - checkbox "Grid" [checked] [ref=f43e20]
+            - text: Grid
+          - generic [ref=f43e21]:
+            - checkbox "Map" [checked] [ref=f43e22]
+            - text: Map
+          - generic [ref=f43e23]:
+            - checkbox "Global costmap" [ref=f43e24]
+            - text: Global costmap
+          - generic [ref=f43e25]:
+            - checkbox "Local costmap" [checked] [ref=f43e26]
+            - text: Local costmap
+          - generic [ref=f43e27]:
+            - checkbox "Laser scan" [checked] [ref=f43e28]
+            - text: Laser scan
+          - generic [ref=f43e29]:
+            - checkbox "Plan" [checked] [ref=f43e30]
+            - text: Plan
+          - generic [ref=f43e31]:
+            - checkbox "Local plan" [checked] [ref=f43e32]
+            - text: Local plan
+          - generic [ref=f43e33]:
+            - checkbox "Robot model" [checked] [ref=f43e34]
+            - text: Robot model
+          - generic [ref=f43e35]:
+            - checkbox "URDF visual" [checked] [ref=f43e36]
+            - text: URDF visual
+          - generic [ref=f43e37]:
+            - checkbox "URDF collision" [ref=f43e38]
+            - text: URDF collision
+          - generic [ref=f43e39]:
+            - checkbox "TF axes" [ref=f43e40]
+            - text: TF axes
+      - generic [ref=f43e41]:
+        - heading "Topics" [level=2] [ref=f43e42]
+        - generic [ref=f43e43]:
+          - generic [ref=f43e44]:
+            - generic [ref=f43e45]: arm_status
+            - generic [ref=f43e46]: String
+            - generic [ref=f43e47]: "-"
+          - generic [ref=f43e48]:
+            - generic [ref=f43e49]: collision_status
+            - generic [ref=f43e50]: String
+            - generic [ref=f43e51]: "-"
+          - generic [ref=f43e52]:
+            - generic [ref=f43e53]: global_costmap/costmap
+            - generic [ref=f43e54]: Grid
+            - generic [ref=f43e55]: "-"
+          - generic [ref=f43e56]:
+            - generic [ref=f43e57]: goal_status
+            - generic [ref=f43e58]: String
+            - generic [ref=f43e59]: "-"
+          - generic [ref=f43e60]:
+            - generic [ref=f43e61]: local_costmap/costmap
+            - generic [ref=f43e62]: Grid
+            - generic [ref=f43e63]: "-"
+          - generic [ref=f43e64]:
+            - generic [ref=f43e65]: map
+            - generic [ref=f43e66]: Grid
+            - generic [ref=f43e67]: "-"
+          - generic [ref=f43e68]:
+            - generic [ref=f43e69]: map_list
+            - generic [ref=f43e70]: String
+            - generic [ref=f43e71]: "-"
+          - generic [ref=f43e72]:
+            - generic [ref=f43e73]: map_status
+            - generic [ref=f43e74]: String
+            - generic [ref=f43e75]: "-"
+          - generic [ref=f43e76]:
+            - generic [ref=f43e77]: moveit_arm
+            - generic [ref=f43e78]: Path
+            - generic [ref=f43e79]: "-"
+          - generic [ref=f43e80]:
+            - generic [ref=f43e81]: moveit_path
+            - generic [ref=f43e82]: Path
+            - generic [ref=f43e83]: "-"
+          - generic [ref=f43e84]:
+            - generic [ref=f43e85]: moveit_state
+            - generic [ref=f43e86]: String
+            - generic [ref=f43e87]: "-"
+          - generic [ref=f43e88]:
+            - generic [ref=f43e89]: moveit_status
+            - generic [ref=f43e90]: String
+            - generic [ref=f43e91]: "-"
+          - generic [ref=f43e92]:
+            - generic [ref=f43e93]: moveit_target_pose
+            - generic [ref=f43e94]: Pose
+            - generic [ref=f43e95]: "-"
+          - generic [ref=f43e96]:
+            - generic [ref=f43e97]: rl_nav_model_list
+            - generic [ref=f43e98]: String
+            - generic [ref=f43e99]: "-"
+          - generic [ref=f43e100]:
+            - generic [ref=f43e101]: rl_nav_status
+            - generic [ref=f43e102]: String
+            - generic [ref=f43e103]: "-"
+          - generic [ref=f43e104]:
+            - generic [ref=f43e105]: robot_description
+            - generic [ref=f43e106]: String
+            - generic [ref=f43e107]: "-"
+          - generic [ref=f43e108]:
+            - generic [ref=f43e109]: slam_status
+            - generic [ref=f43e110]: String
+            - generic [ref=f43e111]: "-"
+          - generic [ref=f43e112]:
+            - generic [ref=f43e113]: tf_static
+            - generic [ref=f43e114]: TF
+            - generic [ref=f43e115]: "-"
+          - generic [ref=f43e116]:
+            - generic [ref=f43e117]: odometry/filtered
+            - generic [ref=f43e118]: Odom
+            - generic [ref=f43e119]: "-"
+          - generic [ref=f43e120]:
+            - generic [ref=f43e121]: tf
+            - generic [ref=f43e122]: TF
+            - generic [ref=f43e123]: "-"
+          - generic [ref=f43e124]:
+            - generic [ref=f43e125]: joint_states
+            - generic [ref=f43e126]: JointState
+            - generic [ref=f43e127]: "-"
+          - generic [ref=f43e128]:
+            - generic [ref=f43e129]: imu
+            - generic [ref=f43e130]: Imu
+            - generic [ref=f43e131]: "-"
+    - generic [ref=f43e132]:
+      - generic [ref=f43e134]:
+        - button "Map" [ref=f43e135] [cursor=pointer]
+        - button "3D" [ref=f43e136] [cursor=pointer]
+        - button "MoveIt" [ref=f43e137] [cursor=pointer]
+      - generic: drag pan · wheel zoom · click 2D goal · WASD teleop
+    - complementary [ref=f43e141]:
+      - generic [ref=f43e142]:
+        - generic [ref=f43e143]:
+          - tab "SLAM / Map" [selected] [ref=f43e144] [cursor=pointer]
+          - tab "Navigation" [ref=f43e145] [cursor=pointer]
+          - tab "Teleop" [ref=f43e146] [cursor=pointer]
+          - tab "Diagnostics" [ref=f43e147] [cursor=pointer]
+          - tab "MoveIt" [ref=f43e148] [cursor=pointer]
+          - tab "RL Nav" [ref=f43e149] [cursor=pointer]
+          - tab "Manipulator" [ref=f43e150] [cursor=pointer]
+        - tabpanel [ref=f43e152]:
+          - generic [ref=f43e153]:
+            - heading "SLAM / Map" [level=2] [ref=f43e154]
+            - generic [ref=f43e155]:
+              - generic [ref=f43e156]:
+                - generic [ref=f43e157]: SLAM
+                - generic [ref=f43e158]: mapping
+              - generic [ref=f43e159]:
+                - generic [ref=f43e160]: map
+                - generic [ref=f43e161]: ready
+              - generic [ref=f43e162]:
+                - generic [ref=f43e163]: collision
+                - generic [ref=f43e164]: "enabled | teleop: collision check off"
+              - generic [ref=f43e165]:
+                - generic [ref=f43e166]: map
+                - combobox [ref=f43e167]:
+                  - option "(select map)" [selected]
+                  - option "gg"
+                  - option "map_20261120_165654"
+                  - option "map_20261120_180125"
+                  - option "map_20261123_183306"
+                  - option "map_20261123_190522"
+                  - option "map_20261123_191152"
+                  - option "map_20261123_193419"
+                  - option "map_20261123_194341"
+                  - option "map_20261123_204217"
+                  - option "map_20261124_134759"
+              - generic [ref=f43e168]:
+                - button "start SLAM" [ref=f43e169] [cursor=pointer]
+                - button "load" [ref=f43e170] [cursor=pointer]
+                - button "unload" [ref=f43e171] [cursor=pointer]
+                - button "save" [ref=f43e172] [cursor=pointer]
+                - button "collision ON" [ref=f43e173] [cursor=pointer]

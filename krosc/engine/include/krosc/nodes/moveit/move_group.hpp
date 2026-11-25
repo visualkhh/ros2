@@ -98,6 +98,7 @@ class MoveGroup final : public Node {
   Parameter<double> cartesian_speed_;
   Parameter<double> cartesian_accel_;
   Parameter<double> sample_time_;
+  Parameter<double> min_tcp_z_;
   Parameter<std::string> arm_stop_topic_;
   Parameter<std::string> kinematics_plugin_;
   Parameter<std::string> planner_plugin_;

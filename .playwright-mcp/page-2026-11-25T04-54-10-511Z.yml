@@ -1,0 +1,200 @@
+- generic [ref=f45e1]:
+  - banner [ref=f45e2]:
+    - generic [ref=f45e3]: krosc web
+    - generic [ref=f45e4]: websocket
+    - generic [ref=f45e7]: robot connected
+    - button "Fit" [ref=f45e10] [cursor=pointer]
+    - generic [ref=f45e11]:
+      - checkbox "follow robot" [checked] [ref=f45e12]
+      - text: follow robot
+    - generic [ref=f45e13]: 0.00, 0.00
+  - main [ref=f45e14]:
+    - complementary [ref=f45e15]:
+      - generic [ref=f45e16]:
+        - heading "Displays" [level=2] [ref=f45e17]
+        - generic [ref=f45e18]:
+          - generic [ref=f45e19]:
+            - checkbox "Grid" [checked] [ref=f45e20]
+            - text: Grid
+          - generic [ref=f45e21]:
+            - checkbox "Map" [checked] [ref=f45e22]
+            - text: Map
+          - generic [ref=f45e23]:
+            - checkbox "Global costmap" [ref=f45e24]
+            - text: Global costmap
+          - generic [ref=f45e25]:
+            - checkbox "Local costmap" [checked] [ref=f45e26]
+            - text: Local costmap
+          - generic [ref=f45e27]:
+            - checkbox "Laser scan" [checked] [ref=f45e28]
+            - text: Laser scan
+          - generic [ref=f45e29]:
+            - checkbox "Plan" [checked] [ref=f45e30]
+            - text: Plan
+          - generic [ref=f45e31]:
+            - checkbox "Local plan" [checked] [ref=f45e32]
+            - text: Local plan
+          - generic [ref=f45e33]:
+            - checkbox "Robot model" [checked] [ref=f45e34]
+            - text: Robot model
+          - generic [ref=f45e35]:
+            - checkbox "URDF visual" [checked] [ref=f45e36]
+            - text: URDF visual
+          - generic [ref=f45e37]:
+            - checkbox "URDF collision" [ref=f45e38]
+            - text: URDF collision
+          - generic [ref=f45e39]:
+            - checkbox "TF axes" [ref=f45e40]
+            - text: TF axes
+      - generic [ref=f45e41]:
+        - heading "Topics" [level=2] [ref=f45e42]
+        - generic [ref=f45e43]:
+          - generic [ref=f45e44]:
+            - generic [ref=f45e45]: arm_status
+            - generic [ref=f45e46]: String
+            - generic [ref=f45e47]: "2.0"
+          - generic [ref=f45e48]:
+            - generic [ref=f45e49]: collision_status
+            - generic [ref=f45e50]: String
+            - generic [ref=f45e51]: "-"
+          - generic [ref=f45e52]:
+            - generic [ref=f45e53]: global_costmap/costmap
+            - generic [ref=f45e54]: Grid
+            - generic [ref=f45e55]: "-"
+          - generic [ref=f45e56]:
+            - generic [ref=f45e57]: goal_status
+            - generic [ref=f45e58]: String
+            - generic [ref=f45e59]: "-"
+          - generic [ref=f45e60]:
+            - generic [ref=f45e61]: local_costmap/costmap
+            - generic [ref=f45e62]: Grid
+            - generic [ref=f45e63]: "5.0"
+          - generic [ref=f45e64]:
+            - generic [ref=f45e65]: map
+            - generic [ref=f45e66]: Grid
+            - generic [ref=f45e67]: "-"
+          - generic [ref=f45e68]:
+            - generic [ref=f45e69]: map_list
+            - generic [ref=f45e70]: String
+            - generic [ref=f45e71]: "-"
+          - generic [ref=f45e72]:
+            - generic [ref=f45e73]: map_status
+            - generic [ref=f45e74]: String
+            - generic [ref=f45e75]: "-"
+          - generic [ref=f45e76]:
+            - generic [ref=f45e77]: moveit_arm
+            - generic [ref=f45e78]: Path
+            - generic [ref=f45e79]: "1.0"
+          - generic [ref=f45e80]:
+            - generic [ref=f45e81]: moveit_path
+            - generic [ref=f45e82]: Path
+            - generic [ref=f45e83]: "1.0"
+          - generic [ref=f45e84]:
+            - generic [ref=f45e85]: moveit_state
+            - generic [ref=f45e86]: String
+            - generic [ref=f45e87]: "1.0"
+          - generic [ref=f45e88]:
+            - generic [ref=f45e89]: moveit_status
+            - generic [ref=f45e90]: String
+            - generic [ref=f45e91]: "1.0"
+          - generic [ref=f45e92]:
+            - generic [ref=f45e93]: moveit_target_pose
+            - generic [ref=f45e94]: Pose
+            - generic [ref=f45e95]: "1.0"
+          - generic [ref=f45e96]:
+            - generic [ref=f45e97]: rl_nav_model_list
+            - generic [ref=f45e98]: String
+            - generic [ref=f45e99]: "-"
+          - generic [ref=f45e100]:
+            - generic [ref=f45e101]: rl_nav_status
+            - generic [ref=f45e102]: String
+            - generic [ref=f45e103]: "1.0"
+          - generic [ref=f45e104]:
+            - generic [ref=f45e105]: robot_description
+            - generic [ref=f45e106]: String
+            - generic [ref=f45e107]: "-"
+          - generic [ref=f45e108]:
+            - generic [ref=f45e109]: slam_status
+            - generic [ref=f45e110]: String
+            - generic [ref=f45e111]: "-"
+          - generic [ref=f45e112]:
+            - generic [ref=f45e113]: tf_static
+            - generic [ref=f45e114]: TF
+            - generic [ref=f45e115]: "-"
+          - generic [ref=f45e116]:
+            - generic [ref=f45e117]: tf
+            - generic [ref=f45e118]: TF
+            - generic [ref=f45e119]: "70.0"
+          - generic [ref=f45e120]:
+            - generic [ref=f45e121]: joint_states
+            - generic [ref=f45e122]: JointState
+            - generic [ref=f45e123]: "50.0"
+          - generic [ref=f45e124]:
+            - generic [ref=f45e125]: odom
+            - generic [ref=f45e126]: Odom
+            - generic [ref=f45e127]: "17.0"
+          - generic [ref=f45e128]:
+            - generic [ref=f45e129]: odometry/filtered
+            - generic [ref=f45e130]: Odom
+            - generic [ref=f45e131]: "20.0"
+          - generic [ref=f45e174]:
+            - generic [ref=f45e175]: imu
+            - generic [ref=f45e176]: Imu
+            - generic [ref=f45e177]: "21.0"
+          - generic [ref=f45e178]:
+            - generic [ref=f45e179]: scan
+            - generic [ref=f45e180]: Scan
+            - generic [ref=f45e181]: "10.0"
+          - generic [ref=f45e182]:
+            - generic [ref=f45e183]: diagnostics
+            - generic [ref=f45e184]: Diagnostics
+            - generic [ref=f45e185]: "2.0"
+    - generic [ref=f45e132]:
+      - generic [ref=f45e134]:
+        - button "Map" [ref=f45e135] [cursor=pointer]
+        - button "3D" [ref=f45e136] [cursor=pointer]
+        - button "MoveIt" [ref=f45e137] [cursor=pointer]
+      - generic: drag pan · wheel zoom · click 2D goal · WASD teleop
+    - complementary [ref=f45e141]:
+      - generic [ref=f45e142]:
+        - generic [ref=f45e143]:
+          - tab "SLAM / Map" [selected] [ref=f45e144] [cursor=pointer]
+          - tab "Navigation" [ref=f45e145] [cursor=pointer]
+          - tab "Teleop" [ref=f45e146] [cursor=pointer]
+          - tab "Diagnostics" [ref=f45e147] [cursor=pointer]
+          - tab "MoveIt" [ref=f45e148] [cursor=pointer]
+          - tab "RL Nav" [ref=f45e149] [cursor=pointer]
+          - tab "Manipulator" [ref=f45e150] [cursor=pointer]
+        - tabpanel [ref=f45e152]:
+          - generic [ref=f45e153]:
+            - heading "SLAM / Map" [level=2] [ref=f45e154]
+            - generic [ref=f45e155]:
+              - generic [ref=f45e156]:
+                - generic [ref=f45e157]: SLAM
+                - generic [ref=f45e158]: mapping
+              - generic [ref=f45e159]:
+                - generic [ref=f45e160]: map
+                - generic [ref=f45e161]: ready
+              - generic [ref=f45e162]:
+                - generic [ref=f45e163]: collision
+                - generic [ref=f45e164]: enabled
+              - generic [ref=f45e165]:
+                - generic [ref=f45e166]: map
+                - combobox [ref=f45e167]:
+                  - option "(select map)" [selected]
+                  - option "gg"
+                  - option "map_20261120_165654"
+                  - option "map_20261120_180125"
+                  - option "map_20261123_183306"
+                  - option "map_20261123_190522"
+                  - option "map_20261123_191152"
+                  - option "map_20261123_193419"
+                  - option "map_20261123_194341"
+                  - option "map_20261123_204217"
+                  - option "map_20261124_134759"
+              - generic [ref=f45e168]:
+                - button "start SLAM" [ref=f45e169] [cursor=pointer]
+                - button "load" [ref=f45e170] [cursor=pointer]
+                - button "unload" [ref=f45e171] [cursor=pointer]
+                - button "save" [ref=f45e172] [cursor=pointer]
+                - button "collision ON" [ref=f45e173] [cursor=pointer]

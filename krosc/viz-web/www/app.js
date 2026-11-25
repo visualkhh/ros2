@@ -29,6 +29,8 @@ const state = {
     tf: false,
     urdf_visual: true,
     urdf_collision: false,
+    axes: true,
+    joint_axes: false,
   },
 };
 
@@ -652,9 +654,53 @@ function activateView(id) {
     : id === 'moveit'
       ? 'TCP 마커 드래그 X/Y · Shift+Z · Ctrl+Pitch · Plan/Execute는 control-panel'
       : 'drag pan · wheel zoom · click 2D goal · WASD teleop';
+  const tools = $('view-tools');
+  if (tools) {
+    tools.style.display = id === '3d' || id === 'moveit' ? 'flex' : 'none';
+  }
+  syncViewTools();
   if (typeof resizeCanvas === 'function') {
     resizeCanvas();
   }
+}
+
+const viewToolDefs = [
+  ['Visual', 'urdf_visual'],
+  ['Collision', 'urdf_collision'],
+  ['Axes', 'axes'],
+  ['Joint Axes', 'joint_axes'],
+  ['Grid', 'grid'],
+  ['Scan', 'scan'],
+];
+
+function syncViewTools() {
+  for (const button of document.querySelectorAll('.view-tool')) {
+    button.classList.toggle('active', Boolean(state.settings[button.dataset.setting]));
+  }
+}
+
+function applyViewSetting(key, value) {
+  state.settings[key] = value;
+  const checkbox = document.querySelector(`#displays input[data-key="${key}"]`);
+  if (checkbox) {
+    checkbox.checked = value;
+  }
+  syncViewTools();
+}
+
+function buildViewTools() {
+  const bar = $('view-tools');
+  if (!bar) return;
+  for (const [label, key] of viewToolDefs) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'view-tool';
+    button.dataset.setting = key;
+    button.textContent = label;
+    button.addEventListener('click', () => applyViewSetting(key, !state.settings[key]));
+    bar.append(button);
+  }
+  syncViewTools();
 }
 
 const host = {
@@ -745,7 +791,11 @@ for (const [key, label] of displays) {
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.checked = state.settings[key];
-  checkbox.addEventListener('change', () => { state.settings[key] = checkbox.checked; });
+  checkbox.dataset.key = key;
+  checkbox.addEventListener('change', () => {
+    state.settings[key] = checkbox.checked;
+    syncViewTools();
+  });
   wrapper.append(checkbox, document.createTextNode(label));
   $('displays').append(wrapper);
 }
@@ -875,6 +925,7 @@ function resizeCanvas() {
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+buildViewTools();
 activateView('map');
 
 function screenToWorld(x, y) {
@@ -1336,6 +1387,58 @@ function draw3dGoal() {
   }
 }
 
+function draw3dAxes() {
+  if (!state.settings.axes) return;
+  const origin = project3d(0, 0, 0);
+  if (!origin) return;
+  const axes = [
+    [project3d(0.6, 0, 0), '#ff6b6b'],
+    [project3d(0, 0.6, 0), '#54d18c'],
+    [project3d(0, 0, 0.6), '#6aa9ff'],
+  ];
+  context3d.lineWidth = 2;
+  for (const [point, color] of axes) {
+    if (!point) continue;
+    context3d.strokeStyle = color;
+    context3d.beginPath();
+    context3d.moveTo(origin.x, origin.y);
+    context3d.lineTo(point.x, point.y);
+    context3d.stroke();
+  }
+}
+
+function draw3dJointAxes() {
+  if (!state.settings.joint_axes) return;
+  const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
+  const c = Math.cos(transform.yaw);
+  const s = Math.sin(transform.yaw);
+  const toWorld = (point) => ({
+    x: transform.x + c * point.x - s * point.y,
+    y: transform.y + s * point.x + c * point.y,
+    z: point.z,
+  });
+  for (const point of armPoints()) {
+    const origin = project3d(toWorld(point).x, toWorld(point).y, point.z);
+    if (!origin) continue;
+    const axes = [
+      [project3d(toWorld({ x: point.x + 0.03, y: point.y, z: point.z }).x,
+                 toWorld({ x: point.x + 0.03, y: point.y, z: point.z }).y, point.z), '#ff6b6b'],
+      [project3d(toWorld({ x: point.x, y: point.y + 0.03, z: point.z }).x,
+                 toWorld({ x: point.x, y: point.y + 0.03, z: point.z }).y, point.z), '#54d18c'],
+      [project3d(toWorld(point).x, toWorld(point).y, point.z + 0.03), '#6aa9ff'],
+    ];
+    context3d.lineWidth = 1;
+    for (const [end, color] of axes) {
+      if (!end) continue;
+      context3d.strokeStyle = color;
+      context3d.beginPath();
+      context3d.moveTo(origin.x, origin.y);
+      context3d.lineTo(end.x, end.y);
+      context3d.stroke();
+    }
+  }
+}
+
 function draw3d() {
   const width = canvas3d.clientWidth;
   const height = canvas3d.clientHeight;
@@ -1349,8 +1452,10 @@ function draw3d() {
     }
   }
   draw3dGrid();
+  draw3dAxes();
   draw3dScan();
   draw3dRobot();
+  draw3dJointAxes();
   draw3dArm();
   draw3dGoal();
 }

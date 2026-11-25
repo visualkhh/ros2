@@ -89,6 +89,7 @@ MoveGroup::MoveGroup(Context& context, std::string name, std::map<std::string, P
                                                  [](double value) { return value > 0.0; })),
       sample_time_(declare_parameter<double>("sample_time", 0.05,
                                              [](double value) { return value > 0.0; })),
+      min_tcp_z_(declare_parameter<double>("min_tcp_z", 0.02)),
       arm_stop_topic_(declare_parameter<std::string>("arm_stop_topic", "arm_stop")),
       kinematics_plugin_(declare_parameter<std::string>("kinematics.plugin",
                                                         "krosc_moveit/ArmChainKinematics")),
@@ -584,6 +585,10 @@ bool MoveGroup::goal_from_request_locked(const msgs::moveit::MoveGroupGoal& requ
   target.x = request.target_pose.pose.position.x;
   target.y = request.target_pose.pose.position.y;
   target.z = request.target_pose.pose.position.z;
+  if (target.z < min_tcp_z_.value()) {
+    error = "target z가 바닥/작업영역보다 낮다";
+    return false;
+  }
   const auto rpy = tfmath::to_rpy(request.target_pose.pose.orientation);
   target.pitch = -rpy.pitch;
   target.grip = gripper_;
@@ -623,6 +628,12 @@ void MoveGroup::on_target(const msgs::String& message) {
     publish_status_locked("Target 오류: " + error);
     return;
   }
+  if (target.z < min_tcp_z_.value()) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    publish_status_locked("Target 거부: 바닥/작업영역보다 낮다 (z=" +
+                          std::to_string(target.z) + ")");
+    return;
+  }
   std::lock_guard<std::mutex> lock(mutex_);
   if (executing_ || busy_.load()) {
     publish_status_locked("Target 거부: Execute 중이다");
@@ -650,8 +661,8 @@ void MoveGroup::on_preset(const msgs::String& message) {
   }
   std::array<double, 4> goal{};
   if (mode == "home") {
-    // 이 마운트에서 all-zero는 팔이 바닥을 향해 걸린다. 안전한 STOW 자세를 HOME으로 쓴다.
-    goal = {0.0, -1.9024, 1.3440, 0.9023};
+    // all-zero는 바닥을 향하고, STOW와 구분되는 안전한 기본 자세.
+    goal = {0.0, -1.2000, 0.8000, 0.3000};
   } else if (mode == "stow") {
     goal = {0.0, -1.9024, 1.3440, 0.9023};
   } else {
