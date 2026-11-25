@@ -42,11 +42,20 @@ constexpr std::size_t kMaxQueue = 512;
 // peer에서 받은 프레임을 로컬에 publish할 때, 그 publish에서 파생된 응답(상태/목록)이
 // peer로 다시 나가지 못하게 막던 문제를 고친다. 이제 "원래 보낸 peer"에게만 되돌려 보내지 않는다.
 thread_local const void* t_origin_peer = nullptr;
+thread_local std::string t_origin_topic;
 
 struct ReceiveGuard {
-  explicit ReceiveGuard(const void* peer) : previous(t_origin_peer) { t_origin_peer = peer; }
-  ~ReceiveGuard() { t_origin_peer = previous; }
-  const void* previous;
+  ReceiveGuard(const void* peer, std::string topic)
+      : previous_peer(t_origin_peer), previous_topic(t_origin_topic) {
+    t_origin_peer = peer;
+    t_origin_topic = std::move(topic);
+  }
+  ~ReceiveGuard() {
+    t_origin_peer = previous_peer;
+    t_origin_topic = previous_topic;
+  }
+  const void* previous_peer;
+  std::string previous_topic;
 };
 
 std::string endpoint_text(const std::string& host, std::uint16_t port) {
@@ -539,8 +548,8 @@ struct PeerNetwork::Impl {
       if (!peer || !peer->alive.load()) {
         continue;
       }
-      if (t_origin_peer == static_cast<const void*>(peer.get())) {
-        continue;  // 보낸 peer에게 그대로 되돌려 보내지 않는다 (에코 방지)
+      if (t_origin_peer == static_cast<const void*>(peer.get()) && t_origin_topic == topic) {
+        continue;  // 같은 토픽만 되돌려 보내지 않는다 (응답/상태는 보낸 peer에도 보낸다)
       }
       {
         std::lock_guard<std::mutex> lock(peer->subscription_mutex);
@@ -613,7 +622,7 @@ struct PeerNetwork::Impl {
       topic = remapped->second;
     }
     const QoS qos = qos_for_remote_topic(topic, frame.type == kPeerTopicLatched);
-    ReceiveGuard guard(&peer);
+    ReceiveGuard guard(&peer, topic);
     switch (frame.kind) {
       case Kind::Twist:
         context.topics().publish<msgs::Twist>(
