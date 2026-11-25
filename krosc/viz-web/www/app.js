@@ -1501,24 +1501,30 @@ function draw3dRobot() {
         draw3dPrimitive(primitive, transform);
       }
     }
-    const points = [];
-    for (const point of armPoints()) {
-      const projected = project3d(transform.x + c * point.x - s * point.y,
-                                 transform.y + s * point.x + c * point.y, point.z);
-      if (projected) points.push(projected);
-    }
-    if (points.length > 1) {
-      context3d.strokeStyle = '#d7dde8';
-      context3d.lineWidth = 2;
-      context3d.beginPath();
-      context3d.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; ++i) context3d.lineTo(points[i].x, points[i].y);
-      context3d.stroke();
-      context3d.fillStyle = '#9aa6b9';
-      for (const point of points) {
+    // 팔은 URDF visual(얇은 박스)로 그린다. visual이 없을 때만 스틱으로 대체.
+    const armPrimitives = urdfPrimitives(isArmLink, true);
+    if (armPrimitives.length > 0) {
+      for (const primitive of armPrimitives) draw3dPrimitive(primitive, transform);
+    } else {
+      const points = [];
+      for (const point of armPoints()) {
+        const projected = project3d(transform.x + c * point.x - s * point.y,
+                                   transform.y + s * point.x + c * point.y, point.z);
+        if (projected) points.push(projected);
+      }
+      if (points.length > 1) {
+        context3d.strokeStyle = '#d7dde8';
+        context3d.lineWidth = 2;
         context3d.beginPath();
-        context3d.arc(point.x, point.y, 3, 0, Math.PI * 2);
-        context3d.fill();
+        context3d.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; ++i) context3d.lineTo(points[i].x, points[i].y);
+        context3d.stroke();
+        context3d.fillStyle = '#9aa6b9';
+        for (const point of points) {
+          context3d.beginPath();
+          context3d.arc(point.x, point.y, 3, 0, Math.PI * 2);
+          context3d.fill();
+        }
       }
     }
   }

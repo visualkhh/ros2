@@ -216,8 +216,14 @@ export function init(host) {
         for (const primitive of (host.urdfPrimitives ? host.urdfPrimitives((name) => !host.isArmLink(name), true) : [])) {
           drawPrimitive(primitive, width, height);
         }
+        const armPrimitives = host.urdfPrimitives
+          ? host.urdfPrimitives((name) => host.isArmLink(name), true) : [];
+        if (armPrimitives.length > 0) {
+          for (const primitive of armPrimitives) drawPrimitive(primitive, width, height);
+        }
         const arm = host.armPoints ? host.armPoints() : [];
-        const points = arm.map((point) => project(point, width, height)).filter(Boolean);
+        const points = armPrimitives.length > 0 ? []
+          : arm.map((point) => project(point, width, height)).filter(Boolean);
         if (points.length > 1) {
           context.strokeStyle = '#d7dde8';
           context.lineWidth = 2;
