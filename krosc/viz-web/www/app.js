@@ -537,6 +537,16 @@ function urdfTransforms() {
   return transforms;
 }
 
+function urdfLinkFrames() {
+  const transforms = urdfTransforms();
+  if (!transforms) return [];
+  const frames = [];
+  for (const [name, transform] of transforms) {
+    frames.push({ name, point: mat4Apply(transform, [0, 0, 0]) });
+  }
+  return frames;
+}
+
 function urdfPrimitives(filter, useVisual = false) {
   const model = urdfModel();
   const transforms = urdfTransforms();
@@ -757,6 +767,7 @@ const host = {
   armPoints,
   urdfBoxes,
   urdfPrimitives,
+  urdfLinkFrames,
   isArmLink,
   settings: state.settings,
   addView({ id, title }) {
@@ -1354,7 +1365,8 @@ function draw3dPrimitive(primitive, transform) {
       context3d.lineTo(projected[b].x, projected[b].y);
     }
     context3d.stroke();
-    context3d.fillStyle = 'rgba(150, 165, 185, 0.12)';
+    context3d.fillStyle = isArmLink(primitive.name)
+      ? 'rgba(150, 165, 185, 0.14)' : 'rgba(190, 170, 110, 0.22)';
     context3d.beginPath();
     context3d.moveTo(projected[0].x, projected[0].y);
     for (const point of projected.slice(1)) context3d.lineTo(point.x, point.y);
@@ -1382,6 +1394,12 @@ function draw3dPrimitive(primitive, transform) {
       context3d.moveTo(top[i].x, top[i].y); context3d.lineTo(bottom[i].x, bottom[i].y);
     }
     context3d.stroke();
+    context3d.fillStyle = 'rgba(190, 170, 110, 0.20)';
+    context3d.beginPath();
+    context3d.moveTo(top[0].x, top[0].y);
+    for (const point of top.slice(1)) context3d.lineTo(point.x, point.y);
+    context3d.closePath();
+    context3d.fill();
   } else if (primitive.type === 'sphere') {
     const center = projectBasePoint(primitive.center, transform, c, s);
     if (!center) return;
@@ -1479,6 +1497,31 @@ function draw3dGoal() {
   }
 }
 
+function draw3dLinkAxes() {
+  if (!state.settings.axes) return;
+  const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
+  const c = Math.cos(transform.yaw);
+  const s = Math.sin(transform.yaw);
+  for (const frame of urdfLinkFrames()) {
+    if (frame.name === 'base_link') continue;
+    const x = transform.x + c * frame.point[0] - s * frame.point[1];
+    const y = transform.y + s * frame.point[0] + c * frame.point[1];
+    const origin = project3d(x, y, frame.point[2]);
+    if (!origin) continue;
+    const axes = [
+      [project3d(x + 0.03, y, frame.point[2]), '#ff6b6b'],
+      [project3d(x, y + 0.03, frame.point[2]), '#54d18c'],
+      [project3d(x, y, frame.point[2] + 0.03), '#6aa9ff'],
+    ];
+    context3d.lineWidth = 1;
+    for (const [end, color] of axes) {
+      if (!end) continue;
+      context3d.strokeStyle = color;
+      context3d.beginPath(); context3d.moveTo(origin.x, origin.y); context3d.lineTo(end.x, end.y); context3d.stroke();
+    }
+  }
+}
+
 function draw3dAxes() {
   if (!state.settings.axes) return;
   const origin = project3d(0, 0, 0);
@@ -1545,6 +1588,7 @@ function draw3d() {
   }
   draw3dGrid();
   draw3dAxes();
+  draw3dLinkAxes();
   draw3dScan();
   draw3dRobot();
   draw3dJointAxes();
