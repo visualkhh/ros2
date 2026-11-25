@@ -287,10 +287,12 @@ int main(int argc, char** argv) {
   krosc::nodes::Cartographer cartographer(
       context, "cartographer_node",
       {{"mode", std::string(slam ? "mapping" : "idle")},
-       {"match_every", std::int64_t{4}},
+       {"match_every", std::int64_t{2}},
        {"num_matching_points", std::int64_t{20}},
-       {"linear_search_window", 0.05},
-       {"angular_search_window", 3.0 * kDegreesToRadians},
+       // 직진 0.26 m/s에서 매칭 간격(2스캔=0.2s) 동안 약 5cm 이동한다.
+       // 기존 ±5cm/±3° 창은 이동량을 못 따라가 매칭이 자주 기각됐다(localization 드리프트).
+       {"linear_search_window", 0.20},
+       {"angular_search_window", 12.0 * kDegreesToRadians},
        {"map_publish_period_sec", 2.0},
        {"tf_publish_period_sec", 0.05},
        {"tf_smoothing", 0.35}});
@@ -334,6 +336,51 @@ int main(int argc, char** argv) {
        {"robot_radius", 0.22},
        {"inflation_radius", 0.55},
        {"cost_scaling_factor", 3.0}});
+  // Viz에서 costmap 인플레이션/스케일을 실시간으로 바꾼다.
+  //   costmap_params: "global,inflation_radius,0.6;local,cost_scaling_factor,4.0"
+  krosc::Node costmap_params_node(context, "costmap_params");
+  [[maybe_unused]] auto costmap_params_subscription = costmap_params_node.subscribe<krosc::msgs::String>(
+      "costmap_params",
+      [&global_costmap, &local_costmap, &costmap_params_node](const krosc::msgs::String& message) {
+        std::stringstream items(message.data);
+        std::string item;
+        while (std::getline(items, item, ';')) {
+          std::stringstream fields(item);
+          std::string target;
+          std::string key;
+          std::string value;
+          if (!std::getline(fields, target, ',') || !std::getline(fields, key, ',') ||
+              !std::getline(fields, value, ',')) {
+            continue;
+          }
+          krosc::Node* node = target == "global" ? &global_costmap
+                              : target == "local" ? &local_costmap
+                                                  : nullptr;
+          if (node == nullptr || (key != "inflation_radius" && key != "cost_scaling_factor")) {
+            continue;
+          }
+          double number = 0.0;
+          try {
+            number = std::stod(value);
+            node->set_parameter(key, number);
+          } catch (const std::exception& error) {
+            costmap_params_node.logger().warn("costmap_params: %s", error.what());
+          }
+        }
+      },
+      krosc::QOS_DEFAULT);
+  [[maybe_unused]] auto costmap_params_timer = costmap_params_node.create_timer(1.0, [&] {
+    std::ostringstream text;
+    text << "global.inflation_radius="
+         << global_costmap.get_parameter_as<double>("inflation_radius")
+         << ";global.cost_scaling_factor="
+         << global_costmap.get_parameter_as<double>("cost_scaling_factor")
+         << ";local.inflation_radius=" << local_costmap.get_parameter_as<double>("inflation_radius")
+         << ";local.cost_scaling_factor="
+         << local_costmap.get_parameter_as<double>("cost_scaling_factor");
+    costmap_params_node.publish("costmap_params_state", krosc::msgs::String{text.str()},
+                                krosc::QOS_LATCHED);
+  });
   krosc::nodes::nav2::PlannerServer planner_server(
       context, global_costmap, "planner_server",
       {{"planner_plugins", std::vector<std::string>{"GridBased"}},

@@ -36,6 +36,7 @@ int main(int argc, char** argv) {
   // 프로젝트 플러그인이 쓰는 토픽. 코어 웹 게이트웨이는 기본 토픽만 안다.
   options.forward_topics = {
       {"arm_status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
+      {"costmap_params_state", krosc::net::Kind::String, krosc::QOS_LATCHED},
       {"moveit_status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"moveit_state", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"moveit_target_pose", krosc::net::Kind::Pose, krosc::QOS_DEFAULT},

@@ -112,6 +112,67 @@ export function init(host) {
     updateUi();
   });
 
+  // costmap inflation / scaling (로봇에서 5Hz로 갱신되는 값을 읽고, Apply로 즉시 변경)
+  const costmapTitle = document.createElement('div');
+  costmapTitle.className = 'muted';
+  costmapTitle.textContent = 'COSTMAP (inflation / scaling)';
+  body.append(costmapTitle);
+  const costmapGrid = document.createElement('div');
+  costmapGrid.className = 'moveit-grid';
+  body.append(costmapGrid);
+  const numberField = (label, value, step) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'moveit-field';
+    const name = document.createElement('label');
+    name.textContent = label;
+    const field = document.createElement('input');
+    field.type = 'number';
+    field.step = String(step);
+    field.value = String(value);
+    wrapper.append(name, field);
+    costmapGrid.append(wrapper);
+    return field;
+  };
+  const globalInflation = numberField('global infl (m)', 0.55, 0.05);
+  const globalScaling = numberField('global scale', 3.0, 0.5);
+  const localInflation = numberField('local infl (m)', 0.55, 0.05);
+  const localScaling = numberField('local scale', 3.0, 0.5);
+  const costmapRow = buttonRow(body);
+  button(costmapRow, 'Apply costmap', () => {
+    const text =
+      `global,inflation_radius,${globalInflation.value};` +
+      `global,cost_scaling_factor,${globalScaling.value};` +
+      `local,inflation_radius,${localInflation.value};` +
+      `local,cost_scaling_factor,${localScaling.value}`;
+    host.sendString('costmap_params', text);
+    setLevel(status, 'costmap applied', 'ok');
+  }, 'primary');
+  const costmapState = document.createElement('div');
+  costmapState.className = 'muted';
+  body.append(costmapState);
+
+  host.onTopic('costmap_params_state', (message) => {
+    const values = new Map();
+    for (const item of String(message.data || '').split(';')) {
+      const equal = item.indexOf('=');
+      if (equal < 0) continue;
+      values.set(item.slice(0, equal), item.slice(equal + 1));
+    }
+    const assign = (field, key) => {
+      const value = values.get(key);
+      if (value !== undefined && document.activeElement !== field) {
+        field.value = value;
+      }
+    };
+    assign(globalInflation, 'global.inflation_radius');
+    assign(globalScaling, 'global.cost_scaling_factor');
+    assign(localInflation, 'local.inflation_radius');
+    assign(localScaling, 'local.cost_scaling_factor');
+    costmapState.textContent =
+      `g ${values.get('global.inflation_radius') || '-'} m / ${values.get('global.cost_scaling_factor') || '-'} · ` +
+      `l ${values.get('local.inflation_radius') || '-'} m / ${values.get('local.cost_scaling_factor') || '-'}`;
+  });
+
   setInterval(() => {
     countLabel.textContent = `multi goals: ${host.waypointCount()}`;
   }, 300);
