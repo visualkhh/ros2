@@ -27,6 +27,8 @@ const state = {
     local_plan: true,
     robot: true,
     tf: false,
+    urdf_visual: true,
+    urdf_collision: false,
   },
 };
 
@@ -733,6 +735,8 @@ const displays = [
   ['path', 'Plan'],
   ['local_plan', 'Local plan'],
   ['robot', 'Robot model'],
+  ['urdf_visual', 'URDF visual'],
+  ['urdf_collision', 'URDF collision'],
   ['tf', 'TF axes'],
 ];
 
@@ -1248,28 +1252,46 @@ function draw3dRobot() {
   const transform = frameTransform('base_link') || { x: 0, y: 0, yaw: 0 };
   const c = Math.cos(transform.yaw);
   const s = Math.sin(transform.yaw);
-  const boxes = urdfBoxes(isArmLink);
-  const edges = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6], [3, 7],
-                 [4, 5], [4, 6], [5, 7], [6, 7]];
-  for (const box of boxes) {
-    const projected = box.corners.map((corner) => project3d(
-        transform.x + c * corner[0] - s * corner[1],
-        transform.y + s * corner[0] + c * corner[1], corner[2]));
-    if (projected.some((point) => point === null)) continue;
-    context3d.strokeStyle = '#b8c2d2';
-    context3d.lineWidth = 1;
-    context3d.beginPath();
-    for (const [a, b] of edges) {
-      context3d.moveTo(projected[a].x, projected[a].y);
-      context3d.lineTo(projected[b].x, projected[b].y);
+  if (state.settings.urdf_visual) {
+    const points = [];
+    for (const point of armPoints()) {
+      const projected = project3d(transform.x + c * point.x - s * point.y,
+                                 transform.y + s * point.x + c * point.y, point.z);
+      if (projected) points.push(projected);
     }
-    context3d.stroke();
-    context3d.fillStyle = 'rgba(150, 165, 185, 0.10)';
-    context3d.beginPath();
-    context3d.moveTo(projected[0].x, projected[0].y);
-    for (const point of projected.slice(1)) context3d.lineTo(point.x, point.y);
-    context3d.closePath();
-    context3d.fill();
+    if (points.length > 1) {
+      context3d.strokeStyle = '#d7dde8';
+      context3d.lineWidth = 2;
+      context3d.beginPath();
+      context3d.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; ++i) context3d.lineTo(points[i].x, points[i].y);
+      context3d.stroke();
+      context3d.fillStyle = '#9aa6b9';
+      for (const point of points) {
+        context3d.beginPath();
+        context3d.arc(point.x, point.y, 3, 0, Math.PI * 2);
+        context3d.fill();
+      }
+    }
+  }
+  if (state.settings.urdf_collision) {
+    const boxes = urdfBoxes(isArmLink);
+    const edges = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6], [3, 7],
+                   [4, 5], [4, 6], [5, 7], [6, 7]];
+    for (const box of boxes) {
+      const projected = box.corners.map((corner) => project3d(
+          transform.x + c * corner[0] - s * corner[1],
+          transform.y + s * corner[0] + c * corner[1], corner[2]));
+      if (projected.some((point) => point === null)) continue;
+      context3d.strokeStyle = '#8fa0b7';
+      context3d.lineWidth = 1;
+      context3d.beginPath();
+      for (const [a, b] of edges) {
+        context3d.moveTo(projected[a].x, projected[a].y);
+        context3d.lineTo(projected[b].x, projected[b].y);
+      }
+      context3d.stroke();
+    }
   }
 }
 

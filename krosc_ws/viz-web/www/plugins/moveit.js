@@ -74,8 +74,26 @@ export function init(host) {
         if (c && d) { context.beginPath(); context.moveTo(c.x, c.y); context.lineTo(d.x, d.y); context.stroke(); }
       }
 
-      const boxes = host.urdfBoxes ? host.urdfBoxes(host.isArmLink) : [];
-      for (const box of boxes) drawBox(box, width, height);
+      if (host.settings.urdf_collision) {
+        const boxes = host.urdfBoxes ? host.urdfBoxes(host.isArmLink) : [];
+        for (const box of boxes) drawBox(box, width, height);
+      }
+      if (host.settings.urdf_visual) {
+        const arm = host.armPoints ? host.armPoints() : [];
+        const points = arm.map((point) => project(point, width, height)).filter(Boolean);
+        if (points.length > 1) {
+          context.strokeStyle = '#d7dde8';
+          context.lineWidth = 2;
+          context.beginPath();
+          context.moveTo(points[0].x, points[0].y);
+          for (let i = 1; i < points.length; ++i) context.lineTo(points[i].x, points[i].y);
+          context.stroke();
+          context.fillStyle = '#9aa6b9';
+          for (const point of points) {
+            context.beginPath(); context.arc(point.x, point.y, 3, 0, Math.PI * 2); context.fill();
+          }
+        }
+      }
 
       const target = host.latest('moveit_target_pose');
       targetScreenPoint = null;
