@@ -857,7 +857,7 @@ const host = {
   onGoalSent(listener) { addGoalSentListener(listener); },
   waypointCount() { return state.waypoints.length; },
   clearWaypoints() { state.waypoints = []; },
-  sendWaypoints() { return sendPath('goal_poses', state.waypoints); },
+  sendWaypoints(preview) { return sendPath(preview ? 'preview_goals' : 'goal_poses', state.waypoints); },
   toast,
   robotPose,
   lookup,

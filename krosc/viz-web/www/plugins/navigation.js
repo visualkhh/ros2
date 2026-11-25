@@ -70,8 +70,9 @@ export function init(host) {
       setLevel(status, 'load a map first (localization)', 'warn');
       return;
     }
-    host.sendWaypoints();
-    setLevel(status, `sent ${count} goals`, 'ok');
+    host.sendWaypoints(preview);
+    setLevel(status, preview ? `preview ${count} goals (경로만 표시)` : `sent ${count} goals`,
+             preview ? 'warn' : 'ok');
   }, 'primary');
   button(multiRow, 'Clear', () => {
     host.clearWaypoints();
