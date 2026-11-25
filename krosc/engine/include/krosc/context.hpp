@@ -55,6 +55,8 @@ class Context {
 
  private:
   std::string name_;
+  // 네트워크가 마지막에 소멸하도록 먼저 선언한다 (executor/topics가 먼저 정리된다).
+  std::unique_ptr<net::PeerNetwork> peer_network_;
   // 선언 역순으로 소멸한다: parameters -> timers -> services -> topics -> executor -> time_source.
   std::shared_ptr<TimeSource> time_source_;
   std::unique_ptr<Executor> executor_;
@@ -62,8 +64,6 @@ class Context {
   std::unique_ptr<ServiceRegistry> services_;
   std::unique_ptr<TimerManager> timers_;
   std::unique_ptr<ParameterManager> parameters_;
-  // 네트워크가 다른 멤버들보다 먼저 멈추도록 마지막에 선언한다.
-  std::unique_ptr<net::PeerNetwork> peer_network_;
   mutable std::mutex node_mutex_;
   std::set<std::string> node_names_;
   bool shutdown_ = false;
