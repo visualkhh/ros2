@@ -173,7 +173,8 @@ bool RlNavController::set_fallback_locked(const std::string& kind) {
   if (!inner) {
     return false;
   }
-  inner->configure(*node_, name_ + ".inner_" + kind);
+  // 같은 종류로 다시 전환해도 파라미터 재선언 예외가 나지 않게 인스턴스별 이름을 쓴다.
+  inner->configure(*node_, name_ + ".inner_" + kind + "_" + std::to_string(++fallback_instance_));
   fallback_ = std::move(inner);
   return true;
 }

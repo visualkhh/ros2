@@ -92,6 +92,8 @@ class RlNavController final : public krosc::nodes::nav2::NavControllerPlugin {
   std::string current_model_;
   // 정책 입력 크기에서 역산한 관측 구성 (모델마다 lidar ray 수가 다를 수 있다).
   std::int64_t active_rays_ = 0;
+  // 폴백 컨트롤러를 다시 만들 때 파라미터 이름이 겹치지 않게 하는 인스턴스 번호.
+  std::int64_t fallback_instance_ = 0;
   bool inflation_feature_ = false;
   std::vector<std::string> model_names_;
   std::shared_ptr<const krosc::msgs::LaserScan> scan_;
