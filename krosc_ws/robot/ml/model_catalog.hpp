@@ -22,8 +22,11 @@ inline std::vector<std::string> list_models(const std::string& directory) {
     return found;
   }
   for (const auto& entry : std::filesystem::directory_iterator(base, error)) {
-    if (error || !entry.is_directory(error)) {
+    if (error) {
       break;
+    }
+    if (!entry.is_directory(error)) {
+      continue;  // README.md 같은 파일이 먼저 나와도 계속 스캔한다
     }
     bool has_onnx = false;
     for (const auto& file : std::filesystem::directory_iterator(entry.path(), error)) {
@@ -34,6 +37,10 @@ inline std::vector<std::string> list_models(const std::string& directory) {
         has_onnx = true;
         break;
       }
+    }
+    if (error) {
+      error.clear();
+      continue;
     }
     if (has_onnx) {
       found.push_back(entry.path().filename().string());

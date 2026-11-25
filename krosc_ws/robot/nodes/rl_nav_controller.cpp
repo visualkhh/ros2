@@ -150,6 +150,7 @@ void RlNavController::configure(krosc::Node& node, const std::string& name) {
     }
     if (now - last_model_list_ >= 2.0) {
       last_model_list_ = now;
+      refresh_models_locked();  // 폴더를 새로 추가해도 재시작 없이 목록에 뜨게
       publish_model_list_locked();
     }
   });

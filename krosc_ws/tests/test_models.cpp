@@ -18,6 +18,8 @@ std::filesystem::path make_tree() {
   const auto base = std::filesystem::temp_directory_path() /
                     ("krosc_models_" + std::to_string(::getpid()));
   std::filesystem::remove_all(base);
+  std::filesystem::create_directories(base);
+  std::ofstream(base / "README.md") << "top-level file must not stop the scan";
   std::filesystem::create_directories(base / "alpha");
   std::filesystem::create_directories(base / "beta");
   std::filesystem::create_directories(base / "gamma");
