@@ -31,7 +31,7 @@ export function init(host) {
     host.setMultiGoal(multi);
     multiButton.className = multi ? 'primary' : '';
     hint.textContent = multi
-      ? '맵 클릭 = waypoint 추가 · Backspace = 마지막 취소 · Send로 전체 전송'
+      ? '맵을 누른 채 드래그 = waypoint + 방향 · 클릭만 하면 방향 0 · Backspace = 마지막 취소 · Send로 전송'
       : '맵을 클릭하면 2D goal을 보낸다.';
   });
   button(multiRow, 'Send', () => {

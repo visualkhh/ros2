@@ -995,6 +995,7 @@ let dragging = false;
 let dragged = false;
 let dragStart = { x: 0, y: 0 };
 let lastPointer = { x: 0, y: 0 };
+let waypointDraft = null;  // {x, y, cx, cy}: 누른 지점 + 현재 드래그 지점
 
 function resizeCanvas() {
   const ratio = window.devicePixelRatio || 1;
@@ -1023,6 +1024,14 @@ function worldToScreen(x, y) {
 }
 
 canvas.addEventListener('pointerdown', (event) => {
+  if (state.multiGoal && event.button === 0) {
+    const rect = canvas.getBoundingClientRect();
+    const world = screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
+    waypointDraft = { x: world.x, y: world.y, cx: world.x, cy: world.y };
+    canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    return;
+  }
   dragging = true;
   dragged = false;
   dragStart = { x: event.clientX, y: event.clientY };
@@ -1032,6 +1041,11 @@ canvas.addEventListener('pointermove', (event) => {
   const world = screenToWorld(event.clientX - canvas.getBoundingClientRect().left,
                               event.clientY - canvas.getBoundingClientRect().top);
   $('cursor').textContent = `${world.x.toFixed(2)}, ${world.y.toFixed(2)}`;
+  if (waypointDraft) {
+    waypointDraft.cx = world.x;
+    waypointDraft.cy = world.y;
+    return;
+  }
   if (dragging) {
     const dx = event.clientX - dragStart.x;
     const dy = event.clientY - dragStart.y;
@@ -1042,15 +1056,20 @@ canvas.addEventListener('pointermove', (event) => {
   }
 });
 canvas.addEventListener('pointerup', (event) => {
+  if (waypointDraft) {
+    const dx = waypointDraft.cx - waypointDraft.x;
+    const dy = waypointDraft.cy - waypointDraft.y;
+    const yaw = (dx * dx + dy * dy > 1e-4) ? Math.atan2(dy, dx) : 0;
+    state.waypoints.push({ x: waypointDraft.x, y: waypointDraft.y, yaw });
+    waypointDraft = null;
+    canvas.focus();
+    return;
+  }
   dragging = false;
-  if (!dragged) {
+  if (!dragged && !state.multiGoal) {
     const world = screenToWorld(event.clientX - canvas.getBoundingClientRect().left,
                                 event.clientY - canvas.getBoundingClientRect().top);
-    if (state.multiGoal) {
-      state.waypoints.push({ x: world.x, y: world.y, yaw: 0 });
-    } else {
-      sendGoal(world.x, world.y);
-    }
+    sendGoal(world.x, world.y);
   }
 });
 canvas.addEventListener('wheel', (event) => {
@@ -1319,8 +1338,27 @@ function drawOdometry() {
   }
 }
 
+function drawWaypointArrow(screen, yaw, color) {
+  const length = Math.max(0.45 * view.scale, 18);
+  const tip = { x: screen.x + Math.cos(yaw) * length, y: screen.y - Math.sin(yaw) * length };
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(screen.x, screen.y);
+  context.lineTo(tip.x, tip.y);
+  context.stroke();
+  const angle = Math.atan2(tip.y - screen.y, tip.x - screen.x);
+  context.beginPath();
+  context.moveTo(tip.x, tip.y);
+  context.lineTo(tip.x - Math.cos(angle - 0.45) * 8, tip.y - Math.sin(angle - 0.45) * 8);
+  context.lineTo(tip.x - Math.cos(angle + 0.45) * 8, tip.y - Math.sin(angle + 0.45) * 8);
+  context.closePath();
+  context.fillStyle = color;
+  context.fill();
+}
+
 function drawWaypoints2d() {
-  if (state.waypoints.length === 0) return;
+  if (state.waypoints.length === 0 && !waypointDraft) return;
   const screens = state.waypoints.map((point) => worldToScreen(point.x, point.y));
   context.strokeStyle = 'rgba(255, 179, 107, 0.9)';
   context.lineWidth = 1.5;
@@ -1334,6 +1372,8 @@ function drawWaypoints2d() {
   context.setLineDash([]);
   context.font = '11px system-ui';
   screens.forEach((screen, index) => {
+    const point = state.waypoints[index];
+    drawWaypointArrow(screen, point.yaw || 0, 'rgba(255, 179, 107, 0.95)');
     context.fillStyle = index === screens.length - 1 ? '#ffb36b' : 'rgba(255, 179, 107, 0.75)';
     context.beginPath();
     context.arc(screen.x, screen.y, 7, 0, Math.PI * 2);
@@ -1341,6 +1381,18 @@ function drawWaypoints2d() {
     context.fillStyle = '#1b2230';
     context.fillText(String(index + 1), screen.x - (index + 1 >= 10 ? 6 : 3), screen.y + 4);
   });
+  if (waypointDraft) {
+    const start = worldToScreen(waypointDraft.x, waypointDraft.y);
+    const dx = waypointDraft.cx - waypointDraft.x;
+    const dy = waypointDraft.cy - waypointDraft.y;
+    const yaw = (dx * dx + dy * dy > 1e-4) ? Math.atan2(dy, dx) : 0;
+    drawWaypointArrow(start, yaw, 'rgba(120, 200, 255, 0.95)');
+    context.strokeStyle = 'rgba(120, 200, 255, 0.9)';
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.arc(start.x, start.y, 7, 0, Math.PI * 2);
+    context.stroke();
+  }
 }
 
 function drawRobot() {
@@ -1623,6 +1675,16 @@ function draw3dWaypoints() {
   state.waypoints.forEach((waypoint, index) => {
     const point = project3d(waypoint.x, waypoint.y, 0.05);
     if (!point) return;
+    const tip = project3d(waypoint.x + Math.cos(waypoint.yaw || 0) * 0.45,
+                          waypoint.y + Math.sin(waypoint.yaw || 0) * 0.45, 0.05);
+    if (tip) {
+      context3d.strokeStyle = 'rgba(255, 179, 107, 0.9)';
+      context3d.lineWidth = 1.5;
+      context3d.beginPath();
+      context3d.moveTo(point.x, point.y);
+      context3d.lineTo(tip.x, tip.y);
+      context3d.stroke();
+    }
     context3d.fillStyle = 'rgba(255, 179, 107, 0.9)';
     context3d.beginPath();
     context3d.arc(point.x, point.y, index === state.waypoints.length - 1 ? 5 : 3.5, 0, Math.PI * 2);
