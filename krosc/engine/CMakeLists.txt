@@ -108,6 +108,8 @@ if(KROSC_BUILD_BENCH)
   target_link_libraries(krosc_bench PRIVATE krosc::core)
   add_executable(krosc_nav2_bench benchmarks/nav2_bench.cpp)
   target_link_libraries(krosc_nav2_bench PRIVATE krosc::core)
+  add_executable(krosc_net_bench benchmarks/net_bench.cpp)
+  target_link_libraries(krosc_net_bench PRIVATE krosc::core Threads::Threads)
 endif()
 
 install(TARGETS krosc_core ARCHIVE DESTINATION lib)

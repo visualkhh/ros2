@@ -178,6 +178,7 @@ struct Peer : public std::enable_shared_from_this<Peer> {
 
   void start();
   void send(const Frame& frame);
+  void send(std::shared_ptr<const Frame> frame);
   void close();
   void read_loop();
   void write_loop();
@@ -191,7 +192,7 @@ struct Peer : public std::enable_shared_from_this<Peer> {
   std::thread writer;
   std::mutex queue_mutex;
   std::condition_variable queue_cv;
-  std::deque<Frame> queue;
+  std::deque<std::shared_ptr<const Frame>> queue;
   std::mutex subscription_mutex;
   std::set<std::string> subscriptions;
   std::mutex services_mutex;
@@ -820,20 +821,17 @@ struct PeerNetwork::Impl {
       if (event == nullptr) {
         return;
       }
-      const std::vector<std::uint8_t> payload = encode_action_event(topic, *event);
-      if (payload.empty()) {
-        return;
-      }
-      Frame frame;
-      frame.type = kFrameActionEvent;
-      frame.topic = topic;
-      frame.kind = Kind::Rpc;
-      frame.payload = payload;
       std::vector<std::shared_ptr<Peer>> snapshot;
       {
         std::lock_guard<std::mutex> lock(peers_mutex);
         snapshot = peers;
       }
+      const std::vector<std::uint8_t> payload = encode_action_event(topic, *event);
+      if (payload.empty()) {
+        return;
+      }
+      auto frame = std::make_shared<const Frame>(
+          Frame{kFrameActionEvent, topic, Kind::Rpc, payload});
       for (const auto& peer : snapshot) {
         if (peer && peer->alive.load()) {
           peer->send(frame);
@@ -841,38 +839,54 @@ struct PeerNetwork::Impl {
       }
       return;
     }
-    const auto kind = message_kind(type);
-    if (!kind) {
-      return;
-    }
-    Frame frame;
-    frame.type = qos.latched() ? kPeerTopicLatched : kFrameTopic;
-    frame.topic = topic;
-    frame.kind = *kind;
-    frame.payload = encode_message(type, message.get());
-    if (qos.latched()) {
-      std::lock_guard<std::mutex> lock(latched_mutex);
-      latched[topic] = {*kind, frame.payload};
-    }
+    // 피어가 없거나 아무도 이 토픽을 구독하지 않으면 직렬화/복사를 하지 않는다.
+    // latched는 나중에 붙을 피어를 위해 캐시해야 하므로 항상 인코딩한다.
+    const bool is_latched = qos.latched();
     std::vector<std::shared_ptr<Peer>> snapshot;
     {
       std::lock_guard<std::mutex> lock(peers_mutex);
       snapshot = peers;
     }
+    std::vector<std::shared_ptr<Peer>> targets;
+    targets.reserve(snapshot.size());
     for (const auto& peer : snapshot) {
       if (!peer || !peer->alive.load()) {
         continue;
       }
       if (t_origin_peer == static_cast<const void*>(peer.get()) && t_origin_topic == topic) {
-        continue;  // 같은 토픽만 되돌려 보내지 않는다 (응답/상태는 보낸 peer에도 보낸다)
+        continue;  // 같은 토픽만 되돌려 보내지 않는다 (응답/상태는 보낸 peer에도 전달)
       }
+      bool subscribed = true;
       {
         std::lock_guard<std::mutex> lock(peer->subscription_mutex);
-        if (peer->discovered && peer->subscriptions.count(topic) == 0) {
-          continue;
-        }
+        subscribed = !peer->discovered || peer->subscriptions.count(topic) != 0;
       }
-      peer->send(frame);
+      if (subscribed) {
+        targets.push_back(peer);
+      }
+    }
+    if (targets.empty() && !is_latched) {
+      return;
+    }
+    const auto kind = message_kind(type);
+    if (!kind) {
+      return;
+    }
+    Frame frame;
+    frame.type = is_latched ? kPeerTopicLatched : kFrameTopic;
+    frame.topic = topic;
+    frame.kind = *kind;
+    frame.payload = encode_message(type, message.get());
+    if (is_latched) {
+      std::lock_guard<std::mutex> lock(latched_mutex);
+      latched[topic] = {*kind, frame.payload};
+    }
+    if (targets.empty()) {
+      return;
+    }
+    auto shared = std::make_shared<const Frame>(std::move(frame));
+    for (const auto& peer : targets) {
+      peer->send(shared);
     }
   }
 
@@ -1080,7 +1094,11 @@ void Peer::start() {
 }
 
 void Peer::send(const Frame& frame) {
-  if (!alive.load()) {
+  send(std::make_shared<const Frame>(frame));
+}
+
+void Peer::send(std::shared_ptr<const Frame> frame) {
+  if (!frame || !alive.load()) {
     return;
   }
   {
@@ -1088,12 +1106,12 @@ void Peer::send(const Frame& frame) {
     if (!alive.load()) {
       return;
     }
-    const bool data_frame = frame.type == kFrameTopic || frame.type == kPeerTopicLatched;
-    if (data_frame && latest_only_topic(frame.topic)) {
+    const bool data_frame = frame->type == kFrameTopic || frame->type == kPeerTopicLatched;
+    if (data_frame && latest_only_topic(frame->topic)) {
       for (auto it = queue.rbegin(); it != queue.rend(); ++it) {
-        if (it->topic == frame.topic &&
-            (it->type == kFrameTopic || it->type == kPeerTopicLatched)) {
-          *it = frame;  // 아직 안 나간 같은 토픽 프레임을 최신 값으로 교체
+        if ((*it)->topic == frame->topic &&
+            ((*it)->type == kFrameTopic || (*it)->type == kPeerTopicLatched)) {
+          *it = std::move(frame);  // 아직 안 나간 같은 토픽 프레임을 최신 값으로 교체
           queue_cv.notify_one();
           return;
         }
@@ -1102,7 +1120,7 @@ void Peer::send(const Frame& frame) {
     if (queue.size() >= kMaxQueue) {
       queue.pop_front();
     }
-    queue.push_back(frame);
+    queue.push_back(std::move(frame));
   }
   queue_cv.notify_one();
 }
@@ -1131,7 +1149,7 @@ void Peer::read_loop() {
 
 void Peer::write_loop() {
   while (alive.load()) {
-    Frame frame;
+    std::shared_ptr<const Frame> frame;
     {
       std::unique_lock<std::mutex> lock(queue_mutex);
       queue_cv.wait(lock, [this] { return !alive.load() || !queue.empty(); });
@@ -1141,7 +1159,7 @@ void Peer::write_loop() {
       frame = std::move(queue.front());
       queue.pop_front();
     }
-    if (!write_frame(fd, frame)) {
+    if (!frame || !write_frame(fd, *frame)) {
       close();
       return;
     }

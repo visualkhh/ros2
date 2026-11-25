@@ -35,7 +35,7 @@ class HttpServer {
   void start();
   [[nodiscard]] std::uint16_t port() const { return bound_port_; }
 
-  void broadcast_binary(const std::vector<std::uint8_t>& body);
+  void broadcast_binary(std::vector<std::uint8_t> body);
   void broadcast_text(const std::string& text);
 
  private:
@@ -62,7 +62,7 @@ class HttpServer {
   // 늦게 붙은 브라우저에도 지도/상태/모델 목록을 주기 위해 최신 프레임을 토픽별로 보관한다.
   // 고주기 토픽(tf/scan/odom)은 다음 메시지가 금방 오므로 캐시하지 않는다.
   std::mutex cache_mutex_;
-  std::map<std::string, std::vector<std::uint8_t>> cache_;
+  std::map<std::string, std::shared_ptr<const std::vector<std::uint8_t>>> cache_;
   // 브라우저 전송 주기 제한: 렌더(60fps)보다 자주 보내봐야 큐만 쌓인다.
   std::mutex throttle_mutex_;
   std::map<std::string, std::chrono::steady_clock::time_point> last_forward_;

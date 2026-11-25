@@ -5,9 +5,12 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
+#include <array>
 #include <cerrno>
+#include <cstring>
 #include <chrono>
 #include <thread>
 #include <utility>
@@ -38,20 +41,6 @@ bool read_exact(int fd, std::uint8_t* buffer, std::size_t size) {
   return true;
 }
 
-bool send_all(int fd, const std::uint8_t* data, std::size_t size) {
-  std::size_t offset = 0;
-  while (offset < size) {
-    const ssize_t sent = ::send(fd, data + offset, size - offset, MSG_NOSIGNAL);
-    if (sent < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return false;
-    }
-    offset += static_cast<std::size_t>(sent);
-  }
-  return true;
-}
 
 
 }  // namespace
@@ -134,16 +123,79 @@ bool read_frame(int fd, Frame& frame) {
 }
 
 bool write_frame(int fd, const Frame& frame) {
-  const std::vector<std::uint8_t> encoded = encode_frame(frame);
-  if (encoded.empty()) {
+  if (frame.topic.size() > 0xFFFFu || frame.payload.size() > kMaxFrame) {
     return false;
   }
-  return send_all(fd, encoded.data(), encoded.size());
+  const std::size_t body_size = 3 + frame.topic.size() + 1 + frame.payload.size();
+  if (body_size > kMaxFrame) {
+    return false;
+  }
+  std::array<std::uint8_t, 512> stack_header{};
+  std::vector<std::uint8_t> heap_header;
+  const std::size_t header_size = 4 + 3 + frame.topic.size() + 1;
+  std::uint8_t* header = stack_header.data();
+  if (header_size > stack_header.size()) {
+    heap_header.resize(header_size);
+    header = heap_header.data();
+  }
+  const std::uint32_t length = static_cast<std::uint32_t>(body_size);
+  header[0] = static_cast<std::uint8_t>(length & 0xFF);
+  header[1] = static_cast<std::uint8_t>((length >> 8) & 0xFF);
+  header[2] = static_cast<std::uint8_t>((length >> 16) & 0xFF);
+  header[3] = static_cast<std::uint8_t>((length >> 24) & 0xFF);
+  header[4] = frame.type;
+  const std::uint16_t topic_size = static_cast<std::uint16_t>(frame.topic.size());
+  header[5] = static_cast<std::uint8_t>(topic_size & 0xFF);
+  header[6] = static_cast<std::uint8_t>((topic_size >> 8) & 0xFF);
+  std::memcpy(header + 7, frame.topic.data(), frame.topic.size());
+  header[7 + frame.topic.size()] = static_cast<std::uint8_t>(frame.kind);
+  iovec vectors[2] = {
+      {header, header_size},
+      {const_cast<std::uint8_t*>(frame.payload.data()), frame.payload.size()},
+  };
+  msghdr message{};
+  message.msg_iov = vectors;
+  message.msg_iovlen = frame.payload.empty() ? 1 : 2;
+  while (message.msg_iovlen > 0) {
+    const ssize_t sent = ::sendmsg(fd, &message, MSG_NOSIGNAL);
+    if (sent < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    if (sent == 0) {
+      return false;
+    }
+    std::size_t remaining = static_cast<std::size_t>(sent);
+    while (remaining > 0 && message.msg_iovlen > 0) {
+      iovec& current = message.msg_iov[0];
+      if (remaining >= current.iov_len) {
+        remaining -= current.iov_len;
+        ++message.msg_iov;
+        --message.msg_iovlen;
+      } else {
+        current.iov_base = static_cast<std::uint8_t*>(current.iov_base) + remaining;
+        current.iov_len -= remaining;
+        remaining = 0;
+      }
+    }
+  }
+  return true;
 }
 
 std::optional<std::string> frame_topic(const std::vector<std::uint8_t>& body) {
-  const auto frame = decode_body(body);
-  return frame ? std::optional<std::string>(frame->topic) : std::nullopt;
+  // payload를 디코드/복사하지 않고 topic만 읽는다 (웹 게이트웨이의 고주기 경로).
+  if (body.size() < 4) {
+    return std::nullopt;
+  }
+  const std::uint16_t topic_size =
+      static_cast<std::uint16_t>(body[1]) |
+      static_cast<std::uint16_t>(static_cast<std::uint16_t>(body[2]) << 8);
+  if (3u + topic_size > body.size()) {
+    return std::nullopt;
+  }
+  return std::string(reinterpret_cast<const char*>(body.data() + 3), topic_size);
 }
 
 

@@ -394,7 +394,7 @@ void HttpServer::handle_client(int fd) {
     {
       std::lock_guard<std::mutex> lock(cache_mutex_);
       for (const auto& [topic_name, frame] : cache_) {
-        client->enqueue(0x2, std::make_shared<const std::vector<std::uint8_t>>(frame), topic_name);
+        client->enqueue(0x2, frame, topic_name);
       }
     }
     {
@@ -479,13 +479,10 @@ bool HttpServer::serve_static(int fd, const std::string& target) {
   return false;
 }
 
-void HttpServer::broadcast_binary(const std::vector<std::uint8_t>& body) {
+void HttpServer::broadcast_binary(std::vector<std::uint8_t> body) {
   const auto topic_name = frame_topic(body);
+  const bool keep = topic_name && cacheable(*topic_name);
   if (topic_name) {
-    if (cacheable(*topic_name)) {
-      std::lock_guard<std::mutex> lock(cache_mutex_);
-      cache_[*topic_name] = body;
-    }
     const int period = throttle_period_ms(*topic_name);
     if (period > 0) {
       std::lock_guard<std::mutex> lock(throttle_mutex_);
@@ -498,6 +495,11 @@ void HttpServer::broadcast_binary(const std::vector<std::uint8_t>& body) {
       last = now;
     }
   }
+  auto frame = std::make_shared<const std::vector<std::uint8_t>>(std::move(body));
+  if (keep) {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    cache_[*topic_name] = frame;
+  }
   std::vector<std::shared_ptr<Client>> clients;
   {
     std::lock_guard<std::mutex> lock(clients_mutex_);
@@ -506,7 +508,6 @@ void HttpServer::broadcast_binary(const std::vector<std::uint8_t>& body) {
   if (clients.empty()) {
     return;
   }
-  auto frame = std::make_shared<const std::vector<std::uint8_t>>(body);
   const std::string name = topic_name ? *topic_name : std::string{};
   for (const auto& client : clients) {
     if (client && client->alive.load()) {
