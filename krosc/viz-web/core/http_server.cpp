@@ -249,12 +249,13 @@ struct HttpServer::Client {
 
 HttpServer::HttpServer(std::string bind_address, std::uint16_t port,
                        std::vector<std::string> www_roots, SendHandler send_frame,
-                       ManifestHandler manifest)
+                       ManifestHandler manifest, TextHandler text_handler)
     : bind_address_(std::move(bind_address)),
       port_(port),
       www_roots_(std::move(www_roots)),
       send_frame_(std::move(send_frame)),
-      manifest_(std::move(manifest)) {}
+      manifest_(std::move(manifest)),
+      text_handler_(std::move(text_handler)) {}
 
 HttpServer::~HttpServer() {
   if (stopping_.exchange(true)) {
@@ -407,6 +408,17 @@ void HttpServer::handle_client(int fd) {
         break;
       }
       if (opcode == 0x1) {
+        if (text_handler_) {
+          std::weak_ptr<Client> weak = client;
+          text_handler_(std::string(payload.begin(), payload.end()),
+                        [weak](std::string reply) {
+                          if (auto target = weak.lock()) {
+                            auto frame = std::make_shared<const std::vector<std::uint8_t>>(
+                                reply.begin(), reply.end());
+                            target->enqueue(0x1, std::move(frame));
+                          }
+                        });
+        }
         continue;
       }
       if (opcode == 0x2) {

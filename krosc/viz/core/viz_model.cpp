@@ -3,6 +3,10 @@
 #include <chrono>
 #include <utility>
 
+#include "krosc/msgs/rcl_interfaces.hpp"
+#include "krosc/parameter_rpc.hpp"
+#include "krosc/ros2_control/controller_manager.hpp"
+
 namespace krosc::viz {
 
 namespace {
@@ -303,6 +307,85 @@ std::optional<msgs::TransformStamped> VizModel::transform_in_fixed(const std::st
     return buffer_.lookup_transform(fixed_frame_, frame, std::nullopt);
   } catch (const TransformException&) {
     return std::nullopt;
+  }
+}
+
+bool VizModel::set_parameters(const std::string& node_name,
+                              const std::map<std::string, ParamValue>& values,
+                              std::string& error) {
+  using namespace msgs::rcl_interfaces;
+  SetParametersRequest request;
+  for (const auto& [name, value] : values) {
+    msgs::rcl_interfaces::Parameter parameter;
+    parameter.name = name;
+    parameter.value = parameter_value_message(value);
+    request.parameters.push_back(std::move(parameter));
+  }
+  try {
+    const auto response =
+        node_.call_service<SetParametersRequest, SetParametersResponse>(
+            node_name + "/set_parameters", request);
+    for (const auto& result : response.results) {
+      if (!result.successful) {
+        error = result.reason;
+        return false;
+      }
+    }
+    return true;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
+}
+
+std::optional<ParamValue> VizModel::get_parameter(const std::string& node_name,
+                                                  const std::string& name) {
+  using namespace msgs::rcl_interfaces;
+  GetParametersRequest request;
+  request.names = {name};
+  try {
+    const auto response =
+        node_.call_service<GetParametersRequest, GetParametersResponse>(
+            node_name + "/get_parameters", request);
+    if (response.values.empty() ||
+        response.values[0].type == static_cast<std::uint8_t>(ParameterType::NotSet)) {
+      return std::nullopt;
+    }
+    return param_value_from_message(response.values[0]);
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
+
+bool VizModel::switch_controller(const std::vector<std::string>& start,
+                                 const std::vector<std::string>& stop, int strictness,
+                                 std::string& error) {
+  ros2_control::SwitchControllerRequest request;
+  request.start_controllers = start;
+  request.stop_controllers = stop;
+  request.strictness = strictness;
+  try {
+    const auto response =
+        node_.call_service<ros2_control::SwitchControllerRequest,
+                           ros2_control::SwitchControllerResponse>(
+            "controller_manager/switch_controller", request);
+    error = response.message;
+    return response.ok;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
+}
+
+bool VizModel::trigger(const std::string& service, std::string& message) {
+  try {
+    const auto response = node_.call_service<msgs::TriggerRequest, msgs::TriggerResponse>(
+        service, msgs::TriggerRequest{});
+    message = response.message;
+    return response.success;
+  } catch (const std::exception& exception) {
+    message = exception.what();
+    return false;
   }
 }
 

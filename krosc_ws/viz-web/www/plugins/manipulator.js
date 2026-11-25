@@ -24,15 +24,46 @@ export function init(host) {
   }
   renderTorque();
 
-  const preset = (mode) => {
+  let manualMode = false;
+  const setManualMode = async (manual) => {
+    if (manualMode === manual) return true;
+    try {
+      const response = await host.rpc('controller/switch', {
+        start: manual ? ['arm_command_controller'] : ['joint_trajectory_controller'],
+        stop: manual ? ['joint_trajectory_controller'] : ['arm_command_controller'],
+        strictness: 1,
+      });
+      if (!response.ok) {
+        setLevel(status, `controller 전환 실패: ${response.message}`, 'bad');
+        return false;
+      }
+      manualMode = manual;
+      return true;
+    } catch (error) {
+      setLevel(status, `controller 전환 실패: ${error.message}`, 'bad');
+      return false;
+    }
+  };
+  const preset = async (mode) => {
     torqueOn = true;
     host.sendBool('arm_torque', true);
     renderTorque();
-    host.sendBool('arm_manual', false);
-    host.sendString('moveit_preset', mode);
-    host.sendEmpty('moveit_execute');
-    moving = false;
-    setLevel(status, `${mode.toUpperCase()} → MoveIt 실행`);
+    if (!(await setManualMode(false))) return;
+    try {
+      const response = await host.rpc('moveit/send_goal', {
+        preset: mode,
+        plan_only: false,
+        cartesian: false,
+        grip: -1,
+      });
+      moving = false;
+      setLevel(status, response.accepted
+        ? `${mode.toUpperCase()} → MoveIt 실행`
+        : `MoveIt 거부: ${response.error || 'busy'}`,
+        response.accepted ? '' : 'warn');
+    } catch (error) {
+      setLevel(status, `MoveIt 실패: ${error.message}`, 'bad');
+    }
   };
   button(actions, 'STOW', () => preset('stow'), 'primary');
   button(actions, 'HOME', () => preset('home'));
@@ -99,7 +130,7 @@ export function init(host) {
         host.sendBool('arm_torque', true);
         renderTorque();
       }
-      host.sendBool('arm_manual', true);
+      setManualMode(true);
       target[index] = degrees * RAD;
       moving = true;
     });
@@ -128,7 +159,7 @@ export function init(host) {
       host.sendBool('arm_torque', true);
       renderTorque();
     }
-    host.sendBool('arm_manual', true);
+    setManualMode(true);
     target[4] = mm / 1000;
     moving = true;
   });

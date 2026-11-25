@@ -38,6 +38,7 @@ std::vector<ContextLink::TopicSpec> default_forward_topics() {
       {"diagnostics", Kind::Diagnostics, QOS_DEFAULT},
       {"rosout", Kind::Log, QOS_DEFAULT},
       {"map_list", Kind::String, QOS_LATCHED},
+      {"map_name", Kind::String, QOS_LATCHED},
       {"map_status", Kind::String, QOS_LATCHED},
       {"slam_status", Kind::String, QOS_LATCHED},
       {"goal_status", Kind::String, QOS_LATCHED},
@@ -49,7 +50,10 @@ std::vector<ContextLink::TopicSpec> default_forward_topics() {
 }  // namespace
 
 VizWeb::VizWeb(VizWebOptions options, VizWebPluginRegistry registry, Context& context)
-    : options_(std::move(options)), registry_(std::move(registry)), context_(&context) {}
+    : options_(std::move(options)), registry_(std::move(registry)), context_(&context),
+      rpc_(std::make_unique<WebRpc>(context)) {
+  register_default_web_rpc(*rpc_, context);
+}
 
 VizWeb::~VizWeb() { shutdown(); }
 
@@ -62,6 +66,7 @@ bool VizWeb::initialize(std::string& error) {
     return false;
   }
   link_ = std::make_unique<ContextLink>(*context_);
+  rpc_->start();
   std::vector<std::string> roots;
   if (!options_.overlay_root.empty()) {
     roots.push_back(options_.overlay_root);
@@ -74,7 +79,10 @@ bool VizWeb::initialize(std::string& error) {
           (void)link_->send(frame);
         }
       },
-      [this] { return registry_.manifest_json(); });
+      [this] { return registry_.manifest_json(); },
+      [this](const std::string& text, HttpServer::TextReply reply) {
+        rpc_->handle(text, std::move(reply));
+      });
   link_->set_frame_handler([this](const net::Frame& frame) {
     server_->broadcast_binary(net::encode_body(frame));
   });
@@ -147,6 +155,7 @@ void VizWeb::shutdown() {
     link_->shutdown();
   }
   server_.reset();
+  rpc_->shutdown();
   link_.reset();
   initialized_ = false;
 }

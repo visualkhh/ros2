@@ -94,6 +94,8 @@ struct ContextLink::Impl {
       case net::Kind::Empty:
         subscribe_topic<msgs::Empty>(topic.name, topic.kind, topic.qos);
         break;
+      default:
+        break;
     }
   }
 

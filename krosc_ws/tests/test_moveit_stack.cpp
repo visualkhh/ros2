@@ -12,6 +12,7 @@
 
 #include "krosc/action.hpp"
 #include "krosc/manipulation/arm_chain.hpp"
+#include "krosc/math.hpp"
 #include "krosc/context.hpp"
 #include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/msgs.hpp"
@@ -200,16 +201,38 @@ KROSC_TEST(moveit_ros2_control_real_arm_pipeline) {
   monitor.publish("robot_description", krosc::msgs::String{urdf}, krosc::QOS_LATCHED);
   CHECK(wait_until([&] { return joint_states.load() >= 4; }, 2.0));
 
-  std::ostringstream target_text;
-  target_text << target.x << "," << target.y << "," << target.z << "," << pitch_deg << ",0,1,1";
-  monitor.publish("moveit_target", krosc::msgs::String{target_text.str()}, krosc::QOS_DEFAULT);
-  CHECK(wait_until([&] { return status_contains("Preview: IK ok"); }, 3.0));
-
-  monitor.publish("moveit_plan", krosc::msgs::Empty{}, krosc::QOS_DEFAULT);
-  CHECK(wait_until([&] { return status_contains("Plan OK"); }, 5.0));
+  const double yaw = std::atan2(target.y + 0.000230, target.x - 0.059985);
+  const double pitch = pitch_deg * 3.14159265358979323846 / 180.0;
+  krosc::msgs::moveit::MoveGroupGoal target_goal;
+  target_goal.target_pose.header = krosc::msgs::Header{0.0, "base_link"};
+  target_goal.target_pose.pose.position = {target.x, target.y, target.z};
+  target_goal.target_pose.pose.orientation = krosc::tfmath::from_rpy(0.0, -pitch, yaw);
+  target_goal.cartesian = true;
+  target_goal.grip = 0.0;
+  target_goal.plan_only = true;
+  {
+    krosc::ActionClient<krosc::msgs::moveit::MoveGroupGoal, krosc::msgs::moveit::MoveGroupFeedback,
+                        krosc::msgs::moveit::MoveGroupResult>
+        planner(context, krosc::msgs::moveit::MOVE_ACTION);
+    const auto handle = planner.send_goal(target_goal);
+    const auto result = handle->result(5.0);
+    CHECK(result.status == krosc::GoalStatus::Succeeded);
+    CHECK(result.result.has_value());
+    CHECK_EQ(krosc::msgs::moveit::MoveGroupResult::NONE,
+             std::any_cast<krosc::msgs::moveit::MoveGroupResult>(result.result).error_code);
+  }
+  CHECK(wait_until([&] { return status_contains("Move: plan_only"); }, 5.0));
 
   const double before = hardware->command("joint2");
-  monitor.publish("moveit_execute", krosc::msgs::Empty{}, krosc::QOS_DEFAULT);
+  target_goal.plan_only = false;
+  {
+    krosc::ActionClient<krosc::msgs::moveit::MoveGroupGoal, krosc::msgs::moveit::MoveGroupFeedback,
+                        krosc::msgs::moveit::MoveGroupResult>
+        executor(context, krosc::msgs::moveit::MOVE_ACTION);
+    const auto handle = executor.send_goal(target_goal);
+    const auto result = handle->result(20.0);
+    CHECK(result.status == krosc::GoalStatus::Succeeded);
+  }
   CHECK(wait_until([&] { return status_contains("Execute 완료"); }, 20.0));
   CHECK(std::abs(hardware->command("joint2") - before) > 1e-3);
   for (const auto& joint : {"joint1", "joint2", "joint3", "joint4"}) {

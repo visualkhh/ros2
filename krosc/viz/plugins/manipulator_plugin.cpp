@@ -111,7 +111,7 @@ void ManipulatorPlugin::initialize(VizHost& host) {
       if (!torque_on_) {
         apply_torque(true);
       }
-      host_->model().node().publish("arm_manual", msgs::Bool{true}, QOS_DEFAULT);
+      set_manual_mode(true);
       target_[static_cast<std::size_t>(i)] = static_cast<double>(degrees) * kPi / 180.0;
       moving_ = true;
     });
@@ -138,7 +138,7 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     if (!torque_on_) {
       apply_torque(true);
     }
-    host_->model().node().publish("arm_manual", msgs::Bool{true}, QOS_DEFAULT);
+    set_manual_mode(true);
     target_[4] = static_cast<double>(mm) / 1000.0;
     moving_ = true;
   });
@@ -185,18 +185,16 @@ void ManipulatorPlugin::initialize(VizHost& host) {
     cancel_moveit_if_executing();
     apply_torque(true);
     set_preset({0.0, -1.9024, 1.3440, 0.9023, 0.0});
-    host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
-    host_->model().node().publish("moveit_preset", msgs::String{"stow"}, QOS_DEFAULT);
-    host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
+    set_manual_mode(false);
+    send_move_preset("stow");
     set_status("STOW → MoveIt 실행");
   });
   connect(home, &QPushButton::clicked, this, [this, set_preset, apply_torque] {
     cancel_moveit_if_executing();
     apply_torque(true);
     set_preset({0.5000, -1.8000, 1.4000, 0.8000, 0.0});
-    host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
-    host_->model().node().publish("moveit_preset", msgs::String{"home"}, QOS_DEFAULT);
-    host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
+    set_manual_mode(false);
+    send_move_preset("home");
     set_status("HOME (safe) → MoveIt 실행");
   });
   connect(estop, &QPushButton::clicked, this, [this] {
@@ -209,6 +207,8 @@ void ManipulatorPlugin::initialize(VizHost& host) {
 
   dock_->setWidget(panel);
   host.add_dock(dock_, Qt::RightDockWidgetArea);
+  move_client_ = std::make_unique<MoveClient>(host.model().node().context(),
+                                              krosc::msgs::moveit::MOVE_ACTION);
   send_timer_ = new QTimer(this);
   connect(send_timer_, &QTimer::timeout, this, &ManipulatorPlugin::send_target);
   send_timer_->start(50);
@@ -229,6 +229,11 @@ void ManipulatorPlugin::shutdown() {
   if (refresh_timer_ != nullptr) {
     refresh_timer_->stop();
   }
+  move_handle_.reset();
+  if (move_client_) {
+    move_client_->shutdown();
+    move_client_.reset();
+  }
   if (dock_ != nullptr) {
     dock_->deleteLater();
     dock_ = nullptr;
@@ -239,10 +244,45 @@ void ManipulatorPlugin::cancel_moveit_if_executing() {
   if (host_ == nullptr) {
     return;
   }
-  const auto state = host_->model().moveit_state();
-  if (state != nullptr && state->data.find("executing=1") != std::string::npos) {
-    host_->model().node().publish("moveit_cancel", msgs::Empty{}, QOS_DEFAULT);
+  if (move_handle_ && move_handle_->status() == krosc::GoalStatus::Accepted) {
+    (void)move_handle_->cancel();
   }
+}
+
+void ManipulatorPlugin::set_manual_mode(bool manual) {
+  if (host_ == nullptr || manual_mode_ == manual) {
+    return;
+  }
+  std::string error;
+  const bool ok =
+      manual ? host_->model().switch_controller({"arm_command_controller"},
+                                                {"joint_trajectory_controller"}, 1, error)
+             : host_->model().switch_controller({"joint_trajectory_controller"},
+                                                {"arm_command_controller"}, 1, error);
+  if (!ok) {
+    set_status(QString("controller switch 실패: %1").arg(QString::fromStdString(error)));
+    return;
+  }
+  manual_mode_ = manual;
+}
+
+void ManipulatorPlugin::send_move_preset(const std::string& preset) {
+  if (host_ == nullptr || move_client_ == nullptr) {
+    return;
+  }
+  if (move_handle_ && move_handle_->status() == krosc::GoalStatus::Accepted) {
+    return;
+  }
+  krosc::msgs::moveit::MoveGroupGoal goal;
+  goal.preset = preset;
+  goal.cartesian = false;
+  goal.plan_only = false;
+  move_handle_ = move_client_->send_goal(
+      goal, [this](const krosc::msgs::moveit::MoveGroupFeedback& feedback) {
+        set_status(QString("MoveIt %1 %2%")
+                       .arg(QString::fromStdString(feedback.state))
+                       .arg(static_cast<int>(feedback.progress * 100.0)));
+      });
 }
 
 void ManipulatorPlugin::send_target() {

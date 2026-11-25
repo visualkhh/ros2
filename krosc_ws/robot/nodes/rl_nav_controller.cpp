@@ -60,10 +60,7 @@ RlNavController::~RlNavController() {
 void RlNavController::cancel_subscriptions() {
   scan_subscription_.cancel();
   imu_subscription_.cancel();
-  enable_subscription_.cancel();
-  fallback_subscription_.cancel();
-  reload_subscription_.cancel();
-  model_subscription_.cancel();
+  reload_service_.destroy();
 }
 
 void RlNavController::configure(krosc::Node& node, const std::string& name) {
@@ -72,14 +69,19 @@ void RlNavController::configure(krosc::Node& node, const std::string& name) {
   const auto non_negative = [](double value) { return value >= 0.0; };
   const auto prefix = [&name](const char* suffix) { return name + "." + suffix; };
 
-  enable_ = node_->declare_parameter<bool>(prefix("enable"), false);
+  enable_ = node_->declare_parameter<bool>(
+      prefix("enable"), false, {},
+      [this](const bool& value) { on_enable_value(value); });
   model_path_ = node_->declare_parameter<std::string>(prefix("model_path"), "");
   models_directory_ = node_->declare_parameter<std::string>(
       prefix("models_directory"), std::string(KROSC_WS_MODELS_DIR) + "/rl_nav_controller");
-  model_ = node_->declare_parameter<std::string>(prefix("model"), "rl_maze");
+  model_ = node_->declare_parameter<std::string>(
+      prefix("model"), "rl_maze", {},
+      [this](const std::string& value) { on_model_value(value); });
   fallback_controller_ = node_->declare_parameter<std::string>(
       prefix("fallback_controller"), "rpp",
-      [](const std::string& value) { return value == "mppi" || value == "dwb" || value == "rpp"; });
+      [](const std::string& value) { return value == "mppi" || value == "dwb" || value == "rpp"; },
+      [this](const std::string& value) { on_fallback_value(value); });
   max_lin_ = node_->declare_parameter<double>(prefix("max_lin"), 0.26, positive);
   max_ang_ = node_->declare_parameter<double>(prefix("max_ang"), 1.82, positive);
   v_min_ratio_ = node_->declare_parameter<double>(prefix("v_min_ratio"), -0.2,
@@ -129,14 +131,8 @@ void RlNavController::configure(krosc::Node& node, const std::string& name) {
       krosc::QOS_SENSOR_DATA);
   imu_subscription_ = node_->subscribe<krosc::msgs::Imu>(
       imu_topic_.value(), [this](const auto& message) { on_imu(message); }, krosc::QOS_SENSOR_DATA);
-  enable_subscription_ = node_->subscribe<krosc::msgs::Bool>(
-      "rl_nav_enable", [this](const auto& message) { on_enable(message); }, krosc::QOS_DEFAULT);
-  fallback_subscription_ = node_->subscribe<krosc::msgs::String>(
-      "rl_nav_fallback", [this](const auto& message) { on_fallback(message); }, krosc::QOS_DEFAULT);
-  reload_subscription_ = node_->subscribe<krosc::msgs::Empty>(
-      "rl_nav_reload", [this](const auto& message) { on_reload(message); }, krosc::QOS_DEFAULT);
-  model_subscription_ = node_->subscribe<krosc::msgs::String>(
-      "rl_nav_model", [this](const auto& message) { on_model(message); }, krosc::QOS_DEFAULT);
+  reload_service_ = node_->create_service<krosc::msgs::TriggerRequest, krosc::msgs::TriggerResponse>(
+      "rl_nav_controller/reload", [this](const krosc::msgs::TriggerRequest&) { return on_reload(); });
   last_model_list_ = node_->now();
   publish_status_locked(Velocity{}, 2, false, 0.0);
   // Viz가 늦게 붙어도(특히 시작 직후) 상태/모델 목록을 받도록 주기적으로 다시 낸다.
@@ -190,55 +186,54 @@ void RlNavController::on_imu(const krosc::msgs::Imu& message) {
   gyro_ = message.angular_velocity.z;
 }
 
-void RlNavController::on_enable(const krosc::msgs::Bool& message) {
+void RlNavController::on_enable_value(bool enabled) {
   std::lock_guard<std::mutex> lock(mutex_);
-  enable_.set(message.data);
   prev_action_ = {0.0F, 0.0F};
   active_last_ = false;
-  publish_status_locked(Velocity{}, enable_.value() ? 0 : 2, false, 0.0);
+  publish_status_locked(Velocity{}, enabled ? 0 : 2, false, 0.0);
 }
 
-void RlNavController::on_fallback(const krosc::msgs::String& message) {
+void RlNavController::on_fallback_value(const std::string& fallback) {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (!set_fallback_locked(message.data)) {
-    node_->logger().warn("RL fallback 이름이 잘못됐다: %s", message.data.c_str());
+  if (!set_fallback_locked(fallback)) {
+    node_->logger().warn("RL fallback 이름이 잘못됐다: %s", fallback.c_str());
     return;
   }
-  fallback_controller_.set(message.data);
   active_last_ = false;
   publish_status_locked(Velocity{}, enable_.value() ? 0 : 2, false, 0.0);
 }
 
-void RlNavController::on_reload(const krosc::msgs::Empty&) {
+krosc::msgs::TriggerResponse RlNavController::on_reload() {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string target = current_model_.empty() ? model_.value() : current_model_;
   std::string error;
-  if (!load_policy_locked(target, error)) {
+  const bool ok = load_policy_locked(target, error);
+  if (!ok) {
     node_->logger().warn("RL policy reload 실패: %s", error.c_str());
   }
   prev_action_ = {0.0F, 0.0F};
   active_last_ = false;
   publish_status_locked(Velocity{}, policy_.loaded() ? (enable_.value() ? 0 : 2) : 1, false, 0.0);
+  return krosc::msgs::TriggerResponse{ok, ok ? "reloaded " + target : error};
 }
 
-void RlNavController::on_model(const krosc::msgs::String& message) {
+void RlNavController::on_model_value(const std::string& model) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!model_path_.value().empty()) {
     node_->logger().warn("RL model 선택 무시: model_path=%s가 우선한다", model_path_.value().c_str());
     return;
   }
-  if (!ml::safe_model_name(message.data)) {
-    node_->logger().warn("RL model 이름이 잘못됐다: %s", message.data.c_str());
+  if (!ml::safe_model_name(model)) {
+    node_->logger().warn("RL model 이름이 잘못됐다: %s", model.c_str());
     return;
   }
   std::string error;
-  if (!load_policy_locked(message.data, error)) {
-    node_->logger().warn("RL model 전환 실패 (%s): %s", message.data.c_str(), error.c_str());
+  if (!load_policy_locked(model, error)) {
+    node_->logger().warn("RL model 전환 실패 (%s): %s", model.c_str(), error.c_str());
   }
   prev_action_ = {0.0F, 0.0F};
   active_last_ = false;
   publish_status_locked(Velocity{}, policy_.loaded() ? (enable_.value() ? 0 : 2) : 1, false, 0.0);
-  refresh_models_locked();
 }
 
 void RlNavController::refresh_models_locked() {

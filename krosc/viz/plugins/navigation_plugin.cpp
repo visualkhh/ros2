@@ -147,18 +147,6 @@ void NavigationPlugin::initialize(VizHost& host) {
   dock_->setWidget(panel);
   host.add_dock(dock_, Qt::RightDockWidgetArea);
 
-  costmap_subscription_ = host_->model().node().subscribe<msgs::String>(
-      "costmap_params_state",
-      [this](const msgs::String& message) {
-        std::lock_guard<std::mutex> lock(costmap_mutex_);
-        costmap_state_ = message.data;
-        costmap_dirty_ = true;
-      },
-      QOS_LATCHED);
-  costmap_timer_ = new QTimer(dock_);
-  QObject::connect(costmap_timer_, &QTimer::timeout, dock_, [this] { refresh_costmap_state(); });
-  costmap_timer_->start(300);
-
   connect(&host.scene(), &SceneView::tool_pose, this,
           [this](double x, double y, double yaw) { handle_tool_pose(x, y, yaw, false); });
   connect(&host.map_view(), &MapView2D::tool_pose, this,
@@ -168,6 +156,39 @@ void NavigationPlugin::initialize(VizHost& host) {
   qApp->installEventFilter(this);
   active_ = true;
   update_buttons();
+  load_costmap_params();
+}
+
+void NavigationPlugin::load_costmap_params() {
+  if (host_ == nullptr) {
+    return;
+  }
+  // peer discovery가 끝나기 전에 동기 RPC로 UI를 막지 않는다.
+  const auto* peer = host_->model().node().context().peer_network();
+  if (peer != nullptr) {
+    const auto services = peer->remote_services();
+    if (services.empty() ||
+        std::find(services.begin(), services.end(), "global_costmap/get_parameters") ==
+            services.end()) {
+      return;
+    }
+  }
+  const auto apply = [this](QDoubleSpinBox* spin, const std::string& node,
+                            const std::string& name) {
+    if (spin == nullptr) {
+      return;
+    }
+    const auto value = host_->model().get_parameter(node, name);
+    if (value && std::holds_alternative<double>(*value)) {
+      spin->setValue(std::get<double>(*value));
+    }
+  };
+  apply(global_inflation_, "global_costmap", "inflation_radius");
+  apply(global_scaling_, "global_costmap", "cost_scaling_factor");
+  apply(local_inflation_, "local_costmap", "inflation_radius");
+  apply(local_scaling_, "local_costmap", "cost_scaling_factor");
+  apply(local_width_, "local_costmap", "width");
+  apply(local_height_, "local_costmap", "height");
 }
 
 void NavigationPlugin::shutdown() {
@@ -408,14 +429,35 @@ void NavigationPlugin::apply_costmap_params() {
   if (host_ == nullptr || global_inflation_ == nullptr) {
     return;
   }
-  const std::string text =
-      "global,inflation_radius," + std::to_string(global_inflation_->value()) +
-      ";global,cost_scaling_factor," + std::to_string(global_scaling_->value()) +
-      ";local,inflation_radius," + std::to_string(local_inflation_->value()) +
-      ";local,cost_scaling_factor," + std::to_string(local_scaling_->value()) +
-      ";local,width," + std::to_string(local_width_->value()) +
-      ";local,height," + std::to_string(local_height_->value());
-  host_->model().node().publish("costmap_params", msgs::String{text}, QOS_DEFAULT);
+  std::string error;
+  const bool global_ok = host_->model().set_parameters(
+      "global_costmap",
+      {{"inflation_radius", global_inflation_->value()},
+       {"cost_scaling_factor", global_scaling_->value()}},
+      error);
+  const bool local_ok = host_->model().set_parameters(
+      "local_costmap",
+      {{"inflation_radius", local_inflation_->value()},
+       {"cost_scaling_factor", local_scaling_->value()},
+       {"width", local_width_->value()},
+       {"height", local_height_->value()}},
+      error);
+  if (!global_ok || !local_ok) {
+    status_->setText(QString("costmap 실패: %1").arg(QString::fromStdString(error)));
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(costmap_mutex_);
+    costmap_state_ =
+        "global.inflation_radius=" + std::to_string(global_inflation_->value()) +
+        ";global.cost_scaling_factor=" + std::to_string(global_scaling_->value()) +
+        ";local.inflation_radius=" + std::to_string(local_inflation_->value()) +
+        ";local.cost_scaling_factor=" + std::to_string(local_scaling_->value()) +
+        ";local.width=" + std::to_string(local_width_->value()) +
+        ";local.height=" + std::to_string(local_height_->value());
+    costmap_dirty_ = true;
+  }
+  refresh_costmap_state();
   status_->setText("costmap applied");
 }
 

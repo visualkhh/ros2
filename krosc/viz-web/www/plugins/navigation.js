@@ -171,43 +171,61 @@ export function init(host) {
   const localScaling = numberField('local scale', 3.0, 0.5);
   const localWidth = numberField('local width (m)', 4.0, 0.5);
   const localHeight = numberField('local height (m)', 4.0, 0.5);
-  const costmapRow = buttonRow(body);
-  button(costmapRow, 'Apply costmap', () => {
-    host.sendString('costmap_params',
-      `global,inflation_radius,${globalInflation.value};` +
-      `global,cost_scaling_factor,${globalScaling.value};` +
-      `local,inflation_radius,${localInflation.value};` +
-      `local,cost_scaling_factor,${localScaling.value};` +
-      `local,width,${localWidth.value};` +
-      `local,height,${localHeight.value}`);
-    setLevel(status, 'costmap applied', 'ok');
-  }, 'primary');
   const costmapState = document.createElement('div');
   costmapState.className = 'muted';
+  const costmapRow = buttonRow(body);
+
+  async function applyCostmap() {
+    try {
+      const global = await host.setParameters('global_costmap', {
+        inflation_radius: Number(globalInflation.value),
+        cost_scaling_factor: Number(globalScaling.value),
+      });
+      const local = await host.setParameters('local_costmap', {
+        inflation_radius: Number(localInflation.value),
+        cost_scaling_factor: Number(localScaling.value),
+        width: Number(localWidth.value),
+        height: Number(localHeight.value),
+      });
+      const results = [...(global.results || []), ...(local.results || [])];
+      const failed = results.find((item) => !item.successful);
+      if (failed) {
+        setLevel(status, `costmap 실패: ${failed.reason}`, 'bad');
+        return;
+      }
+      setLevel(status, 'costmap applied', 'ok');
+      costmapState.textContent =
+        `g ${globalInflation.value} m / ${globalScaling.value} · ` +
+        `l ${localInflation.value} m / ${localScaling.value} / ` +
+        `${localWidth.value}x${localHeight.value} m`;
+    } catch (error) {
+      setLevel(status, `costmap 실패: ${error.message}`, 'bad');
+    }
+  }
+
+  button(costmapRow, 'Apply costmap', applyCostmap, 'primary');
   body.append(costmapState);
 
-  host.onTopic('costmap_params_state', (message) => {
-    const values = new Map();
-    for (const item of String(message.data || '').split(';')) {
-      const equal = item.indexOf('=');
-      if (equal < 0) continue;
-      values.set(item.slice(0, equal), item.slice(equal + 1));
+  (async () => {
+    try {
+      const global = await host.getParameters('global_costmap',
+        ['inflation_radius', 'cost_scaling_factor']);
+      const local = await host.getParameters('local_costmap',
+        ['inflation_radius', 'cost_scaling_factor', 'width', 'height']);
+      const assign = (field, values, key) => {
+        if (values?.[key] !== undefined) field.value = values[key];
+      };
+      assign(globalInflation, global.values, 'inflation_radius');
+      assign(globalScaling, global.values, 'cost_scaling_factor');
+      assign(localInflation, local.values, 'inflation_radius');
+      assign(localScaling, local.values, 'cost_scaling_factor');
+      assign(localWidth, local.values, 'width');
+      assign(localHeight, local.values, 'height');
+    } catch (error) {
+      setLevel(status, `costmap 값 읽기 실패: ${error.message}`, 'warn');
     }
-    const assign = (field, key) => {
-      const value = values.get(key);
-      if (value !== undefined && document.activeElement !== field) field.value = value;
-    };
-    assign(globalInflation, 'global.inflation_radius');
-    assign(globalScaling, 'global.cost_scaling_factor');
-    assign(localInflation, 'local.inflation_radius');
-    assign(localScaling, 'local.cost_scaling_factor');
-    assign(localWidth, 'local.width');
-    assign(localHeight, 'local.height');
-    costmapState.textContent =
-      `g ${values.get('global.inflation_radius') || '-'} m / ${values.get('global.cost_scaling_factor') || '-'} · ` +
-      `l ${values.get('local.inflation_radius') || '-'} m / ${values.get('local.cost_scaling_factor') || '-'} / ` +
-      `${values.get('local.width') || '-'}x${values.get('local.height') || '-'} m`;
-  });
+  })();
+
 
   updateUi();
 }

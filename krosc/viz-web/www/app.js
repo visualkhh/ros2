@@ -660,6 +660,10 @@ function body(topicName, kind, payload) {
 }
 
 const sendOutbox = [];
+const textOutbox = [];
+let rpcSequence = 0;
+const rpcPending = new Map();
+const eventHandlers = new Map();
 
 function sendBinary(topicName, kind, payload) {
   const bytes = body(topicName, kind, payload);
@@ -675,6 +679,41 @@ function sendBinary(topicName, kind, payload) {
   }
   state.ws.send(bytes);
   return true;
+}
+
+function sendText(text) {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(text);
+    return true;
+  }
+  if (state.ws && state.ws.readyState === WebSocket.CONNECTING) {
+    textOutbox.push(text);
+    if (textOutbox.length > 100) textOutbox.shift();
+    return true;
+  }
+  return false;
+}
+
+function rpc(method, params = {}, timeoutMs = 10000) {
+  const id = ++rpcSequence;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      rpcPending.delete(id);
+      reject(new Error(`${method} timeout`));
+    }, timeoutMs);
+    rpcPending.set(id, { resolve, reject, timer });
+    if (!sendText(JSON.stringify({ id, method, params }))) {
+      clearTimeout(timer);
+      rpcPending.delete(id);
+      reject(new Error('websocket not connected'));
+    }
+  });
+}
+
+function onEvent(name, callback) {
+  if (!eventHandlers.has(name)) eventHandlers.set(name, new Set());
+  eventHandlers.get(name).add(callback);
+  return () => eventHandlers.get(name)?.delete(callback);
 }
 
 function sendString(topicName, value) {
@@ -847,6 +886,14 @@ function buildViewTools() {
 const host = {
   onTopic,
   latest: topic,
+  rpc,
+  onEvent,
+  async setParameters(node, parameters) {
+    return rpc('params/set', { node, parameters });
+  },
+  async getParameters(node, names) {
+    return rpc('params/get', { node, names });
+  },
   sendString,
   sendBool,
   sendEmpty,
@@ -1037,10 +1084,18 @@ function connect() {
     while (sendOutbox.length > 0) {
       socket.send(sendOutbox.shift());
     }
+    while (textOutbox.length > 0) {
+      socket.send(textOutbox.shift());
+    }
   };
   socket.onclose = () => {
     state.wsOpen = false;
     state.robotConnected = false;
+    for (const pending of rpcPending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error('websocket closed'));
+    }
+    rpcPending.clear();
     updateWsStatus();
     updateRobotStatus();
     setTimeout(connect, 1000);
@@ -1049,9 +1104,26 @@ function connect() {
   socket.onmessage = (event) => {
     if (typeof event.data === 'string') {
       try {
-        const status = JSON.parse(event.data);
-        if (status.type === 'robot') {
-          state.robotConnected = Boolean(status.connected);
+        const message = JSON.parse(event.data);
+        if (message.id !== undefined && rpcPending.has(message.id)) {
+          const pending = rpcPending.get(message.id);
+          rpcPending.delete(message.id);
+          clearTimeout(pending.timer);
+          if (message.ok) {
+            pending.resolve(message.result ?? {});
+          } else {
+            pending.reject(new Error(message.error || 'rpc failed'));
+          }
+          return;
+        }
+        if (typeof message.event === 'string') {
+          for (const callback of eventHandlers.get(message.event) || []) {
+            try { callback(message.params ?? {}); } catch (error) { console.error(error); }
+          }
+          return;
+        }
+        if (message.type === 'robot') {
+          state.robotConnected = Boolean(message.connected);
           updateRobotStatus();
         }
       } catch (error) { console.error(error); }

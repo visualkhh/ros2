@@ -240,25 +240,8 @@ int main(int argc, char** argv) {
        {"arm_command_controller.command_topic", std::string("arm_joint_command")},
        {"arm_command_controller.auto_activate", false}},
       hardware_registry);
-  // 수동 조작(Viz 슬라이더/STOW 수동 경로)과 MoveIt은 같은 관절 command interface를 공유할 수
-  // 없으므로, Viz가 arm_manual로 모드를 알려오면 컨트롤러를 맞바꾼다.
-  [[maybe_unused]] auto arm_manual_switch = controller_manager.subscribe<krosc::msgs::Bool>(
-      "arm_manual",
-      [&controller_manager](const krosc::msgs::Bool& message) {
-        const bool manual = message.data;
-        const bool ok =
-            manual ? controller_manager.switch_controller({"arm_command_controller"},
-                                                          {"joint_trajectory_controller"}, 1)
-                   : controller_manager.switch_controller({"joint_trajectory_controller"},
-                                                          {"arm_command_controller"}, 1);
-        if (!ok) {
-          controller_manager.logger().warn("arm_manual: %s 컨트롤러 전환 실패",
-                                           manual ? "manual" : "trajectory");
-        }
-      },
-      krosc::QOS_DEFAULT);
   // MoveIt move_group: kinematics/planner/controller_manager 플러그인을 골라 조립한다.
-  // 기존 Viz의 moveit_target/moveit_plan/moveit_execute/moveit_cancel/moveit_scrub 토픽도 그대로 받는다.
+  // Viz 명령은 move_action 액션 + move_group/scrub 서비스로 들어온다.
   krosc::moveit::MoveGroup move_group(
       context, "move_group",
       {{"base_link", std::string("base_link")},
@@ -336,55 +319,6 @@ int main(int argc, char** argv) {
        {"robot_radius", 0.22},
        {"inflation_radius", 0.55},
        {"cost_scaling_factor", 3.0}});
-  // Viz에서 costmap 인플레이션/스케일을 실시간으로 바꾼다.
-  //   costmap_params: "global,inflation_radius,0.6;local,cost_scaling_factor,4.0"
-  krosc::Node costmap_params_node(context, "costmap_params");
-  [[maybe_unused]] auto costmap_params_subscription = costmap_params_node.subscribe<krosc::msgs::String>(
-      "costmap_params",
-      [&global_costmap, &local_costmap, &costmap_params_node](const krosc::msgs::String& message) {
-        std::stringstream items(message.data);
-        std::string item;
-        while (std::getline(items, item, ';')) {
-          std::stringstream fields(item);
-          std::string target;
-          std::string key;
-          std::string value;
-          if (!std::getline(fields, target, ',') || !std::getline(fields, key, ',') ||
-              !std::getline(fields, value, ',')) {
-            continue;
-          }
-          krosc::Node* node = target == "global" ? &global_costmap
-                              : target == "local" ? &local_costmap
-                                                  : nullptr;
-          if (node == nullptr ||
-              (key != "inflation_radius" && key != "cost_scaling_factor" && key != "width" &&
-               key != "height")) {
-            continue;
-          }
-          double number = 0.0;
-          try {
-            number = std::stod(value);
-            node->set_parameter(key, number);
-          } catch (const std::exception& error) {
-            costmap_params_node.logger().warn("costmap_params: %s", error.what());
-          }
-        }
-      },
-      krosc::QOS_DEFAULT);
-  [[maybe_unused]] auto costmap_params_timer = costmap_params_node.create_timer(1.0, [&] {
-    std::ostringstream text;
-    text << "global.inflation_radius="
-         << global_costmap.get_parameter_as<double>("inflation_radius")
-         << ";global.cost_scaling_factor="
-         << global_costmap.get_parameter_as<double>("cost_scaling_factor")
-         << ";local.inflation_radius=" << local_costmap.get_parameter_as<double>("inflation_radius")
-         << ";local.cost_scaling_factor="
-         << local_costmap.get_parameter_as<double>("cost_scaling_factor")
-         << ";local.width=" << local_costmap.get_parameter_as<double>("width")
-         << ";local.height=" << local_costmap.get_parameter_as<double>("height");
-    costmap_params_node.publish("costmap_params_state", krosc::msgs::String{text.str()},
-                                krosc::QOS_LATCHED);
-  });
   krosc::nodes::nav2::PlannerServer planner_server(
       context, global_costmap, "planner_server",
       {{"planner_plugins", std::vector<std::string>{"GridBased"}},

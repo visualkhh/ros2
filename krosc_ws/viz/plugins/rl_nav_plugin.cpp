@@ -114,7 +114,10 @@ void RlNavPlugin::initialize(krosc::viz::VizHost& host) {
   });
   QObject::connect(reload_, &QPushButton::clicked, dock_, [this] {
     if (host_ != nullptr) {
-      host_->model().node().publish("rl_nav_reload", krosc::msgs::Empty{}, krosc::QOS_DEFAULT);
+      std::string message;
+      if (!host_->model().trigger("rl_nav_controller/reload", message)) {
+        status_->setText(QString("RL reload 실패: %1").arg(QString::fromStdString(message)));
+      }
     }
   });
   model_list_subscription_ = host.model().node().subscribe<krosc::msgs::String>(
@@ -152,28 +155,40 @@ void RlNavPlugin::shutdown() {
 }
 
 void RlNavPlugin::set_enabled(bool enabled) {
+  if (host_ == nullptr) {
+    return;
+  }
+  std::string error;
+  if (!host_->model().set_parameters("controller_server", {{"FollowPath.enable", enabled}}, error)) {
+    status_->setText(QString("RL enable 실패: %1").arg(QString::fromStdString(error)));
+    return;
+  }
   enabled_ = enabled;
   toggle_->setText(enabled ? "RL ON" : "RL OFF");
   toggle_->setStyleSheet(enabled ? "background:#1f6b43;" : "background:#7a2a2a;");
-  if (host_ != nullptr) {
-    host_->model().node().publish("rl_nav_enable", krosc::msgs::Bool{enabled}, krosc::QOS_DEFAULT);
-  }
 }
 
 void RlNavPlugin::set_fallback(const QString& fallback) {
   if (host_ == nullptr) {
     return;
   }
-  host_->model().node().publish("rl_nav_fallback",
-                                krosc::msgs::String{fallback.toStdString()}, krosc::QOS_DEFAULT);
+  std::string error;
+  if (!host_->model().set_parameters(
+          "controller_server",
+          {{"FollowPath.fallback_controller", fallback.toStdString()}}, error)) {
+    status_->setText(QString("RL fallback 실패: %1").arg(QString::fromStdString(error)));
+  }
 }
 
 void RlNavPlugin::set_model(const QString& model) {
   if (host_ == nullptr) {
     return;
   }
-  host_->model().node().publish("rl_nav_model", krosc::msgs::String{model.toStdString()},
-                                krosc::QOS_DEFAULT);
+  std::string error;
+  if (!host_->model().set_parameters(
+          "controller_server", {{"FollowPath.model", model.toStdString()}}, error)) {
+    status_->setText(QString("RL model 실패: %1").arg(QString::fromStdString(error)));
+  }
 }
 
 void RlNavPlugin::refresh() {

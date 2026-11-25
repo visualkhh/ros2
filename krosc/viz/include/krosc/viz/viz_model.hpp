@@ -78,6 +78,15 @@ class VizModel {
   void publish_cmd_vel(double linear, double angular);
   void publish_goal(double x, double y, double theta);
 
+  // RPC 편의 함수. 실패하면 error/message에 이유를 채운다.
+  bool set_parameters(const std::string& node_name,
+                      const std::map<std::string, ParamValue>& values, std::string& error);
+  [[nodiscard]] std::optional<ParamValue> get_parameter(const std::string& node_name,
+                                                        const std::string& name);
+  bool switch_controller(const std::vector<std::string>& start,
+                         const std::vector<std::string>& stop, int strictness, std::string& error);
+  bool trigger(const std::string& service, std::string& message);
+
  private:
   struct Stat {
     std::string type;

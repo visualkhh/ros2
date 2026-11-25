@@ -22,9 +22,11 @@ class HttpServer {
  public:
   using ManifestHandler = std::function<std::string()>;
   using SendHandler = std::function<void(const krosc::net::Frame&)>;
+  using TextReply = std::function<void(std::string)>;
+  using TextHandler = std::function<void(const std::string&, TextReply)>;
 
   HttpServer(std::string bind_address, std::uint16_t port, std::vector<std::string> www_roots,
-             SendHandler send_frame, ManifestHandler manifest = {});
+             SendHandler send_frame, ManifestHandler manifest = {}, TextHandler text_handler = {});
   ~HttpServer();
 
   HttpServer(const HttpServer&) = delete;
@@ -49,6 +51,7 @@ class HttpServer {
   std::vector<std::string> www_roots_;
   SendHandler send_frame_;
   ManifestHandler manifest_;
+  TextHandler text_handler_;
   std::atomic<bool> stopping_{false};
   int listen_fd_ = -1;
   std::thread accept_thread_;

@@ -4,8 +4,11 @@
 #include <QString>
 
 #include <array>
+#include <memory>
 #include <string>
 
+#include "krosc/action.hpp"
+#include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/viz/viz_plugin.hpp"
 
 class QComboBox;
@@ -36,6 +39,8 @@ class ManipulatorPlugin final : public QObject, public VizPlugin {
   void set_slider_values(const std::array<double, 5>& positions);
   void cancel_moveit_if_executing();
   void reset_arm();
+  void set_manual_mode(bool manual);
+  void send_move_preset(const std::string& preset);
   [[nodiscard]] QString error_summary() const;
 
   VizHost* host_ = nullptr;
@@ -52,6 +57,14 @@ class ManipulatorPlugin final : public QObject, public VizPlugin {
   QLabel* speed_label_ = nullptr;
   QTimer* send_timer_ = nullptr;
   QTimer* refresh_timer_ = nullptr;
+  using MoveClient = krosc::ActionClient<krosc::msgs::moveit::MoveGroupGoal,
+                                         krosc::msgs::moveit::MoveGroupFeedback,
+                                         krosc::msgs::moveit::MoveGroupResult>;
+  std::unique_ptr<MoveClient> move_client_;
+  std::shared_ptr<krosc::ClientGoalHandle<krosc::msgs::moveit::MoveGroupGoal,
+                                          krosc::msgs::moveit::MoveGroupFeedback,
+                                          krosc::msgs::moveit::MoveGroupResult>> move_handle_;
+  bool manual_mode_ = false;
   std::array<double, 5> target_{};
   std::array<double, 5> output_{};
   bool moving_ = false;

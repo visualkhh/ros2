@@ -24,12 +24,31 @@ export function init(host) {
 
   const buttons = buttonRow(body);
   let enabled = false;
-  const toggle = button(buttons, 'RL OFF', () => {
-    enabled = !enabled;
-    host.sendBool('rl_nav_enable', enabled);
-    updateToggle();
+  const toggle = button(buttons, 'RL OFF', async () => {
+    const next = !enabled;
+    try {
+      const response = await host.setParameters('controller_server', {
+        'FollowPath.enable': next,
+      });
+      const failed = response.results?.find((item) => !item.successful);
+      if (failed) {
+        host.toast(`RL enable 실패: ${failed.reason}`);
+        return;
+      }
+      enabled = next;
+      updateToggle();
+    } catch (error) {
+      host.toast(`RL enable 실패: ${error.message}`);
+    }
   }, 'danger');
-  button(buttons, 'Reload', () => host.sendEmpty('rl_nav_reload'));
+  button(buttons, 'Reload', async () => {
+    try {
+      const response = await host.rpc('rl/reload', {});
+      host.toast(`RL reload: ${response.message || (response.ok ? 'ok' : 'failed')}`);
+    } catch (error) {
+      host.toast(`RL reload 실패: ${error.message}`);
+    }
+  });
 
   function updateToggle() {
     toggle.textContent = enabled ? 'RL ON' : 'RL OFF';
@@ -38,16 +57,28 @@ export function init(host) {
 
   let requestedFallback = null;
   let requestedModel = null;
-  fallback.addEventListener('change', () => {
+  fallback.addEventListener('change', async () => {
     requestedFallback = fallback.value;
-    host.sendString('rl_nav_fallback', fallback.value);
-    host.toast(`fallback → ${fallback.value} 요청`);
+    try {
+      await host.setParameters('controller_server', {
+        'FollowPath.fallback_controller': fallback.value,
+      });
+      host.toast(`fallback → ${fallback.value} 요청`);
+    } catch (error) {
+      host.toast(`fallback 실패: ${error.message}`);
+    }
   });
-  model.addEventListener('change', () => {
+  model.addEventListener('change', async () => {
     if (!model.value) return;
     requestedModel = model.value;
-    host.sendString('rl_nav_model', model.value);
-    host.toast(`model → ${model.value} 요청`);
+    try {
+      await host.setParameters('controller_server', {
+        'FollowPath.model': model.value,
+      });
+      host.toast(`model → ${model.value} 요청`);
+    } catch (error) {
+      host.toast(`model 실패: ${error.message}`);
+    }
   });
 
   host.onTopic('rl_nav_model_list', (message) => {

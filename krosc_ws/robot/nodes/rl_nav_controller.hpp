@@ -42,10 +42,10 @@ class RlNavController final : public krosc::nodes::nav2::NavControllerPlugin {
  private:
   void on_scan(const krosc::msgs::LaserScan& message);
   void on_imu(const krosc::msgs::Imu& message);
-  void on_enable(const krosc::msgs::Bool& message);
-  void on_fallback(const krosc::msgs::String& message);
-  void on_reload(const krosc::msgs::Empty& message);
-  void on_model(const krosc::msgs::String& message);
+  void on_enable_value(bool enabled);
+  void on_fallback_value(const std::string& fallback);
+  void on_model_value(const std::string& model);
+  krosc::msgs::TriggerResponse on_reload();
 
   bool set_fallback_locked(const std::string& kind);
   bool load_policy_locked(const std::string& model, std::string& error);
@@ -112,10 +112,7 @@ class RlNavController final : public krosc::nodes::nav2::NavControllerPlugin {
 
   krosc::Subscription<krosc::msgs::LaserScan> scan_subscription_;
   krosc::Subscription<krosc::msgs::Imu> imu_subscription_;
-  krosc::Subscription<krosc::msgs::Bool> enable_subscription_;
-  krosc::Subscription<krosc::msgs::String> fallback_subscription_;
-  krosc::Subscription<krosc::msgs::Empty> reload_subscription_;
-  krosc::Subscription<krosc::msgs::String> model_subscription_;
+  krosc::ServiceServer reload_service_;
 };
 
 }  // namespace krosc_ws

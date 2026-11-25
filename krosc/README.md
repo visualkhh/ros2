@@ -63,7 +63,8 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 ```
 
 - Viz/VizWeb은 자기 `Context`/`net::Client`를 만들지 않는다. app main이 `Krosc`를 만들고
-  `Krosc::context()`를 넘긴다. 원격 연결은 `PeerNetwork`가 토픽 단위로 처리한다.
+  `Krosc::context()`를 넘긴다. 원격 연결은 `PeerNetwork`가 토픽/서비스/액션/파라미터
+  RPC 단위로 처리한다.
 - 웹 게이트웨이의 브라우저 프레임 ↔ 토픽 브리지는 `krosc/viz-web/core/context_link.cpp`에 있다.
   코어(`engine/`)는 브라우저 프레임이나 웹 구독 정책을 모른다.
 - `main.cpp`는 인자만 `VizWebOptions`로 넘기고, `krosc::viz_web::VizWeb`이 ContextLink/HttpServer/
@@ -71,6 +72,9 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 - 웹으로 내보낼 토픽은 `VizWebOptions::forward_topics`로 정한다. 기본은 코어 웹 앱 토픽이고,
   프로젝트 main/플러그인이 자기 토픽(`moveit_*`, `rl_nav_*`)을 추가한다.
 - 브라우저는 `www/app.js`에서 프레임을 해석해 지도/스캔/TF/경로를 Canvas에 그린다.
+- 명령(지도 load/save/delete, 파라미터, MoveIt goal)은 텍스트 JSON RPC(`host.rpc`)로 보낸다.
+  `krosc/viz-web/core/web_rpc.cpp`가 로컬/원격 서비스로 바꾸고, 프로젝트가 `web.rpc().add(...)`로
+  자기 RPC를 붙인다.
 - 웹 플러그인은 main이 `VizWebPluginRegistry`에 등록하고, 게이트웨이가 `/plugins.json`을 **동적으로** 만든다.
   코어 앱은 SLAM/Navigation/Teleop/Diagnostics를 기본으로 하고, 프로젝트 앱(`krosc_ws/viz-web`)이
   MoveIt/RL Nav를 추가한다. JS 모듈은 `www/plugins/*.js`다.
@@ -142,12 +146,12 @@ krosc/
 ├── CMakeLists.txt                 # 최상위 (engine, sim, viz-web, viz, examples)
 ├── engine/                        # krosc_core (표준 라이브러리만)
 │   ├── CMakeLists.txt
-│   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/action/msgs
+│   ├── include/krosc/             # node/context/topic/timer/tf/parameter/service/action/msgs/rpc
 │   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
 │   │   ├── ros2_control/          # controller_manager, JSB/JTC/forward/diff_drive
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 51 tests (nav2/ros2_control/MoveIt/net 포함)
+│   ├── tests/                     # core 54 tests (nav2/ros2_control/MoveIt/net/RPC 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp
 ├── sim/                           # krosc_sim (+ krosc_sim_qt)
 │   ├── CMakeLists.txt
@@ -308,15 +312,32 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)와 `kros/benchmarks/nav2_ben
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 51 + sim 3 = 54 tests, 2 executables
+# core 54 + sim 3 = 57 tests, 2 executables
 ```
 
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - ros2_control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
-- MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + moveit_* 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
+- MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + move_group/scrub + 상태 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
+- RPC: 서비스/액션/파라미터 포워딩(discovery, timeout, latched), 웹 JSON RPC
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
 - ASan/UBSan으로 core/sim 테스트와 데모 실행 검증 완료 (오류/누수 없음)
+
+## RPC (PeerNetwork)
+
+토픽은 기존 바이너리 프레임으로 흐르고, 서비스/액션/파라미터는 같은 TCP 연결 위에 RPC 프레임으로
+올라간다.
+
+- 서비스: `kFrameRpcRequest`/`kFrameRpcResponse` + `RpcEnvelope(request_id, type, payload, error)`.
+  로컬 서버가 없으면 `PeerNetwork`가 원격 피어로 보내고, 응답을 request_id로 맞춘다 (기본 5초 timeout).
+- discovery: 서비스 생성/삭제 시 `__services` control로 이름 목록을 광고한다. 아직 광고 전이면
+  연결된 피어에 broadcast하고, 응답이 없으면 timeout.
+- 타입 코덱: `engine/core/rpc.cpp`. `std_msgs`, `std_srvs`, nav2 map 서비스, `rcl_interfaces`
+  파라미터, `ros2_control` 컨트롤러 서비스, 액션 goal/feedback/result를 등록한다.
+- 액션: 기존 `ActionServer`/`ActionClient` API 그대로. `send_goal`/`cancel_goal` 서비스와
+  `/_action/event` 이벤트를 PeerNetwork가 인코딩한다. `register_action_codec()`로 프로젝트 액션을 추가한다.
+- 파라미터: 모든 `Node`가 `<node>/get_parameters`, `set_parameters`, `set_parameters_atomically`,
+  `list_parameters`, `describe_parameters` 서비스를 만든다.
 
 ## 플러그인 구조
 
@@ -379,6 +400,7 @@ ROS 2와 맞춘 노드 이름:
 - [x] `viz` Qt `VizWindow`: 격자, TF 축, URDF, 라이다, odom/filtered, map/costmap, 경로, 궤적, 로그
 - [x] `viz` 코어 플러그인: `teleop`, `slam`, `navigation`, `manipulator` (VizWindow는 기반 UI만)
 - [x] TCP 원격 토픽(9000): 텔레메트리 + `cmd_vel`, latched 다중 tf_static, Mac `krosc_viz_app --server`
+- [x] PeerNetwork RPC: 서비스/액션/파라미터 포워딩 + discovery/timeout + 웹 JSON RPC
 - [x] Peer mesh(`Context::Options::network`): 다른 Krosc와 임의 토픽 discover/subscribe + latched 공유 (서비스/액션은 다음 단계)
 - [x] noVNC: Docker Ubuntu 26.04 안의 sim+viz 두 창을 맥 브라우저로 본다
 - [x] `viz-web`: HTTP + WebSocket 게이트웨이, 동적 `/plugins.json`, 지도/스캔/TF/경로/상태 뷰

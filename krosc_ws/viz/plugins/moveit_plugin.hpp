@@ -1,5 +1,9 @@
 #pragma once
 
+#include <memory>
+
+#include "krosc/action.hpp"
+#include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/viz/viz_plugin.hpp"
 
 class QCheckBox;
@@ -16,7 +20,8 @@ class SceneView;
 
 namespace krosc_ws::viz {
 
-// MoveIt 패널 + MoveIt 탭. Pi의 move_group 노드와 토픽으로만 통신한다.
+// MoveIt 패널 + MoveIt 탭. 명령은 move_action 액션/scrub 서비스로,
+// 상태는 moveit_* 토픽으로 받는다.
 class MoveItPlugin final : public krosc::viz::VizPlugin {
  public:
   MoveItPlugin() : krosc::viz::VizPlugin({"moveit", "MoveIt", "1.0", {}}) {}
@@ -27,6 +32,8 @@ class MoveItPlugin final : public krosc::viz::VizPlugin {
   void build_dock();
   void refresh();
   void publish_target(bool preview = false);
+  void send_goal(bool plan_only, const std::string& preset = {});
+  void send_scrub(int index);
   void update_preview();
   void set_target_from_current();
   void plan();
@@ -53,6 +60,16 @@ class MoveItPlugin final : public krosc::viz::VizPlugin {
   QLabel* status_label_ = nullptr;
   QSlider* scrub_ = nullptr;
   QTimer* refresh_timer_ = nullptr;
+  QTimer* preview_timer_ = nullptr;
+  QTimer* scrub_timer_ = nullptr;
+  using MoveClient = krosc::ActionClient<krosc::msgs::moveit::MoveGroupGoal,
+                                         krosc::msgs::moveit::MoveGroupFeedback,
+                                         krosc::msgs::moveit::MoveGroupResult>;
+  std::unique_ptr<MoveClient> client_;
+  std::shared_ptr<krosc::ClientGoalHandle<krosc::msgs::moveit::MoveGroupGoal,
+                                          krosc::msgs::moveit::MoveGroupFeedback,
+                                          krosc::msgs::moveit::MoveGroupResult>> handle_;
+  int scrub_index_ = 0;
   bool dragging_ = false;
   double last_drag_publish_ = 0.0;
   bool executing_ = false;

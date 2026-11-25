@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
+#include "krosc/msgs/nav2_srv.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/viz/viz_model.hpp"
 #include "krosc/viz/viz_window.hpp"
@@ -50,8 +51,12 @@ void SlamPlugin::initialize(VizHost& host) {
       return;
     }
     const std::string target = slam_status_text() == "mapping" ? "idle" : "mapping";
-    host_->model().node().publish("slam_mode", msgs::String{target}, QOS_DEFAULT);
-    status_label_->setText(QString("slam_mode: %1").arg(QString::fromStdString(target)));
+    std::string error;
+    if (host_->model().set_parameters("cartographer_node", {{"mode", ParamValue{target}}}, error)) {
+      status_label_->setText(QString("slam mode: %1").arg(QString::fromStdString(target)));
+    } else {
+      status_label_->setText(QString("slam mode 실패: %1").arg(QString::fromStdString(error)));
+    }
   });
 
   map_combo_ = new QComboBox(panel);
@@ -66,8 +71,13 @@ void SlamPlugin::initialize(VizHost& host) {
       return;
     }
     if (map_combo_->currentIndex() <= 0) {
-      host_->model().node().publish("map_unload", msgs::Empty{}, QOS_DEFAULT);
-      status_label_->setText("unloading map (none) ...");
+      try {
+        host_->model().node().call_service<msgs::Empty, msgs::Empty>(
+            "map_catalog/unload_map", msgs::Empty{});
+        status_label_->setText("unloading map (none) ...");
+      } catch (const std::exception& error) {
+        status_label_->setText(QString("unload 실패: %1").arg(error.what()));
+      }
       return;
     }
     const QString name = map_combo_->currentText();
@@ -75,8 +85,18 @@ void SlamPlugin::initialize(VizHost& host) {
       status_label_->setText("select a map first");
       return;
     }
-    host_->model().node().publish("map_change", msgs::String{name.toStdString()}, QOS_DEFAULT);
-    status_label_->setText(QString("loading %1 ...").arg(name));
+    try {
+      const auto response = host_->model().node().call_service<msgs::nav2::LoadMapRequest,
+                                                               msgs::nav2::LoadMapResponse>(
+          "map_catalog/load_map", msgs::nav2::LoadMapRequest{name.toStdString()});
+      if (response.result != msgs::nav2::LoadMapResponse::RESULT_SUCCESS) {
+        status_label_->setText(QString("load 실패: %1 (%2)").arg(name).arg(response.result));
+        return;
+      }
+      status_label_->setText(QString("loading %1 ...").arg(name));
+    } catch (const std::exception& error) {
+      status_label_->setText(QString("load 실패: %1").arg(error.what()));
+    }
   });
 
   map_name_ = new QLineEdit(panel);
@@ -89,9 +109,18 @@ void SlamPlugin::initialize(VizHost& host) {
       return;
     }
     const std::string name = map_name_->text().trimmed().toStdString();
-    host_->model().node().publish("map_save", msgs::String{name}, QOS_DEFAULT);
-    status_label_->setText(name.empty() ? QString("saving (auto name) ...")
-                                        : QString("saving %1 ...").arg(QString::fromStdString(name)));
+    try {
+      msgs::nav2::SaveMapRequest request;
+      request.map_url = name;
+      const auto response = host_->model().node().call_service<msgs::nav2::SaveMapRequest,
+                                                               msgs::nav2::SaveMapResponse>(
+          "map_catalog/save_map", request);
+      status_label_->setText(response.result
+                                 ? QString("saved %1").arg(QString::fromStdString(name))
+                                 : QString("save 실패: %1").arg(QString::fromStdString(name)));
+    } catch (const std::exception& error) {
+      status_label_->setText(QString("save 실패: %1").arg(error.what()));
+    }
   });
 
   auto* unload = new QPushButton("unload", panel);
@@ -105,15 +134,23 @@ void SlamPlugin::initialize(VizHost& host) {
       return;
     }
     collision_enabled_ = !collision_enabled_;
-    host_->model().node().publish("collision_set_enabled", msgs::Bool{collision_enabled_},
-                                  QOS_DEFAULT);
+    std::string error;
+    if (!host_->model().set_parameters("collision_monitor", {{"enabled", collision_enabled_}},
+                                       error)) {
+      status_label_->setText(QString("collision 설정 실패: %1").arg(QString::fromStdString(error)));
+    }
     update_collision_button();
   });
   update_collision_button();
   connect(unload, &QPushButton::clicked, this, [this] {
     if (host_ != nullptr) {
-      host_->model().node().publish("map_unload", msgs::Empty{}, QOS_DEFAULT);
-      status_label_->setText("unloading ...");
+      try {
+        host_->model().node().call_service<msgs::Empty, msgs::Empty>(
+            "map_catalog/unload_map", msgs::Empty{});
+        status_label_->setText("unloading ...");
+      } catch (const std::exception& error) {
+        status_label_->setText(QString("unload 실패: %1").arg(error.what()));
+      }
     }
   });
   connect(remove, &QPushButton::clicked, this, [this, panel] {
@@ -129,8 +166,16 @@ void SlamPlugin::initialize(VizHost& host) {
                               QString("Delete map \"%1\" ?").arg(name)) != QMessageBox::Yes) {
       return;
     }
-    host_->model().node().publish("map_delete", msgs::String{name.toStdString()}, QOS_DEFAULT);
-    status_label_->setText(QString("deleting %1 ...").arg(name));
+    try {
+      const auto response = host_->model().node().call_service<msgs::nav2::DeleteMapRequest,
+                                                               msgs::nav2::DeleteMapResponse>(
+          "map_catalog/delete_map", msgs::nav2::DeleteMapRequest{name.toStdString()});
+      status_label_->setText(response.result
+                                 ? QString("deleted %1").arg(name)
+                                 : QString("delete 실패: %1").arg(QString::fromStdString(response.message)));
+    } catch (const std::exception& error) {
+      status_label_->setText(QString("delete 실패: %1").arg(error.what()));
+    }
   });
   status_label_ = new QLabel("", panel);
   status_label_->setWordWrap(true);

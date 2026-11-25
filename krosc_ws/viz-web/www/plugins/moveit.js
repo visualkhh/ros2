@@ -67,11 +67,11 @@ export function init(host) {
     const sy = Math.sin(yaw);
     const cp = Math.cos(pitch);
     const sp = Math.sin(pitch);
-    // Rz(yaw) * Ry(pitch)
+    // Rz(yaw) * Ry(-pitch): 서버의 pitch_down(+가 아래) 규약과 맞춘다.
     return [
-      [cy * cp, -sy, cy * sp],
-      [sy * cp, cy, sy * sp],
-      [-sp, 0, cp],
+      [cy * cp, -sy, -cy * sp],
+      [sy * cp, cy, -sy * sp],
+      [sp, 0, cp],
     ];
   }
   function quatToMatrix(quaternion) {
@@ -395,15 +395,35 @@ export function init(host) {
   let updating = false;
   let targetInitialized = false;
   let previewTimer = null;
-  const targetText = (preview) => `${xInput.value},${yInput.value},${zInput.value},` +
-    `${pitchInput.value},${gripInput.value},${cartesian.checked ? 1 : 0},${preview ? 1 : 0}`;
-  const publishTarget = (preview) => {
-    if (!updating) host.sendString('moveit_target', targetText(preview));
+  let currentGoal = null;
+  const sendGoal = async (planOnly, preset = '') => {
+    if (updating) return;
+    const params = {
+      x: Number(xInput.value),
+      y: Number(yInput.value),
+      z: Number(zInput.value),
+      pitch: Number(pitchInput.value),
+      grip: Number(gripInput.value),
+      cartesian: cartesian.checked,
+      plan_only: planOnly,
+    };
+    if (preset) params.preset = preset;
+    try {
+      const response = await host.rpc('moveit/send_goal', params);
+      if (!response.accepted) {
+        setLevel(status, `MoveIt: ${response.error || 'goal 거부'}`, 'warn');
+        return;
+      }
+      currentGoal = response.goal_id;
+      setLevel(status, planOnly ? 'Plan 요청...' : 'Execute 요청...', 'warn');
+    } catch (error) {
+      setLevel(status, `MoveIt 실패: ${error.message}`, 'bad');
+    }
   };
   const schedulePreview = () => {
     if (updating || draggingTarget) return;
     if (previewTimer) clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => publishTarget(true), 120);
+    previewTimer = setTimeout(() => sendGoal(true), 180);
   };
   for (const input of [xInput, yInput, zInput, pitchInput, gripInput]) {
     input.addEventListener('input', () => {
@@ -508,7 +528,7 @@ export function init(host) {
   canvas.addEventListener('pointerup', (event) => {
     if (dragView && dragMode !== 'orbit') {
       lastLocalEdit = performance.now();
-      publishTarget(true);
+      schedulePreview();
     }
     dragView = false;
     draggingTarget = false;
@@ -521,11 +541,19 @@ export function init(host) {
   }, { passive: false });
 
   const presetRow = buttonRow(body);
-  const preset = (mode) => {
+  const preset = async (mode) => {
     host.sendBool('arm_torque', true);
-    host.sendBool('arm_manual', false);
-    host.sendString('moveit_preset', mode);
-    host.sendEmpty('moveit_execute');
+    try {
+      await host.rpc('controller/switch', {
+        start: ['joint_trajectory_controller'],
+        stop: ['arm_command_controller'],
+        strictness: 1,
+      });
+    } catch (error) {
+      setLevel(status, `controller 전환 실패: ${error.message}`, 'bad');
+      return;
+    }
+    sendGoal(false, mode);
   };
   button(presetRow, 'HOME', () => preset('home'));
   button(presetRow, 'STOW', () => preset('stow'), 'primary');
@@ -541,18 +569,18 @@ export function init(host) {
     pitchInput.value = String(Number(values.get('pitch')) || 0);
     gripInput.value = String(Number(values.get('grip')) || 0);
     updating = false;
-    publishTarget(true);
+    schedulePreview();
   });
-  button(actionRow, 'Plan', () => {
-    publishTarget(false);
-    host.sendEmpty('moveit_plan');
-    setLevel(status, 'Plan 요청...', 'warn');
-  });
-  button(actionRow, 'Execute', () => {
-    host.sendEmpty('moveit_execute');
-    setLevel(status, 'Execute 요청...', 'warn');
-  }, 'primary');
-  button(actionRow, 'Cancel', () => host.sendEmpty('moveit_cancel'), 'danger');
+  button(actionRow, 'Plan', () => sendGoal(true));
+  button(actionRow, 'Execute', () => sendGoal(false), 'primary');
+  button(actionRow, 'Cancel', async () => {
+    try {
+      const response = await host.rpc('moveit/cancel', { goal_id: currentGoal || '' });
+      setLevel(status, response.ok ? 'Cancel 요청...' : 'Cancel할 goal이 없다', response.ok ? 'warn' : 'bad');
+    } catch (error) {
+      setLevel(status, `Cancel 실패: ${error.message}`, 'bad');
+    }
+  }, 'danger');
 
   const scrubRow = document.createElement('div');
   scrubRow.className = 'field';
@@ -566,10 +594,19 @@ export function init(host) {
   scrub.disabled = true;
   scrubRow.append(scrubLabel, scrub);
   body.append(scrubRow);
+  let scrubTimer = null;
   scrub.addEventListener('input', () => {
-    host.sendString('moveit_scrub', String(scrub.value));
+    if (scrubTimer) clearTimeout(scrubTimer);
+    scrubTimer = setTimeout(() => {
+      host.rpc('moveit/scrub', { index: Number(scrub.value) }).catch((error) => {
+        setLevel(status, `Preview 실패: ${error.message}`, 'bad');
+      });
+    }, 60);
   });
 
+  host.onEvent('moveit/feedback', (params) => {
+    setLevel(status, `MoveIt: ${params.state || '-'} ${Math.round((params.progress || 0) * 100)}%`, 'warn');
+  });
   host.onTopic('moveit_status', (message) => {
     const text = message.data || '-';
     const level = /fail|error|reject|abort/i.test(text) ? 'bad'

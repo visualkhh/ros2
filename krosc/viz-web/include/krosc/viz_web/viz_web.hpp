@@ -8,6 +8,7 @@
 
 #include "krosc/viz_web/context_link.hpp"
 #include "krosc/viz_web/viz_web_plugins.hpp"
+#include "krosc/viz_web/web_rpc.hpp"
 
 #ifndef KROSC_VIZ_WEB_ROOT
 #define KROSC_VIZ_WEB_ROOT "viz-web/www"
@@ -53,6 +54,8 @@ class VizWeb {
   [[nodiscard]] bool connected() const;
   [[nodiscard]] const VizWebOptions& options() const { return options_; }
   [[nodiscard]] const VizWebPluginRegistry& plugins() const { return registry_; }
+  // 프로젝트 main이 MoveIt/RL 같은 추가 RPC를 등록할 수 있다.
+  [[nodiscard]] WebRpc& rpc() { return *rpc_; }
 
  private:
   void shutdown();
@@ -62,6 +65,7 @@ class VizWeb {
   Context* context_ = nullptr;
   std::unique_ptr<ContextLink> link_;
   std::unique_ptr<HttpServer> server_;
+  std::unique_ptr<WebRpc> rpc_;
   std::atomic<bool> stop_{false};
   bool initialized_ = false;
 };

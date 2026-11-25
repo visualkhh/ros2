@@ -52,8 +52,10 @@ http://localhost:8080/
 ```
 
 - `krosc_ws_viz_web`은 로봇(`krosc_real`)에 `PeerNetwork`로 붙어 필요한 토픽만 구독하고,
-  `4바이트 길이 + 본문` 프레임을 WebSocket 바이너리로 브라우저에 넘긴다 (JSON 변환 없음).
-  로봇 TCP를 그대로 중계하는 게 아니라 토픽 단위로 discover/subscribe 한다.
+  `4바이트 길이 + 본문` 프레임을 WebSocket 바이너리로 브라우저에 넘긴다 (토픽은 JSON 변환 없음).
+  로봇 TCP를 그대로 중계하는 게 아니라 토픽/서비스 단위로 discover/subscribe 한다.
+- 명령(지도/파라미터/MoveIt goal)은 WebSocket **텍스트 JSON RPC**로 보내고, 게이트웨이가
+  로컬/원격 서비스와 `move_action` 액션으로 바꾼다.
 - 웹 플러그인은 `krosc_ws/viz-web/main.cpp`의 `VizWebPluginRegistry`에 추가한다. 게이트웨이가
   `/plugins.json`을 동적으로 만들고, JS 모듈은 `krosc_ws/viz-web/www/plugins/*.js`에 둔다.
   코어 JS는 `krosc/viz-web/www/plugins/*.js`에서 함께 서빙된다.

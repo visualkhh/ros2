@@ -22,6 +22,7 @@
 #include <string>
 
 #include "krosc/math.hpp"
+#include "krosc/math.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/viz/scene_view.hpp"
@@ -30,7 +31,6 @@
 namespace krosc_ws::viz {
 
 namespace {
-constexpr double kPi = 3.14159265358979323846;
 double steady_seconds() {
   using namespace std::chrono;
   return duration<double>(steady_clock::now().time_since_epoch()).count();
@@ -102,6 +102,17 @@ void MoveItPlugin::initialize(krosc::viz::VizHost& host) {
                    [this] { on_drag_finished(); });
 
   build_dock();
+  client_ = std::make_unique<MoveClient>(host.model().node().context(),
+                                         krosc::msgs::moveit::MOVE_ACTION);
+  preview_timer_ = new QTimer(&host.window());
+  preview_timer_->setSingleShot(true);
+  preview_timer_->setInterval(180);
+  QObject::connect(preview_timer_, &QTimer::timeout, preview_timer_, [this] { send_goal(true); });
+  scrub_timer_ = new QTimer(&host.window());
+  scrub_timer_->setSingleShot(true);
+  scrub_timer_->setInterval(60);
+  QObject::connect(scrub_timer_, &QTimer::timeout, scrub_timer_,
+                   [this] { send_scrub(scrub_index_); });
   refresh_timer_ = new QTimer(&host.window());
   QObject::connect(refresh_timer_, &QTimer::timeout, refresh_timer_, [this] { refresh(); });
   refresh_timer_->start(100);
@@ -111,6 +122,17 @@ void MoveItPlugin::initialize(krosc::viz::VizHost& host) {
 void MoveItPlugin::shutdown() {
   if (refresh_timer_ != nullptr) {
     refresh_timer_->stop();
+  }
+  if (preview_timer_ != nullptr) {
+    preview_timer_->stop();
+  }
+  if (scrub_timer_ != nullptr) {
+    scrub_timer_->stop();
+  }
+  handle_.reset();
+  if (client_) {
+    client_->shutdown();
+    client_.reset();
   }
 }
 
@@ -209,7 +231,12 @@ void MoveItPlugin::build_dock() {
     if (executing_ || updating_) {
       return;
     }
-    host_->model().node().publish("moveit_scrub", krosc::msgs::String{std::to_string(index)}, krosc::QOS_DEFAULT);
+    scrub_index_ = index;
+    if (scrub_timer_ != nullptr) {
+      scrub_timer_->start();
+    } else {
+      send_scrub(index);
+    }
   });
 
   dock_->setWidget(panel);
@@ -218,19 +245,69 @@ void MoveItPlugin::build_dock() {
 }
 
 void MoveItPlugin::publish_target(bool preview) {
-  if (updating_ || x_ == nullptr) {
+  (void)preview;
+  if (updating_ || x_ == nullptr || client_ == nullptr) {
     return;
   }
-  const QString text =
-      QString("%1,%2,%3,%4,%5,%6,%7")
-          .arg(x_->value(), 0, 'f', 4)
-          .arg(y_->value(), 0, 'f', 4)
-          .arg(z_->value(), 0, 'f', 4)
-          .arg(pitch_->value(), 0, 'f', 2)
-          .arg(gripper_->value(), 0, 'f', 2)
-          .arg(cartesian_->isChecked() ? 1 : 0)
-          .arg(preview ? 1 : 0);
-  host_->model().node().publish("moveit_target", krosc::msgs::String{text.toStdString()}, krosc::QOS_DEFAULT);
+  if (handle_ && handle_->status() == krosc::GoalStatus::Accepted) {
+    return;  // 이전 plan/execute가 끝난 뒤 다음 preview를 보낸다
+  }
+  if (preview_timer_ != nullptr) {
+    preview_timer_->start();
+  } else {
+    send_goal(true);
+  }
+}
+
+void MoveItPlugin::send_goal(bool plan_only, const std::string& preset) {
+  if (host_ == nullptr || client_ == nullptr || x_ == nullptr) {
+    return;
+  }
+  if (handle_ && handle_->status() == krosc::GoalStatus::Accepted) {
+    if (status_label_ != nullptr) {
+      status_label_->setText("MoveIt: 이전 goal이 아직 실행 중이다");
+    }
+    return;
+  }
+  krosc::msgs::moveit::MoveGroupGoal goal;
+  goal.plan_only = plan_only;
+  goal.cartesian = cartesian_ != nullptr ? cartesian_->isChecked() : true;
+  goal.grip = gripper_ != nullptr ? gripper_->value() / 1000.0 : -1.0;
+  goal.preset = preset;
+  if (preset.empty()) {
+    const double pitch = pitch_->value() * 3.14159265358979323846 / 180.0;
+    const double yaw = std::atan2(y_->value() + 0.000230, x_->value() - 0.059985);
+    goal.target_pose.header = krosc::msgs::Header{host_->model().node().now(), "base_link"};
+    goal.target_pose.pose.position = {x_->value(), y_->value(), z_->value()};
+    goal.target_pose.pose.orientation = krosc::tfmath::from_rpy(0.0, -pitch, yaw);
+  }
+  handle_ = client_->send_goal(goal, [this](const krosc::msgs::moveit::MoveGroupFeedback& feedback) {
+    if (status_label_ != nullptr) {
+      status_label_->setText(QString("MoveIt: %1 %2%")
+                                 .arg(QString::fromStdString(feedback.state))
+                                 .arg(static_cast<int>(feedback.progress * 100.0)));
+    }
+  });
+  if (status_label_ != nullptr) {
+    status_label_->setText(plan_only ? "Plan 요청..." : "Execute 요청...");
+  }
+}
+
+void MoveItPlugin::send_scrub(int index) {
+  if (host_ == nullptr) {
+    return;
+  }
+  try {
+    const auto response = host_->model().node().call_service<krosc::msgs::String, krosc::msgs::Bool>(
+        "move_group/scrub", krosc::msgs::String{std::to_string(index)});
+    if (!response.data && status_label_ != nullptr) {
+      status_label_->setText("Preview scrub 실패");
+    }
+  } catch (const std::exception& error) {
+    if (status_label_ != nullptr) {
+      status_label_->setText(QString("Preview scrub 실패: %1").arg(error.what()));
+    }
+  }
 }
 
 void MoveItPlugin::update_preview() {
@@ -272,7 +349,7 @@ void MoveItPlugin::update_preview() {
     const double pitch = pitch_->value() * 3.141592653589793 / 180.0;
     const double yaw = std::atan2(y_->value() + 0.000230, x_->value() - 0.059985);
     preview.target = krosc::msgs::Transform{{x_->value(), y_->value(), z_->value()},
-                                     krosc::tfmath::from_rpy(0.0, pitch, yaw)};
+                                     krosc::tfmath::from_rpy(0.0, -pitch, yaw)};
   }
   host_->scene().set_arm_preview(preview);
   if (view_ != nullptr) {
@@ -341,10 +418,7 @@ void MoveItPlugin::plan() {
   if (host_ != nullptr) {
     host_->show_tab(view_);
   }
-  publish_target(false);
-  if (status_label_ != nullptr) {
-    status_label_->setText("Plan 요청...");
-  }
+  send_goal(true);
 }
 
 void MoveItPlugin::execute() {
@@ -354,14 +428,13 @@ void MoveItPlugin::execute() {
   if (host_ != nullptr) {
     host_->show_tab(view_);
   }
-  host_->model().node().publish("moveit_execute", krosc::msgs::Empty{}, krosc::QOS_DEFAULT);
-  if (status_label_ != nullptr) {
-    status_label_->setText("Execute 요청...");
-  }
+  send_goal(false);
 }
 
 void MoveItPlugin::stop() {
-  host_->model().node().publish("moveit_cancel", krosc::msgs::Empty{}, krosc::QOS_DEFAULT);
+  if (handle_) {
+    (void)handle_->cancel();
+  }
   if (status_label_ != nullptr) {
     status_label_->setText("Cancel 요청...");
   }
@@ -410,6 +483,25 @@ void MoveItPlugin::on_drag_finished() {
 void MoveItPlugin::refresh() {
   if (dock_ == nullptr || current_label_ == nullptr) {
     return;
+  }
+  if (handle_ && handle_->status() != krosc::GoalStatus::Accepted) {
+    const auto result = handle_->result(0.0);
+    if (status_label_ != nullptr) {
+      if (result.status == krosc::GoalStatus::Rejected) {
+        status_label_->setText("MoveIt: goal rejected");
+      } else if (result.result.has_value()) {
+        try {
+          const auto& move = std::any_cast<const krosc::msgs::moveit::MoveGroupResult&>(result.result);
+          if (move.error_code != krosc::msgs::moveit::MoveGroupResult::NONE) {
+            status_label_->setText(QString("MoveIt: %1 (%2)")
+                                       .arg(QString::fromStdString(move.error_msg))
+                                       .arg(move.error_code));
+          }
+        } catch (const std::bad_any_cast&) {
+        }
+      }
+    }
+    handle_.reset();
   }
   const auto state_message = host_->model().moveit_state();
   if (!state_message) {

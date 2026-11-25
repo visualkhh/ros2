@@ -23,42 +23,57 @@ export function init(host) {
 
   const buttons = buttonRow(body);
   let slamMode = 'idle';
-  const slamButton = button(buttons, 'start SLAM', () => {
+  const slamButton = button(buttons, 'start SLAM', async () => {
     const target = slamMode === 'mapping' ? 'idle' : 'mapping';
-    slamMode = target;
-    updateSlamButton();
-    host.sendString('slam_mode', target);
-    setLevel(mode, `slam_mode: ${target}`, 'warn');
+    try {
+      await host.rpc('map/slam_mode', { mode: target });
+      setLevel(mode, `slam_mode: ${target}`, 'warn');
+    } catch (error) {
+      setLevel(mode, `slam_mode 실패: ${error.message}`, 'bad');
+    }
   });
   function updateSlamButton() {
     const running = slamMode === 'mapping';
     slamButton.textContent = running ? 'stop SLAM' : 'start SLAM';
     slamButton.className = running ? 'danger' : '';
   }
-  button(buttons, 'load', () => {
+  button(buttons, 'load', async () => {
     if (!mapSelect.value) { host.toast('map을 고른다'); return; }
-    host.sendString('map_change', mapSelect.value);
-  });
-  button(buttons, 'unload', () => host.sendEmpty('map_unload'));
-  // 저장/삭제는 로봇 링크가 잠깐 끊겨도 유실되지 않게 몇 번 재시도한다.
-  let pending = null;  // {kind:'save'|'delete', name, tries, timer}
-  function sendPending(kind, name) {
-    if (pending) clearTimeout(pending.timer);
-    pending = { kind, name, tries: 1, timer: null };
-    host.sendString(kind === 'save' ? 'map_save' : 'map_delete', name);
-    setLevel(mapStatus, kind === 'save' ? `saving ${name} ...` : `deleting ${name} ...`, 'warn');
-    pending.timer = setTimeout(() => retryPending(), 4000);
-  }
-  function retryPending() {
-    if (!pending) return;
-    if (pending.tries >= 3) {
-      setLevel(mapStatus, `${pending.kind} 실패: ${pending.name} (로봇 연결 확인)`, 'bad');
-      pending = null;
-      return;
+    try {
+      const response = await host.rpc('map/load', { name: mapSelect.value });
+      if (response.result !== 0) {
+        setLevel(mapStatus, `load 실패: ${mapSelect.value} (${response.result})`, 'bad');
+      }
+    } catch (error) {
+      setLevel(mapStatus, `load 실패: ${error.message}`, 'bad');
     }
-    pending.tries += 1;
-    host.sendString(pending.kind === 'save' ? 'map_save' : 'map_delete', pending.name);
-    pending.timer = setTimeout(() => retryPending(), 4000);
+  });
+  button(buttons, 'unload', async () => {
+    try {
+      await host.rpc('map/unload', {});
+    } catch (error) {
+      setLevel(mapStatus, `unload 실패: ${error.message}`, 'bad');
+    }
+  });
+  // 저장/삭제는 로봇 링크가 잠깐 끊겨도 유실되지 않게 몇 번 재시도한다.
+  async function sendPending(kind, name) {
+    const method = kind === 'save' ? 'map/save' : 'map/delete';
+    setLevel(mapStatus, kind === 'save' ? `saving ${name} ...` : `deleting ${name} ...`, 'warn');
+    for (let tries = 1; tries <= 3; tries += 1) {
+      try {
+        const response = await host.rpc(method, { name });
+        if (response.result) {
+          return;
+        }
+      } catch (error) {
+        if (tries === 3) {
+          setLevel(mapStatus, `${kind} 실패: ${name} (${error.message})`, 'bad');
+          return;
+        }
+      }
+      if (tries < 3) await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    setLevel(mapStatus, `${kind} 실패: ${name}`, 'bad');
   }
   button(buttons, 'save', () => {
     const name = window.prompt('map 이름', `map_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`);
@@ -74,10 +89,22 @@ export function init(host) {
     sendPending('delete', name);
   }, 'danger');
   let collisionEnabled = true;
-  const collisionButton = button(buttons, 'collision ON', () => {
-    collisionEnabled = !collisionEnabled;
-    host.sendBool('collision_set_enabled', collisionEnabled);
-    updateCollisionButton();
+  const collisionButton = button(buttons, 'collision ON', async () => {
+    const next = !collisionEnabled;
+    try {
+      const response = await host.rpc('params/set', {
+        node: 'collision_monitor',
+        parameters: { enabled: next },
+      });
+      if (response.results?.every((item) => item.successful)) {
+        collisionEnabled = next;
+        updateCollisionButton();
+      } else {
+        setLevel(collision, response.results?.[0]?.reason || 'collision 설정 실패', 'bad');
+      }
+    } catch (error) {
+      setLevel(collision, `collision 실패: ${error.message}`, 'bad');
+    }
   }, 'primary');
   function updateCollisionButton() {
     collisionButton.textContent = collisionEnabled ? 'collision ON' : 'collision OFF';
@@ -101,11 +128,6 @@ export function init(host) {
   host.onTopic('map_status', (message) => {
     const text = message.data || '-';
     setLevel(mapStatus, text);
-    if (pending && (text === `saved ${pending.name}` || text === `deleted ${pending.name}` ||
-                    text.startsWith('save failed') || text.startsWith('delete failed'))) {
-      clearTimeout(pending.timer);
-      pending = null;
-    }
     // 지도 load 직후에는 지도 전체가 보이게 맞춘다 (새로고침 없이 바로 보이도록)
     if (text.startsWith('loaded ')) {
       if (host.fitMap) host.fitMap();

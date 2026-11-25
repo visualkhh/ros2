@@ -46,6 +46,7 @@ class NavigationPlugin final : public QObject, public VizPlugin {
   void publish_multi(bool preview);
   void apply_costmap_params();
   void refresh_costmap_state();
+  void load_costmap_params();
   [[nodiscard]] std::string slam_status_text() const;
 
   VizHost* host_ = nullptr;
