@@ -278,6 +278,14 @@ export function init(host) {
       // 드래그 중에는 네트워크 왕복을 기다리지 않고 입력값으로 즉시 그린다 (Qt와 동일한 반응).
       let pose = target ? target.pose.position : null;
       let orientation = target ? target.pose.orientation : null;
+      if (!pose && host.armPoints) {
+        // 아직 moveit_target_pose가 없으면 실제 TCP 위치에 마커를 그린다 (드래그 시작 가능)
+        const arm = host.armPoints();
+        if (arm.length > 0) {
+          pose = arm[arm.length - 1];
+          orientation = { x: 0, y: 0, z: 0, w: 1 };
+        }
+      }
       const local = draggingTarget || performance.now() - lastLocalEdit < 250;
       if (local) {
         pose = { x: Number(xInput.value), y: Number(yInput.value), z: Number(zInput.value) };
