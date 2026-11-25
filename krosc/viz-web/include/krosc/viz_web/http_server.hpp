@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -59,6 +60,9 @@ class HttpServer {
   // 고주기 토픽(tf/scan/odom)은 다음 메시지가 금방 오므로 캐시하지 않는다.
   std::mutex cache_mutex_;
   std::map<std::string, std::vector<std::uint8_t>> cache_;
+  // 브라우저 전송 주기 제한: 렌더(60fps)보다 자주 보내봐야 큐만 쌓인다.
+  std::mutex throttle_mutex_;
+  std::map<std::string, std::chrono::steady_clock::time_point> last_forward_;
 };
 
 }  // namespace krosc::viz_web

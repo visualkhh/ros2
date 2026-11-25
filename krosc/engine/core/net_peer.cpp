@@ -146,6 +146,16 @@ QoS qos_for_remote_topic(const std::string& topic, bool latched) {
   return QOS_DEFAULT;
 }
 
+// 표시용 고주기 토픽은 큐에 같은 토픽이 있으면 최신 프레임으로 교체한다.
+// (이벤트/명령/제어 프레임은 절대 합치지 않는다.)
+bool latest_only_topic(const std::string& topic) {
+  return topic == "tf" || topic == "tf_static" || topic == "joint_states" || topic == "odom" ||
+         topic == "odometry/filtered" || topic == "scan" || topic == "imu" ||
+         topic == "diagnostics" || topic == "local_plan" || topic == "moveit_state" ||
+         topic == "moveit_status" || topic == "arm_status" || topic == "slam_status" ||
+         topic == "goal_status" || topic == "collision_status" || topic == "rl_nav_status";
+}
+
 }  // namespace
 
 struct Peer : public std::enable_shared_from_this<Peer> {
@@ -686,6 +696,17 @@ void Peer::send(const Frame& frame) {
     std::lock_guard<std::mutex> lock(queue_mutex);
     if (!alive.load()) {
       return;
+    }
+    const bool data_frame = frame.type == kFrameTopic || frame.type == kPeerTopicLatched;
+    if (data_frame && latest_only_topic(frame.topic)) {
+      for (auto it = queue.rbegin(); it != queue.rend(); ++it) {
+        if (it->topic == frame.topic &&
+            (it->type == kFrameTopic || it->type == kPeerTopicLatched)) {
+          *it = frame;  // 아직 안 나간 같은 토픽 프레임을 최신 값으로 교체
+          queue_cv.notify_one();
+          return;
+        }
+      }
     }
     if (queue.size() >= kMaxQueue) {
       queue.pop_front();

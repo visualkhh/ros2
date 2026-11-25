@@ -70,6 +70,25 @@ std::optional<std::string> frame_topic(const std::vector<std::uint8_t>& body) {
   return net::frame_topic(body);
 }
 
+// 표시용 고주기 토픽: 브라우저 큐에 같은 토픽이 이미 있으면 최신 프레임으로 교체한다.
+// (이벤트/명령 토픽은 절대 합치지 않는다.)
+bool latest_only(const std::string& topic) {
+  return topic == "tf" || topic == "tf_static" || topic == "joint_states" || topic == "odom" ||
+         topic == "odometry/filtered" || topic == "scan" || topic == "imu" ||
+         topic == "diagnostics" || topic == "local_plan" || topic == "moveit_state" ||
+         topic == "moveit_status" || topic == "arm_status" || topic == "slam_status" ||
+         topic == "goal_status" || topic == "collision_status" || topic == "rl_nav_status";
+}
+
+// 브라우저로 내보내는 최대 주기(ms). 0 = 제한 없음. 렌더가 60fps면 그 이상은 의미가 없다.
+int throttle_period_ms(const std::string& topic) {
+  if (topic == "tf") return 20;                                    // 50Hz
+  if (topic == "joint_states") return 33;                          // 30Hz
+  if (topic == "odom" || topic == "odometry/filtered") return 50;  // 20Hz
+  if (topic == "local_plan") return 100;                           // 10Hz
+  return 0;
+}
+
 bool cacheable(const std::string& topic) {
   return topic == "map" || topic == "global_costmap/costmap" || topic == "local_costmap/costmap" ||
          topic == "map_list" || topic == "map_status" || topic == "slam_status" ||
@@ -143,13 +162,30 @@ struct HttpServer::Client {
 
   ~Client() { stop(); }
 
-  void enqueue(std::uint8_t frame_opcode, std::shared_ptr<const std::vector<std::uint8_t>> frame) {
+  struct Item {
+    std::uint8_t opcode = 0x2;
+    std::string topic;
+    std::shared_ptr<const std::vector<std::uint8_t>> frame;
+  };
+
+  void enqueue(std::uint8_t frame_opcode, std::shared_ptr<const std::vector<std::uint8_t>> frame,
+               std::string topic = {}) {
     {
       std::lock_guard<std::mutex> lock(queue_mutex);
       if (!alive.load()) {
         return;
       }
-      queue.emplace_back(frame_opcode, std::move(frame));
+      // 고주기 표시 토픽은 큐에 이미 있으면 자리에서 최신 값으로 교체한다 (지연 누적 방지).
+      if (frame_opcode == 0x2 && latest_only(topic)) {
+        for (auto it = queue.rbegin(); it != queue.rend(); ++it) {
+          if (it->opcode == 0x2 && it->topic == topic) {
+            it->frame = std::move(frame);
+            queue_cv.notify_one();
+            return;
+          }
+        }
+      }
+      queue.push_back(Item{frame_opcode, std::move(topic), std::move(frame)});
       while (queue.size() > kMaxQueue) {
         queue.pop_front();
       }
@@ -171,7 +207,7 @@ struct HttpServer::Client {
 
   void writer_loop() {
     while (alive.load()) {
-      std::pair<std::uint8_t, std::shared_ptr<const std::vector<std::uint8_t>>> item;
+      Item item;
       {
         std::unique_lock<std::mutex> lock(queue_mutex);
         queue_cv.wait(lock, [this] { return !alive.load() || !queue.empty(); });
@@ -181,7 +217,7 @@ struct HttpServer::Client {
         item = std::move(queue.front());
         queue.pop_front();
       }
-      if (!websocket_send_frame(fd, item.first, *item.second)) {
+      if (!websocket_send_frame(fd, item.opcode, *item.frame)) {
         alive.store(false);
         ::shutdown(fd, SHUT_RDWR);
         return;
@@ -193,7 +229,7 @@ struct HttpServer::Client {
   std::atomic<bool> alive{true};
   std::mutex queue_mutex;
   std::condition_variable queue_cv;
-  std::deque<std::pair<std::uint8_t, std::shared_ptr<const std::vector<std::uint8_t>>>> queue;
+  std::deque<Item> queue;
   std::thread writer;
 };
 
@@ -343,8 +379,7 @@ void HttpServer::handle_client(int fd) {
     {
       std::lock_guard<std::mutex> lock(cache_mutex_);
       for (const auto& [topic_name, frame] : cache_) {
-        (void)topic_name;
-        client->enqueue(0x2, std::make_shared<const std::vector<std::uint8_t>>(frame));
+        client->enqueue(0x2, std::make_shared<const std::vector<std::uint8_t>>(frame), topic_name);
       }
     }
     {
@@ -419,9 +454,23 @@ bool HttpServer::serve_static(int fd, const std::string& target) {
 }
 
 void HttpServer::broadcast_binary(const std::vector<std::uint8_t>& body) {
-  if (const auto topic_name = frame_topic(body); topic_name && cacheable(*topic_name)) {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-    cache_[*topic_name] = body;
+  const auto topic_name = frame_topic(body);
+  if (topic_name) {
+    if (cacheable(*topic_name)) {
+      std::lock_guard<std::mutex> lock(cache_mutex_);
+      cache_[*topic_name] = body;
+    }
+    const int period = throttle_period_ms(*topic_name);
+    if (period > 0) {
+      std::lock_guard<std::mutex> lock(throttle_mutex_);
+      const auto now = std::chrono::steady_clock::now();
+      auto& last = last_forward_[*topic_name];
+      if (last.time_since_epoch().count() != 0 &&
+          now - last < std::chrono::milliseconds(period)) {
+        return;  // 이번 프레임은 버린다 (렌더 주기보다 빠름)
+      }
+      last = now;
+    }
   }
   std::vector<std::shared_ptr<Client>> clients;
   {
@@ -432,9 +481,10 @@ void HttpServer::broadcast_binary(const std::vector<std::uint8_t>& body) {
     return;
   }
   auto frame = std::make_shared<const std::vector<std::uint8_t>>(body);
+  const std::string name = topic_name ? *topic_name : std::string{};
   for (const auto& client : clients) {
     if (client && client->alive.load()) {
-      client->enqueue(0x2, frame);
+      client->enqueue(0x2, frame, name);
     }
   }
 }
