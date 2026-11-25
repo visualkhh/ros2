@@ -22,10 +22,14 @@ set(CMAKE_AUTORCC ON)
 add_library(krosc_viz STATIC
   core/viz_model.cpp
   core/viz_window.cpp
+  core/viz.cpp
+  core/viz_cli.cpp
   core/map_view.cpp
   core/scene_view.cpp
   include/krosc/viz/viz_model.hpp
   include/krosc/viz/viz_window.hpp
+  include/krosc/viz/viz.hpp
+  include/krosc/viz/viz_cli.hpp
   include/krosc/viz/map_view.hpp
   include/krosc/viz/scene_view.hpp
   include/krosc/viz/key_bindings.hpp
@@ -56,6 +60,8 @@ add_library(krosc_viz_plugins STATIC
   plugins/slam_plugin.cpp
   plugins/navigation_plugin.cpp
   plugins/manipulator_plugin.cpp
+  plugins/registry.cpp
+  include/krosc/viz/plugins/registry.hpp
   include/krosc/viz/plugins/teleop_plugin.hpp
   include/krosc/viz/plugins/slam_plugin.hpp
   include/krosc/viz/plugins/navigation_plugin.hpp

@@ -1,199 +1,72 @@
 #include <QApplication>
-#include <QTimer>
 
 #include <algorithm>
 #include <cstdio>
 #include <memory>
-#include <sstream>
 #include <string>
-#include <vector>
+#include <utility>
 
-#include "krosc/context.hpp"
-#include "krosc/net.hpp"
-#include "krosc/time.hpp"
-#include "krosc/viz/plugins/manipulator_plugin.hpp"
-#include "krosc/viz/plugins/navigation_plugin.hpp"
-#include "krosc/viz/plugins/slam_plugin.hpp"
-#include "krosc/viz/plugins/teleop_plugin.hpp"
-#include "krosc/viz/viz_plugin.hpp"
-#include "krosc/viz/viz_window.hpp"
+#include "krosc/viz/plugins/registry.hpp"
+#include "krosc/viz/viz.hpp"
+#include "krosc/viz/viz_cli.hpp"
 
 #include "plugins/moveit_plugin.hpp"
 #include "plugins/project_panel.hpp"
 #include "plugins/rl_nav_plugin.hpp"
 
-namespace {
-
-struct ServerAddress {
-  std::string host;
-  std::uint16_t port = 9000;
-};
-
-ServerAddress parse_server(const std::string& text) {
-  ServerAddress address;
-  const std::size_t colon = text.rfind(':');
-  if (colon == std::string::npos) {
-    address.host = text;
-    return address;
-  }
-  address.host = text.substr(0, colon);
-  try {
-    address.port = static_cast<std::uint16_t>(std::stoi(text.substr(colon + 1)));
-  } catch (...) {
-    address.port = 9000;
-  }
-  return address;
-}
-
-std::vector<std::string> split_list(const std::string& text) {
-  std::vector<std::string> result;
-  std::stringstream stream(text);
-  std::string item;
-  while (std::getline(stream, item, ',')) {
-    const std::size_t begin = item.find_first_not_of(" \t");
-    const std::size_t end = item.find_last_not_of(" \t");
-    if (begin != std::string::npos) {
-      result.push_back(item.substr(begin, end - begin + 1));
-    }
-  }
-  return result;
-}
-
-}  // namespace
-
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
-  std::string screenshot;
-  std::string server_text;
-  std::string fixed_frame = "map";
-  std::string tab = "3d";
-  std::string plugins_text = "project_panel,slam,navigation,moveit,rl_nav";
-  double duration = 2.0;
-  double distance = 0.0;
-  bool teleop_panel = false;
-  bool manipulator_panel = false;
-  bool no_manual = false;
-  bool moveit_plugin = true;
-  bool moveit_override = false;
-  for (int i = 1; i < argc; ++i) {
-    const std::string argument = argv[i];
-    if (argument == "--screenshot" && i + 1 < argc) {
-      screenshot = argv[++i];
-    } else if (argument == "--duration" && i + 1 < argc) {
-      duration = std::stod(argv[++i]);
-    } else if (argument == "--server" && i + 1 < argc) {
-      server_text = argv[++i];
-    } else if (argument == "--fixed-frame" && i + 1 < argc) {
-      fixed_frame = argv[++i];
-    } else if (argument == "--tab" && i + 1 < argc) {
-      tab = argv[++i];
-    } else if (argument == "--plugins" && i + 1 < argc) {
-      plugins_text = argv[++i];
-    } else if (argument == "--distance" && i + 1 < argc) {
-      distance = std::stod(argv[++i]);
-    } else if (argument == "--manual") {
-      teleop_panel = true;
-      manipulator_panel = true;
-    } else if (argument == "--teleop") {
-      teleop_panel = true;
-    } else if (argument == "--manipulator") {
-      manipulator_panel = true;
-    } else if (argument == "--moveit") {
-      moveit_plugin = true;
-      moveit_override = true;
+
+  // 프로젝트 전용 플래그. --no-moveit이 --moveit보다 우선한다.
+  bool want_moveit = false;
+  bool no_moveit = false;
+  for (int index = 1; index < argc; ++index) {
+    const std::string argument = argv[index];
+    if (argument == "--moveit") {
+      want_moveit = true;
     } else if (argument == "--no-moveit") {
-      moveit_plugin = false;
-      moveit_override = true;
-    } else if (argument == "--no-manual") {
-      no_manual = true;
-    } else if (argument == "--no-plugins") {
-      plugins_text.clear();
-      moveit_plugin = false;
-      moveit_override = true;
-    } else if (argument == "--help") {
-      std::printf(
-          "usage: krosc_ws_viz_app [--server HOST[:PORT]] [--fixed-frame FRAME] [--tab 3d|map|moveit]\n"
-          "       [--plugins a,b,...] [--manual|--teleop|--manipulator|--moveit|--no-manual] [--no-plugins]\n"
-          "       [--distance M] [--screenshot PATH] [--duration SEC]\n");
-      return 0;
+      no_moveit = true;
     }
   }
 
-  krosc::Context::Options options;
-  options.time_source = std::make_shared<krosc::SystemTimeSource>();
-  krosc::Context context(options);
+  krosc::viz::VizCliDefaults defaults;
+  defaults.fixed_frame = "map";
+  defaults.tab = "3d";
+  defaults.plugins = "project_panel,slam,navigation,moveit,rl_nav";
+  defaults.usage_extra = "[--moveit|--no-moveit]";
 
-  std::unique_ptr<krosc::net::Client> client;
-  if (!server_text.empty()) {
-    const ServerAddress address = parse_server(server_text);
-    client = std::make_unique<krosc::net::Client>(context, address.host, address.port);
+  krosc::viz::VizOptions options;
+  bool help = false;
+  std::string error;
+  if (!krosc::viz::parse_viz_options(argc, argv, defaults, options, help, error)) {
+    std::fprintf(stderr, "[viz] %s\n", error.c_str());
+    return 1;
+  }
+  if (help) {
+    return 0;
+  }
+
+  if (no_moveit) {
+    options.plugins.erase(
+        std::remove(options.plugins.begin(), options.plugins.end(), "moveit"),
+        options.plugins.end());
+  } else if (want_moveit &&
+             std::find(options.plugins.begin(), options.plugins.end(), "moveit") ==
+                 options.plugins.end()) {
+    options.plugins.push_back("moveit");
   }
 
   krosc::viz::VizPluginRegistry registry;
-  registry.add("teleop", [] { return std::make_unique<krosc::viz::TeleopPlugin>(); });
-  registry.add("slam", [] { return std::make_unique<krosc::viz::SlamPlugin>(); });
-  registry.add("navigation", [] { return std::make_unique<krosc::viz::NavigationPlugin>(); });
-  registry.add("manipulator", [] { return std::make_unique<krosc::viz::ManipulatorPlugin>(); });
-  registry.add("project_panel", [] { return std::make_unique<krosc_ws::viz::ProjectPanelPlugin>(); });
+  krosc::viz::register_core_plugins(registry);
+  registry.add("project_panel",
+               [] { return std::make_unique<krosc_ws::viz::ProjectPanelPlugin>(); });
   registry.add("moveit", [] { return std::make_unique<krosc_ws::viz::MoveItPlugin>(); });
   registry.add("rl_nav", [] { return std::make_unique<krosc_ws::viz::RlNavPlugin>(); });
 
-  std::vector<std::string> plugins = split_list(plugins_text);
-  const auto ensure_plugin = [&plugins](const std::string& id) {
-    if (std::find(plugins.begin(), plugins.end(), id) == plugins.end()) {
-      plugins.push_back(id);
-    }
-  };
-  if (teleop_panel) {
-    ensure_plugin("teleop");
+  krosc::viz::Viz viz(std::move(options), std::move(registry));
+  if (!viz.initialize(error)) {
+    std::fprintf(stderr, "[viz] %s\n", error.c_str());
+    return 1;
   }
-  if (manipulator_panel) {
-    ensure_plugin("manipulator");
-  }
-  if (no_manual) {
-    plugins.erase(std::remove(plugins.begin(), plugins.end(), "teleop"), plugins.end());
-    plugins.erase(std::remove(plugins.begin(), plugins.end(), "manipulator"), plugins.end());
-  }
-
-  if (moveit_override) {
-    if (moveit_plugin) {
-      if (std::find(plugins.begin(), plugins.end(), "moveit") == plugins.end()) {
-        plugins.push_back("moveit");
-      }
-    } else {
-      plugins.erase(std::remove(plugins.begin(), plugins.end(), "moveit"), plugins.end());
-    }
-  }
-
-  krosc::viz::VizWindow window(context);
-  window.set_fixed_frame(fixed_frame);
-  window.load_plugins(registry, plugins);
-  window.set_tab(tab);
-  if (distance > 0.0) {
-    window.set_camera_distance(distance);
-  }
-  if (client) {
-    window.set_connection_status(client->connected(), client->endpoint());
-  }
-  window.show();
-
-  QTimer status_timer;
-  if (client) {
-    QObject::connect(&status_timer, &QTimer::timeout, &window,
-                     [&] { window.set_connection_status(client->connected(), client->endpoint()); });
-    status_timer.start(1000);
-  }
-
-  if (!screenshot.empty()) {
-    QTimer::singleShot(static_cast<int>(duration * 1000.0), &window, [&] {
-      const bool saved = window.save_screenshot(QString::fromStdString(screenshot));
-      std::printf("%s%s\n", saved ? "screenshot saved: " : "screenshot failed: ", screenshot.c_str());
-      application.exit(saved ? 0 : 2);
-    });
-  }
-  const int result = application.exec();
-  status_timer.stop();
-  client.reset();
-  context.shutdown();
-  return result;
+  return viz.run();
 }

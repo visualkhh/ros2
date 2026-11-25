@@ -1,6 +1,6 @@
 # krosc/viz/plugins
 
-코어 Viz 패널은 이제 `VizWindow`에 하드코딩되지 않는다. 필요한 플러그인만 골라 붙인다.
+코어 Viz 패널은 `VizWindow`에 하드코딩되지 않는다. 필요한 플러그인만 골라 붙인다.
 
 구현됨:
 
@@ -19,12 +19,19 @@
 
 ```cpp
 krosc::viz::VizPluginRegistry registry;
-registry.add("teleop", [] { return std::make_unique<krosc::viz::TeleopPlugin>(); });
-registry.add("slam", [] { return std::make_unique<krosc::viz::SlamPlugin>(); });
-registry.add("navigation", [] { return std::make_unique<krosc::viz::NavigationPlugin>(); });
-registry.add("manipulator", [] { return std::make_unique<krosc::viz::ManipulatorPlugin>(); });
-window.load_plugins(registry, {"slam", "navigation"});
+krosc::viz::register_core_plugins(registry);   // teleop/slam/navigation/manipulator
+registry.add("my_plugin", [] { return std::make_unique<MyPlugin>(); });
+
+krosc::viz::VizOptions options;
+bool help = false;
+std::string error;
+krosc::viz::parse_viz_options(argc, argv, defaults, options, help, error);
+
+krosc::viz::Viz viz(std::move(options), std::move(registry));
+return viz.run();
 ```
 
 `VizWindow`은 고정 프레임/Follow/Reset/Displays/Topics/TF 같은 **기반 UI만** 만든다.
 SLAM/지도, 목표, 텔레옵, 팔 패널은 전부 플러그인이다.
+`Viz`는 Context/Client/Window/플러그인 로드/타이머/스크린샷/종료를 소유하고,
+`main.cpp`는 외부 파라미터만 `VizOptions`로 넘긴다.

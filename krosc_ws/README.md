@@ -167,23 +167,33 @@ cmake --build build -j
 ## Viz 플러그인 / 프로젝트 Viz main
 
 로봇 쪽 진입점이 `robot/main.cpp`라면, Viz 쪽 진입점은 `viz/main.cpp`다.
+`viz/main.cpp`는 **인자 파싱과 `Viz` 실행만** 하고, 앱 조립은 코어 `krosc::viz::Viz`가 맡는다.
 
 ```text
 krosc_ws/
 ├── robot/main.cpp            # 로봇(Pi) 엔드포인트
 ├── viz/
-│   ├── main.cpp              # 프로젝트 Viz 엔드포인트
+│   ├── main.cpp              # 프로젝트 Viz 엔드포인트 (파라미터 → Viz)
 │   ├── CMakeLists.txt
 │   └── plugins/
 │       ├── project_panel.cpp # 프로젝트 플러그인 예제 ("Project" 탭)
 │       └── moveit_plugin.cpp # MoveIt 도크 + MoveIt 탭
 
 krosc/viz/
-├── main.cpp                  # 공통/최소 Viz 앱
-├── core/                     # VizWindow, SceneView, MapView2D, VizModel
-├── plugins/                  # 코어 플러그인 (SLAM/Nav/Teleop/...)
-└── include/krosc/viz/        # IVizPlugin, VizHost, VizPlugin, ...
+├── main.cpp                  # 공통/최소 Viz 앱 (파라미터 → Viz)
+├── core/
+│   ├── viz.cpp               # 조립/수명주기: Context, Net Client, VizWindow, 플러그인, 타이머
+│   ├── viz_cli.cpp           # 공용 인자 파서 (VizOptions)
+│   └── VizWindow, SceneView, MapView2D, VizModel
+├── plugins/                  # 코어 플러그인 (SLAM/Nav/Teleop/...) + registry
+└── include/krosc/viz/        # Viz, VizOptions, IVizPlugin, VizHost, VizPlugin, ...
 ```
+
+`Viz`가 소유/처리하는 것:
+
+- `Context`, `net::Client`, `VizWindow`
+- 플러그인 로드와 시작 탭/고정 프레임/카메라 거리
+- 접속 상태 타이머, 스크린샷, 종료 시 정리
 
 코어 API는 `krosc/viz/include/krosc/viz/viz_plugin.hpp`에 있다.
 
@@ -200,10 +210,17 @@ class MyPlugin final : public krosc::viz::VizPlugin {
 };
 ```
 
-프로젝트 Viz main에 등록:
+코어 플러그인은 `register_core_plugins()`로 한 번에 등록하고, 프로젝트 플러그인만 추가한다:
 
 ```cpp
+krosc::viz::VizPluginRegistry registry;
+krosc::viz::register_core_plugins(registry);
 registry.add("my_plugin", [] { return std::make_unique<MyPlugin>(); });
+
+krosc::viz::VizOptions options;
+// parse_viz_options(argc, argv, defaults, options, help, error)로 채운다
+krosc::viz::Viz viz(std::move(options), std::move(registry));
+return viz.run();
 ```
 
 CMake에 소스 추가 후 실행:
