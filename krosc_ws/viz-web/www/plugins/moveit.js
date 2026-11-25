@@ -140,6 +140,7 @@ export function init(host) {
   }
 
   function draw() {
+    try {
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
@@ -342,6 +343,9 @@ export function init(host) {
           context.beginPath(); context.arc(tcp.x, tcp.y, 6, 0, Math.PI * 2); context.fill();
         }
       }
+    }
+    } catch (error) {
+      console.error('moveit draw', error);
     }
     requestAnimationFrame(draw);
   }

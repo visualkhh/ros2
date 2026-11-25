@@ -1100,6 +1100,7 @@ function drawGrid() {
 
 function mapCanvas(grid) {
   if (grid._canvas) return grid._canvas;
+  if (!grid.width || !grid.height) return null;
   const image = document.createElement('canvas');
   image.width = grid.width;
   image.height = grid.height;
@@ -1126,6 +1127,7 @@ function mapCanvas(grid) {
 
 function costmapCanvas(grid) {
   if (grid._costCanvas) return grid._costCanvas;
+  if (!grid.width || !grid.height) return null;
   const image = document.createElement('canvas');
   image.width = grid.width;
   image.height = grid.height;
@@ -1173,6 +1175,10 @@ function drawGridMessage(name, builder, alpha) {
   context.scale(view.scale, -view.scale);
   context.imageSmoothingEnabled = false;
   const image = builder(grid);
+  if (!image) {
+    context.restore();
+    return;
+  }
   context.drawImage(image, 0, 0, grid.width * grid.resolution, grid.height * grid.resolution);
   context.restore();
 }
@@ -1820,6 +1826,7 @@ function draw3dOccupancyGrid(name, builder, alpha) {
   const frame = frameTransform(grid.header.frame);
   if (!frame) return;
   const image = builder(grid);
+  if (!image) return;
   const res = grid.resolution;
   const c0 = Math.cos(frame.yaw);
   const s0 = Math.sin(frame.yaw);
@@ -1938,6 +1945,7 @@ canvas3d.addEventListener('wheel', (event) => {
 }, { passive: false });
 
 function render() {
+  try {
   if (activeView === '3d') {
     draw3d();
     requestAnimationFrame(render);
@@ -1965,6 +1973,9 @@ function render() {
   drawOdometry();
   drawGoal();
   drawRobot();
+  } catch (error) {
+    console.error('render', error);
+  }
   requestAnimationFrame(render);
 }
 requestAnimationFrame(render);
