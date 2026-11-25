@@ -287,12 +287,12 @@ int main(int argc, char** argv) {
   krosc::nodes::Cartographer cartographer(
       context, "cartographer_node",
       {{"mode", std::string(slam ? "mapping" : "idle")},
-       {"match_every", std::int64_t{2}},
+       {"match_every", std::int64_t{1}},
        {"num_matching_points", std::int64_t{20}},
        // 직진 0.26 m/s에서 매칭 간격(2스캔=0.2s) 동안 약 5cm 이동한다.
        // 기존 ±5cm/±3° 창은 이동량을 못 따라가 매칭이 자주 기각됐다(localization 드리프트).
-       {"linear_search_window", 0.20},
-       {"angular_search_window", 12.0 * kDegreesToRadians},
+       {"linear_search_window", 0.25},
+       {"angular_search_window", 15.0 * kDegreesToRadians},
        {"map_publish_period_sec", 2.0},
        {"tf_publish_period_sec", 0.05},
        {"tf_smoothing", 0.35}});
