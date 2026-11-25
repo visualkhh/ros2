@@ -265,8 +265,8 @@ pidstat -p "$(pgrep -x krosc_viz_app)" 1 10
 ### 주행
 
 - teleop: `krosc::net::Client`로 `cmd_vel`을 20Hz publish (0.08 m/s, 1.2초 전진/후진)
-- 자율주행: `goal_pose`를 map 좌표로 publish하고 `goal_status`가 `reached`가 될 때까지 대기
-- SLAM: `slam_mode`에 `mapping` publish
+- 자율주행: `navigate_to_pose` 액션 goal을 map 좌표로 보내고 `goal_status`가 `reached`가 될 때까지 대기
+- SLAM: `cartographer_node`의 `mode` 파라미터를 `mapping`으로 설정
 
 ---
 

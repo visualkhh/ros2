@@ -9,6 +9,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace krosc::net {
@@ -37,6 +38,10 @@ class HttpServer {
 
   void broadcast_binary(std::vector<std::uint8_t> body);
   void broadcast_text(const std::string& text);
+  // 새 WebSocket 클라이언트가 붙을 때 보낼 현재 상태(예: 로봇 연결 여부).
+  void set_text_on_connect(std::function<std::string()> handler) {
+    text_on_connect_ = std::move(handler);
+  }
 
  private:
   struct Client;
@@ -52,6 +57,7 @@ class HttpServer {
   SendHandler send_frame_;
   ManifestHandler manifest_;
   TextHandler text_handler_;
+  std::function<std::string()> text_on_connect_;
   std::atomic<bool> stopping_{false};
   int listen_fd_ = -1;
   std::thread accept_thread_;

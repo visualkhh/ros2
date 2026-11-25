@@ -95,6 +95,8 @@ class BtNavigator final : public Node {
 
   std::atomic<bool> preempt_{false};
   std::atomic<bool> cancel_requested_{false};
+  // navigate_to_pose와 navigate_through_poses는 BT 하나를 공유한다. 동시에 실행되지 않게 직렬화한다.
+  std::mutex execute_mutex_;
   mutable std::mutex follow_mutex_;
   std::shared_ptr<FollowHandle> follow_handle_;
   mutable std::mutex status_mutex_;

@@ -140,9 +140,11 @@ cmake --build build -j
   다시 활성화한다.
 - Viz의 STOW/HOME은 수동 경로가 아니라 `move_action` goal의 `preset`을 쓰고 토크를 자동으로 켠다.
 - 부팅 시 `arm_torque_on_start`(기본 true)로 토크를 켜 팔이 중력으로 떨어지지 않게 한다
-- `arm_torque`(Bool): 전체 토크 ON/OFF, `arm_stop`(Empty): 현재 자세 유지
+- `arm/set_torque`(`std_srvs/SetBool`): 전체 토크 ON/OFF
+- `arm/stop`(`std_srvs/Trigger`): 현재 자세 유지
 - 수동/자동 전환은 `controller_manager/switch_controller` 서비스로 한다 (기존 `arm_manual` 토픽 제거)
-- `arm_reset`(String): `all` / `joint1`..`joint4` / `gripper` — OpenCR `AR`로 해당 DYNAMIXEL 재부팅 (Hardware Error 해제)
+- `arm/reset`(`krosc_ws/srv/ArmReset`): `all` / `joint1`..`joint4` / `gripper` — OpenCR `AR`로 해당 DYNAMIXEL 재부팅 (Hardware Error 해제)
+- `buzzer`(`krosc_ws/srv/Buzzer`): `frequency`(Hz), `duration`(ms)
 - `arm_status`(String): `present=...;err=...;temp=...` — Viz Manipulator 패널에 에러가 빨간색으로 표시된다
 - 손목 roll 관절은 없다. ID 16은 사용하지 않는다.
 
@@ -150,12 +152,14 @@ cmake --build build -j
 
 - nav2와 같은 노드 구조: `global_costmap`/`local_costmap`(`Costmap2DROS`) → `planner_server`
   (`NavfnPlanner` 등) → `controller_server`(`RegulatedPurePursuitController` 등) → `bt_navigator`.
-- `goal_pose`(단일), `goal_poses`(multi): `bt_navigator`가 `compute_path_to_pose` 액션으로 계획하고
-  `follow_path` 액션으로 따라간다. `replanning_period`마다 다시 계획하고, 실패하면
-  `behavior_server`(spin → backup → wait)로 회복한다.
-- Multi Goal은 각 웨이포인트에 **위치 + yaw**를 저장하고, 구간별 경로를 하나로 이어
-  `follow_path` 한 번으로 보낸다 (nav2 `navigate_through_poses`와 같은 방식). 마지막 웨이포인트의
-  yaw까지 controller의 goal checker가 맞춘다.
+- 단일 목표: Viz/웹이 nav2 표준 `navigate_to_pose` 액션을 보내고, `bt_navigator`가
+  `compute_path_to_pose` 액션으로 계획한 뒤 `follow_path` 액션으로 따라간다.
+  `replanning_period`마다 다시 계획하고, 실패하면 `behavior_server`(spin → backup → wait)로 회복한다.
+- 경로 미리보기: `compute_path_to_pose` 액션이 `plan` 토픽을 latch로 낸다.
+- Multi Goal: `navigate_through_poses` / `compute_path_through_poses` 액션을 쓴다. 각 웨이포인트에
+  **위치 + yaw**를 저장하고, 구간별 경로를 하나로 이어 `follow_path` 한 번으로 보낸다. 마지막
+  웨이포인트의 yaw까지 controller의 goal checker가 맞춘다.
+- 취소: 현재 goal의 `cancel_goal` 서비스(액션 취소)로 처리한다.
 - `global_costmap/costmap`: static_layer + inflation_layer (2D/3D Viz에 표시)
 - `local_costmap/costmap`: 로봇 주변 4m rolling window, obstacle_layer + inflation_layer (2D/3D Viz에 표시)
 - 색은 RViz `costmap` 스킴: 1~98 blue→red, 99 cyan(inscribed), 100 purple(lethal), -1 blue-green-gray

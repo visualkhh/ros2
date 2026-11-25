@@ -409,6 +409,13 @@ void HttpServer::handle_client(int fd) {
       std::lock_guard<std::mutex> lock(clients_mutex_);
       clients_.push_back(client);
     }
+    if (text_on_connect_) {
+      std::string text = text_on_connect_();
+      if (!text.empty()) {
+        client->enqueue(0x1, std::make_shared<const std::vector<std::uint8_t>>(
+                                  text.begin(), text.end()));
+      }
+    }
     while (client->alive.load() && !stopping_.load()) {
       std::uint8_t opcode = 0;
       std::vector<std::uint8_t> payload;

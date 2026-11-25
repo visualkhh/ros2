@@ -67,6 +67,7 @@ class VizWeb {
   std::unique_ptr<HttpServer> server_;
   std::unique_ptr<WebRpc> rpc_;
   std::atomic<bool> stop_{false};
+  std::atomic<bool> robot_connected_{false};
   bool initialized_ = false;
 };
 

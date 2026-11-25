@@ -87,11 +87,17 @@ bool VizWeb::initialize(std::string& error) {
     server_->broadcast_binary(net::encode_body(frame));
   });
   link_->set_status_handler([this](bool connected) {
+    robot_connected_.store(connected);
     std::printf("[viz-web] robot %s: %s\n", connected ? "connected" : "disconnected",
                 link_->endpoint().c_str());
     std::fflush(stdout);
     server_->broadcast_text(std::string("{\"type\":\"robot\",\"connected\":") +
                             (connected ? "true" : "false") + "}");
+  });
+  // 늦게 붙은 브라우저도 현재 로봇 연결 상태를 바로 받는다.
+  server_->set_text_on_connect([this] {
+    return std::string("{\"type\":\"robot\",\"connected\":") +
+           (robot_connected_.load() ? "true" : "false") + "}";
   });
   try {
     server_->start();

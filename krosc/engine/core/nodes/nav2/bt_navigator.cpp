@@ -213,9 +213,14 @@ std::optional<msgs::Path> BtNavigator::plan_through(
 }
 
 msgs::nav2::NavigateThroughPosesResult BtNavigator::execute_through(ThroughHandle& handle) {
+  std::lock_guard<std::mutex> execution(execute_mutex_);
   msgs::nav2::NavigateThroughPosesResult result;
   preempt_.store(false);
   cancel_requested_.store(false);
+  if (handle.is_cancel_requested()) {
+    result.error_msg = "취소";
+    return result;
+  }
   const std::vector<msgs::PoseStamped> goals = handle.goal().poses;
   if (goals.empty()) {
     result.error_code = msgs::nav2::NavigateThroughPosesResult::UNKNOWN;
@@ -373,9 +378,14 @@ msgs::nav2::NavigateThroughPosesFeedback BtNavigator::through_feedback(
 }
 
 msgs::nav2::NavigateToPoseResult BtNavigator::execute(NavigateHandle& handle) {
+  std::lock_guard<std::mutex> execution(execute_mutex_);
   msgs::nav2::NavigateToPoseResult result;
   preempt_.store(false);
   cancel_requested_.store(false);
+  if (handle.is_cancel_requested()) {
+    result.error_msg = "취소";
+    return result;
+  }
   const msgs::PoseStamped goal = handle.goal().pose;
   const double began = now();
   int recoveries = 0;
