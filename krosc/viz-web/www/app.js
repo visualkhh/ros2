@@ -20,6 +20,7 @@ const state = {
   waypoints: [],
   multiGoal: false,
   goalArmed: false,
+  poseArmed: false,
   settings: {
     grid: true,
     map: true,
@@ -687,6 +688,20 @@ function sendPath(topicName, points) {
 
 const goalSentListeners = [];
 function addGoalSentListener(listener) { goalSentListeners.push(listener); }
+const poseSentListeners = [];
+function addPoseSentListener(listener) { poseSentListeners.push(listener); }
+
+function sendInitialPose(x, y, yaw = 0) {
+  const writer = new Writer();
+  writer.f64(Date.now() / 1000);
+  writer.str('map');
+  writer.f64(x); writer.f64(y); writer.f64(0);
+  writer.f64(0); writer.f64(0); writer.f64(Math.sin(yaw / 2)); writer.f64(Math.cos(yaw / 2));
+  for (let index = 0; index < 36; ++index) {
+    writer.f64(index === 0 ? 0.25 : index === 7 ? 0.25 : index === 35 ? 0.0685 : 0.0);
+  }
+  return sendBinary('initialpose', 13, writer.data);
+}
 
 function sendGoal(x, y, yaw = 0) {
   const writer = new Writer();
@@ -804,6 +819,8 @@ const host = {
   fitMap: fitToMap,
   setMultiGoal(enabled) { state.multiGoal = Boolean(enabled); },
   setGoalArmed(enabled) { state.goalArmed = Boolean(enabled); },
+  setPoseArmed(enabled) { state.poseArmed = Boolean(enabled); },
+  onPoseSent(listener) { addPoseSentListener(listener); },
   onGoalSent(listener) { addGoalSentListener(listener); },
   waypointCount() { return state.waypoints.length; },
   clearWaypoints() { state.waypoints = []; },
@@ -1067,12 +1084,12 @@ canvas.addEventListener('pointerdown', (event) => {
   if (mapPointers.size > 2) {
     return;
   }
-  if ((state.multiGoal || state.goalArmed) && event.button === 0) {
+  if ((state.multiGoal || state.goalArmed || state.poseArmed) && event.button === 0) {
     const rect = canvas.getBoundingClientRect();
     const world = screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
     waypointDraft = {
       x: world.x, y: world.y, cx: world.x, cy: world.y,
-      goal: !state.multiGoal,  // false=waypoint, true=단일 goal
+      mode: state.multiGoal ? 'waypoint' : state.poseArmed ? 'pose' : 'goal',
     };
     event.preventDefault();
     return;
@@ -1134,10 +1151,16 @@ canvas.addEventListener('pointerup', (event) => {
     const dx = waypointDraft.cx - waypointDraft.x;
     const dy = waypointDraft.cy - waypointDraft.y;
     const yaw = (dx * dx + dy * dy > 1e-4) ? Math.atan2(dy, dx) : 0;
-    if (waypointDraft.goal) {
+    if (waypointDraft.mode === 'goal') {
       sendGoal(waypointDraft.x, waypointDraft.y, yaw);
       state.goalArmed = false;
       for (const listener of goalSentListeners) {
+        try { listener(); } catch (error) { console.error(error); }
+      }
+    } else if (waypointDraft.mode === 'pose') {
+      sendInitialPose(waypointDraft.x, waypointDraft.y, yaw);
+      state.poseArmed = false;
+      for (const listener of poseSentListeners) {
         try { listener(); } catch (error) { console.error(error); }
       }
     } else {

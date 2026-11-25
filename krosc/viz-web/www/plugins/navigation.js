@@ -11,12 +11,26 @@ export function init(host) {
   let preview = false;
   let multi = false;
   let armed = false;
+  let poseArmed = false;
 
   const buttons = buttonRow(body);
+  const poseButton = button(buttons, '2D Pose', () => {
+    poseArmed = !poseArmed;
+    if (poseArmed) {
+      armed = false;
+      multi = false;
+      host.setGoalArmed(false);
+      host.setMultiGoal(false);
+    }
+    host.setPoseArmed(poseArmed);
+    updateUi();
+  });
   const goalButton = button(buttons, '2D Goal', () => {
     armed = !armed;
-    if (armed && multi) {
+    if (armed) {
+      poseArmed = false;
       multi = false;
+      host.setPoseArmed(false);
       host.setMultiGoal(false);
     }
     host.setGoalArmed(armed);
@@ -37,9 +51,11 @@ export function init(host) {
   const multiRow = buttonRow(body);
   const multiButton = button(multiRow, 'Multi Goal', () => {
     multi = !multi;
-    if (multi && armed) {
+    if (multi) {
       armed = false;
+      poseArmed = false;
       host.setGoalArmed(false);
+      host.setPoseArmed(false);
     }
     host.setMultiGoal(multi);
     updateUi();
@@ -68,6 +84,7 @@ export function init(host) {
   body.append(countLabel);
 
   function updateUi() {
+    poseButton.className = poseArmed ? 'primary' : '';
     goalButton.className = armed ? 'primary' : '';
     multiButton.className = multi ? 'primary' : '';
     if (multi) {
@@ -75,6 +92,8 @@ export function init(host) {
         '맵을 누른 채 드래그 = waypoint + 방향 · 클릭만 하면 방향 0 · Backspace = 마지막 취소 · Send로 전송';
     } else if (armed) {
       hint.textContent = '맵을 클릭하면 goal을 전송한다 (1회, 자동 해제)';
+    } else if (poseArmed) {
+      hint.textContent = '맵을 누른 채 드래그 = 위치+방향(initialpose) · 클릭만 하면 방향 0';
     } else {
       hint.textContent = '2D Goal을 켠 뒤 맵을 클릭하면 이동한다. (그냥 클릭해도 안 움직임)';
     }
@@ -85,6 +104,11 @@ export function init(host) {
   host.onGoalSent(() => {
     armed = false;
     host.setGoalArmed(false);
+    updateUi();
+  });
+  host.onPoseSent(() => {
+    poseArmed = false;
+    host.setPoseArmed(false);
     updateUi();
   });
 
