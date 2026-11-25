@@ -16,11 +16,18 @@ export function init(host) {
 
   const buttons = buttonRow(body);
   let slamMode = 'idle';
-  button(buttons, 'start SLAM', () => {
+  const slamButton = button(buttons, 'start SLAM', () => {
     const target = slamMode === 'mapping' ? 'idle' : 'mapping';
+    slamMode = target;
+    updateSlamButton();
     host.sendString('slam_mode', target);
     setLevel(mode, `slam_mode: ${target}`, 'warn');
   });
+  function updateSlamButton() {
+    const running = slamMode === 'mapping';
+    slamButton.textContent = running ? 'stop SLAM' : 'start SLAM';
+    slamButton.className = running ? 'danger' : '';
+  }
   button(buttons, 'load', () => {
     if (!mapSelect.value) { host.toast('map을 고른다'); return; }
     host.sendString('map_change', mapSelect.value);
@@ -30,6 +37,16 @@ export function init(host) {
     const name = window.prompt('map 이름', `map_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`);
     if (name) host.sendString('map_save', name.trim());
   });
+  button(buttons, 'delete', () => {
+    const name = mapSelect.value;
+    if (!name) {
+      host.toast('삭제할 map을 먼저 고른다');
+      return;
+    }
+    if (!window.confirm(`map "${name}" 을(를) 삭제할까?`)) return;
+    host.sendString('map_delete', name);
+    setLevel(mapStatus, `deleting ${name} ...`, 'warn');
+  }, 'danger');
   let collisionEnabled = true;
   const collisionButton = button(buttons, 'collision ON', () => {
     collisionEnabled = !collisionEnabled;
@@ -44,6 +61,7 @@ export function init(host) {
   host.onTopic('slam_status', (message) => {
     slamMode = message.data || 'idle';
     setLevel(mode, slamMode, slamMode === 'mapping' ? 'ok' : '');
+    updateSlamButton();  // 이미 매핑 중이면 버튼이 'stop SLAM'으로 보여야 한다
   });
   host.onTopic('map_status', (message) => setLevel(mapStatus, message.data || '-'));
   host.onTopic('map_list', (message) => {

@@ -40,6 +40,8 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
   map_saver_ = declare_parameter<std::string>("map_saver", std::string("map_saver"));
   map_change_topic_ = declare_parameter<std::string>("map_change_topic", std::string("map_change"));
   map_save_topic_ = declare_parameter<std::string>("map_save_topic", std::string("map_save"));
+  map_delete_topic_ =
+      declare_parameter<std::string>("map_delete_topic", std::string("map_delete"));
   map_unload_topic_ = declare_parameter<std::string>("map_unload_topic", std::string("map_unload"));
   map_list_topic_ = declare_parameter<std::string>("map_list_topic", std::string("map_list"));
   map_status_topic_ = declare_parameter<std::string>("map_status_topic", std::string("map_status"));
@@ -49,6 +51,8 @@ MapCatalog::MapCatalog(Context& context, std::string name, std::map<std::string,
       map_change_topic_.value(), [this](const msgs::String& message) { on_map_change(message); });
   subscribe<msgs::String>(
       map_save_topic_.value(), [this](const msgs::String& message) { on_map_save(message); });
+  subscribe<msgs::String>(
+      map_delete_topic_.value(), [this](const msgs::String& message) { on_map_delete(message); });
   subscribe<msgs::Empty>(
       map_unload_topic_.value(), [this](const msgs::Empty& message) { on_map_unload(message); });
   create_timer(list_period_.value(), [this] { refresh(); });
@@ -219,6 +223,42 @@ void MapCatalog::on_map_unload(const msgs::Empty&) {
   }
   publish_slam_mode("idle");
   publish_status("map unloaded");
+  refresh();
+}
+
+void MapCatalog::on_map_delete(const msgs::String& message) {
+  const std::string name = message.data;
+  if (!safe_name(name)) {
+    publish_status("invalid map name: " + name);
+    return;
+  }
+  bool was_loaded = false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (loaded_name_ == name) {
+      loaded_name_.clear();
+      was_loaded = true;
+    }
+  }
+  std::error_code error;
+  const auto removed = std::filesystem::remove_all(directory() / name, error);
+  if (error) {
+    publish_status("delete failed: " + name + " (" + error.message() + ")");
+    return;
+  }
+  if (removed == 0) {
+    publish_status("map not found: " + name);
+    return;
+  }
+  if (was_loaded) {
+    try {
+      call_service<msgs::Empty, msgs::Empty>(map_server_.value() + "/unload_map", msgs::Empty{});
+    } catch (const std::exception& exception) {
+      logger().warn("map_server unload 실패: %s", exception.what());
+    }
+    publish_slam_mode("idle");
+  }
+  publish_status("deleted " + name);
   refresh();
 }
 

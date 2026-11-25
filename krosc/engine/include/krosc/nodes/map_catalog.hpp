@@ -36,6 +36,7 @@ class MapCatalog final : public Node {
   void refresh();
   void on_map_change(const msgs::String& message);
   void on_map_save(const msgs::String& message);
+  void on_map_delete(const msgs::String& message);
   void on_map_unload(const msgs::Empty& message);
   void publish_status(const std::string& text);
   void publish_list();
@@ -51,6 +52,7 @@ class MapCatalog final : public Node {
   Parameter<std::string> map_saver_;
   Parameter<std::string> map_change_topic_;
   Parameter<std::string> map_save_topic_;
+  Parameter<std::string> map_delete_topic_;
   Parameter<std::string> map_unload_topic_;
   Parameter<std::string> map_list_topic_;
   Parameter<std::string> map_status_topic_;

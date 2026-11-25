@@ -5,6 +5,7 @@
 #include <QGridLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -115,11 +116,21 @@ void SlamPlugin::initialize(VizHost& host) {
       status_label_->setText("unloading ...");
     }
   });
-  connect(remove, &QPushButton::clicked, this, [this] {
-    if (host_ != nullptr) {
-      host_->model().node().publish("map_change", msgs::String{""}, QOS_DEFAULT);
-      status_label_->setText("deleting loaded map ...");
+  connect(remove, &QPushButton::clicked, this, [this, panel] {
+    if (host_ == nullptr) {
+      return;
     }
+    if (map_combo_->currentIndex() <= 0 || map_combo_->currentText().isEmpty()) {
+      status_label_->setText("select a map to delete");
+      return;
+    }
+    const QString name = map_combo_->currentText();
+    if (QMessageBox::question(panel, "delete map",
+                              QString("Delete map \"%1\" ?").arg(name)) != QMessageBox::Yes) {
+      return;
+    }
+    host_->model().node().publish("map_delete", msgs::String{name.toStdString()}, QOS_DEFAULT);
+    status_label_->setText(QString("deleting %1 ...").arg(name));
   });
   status_label_ = new QLabel("", panel);
   status_label_->setWordWrap(true);

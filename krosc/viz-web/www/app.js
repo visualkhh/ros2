@@ -1867,9 +1867,10 @@ function render() {
     }
   }
   drawGrid();
-  if (state.settings.global_costmap) drawGridMessage('global_costmap/costmap', costmapCanvas, 0.5);
-  if (state.settings.local_costmap) drawGridMessage('local_costmap/costmap', costmapCanvas, 0.55);
+  // 지도를 먼저 깔고 그 위에 costmap을 그린다. (순서가 반대면 불투명한 지도가 costmap을 가린다)
   if (state.settings.map) drawGridMessage('map', mapCanvas, 1.0);
+  if (state.settings.global_costmap) drawGridMessage('global_costmap/costmap', costmapCanvas, 0.55);
+  if (state.settings.local_costmap) drawGridMessage('local_costmap/costmap', costmapCanvas, 0.6);
   if (state.settings.path) drawPath(topic('plan'), '#6aa9ff', 2);
   if (state.settings.local_plan) drawPath(topic('local_plan'), '#54d18c', 1.5);
   drawScan();
