@@ -710,6 +710,10 @@ void MoveGroup::ensure_trajectory_controller() {
 }
 
 void MoveGroup::on_execute(const msgs::Empty&) {
+  // controller_manager 서비스는 MoveGroup mutex 밖에서 호출한다.
+  // 반대로 잡으면 controller_manager update(자기 mutex) -> joint_states publish ->
+  // MoveGroup mutex 대기와 락 순서가 뒤집혀 데드락이 난다.
+  ensure_trajectory_controller();
   std::lock_guard<std::mutex> lock(mutex_);
   if (busy_.exchange(true)) {
     publish_status_locked("Execute: 이미 실행 중");
@@ -745,7 +749,6 @@ void MoveGroup::on_execute(const msgs::Empty&) {
     publish_status_locked("Execute 실패: controller_manager 플러그인이 없다");
     return;
   }
-  ensure_trajectory_controller();
   follow_ = controller_manager_->send(to_message_locked(*trajectory_));
   if (!follow_ || !follow_->accepted()) {
     follow_.reset();
