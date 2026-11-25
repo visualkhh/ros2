@@ -1726,6 +1726,76 @@ function draw3dOdometry() {
   }
 }
 
+// 맵 셀을 파티클(점)로 그리기 위한 캐시. (Qt Viz draw_map과 같은 스타일)
+function mapPointCache(grid) {
+  if (grid._points) return grid._points;
+  const stride = Math.max(1, Math.floor(Math.sqrt((grid.width * grid.height) / 20000)));
+  const xs = [];
+  const ys = [];
+  const cls = [];
+  for (let y = 0; y < grid.height; y += stride) {
+    for (let x = 0; x < grid.width; x += stride) {
+      const value = grid.data[y * grid.width + x];
+      xs.push((x + 0.5) * grid.resolution);
+      ys.push((y + 0.5) * grid.resolution);
+      cls.push(value < 0 ? 0 : value >= 50 ? 2 : 1);  // unknown / free / occupied
+    }
+  }
+  grid._points = { xs: Float32Array.from(xs), ys: Float32Array.from(ys), cls: Uint8Array.from(cls) };
+  return grid._points;
+}
+
+// 3D 맵: 모르는 곳=어두운 회색, 빈 곳=밝은 회색, 벽=흰색 점 (Qt Viz와 동일)
+function draw3dMapPoints() {
+  const grid = topic('map');
+  if (!grid || !grid.width || !grid.height) return;
+  const frame = frameTransform(grid.header.frame);
+  if (!frame) return;
+  const points = mapPointCache(grid);
+  const c0 = Math.cos(frame.yaw);
+  const s0 = Math.sin(frame.yaw);
+  const gx = frame.x + c0 * grid.origin.position.x - s0 * grid.origin.position.y;
+  const gy = frame.y + s0 * grid.origin.position.x + c0 * grid.origin.position.y;
+  const yaw = frame.yaw + yawOf(grid.origin.orientation);
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const width = canvas3d.clientWidth;
+  const height = canvas3d.clientHeight;
+  if (width < 2 || height < 2) return;
+  const cyw = Math.cos(camera3d.yaw);
+  const syw = Math.sin(camera3d.yaw);
+  const cyp = Math.cos(camera3d.pitch);
+  const syp = Math.sin(camera3d.pitch);
+  const scaleBase = Math.min(width, height) * 0.95;
+  const z = 0.012;
+  const paths = [new Path2D(), new Path2D(), new Path2D()];
+  const xs = points.xs;
+  const ys = points.ys;
+  const cls = points.cls;
+  for (let i = 0; i < xs.length; ++i) {
+    const wx = xs[i];
+    const wy = ys[i];
+    const x = gx + cy * wx - sy * wy;
+    const y = gy + sy * wx + cy * wy;
+    const dx = x - camera3d.tx;
+    const dy = y - camera3d.ty;
+    const rx = cyw * dx + syw * dy;
+    const ry = -syw * dx + cyw * dy;
+    const depth = ry * syp - z * cyp + camera3d.distance;
+    if (depth <= 0.08) continue;
+    const scale = scaleBase / depth;
+    const px = width * 0.5 + rx * scale;
+    const py = height * 0.56 - (ry * cyp + z * syp) * scale;
+    const size = Math.max(1, Math.min(3, 60 / depth));
+    paths[cls[i]].rect(px - size * 0.5, py - size * 0.5, size, size);
+  }
+  const colors = ['rgba(75, 78, 88, 0.67)', 'rgba(185, 190, 200, 0.75)', 'rgba(248, 249, 252, 0.96)'];
+  for (let i = 0; i < 3; ++i) {
+    context3d.fillStyle = colors[i];
+    context3d.fill(paths[i]);
+  }
+}
+
 // 3D 바닥에 occupancy grid/costmap을 그린다. 타일별 affine으로 원근을 근사한다.
 function draw3dOccupancyGrid(name, builder, alpha) {
   const grid = topic(name);
@@ -1795,7 +1865,7 @@ function draw3d() {
     }
   }
   draw3dGrid();
-  if (state.settings.map) draw3dOccupancyGrid('map', mapCanvas, 1.0);
+  if (state.settings.map) draw3dMapPoints();
   if (state.settings.global_costmap) draw3dOccupancyGrid('global_costmap/costmap', costmapCanvas, 0.6);
   if (state.settings.local_costmap) draw3dOccupancyGrid('local_costmap/costmap', costmapCanvas, 0.7);
   draw3dAxes();
