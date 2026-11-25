@@ -1067,10 +1067,13 @@ canvas.addEventListener('pointerdown', (event) => {
   if (mapPointers.size > 2) {
     return;
   }
-  if (state.multiGoal && event.button === 0) {
+  if ((state.multiGoal || state.goalArmed) && event.button === 0) {
     const rect = canvas.getBoundingClientRect();
     const world = screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
-    waypointDraft = { x: world.x, y: world.y, cx: world.x, cy: world.y };
+    waypointDraft = {
+      x: world.x, y: world.y, cx: world.x, cy: world.y,
+      goal: !state.multiGoal,  // false=waypoint, true=단일 goal
+    };
     event.preventDefault();
     return;
   }
@@ -1131,7 +1134,15 @@ canvas.addEventListener('pointerup', (event) => {
     const dx = waypointDraft.cx - waypointDraft.x;
     const dy = waypointDraft.cy - waypointDraft.y;
     const yaw = (dx * dx + dy * dy > 1e-4) ? Math.atan2(dy, dx) : 0;
-    state.waypoints.push({ x: waypointDraft.x, y: waypointDraft.y, yaw });
+    if (waypointDraft.goal) {
+      sendGoal(waypointDraft.x, waypointDraft.y, yaw);
+      state.goalArmed = false;
+      for (const listener of goalSentListeners) {
+        try { listener(); } catch (error) { console.error(error); }
+      }
+    } else {
+      state.waypoints.push({ x: waypointDraft.x, y: waypointDraft.y, yaw });
+    }
     waypointDraft = null;
     canvas.focus();
     return;
