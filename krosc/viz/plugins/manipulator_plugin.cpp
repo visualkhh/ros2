@@ -191,7 +191,7 @@ void ManipulatorPlugin::initialize(VizHost& host) {
   connect(home, &QPushButton::clicked, this, [this, set_preset, apply_torque] {
     cancel_moveit_if_executing();
     apply_torque(true);
-    set_preset({0.0, -1.7000, 1.2000, 0.7000, 0.0});
+    set_preset({0.5000, -1.8000, 1.4000, 0.8000, 0.0});
     host_->model().node().publish("arm_manual", msgs::Bool{false}, QOS_DEFAULT);
     host_->model().node().publish("moveit_preset", msgs::String{"home"}, QOS_DEFAULT);
     host_->model().node().publish("moveit_execute", msgs::Empty{}, QOS_DEFAULT);
