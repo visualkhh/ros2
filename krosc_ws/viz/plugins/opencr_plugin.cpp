@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <string>
@@ -54,6 +55,15 @@ QString fixed(double value, int digits) {
     return "-";
   }
   return QString::number(value, 'f', digits);
+}
+
+// 3S Li-ion 대략: 9.6V(0%) ~ 12.6V(100%). 부하 시 전압이 처지므로 참고값.
+int battery_percent(double voltage) {
+  if (!std::isfinite(voltage)) {
+    return -1;
+  }
+  const double percent = (voltage - 9.6) / 3.0 * 100.0;
+  return static_cast<int>(std::clamp(std::lround(percent), 0L, 100L));
 }
 
 QString level_style(const std::string& text, int level) {
@@ -148,8 +158,14 @@ void OpencrPlugin::refresh() {
     const Values values = values_of(item);
     if (item.name == "OpenCR") {
       status_->setText(level_style(item.message.empty() ? "-" : item.message, item.level));
-      const QString battery = fixed(number(values, "battery"), 2);
-      battery_->setText(QString("%1 V").arg(battery));
+      const double volts = number(values, "battery");
+      const int percent = battery_percent(volts);
+      battery_->setText(QString("%1 V%2")
+                            .arg(fixed(volts, 2),
+                                 percent < 0 ? QString() : QString(" (≈%1%)").arg(percent)));
+      battery_->setStyleSheet(percent < 0 || percent < 25 ? "color:#ff6b6b"
+                              : percent < 50              ? "color:#ffb36b"
+                                                          : "color:#54d18c");
       current_->setText(QString("L %1 A · R %2 A")
                             .arg(fixed(number(values, "left_current"), 2),
                                  fixed(number(values, "right_current"), 2)));

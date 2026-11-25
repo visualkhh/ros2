@@ -34,6 +34,12 @@ export function init(host) {
     host.sendString('buzzer', `${frequency.value},${duration.value}`);
   }, 'primary');
 
+  // 3S Li-ion 대략: 9.6V(0%) ~ 12.6V(100%). 부하 시 전압이 처지므로 참고값.
+  const batteryPercent = (voltage) => {
+    if (!Number.isFinite(voltage)) return null;
+    return Math.max(0, Math.min(100, Math.round(((voltage - 9.6) / 3.0) * 100)));
+  };
+
   const asNumber = (values, key) => {
     const value = Number(values.get(key));
     return Number.isFinite(value) ? value : null;
@@ -46,8 +52,11 @@ export function init(host) {
       const values = new Map((item.values || []).map((entry) => [entry.key, entry.value]));
       if (item.name === 'OpenCR') {
         setLevel(status, item.message || '-', item.level === 0 ? 'ok' : item.level === 1 ? 'warn' : 'bad');
-        setLevel(battery, `${fixed(asNumber(values, 'battery'), 2)} V`,
-                 (asNumber(values, 'battery') ?? 0) >= 10.5 ? 'ok' : 'warn');
+        const volts = asNumber(values, 'battery');
+        const percent = batteryPercent(volts);
+        setLevel(battery,
+                 `${fixed(volts, 2)} V` + (percent === null ? '' : ` (≈${percent}%)`),
+                 percent === null ? 'warn' : percent >= 50 ? 'ok' : percent >= 25 ? 'warn' : 'bad');
         setLevel(current,
                  `L ${fixed(asNumber(values, 'left_current'), 2)} A · R ${fixed(asNumber(values, 'right_current'), 2)} A`);
         setLevel(temperature,
