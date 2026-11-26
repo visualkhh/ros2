@@ -149,11 +149,11 @@ krosc/
 │   ├── include/krosc/             # node/context/topic/tf/time/parameter/service/action/msgs/net(rpc)
 │   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
 │   │   ├── control/               # ControllerManager, JSB/JTC/forward/diff_drive
-│   │   ├── hardware/              # Hardware/HardwareManager (물리 lifecycle + 실행 스케줄)
-│   │   ├── sensor/                # Sensor (논리 센서: read/publish)
+│   │   ├── hardware/              # Hardware (물리 lifecycle만)
+│   │   ├── sensor/                # Sensor/SensorManager (논리 센서 read/publish)
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 60 tests (nav2/control/hardware/MoveIt/net/RPC 포함)
+│   ├── tests/                     # core 59 tests (nav2/control/sensor/hardware/MoveIt/net/RPC 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp, net_bench.cpp
 ├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
@@ -312,7 +312,7 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)로 돌린다.
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 60 + sim 4 = 64 tests, 2 executables
+# core 59 + sim 4 = 63 tests, 2 executables
 ```
 
 동시성 스트레스(선택):
@@ -325,7 +325,9 @@ KROSC_STRESS=1 KROSC_TEST_FILTER=concurrency ./build/engine/krosc_core_tests
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
-- hardware: Hardware lifecycle, HardwareManager가 SensorConfig/ControlConfig 주기로 sensor read→control read→control hook→control write 실행, 실패/지연 집계
+- hardware: Hardware lifecycle(start/stop/connected)만. 주기는 논리 레이어가 가진다
+- sensor: SensorManager가 Sensor.read를 period별 실행, 실패/지연 집계
+- control: ControlManager가 Control.read → controller hook → Control.write를 period별 실행
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + move_group/scrub + 상태 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - RPC: 서비스/액션/파라미터 포워딩(discovery, timeout, latched), 웹 JSON RPC
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
@@ -365,7 +367,7 @@ nav2/control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파생 클
 |---|---|---|
 | nav2 controller | `NavControllerPlugin` (`nodes/nav2/controllers/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController`, `RotationShimController` |
 | nav2 planner | `NavPlannerPlugin` (`nodes/nav2/planners/global_planner.hpp`) | `NavfnPlanner`, `ThetaStarPlanner`, `SmacPlanner2D`, `SmacPlannerHybrid` |
-| control hardware | `ControlInterface` (`control/control_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
+| control | `Control` (`control/control.hpp`) | `OpenCrControl` (krosc_ws), `MockArmSystem` (test) |
 | control controller | `Controller` (`control/controller.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
 | MoveIt kinematics | `MoveItKinematicsPlugin` (`moveit/kinematics/kinematics_base.hpp`) | `ArmChainKinematics` |
 | MoveIt planner | `MoveItPlannerPlugin` (`moveit/planners/planner_manager.hpp`) | `CartesianPlanner`, `JointSpacePlanner` |

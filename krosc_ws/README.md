@@ -7,7 +7,8 @@
 [라즈베리파이] krosc_real
   OpenCRSerial (115200, C/S/I/E/A) ─┐
   LDS-03     (230400, 10Hz) ────────┤
-                                    ├─ HardwareManager ─ read: scan/imu, write: wheel/arm
+                                    ├─ SensorManager ─ scan/imu 발행
+                                    ├─ ControlManager ─ wheel/arm read/write
                                     ├─ RobotStatus ─ arm_status/diagnostics/팔 서비스
                                     ├─ controller_manager (control)
                                     │    ├─ OpenCrControl (control layer)
@@ -354,10 +355,11 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 - `sensors/lds03/`: 스캔 읽기 → `scan` 발행
 - `hardwares/`는 `Hardware`(물리 lifecycle), `controls/`는 `Control`(state/command),
   `sensors/`는 `Sensor`(read/publish)를 상속한다
-- `HardwareManager`: `add_hardware` + `add_sensor(SensorConfig{name, period})` +
-  `add_control(ControlConfig{name, read_period, write_period})`로 등록하고
-  `sensor read → control read → control hook → control write` 순서로 실행한다
-- control hook은 `controller_manager.update()`다. `main`이 HardwareManager/장치/유닛을 조립하고 소유한다
+- `SensorManager`: `add(sensor, name, period)`로 등록하고 각자 주기로 read/publish
+- `ControlManager`: `add(control, name, read_period, write_period)`로 등록하고
+  `control read → controller hook → control write` 순서로 실행한다
+- Hardware는 main에서 생성/start/stop하고 각 Control/Sensor 생성자에 주입한다
+- control hook은 `controller_manager.update()`다. `main`이 장치/유닛/매니저를 조립하고 소유한다
 - LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`,
   `--executor-threads` (환경 변수 `KROSC_SCAN_TOPIC`, `KROSC_IMU_TOPIC`, `KROSC_EXECUTOR_THREADS`)
@@ -380,7 +382,7 @@ control 레이어는 `krosc/engine/include/krosc/control/`, 실기 하드웨어 
 LDS-03은 물리 장치 `hardwares/lds03/lds03_device.cpp`와
 scan을 발행하는 sensor 논리 레이어 `sensors/lds03/lds03_sensor.cpp`로 나뉜다.
 OpenCR은 물리 `hardwares/opencr/opencr_serial.cpp`, 제어 `controls/opencr/opencr_control.cpp`,
-IMU `sensors/opencr/opencr_imu.cpp`로 나뉘고 `HardwareManager`가 read/write 주기로 실행한다.
+IMU `sensors/opencr/opencr_imu.cpp`로 나뉘고 SensorManager/ControlManager가 주기 실행한다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
 ## 구성

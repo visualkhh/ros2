@@ -46,7 +46,8 @@
 #include "controls/opencr/opencr_control.hpp"
 #include "hardwares/lds03/lds03_device.hpp"
 #include "hardwares/opencr/opencr_serial.hpp"
-#include "krosc/hardware/hardware_manager.hpp"
+#include "krosc/control/control_manager.hpp"
+#include "krosc/sensor/sensor_manager.hpp"
 #include "nodes/robot_status.hpp"
 #include "sensors/lds03/lds03_sensor.hpp"
 #include "sensors/opencr/opencr_imu.hpp"
@@ -293,18 +294,18 @@ int main(int argc, char** argv) {
                                                    hardware_options.scan_frame);
   }
 
-  krosc::hardware::HardwareManager hardware;
-  hardware.add_hardware(opencr, {"opencr"});
-  if (lidar) {
-    hardware.add_hardware(*lidar, {"lds03"});
-  }
-  hardware.add_control(control, {"opencr_control", hardware_options.control_read_period,
-                                 hardware_options.control_write_period});
-  hardware.add_sensor(imu, {"opencr_imu", hardware_options.imu_period});
+  krosc::sensor::SensorManager sensor_manager;
+  sensor_manager.add(imu, "opencr_imu", hardware_options.imu_period);
   if (scan) {
-    hardware.add_sensor(*scan, {"lds03_scan", hardware_options.scan_period});
+    sensor_manager.add(*scan, "lds03_scan", hardware_options.scan_period);
   }
+  krosc::control::ControlManager control_manager;
+  control_manager.add(control, "opencr_control", hardware_options.control_read_period,
+                      hardware_options.control_write_period);
   opencr.start();
+  if (lidar) {
+    lidar->start();
+  }
   krosc_ws::RobotStatus driver(context, opencr, lidar.get());
   std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
               scan_rate, imu_topic.c_str(), imu_rate);
@@ -494,11 +495,13 @@ int main(int argc, char** argv) {
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
   std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
 
-  hardware.set_control_hook(
+  control_manager.set_control_hook(
       [&](double time, double period) { controller_manager.update(time, period); },
       hardware_options.control_period);
-  if (!hardware.start()) {
-    std::cerr << "[krosc_ws] 하드웨어 시작 실패\n";
+  sensor_manager.start();
+  if (!control_manager.start()) {
+    std::cerr << "[krosc_ws] control manager 시작 실패\n";
+    sensor_manager.stop();
     return 1;
   }
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
@@ -525,7 +528,12 @@ int main(int argc, char** argv) {
 
   std::printf("[krosc_ws] 정지 중...\n");
   std::fflush(stdout);
-  hardware.stop();
+  control_manager.stop();
+  sensor_manager.stop();
+  if (lidar) {
+    lidar->stop();
+  }
+  opencr.stop();
   context.shutdown();
   std::printf("[krosc_ws] 종료\n");
   return 0;
