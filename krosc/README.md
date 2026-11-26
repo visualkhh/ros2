@@ -150,6 +150,7 @@ krosc/
 │   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
 │   │   ├── control/               # controller_manager, JSB/JTC/forward/diff_drive
 │   │   ├── sensor/                # Sensor/SensorManager (read-only 센서 수명주기)
+│   │   ├── hardware/              # Hardware (물리 장치 start/stop/connected)
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
 │   ├── tests/                     # core 62 tests (nav2/control/sensor/MoveIt/net/RPC 포함)

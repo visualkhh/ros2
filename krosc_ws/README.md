@@ -393,7 +393,7 @@ krosc_ws/
 │   ├── hardwares/
 │   │   ├── serial.cpp/.hpp          # POSIX termios (공용)
 │   │   ├── opencr/
-│   │   │   ├── opencr_serial.cpp/.hpp   # 유일한 시리얼 읽기 스레드 + 캐시
+│   │   │   ├── opencr_serial.cpp/.hpp   # hardware::Hardware + 시리얼 읽기/캐시
 │   │   │   ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서
 │   │   │   ├── control/
 │   │   │   │   └── opencr_system.cpp/.hpp # control SystemInterface (바퀴+팔)

@@ -11,6 +11,7 @@
 #include <thread>
 #include <utility>
 
+#include "krosc/hardware/hardware.hpp"
 #include "krosc/msgs.hpp"
 
 #include "opencr_protocol.hpp"
@@ -35,7 +36,7 @@ struct ArmStatus {
 // - write(Twist): 역기구학으로 바퀴 목표 속도를 계산해 두고, tick()이 50Hz로 C 줄을 보낸다.
 // - 읽기 스레드: S(위치/속도/배터리), I(IMU), E(바퀴 에러)를 파싱한다.
 // - 0.5초 동안 write가 없으면 마지막 명령을 버리고 0을 보낸다 (펌웨어 watchdog와 별개로 앱에서도).
-class OpenCrSerial {
+class OpenCrSerial : public krosc::hardware::Hardware {
  public:
   OpenCrSerial(double wheel_radius, double wheel_separation, std::string port, int baud = 115200,
                double command_period = 0.02, double command_timeout = 0.5, double left_dir = 1.0,
@@ -45,8 +46,8 @@ class OpenCrSerial {
   OpenCrSerial(const OpenCrSerial&) = delete;
   OpenCrSerial& operator=(const OpenCrSerial&) = delete;
 
-  void start();
-  void stop();
+  void start() override;
+  void stop() override;
 
   void write(const krosc::msgs::Twist& command);
   void write_arm(const std::array<double, 5>& position);  // NaN = 그 관절 유지
@@ -57,7 +58,7 @@ class OpenCrSerial {
   void reboot_arm_all();
   void tick();
 
-  [[nodiscard]] bool connected() const { return connected_.load(); }
+  [[nodiscard]] bool connected() const override { return connected_.load(); }
   [[nodiscard]] std::optional<krosc::msgs::Imu> consume_imu();
   [[nodiscard]] ArmStatus arm_status() const;
 

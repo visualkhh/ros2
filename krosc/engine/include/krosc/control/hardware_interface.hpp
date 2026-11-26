@@ -47,7 +47,8 @@ struct HardwareInfo {
   std::string group;
 };
 
-// control의 SystemInterface. on_init -> on_activate -> read/write 반복 -> on_deactivate.
+// control 역할 어댑터. 물리 장치 공통 lifecycle은 krosc/hardware/hardware.hpp의 Hardware다.
+// on_init -> on_activate -> read/write 반복 -> on_deactivate.
 class SystemInterface {
  public:
   virtual ~SystemInterface() = default;
