@@ -162,8 +162,9 @@ QoS qos_for_remote_topic(const std::string& topic, bool latched) {
 
 // 표시용 고주기 토픽은 큐에 같은 토픽이 있으면 최신 프레임으로 교체한다.
 // (이벤트/명령/제어 프레임은 절대 합치지 않는다.)
+// tf_static은 발행자별로 별도 프레임이라 큐에서도 합치면 map→odom이 사라진다.
 bool latest_only_topic(const std::string& topic) {
-  return topic == "tf" || topic == "tf_static" || topic == "joint_states" || topic == "odom" ||
+  return topic == "tf" || topic == "joint_states" || topic == "odom" ||
          topic == "odometry/filtered" || topic == "scan" || topic == "imu" ||
          topic == "diagnostics" || topic == "local_plan" || topic == "moveit_state" ||
          topic == "moveit_status" || topic == "arm_status" || topic == "slam_status" ||
