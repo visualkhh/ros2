@@ -1,4 +1,4 @@
-#include "krosc/ros2_control/joint_trajectory_controller.hpp"
+#include "krosc/control/joint_trajectory_controller.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -9,7 +9,7 @@
 #include "krosc/tf/math.hpp"
 #include "krosc/qos.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 JointTrajectoryController::~JointTrajectoryController() {
   if (action_) {
@@ -303,4 +303,4 @@ msgs::control::FollowJointTrajectoryResult JointTrajectoryController::execute(Ha
   return result;
 }
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

@@ -19,32 +19,32 @@ OpenCrSystem::OpenCrSystem(RealTurtleBot3& robot) : robot_(robot) {
   for (const auto& name :
        {"wheel_left_joint", "wheel_right_joint", "joint1", "joint2", "joint3", "joint4",
         "gripper_left_joint", "gripper_right_joint"}) {
-    states_[name] = std::make_shared<krosc::ros2_control::StateInterface>(std::string(name) + "/position");
+    states_[name] = std::make_shared<krosc::control::StateInterface>(std::string(name) + "/position");
   }
   states_["wheel_left_joint/velocity"] =
-      std::make_shared<krosc::ros2_control::StateInterface>("wheel_left_joint/velocity");
+      std::make_shared<krosc::control::StateInterface>("wheel_left_joint/velocity");
   states_["wheel_right_joint/velocity"] =
-      std::make_shared<krosc::ros2_control::StateInterface>("wheel_right_joint/velocity");
+      std::make_shared<krosc::control::StateInterface>("wheel_right_joint/velocity");
   for (const auto& name : arm_joints()) {
-    commands_[name] = std::make_shared<krosc::ros2_control::CommandInterface>(name + "/position");
+    commands_[name] = std::make_shared<krosc::control::CommandInterface>(name + "/position");
   }
   commands_["wheel_left_joint/velocity"] =
-      std::make_shared<krosc::ros2_control::CommandInterface>("wheel_left_joint/velocity");
+      std::make_shared<krosc::control::CommandInterface>("wheel_left_joint/velocity");
   commands_["wheel_right_joint/velocity"] =
-      std::make_shared<krosc::ros2_control::CommandInterface>("wheel_right_joint/velocity");
+      std::make_shared<krosc::control::CommandInterface>("wheel_right_joint/velocity");
 }
 
-bool OpenCrSystem::on_init(const krosc::ros2_control::HardwareInfo& info) {
-  if (!krosc::ros2_control::SystemInterface::on_init(info)) {
+bool OpenCrSystem::on_init(const krosc::control::HardwareInfo& info) {
+  if (!krosc::control::SystemInterface::on_init(info)) {
     return false;
   }
   last_write_time_ = -1e18;
   return true;
 }
 
-std::vector<std::shared_ptr<krosc::ros2_control::StateInterface>>
+std::vector<std::shared_ptr<krosc::control::StateInterface>>
 OpenCrSystem::export_state_interfaces() {
-  std::vector<std::shared_ptr<krosc::ros2_control::StateInterface>> result;
+  std::vector<std::shared_ptr<krosc::control::StateInterface>> result;
   result.reserve(states_.size());
   for (const auto& [name, state] : states_) {
     (void)name;
@@ -53,9 +53,9 @@ OpenCrSystem::export_state_interfaces() {
   return result;
 }
 
-std::vector<std::shared_ptr<krosc::ros2_control::CommandInterface>>
+std::vector<std::shared_ptr<krosc::control::CommandInterface>>
 OpenCrSystem::export_command_interfaces() {
-  std::vector<std::shared_ptr<krosc::ros2_control::CommandInterface>> result;
+  std::vector<std::shared_ptr<krosc::control::CommandInterface>> result;
   result.reserve(commands_.size());
   for (const auto& [name, command] : commands_) {
     (void)name;

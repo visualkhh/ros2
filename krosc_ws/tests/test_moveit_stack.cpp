@@ -17,7 +17,7 @@
 #include "krosc/nodes/moveit/move_group.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
-#include "krosc/ros2_control/controller_manager.hpp"
+#include "krosc/control/controller_manager.hpp"
 #include "krosc/urdf.hpp"
 
 #include "test_framework.hpp"
@@ -36,19 +36,19 @@ const std::vector<std::string>& arm_joints() {
   return joints;
 }
 
-class MockArmSystem final : public krosc::ros2_control::SystemInterface {
+class MockArmSystem final : public krosc::control::SystemInterface {
  public:
   MockArmSystem() {
     for (const auto& joint : arm_joints()) {
-      state_[joint] = std::make_shared<krosc::ros2_control::StateInterface>(joint + "/position");
-      command_[joint] = std::make_shared<krosc::ros2_control::CommandInterface>(joint + "/position");
+      state_[joint] = std::make_shared<krosc::control::StateInterface>(joint + "/position");
+      command_[joint] = std::make_shared<krosc::control::CommandInterface>(joint + "/position");
     }
-    wheel_left_ = std::make_shared<krosc::ros2_control::StateInterface>("wheel_left_joint/position");
-    wheel_right_ = std::make_shared<krosc::ros2_control::StateInterface>("wheel_right_joint/position");
+    wheel_left_ = std::make_shared<krosc::control::StateInterface>("wheel_left_joint/position");
+    wheel_right_ = std::make_shared<krosc::control::StateInterface>("wheel_right_joint/position");
   }
 
-  std::vector<std::shared_ptr<krosc::ros2_control::StateInterface>> export_state_interfaces() override {
-    std::vector<std::shared_ptr<krosc::ros2_control::StateInterface>> result;
+  std::vector<std::shared_ptr<krosc::control::StateInterface>> export_state_interfaces() override {
+    std::vector<std::shared_ptr<krosc::control::StateInterface>> result;
     for (const auto& [joint, state] : state_) {
       (void)joint;
       result.push_back(state);
@@ -58,8 +58,8 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
     return result;
   }
 
-  std::vector<std::shared_ptr<krosc::ros2_control::CommandInterface>> export_command_interfaces() override {
-    std::vector<std::shared_ptr<krosc::ros2_control::CommandInterface>> result;
+  std::vector<std::shared_ptr<krosc::control::CommandInterface>> export_command_interfaces() override {
+    std::vector<std::shared_ptr<krosc::control::CommandInterface>> result;
     for (const auto& [joint, command] : command_) {
       (void)joint;
       result.push_back(command);
@@ -88,10 +88,10 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
   }
 
  private:
-  std::map<std::string, std::shared_ptr<krosc::ros2_control::StateInterface>> state_;
-  std::map<std::string, std::shared_ptr<krosc::ros2_control::CommandInterface>> command_;
-  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_left_;
-  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_right_;
+  std::map<std::string, std::shared_ptr<krosc::control::StateInterface>> state_;
+  std::map<std::string, std::shared_ptr<krosc::control::CommandInterface>> command_;
+  std::shared_ptr<krosc::control::StateInterface> wheel_left_;
+  std::shared_ptr<krosc::control::StateInterface> wheel_right_;
 };
 
 std::string read_text(const std::string& path) {
@@ -120,7 +120,7 @@ bool wait_until(Predicate predicate, double seconds = 5.0) {
 
 }  // namespace
 
-KROSC_TEST(moveit_ros2_control_real_arm_pipeline) {
+KROSC_TEST(moveit_control_real_arm_pipeline) {
   const std::string urdf = read_text(KROSC_WS_URDF_PATH);
   CHECK(!urdf.empty());
 
@@ -139,13 +139,13 @@ KROSC_TEST(moveit_ros2_control_real_arm_pipeline) {
 
   krosc::Context context;
   MockArmSystem* hardware = nullptr;
-  krosc::ros2_control::HardwareRegistry hardware_registry;
+  krosc::control::HardwareRegistry hardware_registry;
   hardware_registry.add("test/MockArmSystem", [&hardware] {
     auto system = std::make_unique<MockArmSystem>();
     hardware = system.get();
     return system;
   });
-  krosc::ros2_control::ControllerManager manager(
+  krosc::control::ControllerManager manager(
       context, "controller_manager",
       {{"update_rate", 50.0},
        {"hardware.plugin", std::string("test/MockArmSystem")},

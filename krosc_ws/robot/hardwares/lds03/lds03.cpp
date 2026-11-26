@@ -184,8 +184,8 @@ Lds03::Lds03(std::string port, double mount_x, std::string frame_id, bool revers
 
 Lds03::~Lds03() { stop(); }
 
-bool Lds03::on_init(const krosc::ros2_control::HardwareInfo& info) {
-  return krosc::ros2_control::SensorInterface::on_init(info);
+bool Lds03::on_init(const krosc::sensor::SensorInfo& info) {
+  return krosc::sensor::Sensor::on_init(info);
 }
 
 bool Lds03::on_activate() {

@@ -21,7 +21,7 @@ class QTimer;
 namespace krosc::viz {
 
 // 매니퓰레이터 수동 제어 플러그인: 관절 슬라이더, 그리퍼, Torque/STOW/HOME/E-STOP/Reset.
-// arm_joint_command는 ros2_control forward_command_controller가 활성일 때 하드웨어로 간다.
+// arm_joint_command는 control forward_command_controller가 활성일 때 하드웨어로 간다.
 class ManipulatorPlugin final : public QObject, public VizPlugin {
   Q_OBJECT
 

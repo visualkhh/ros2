@@ -148,17 +148,18 @@ krosc/
 │   ├── CMakeLists.txt
 │   ├── include/krosc/             # node/context/topic/tf/time/parameter/service/action/msgs/net(rpc)
 │   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
-│   │   ├── ros2_control/          # controller_manager, JSB/JTC/forward/diff_drive
+│   │   ├── control/               # controller_manager, JSB/JTC/forward/diff_drive
+│   │   ├── sensor/                # Sensor/SensorManager (read-only 센서 수명주기)
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 54 tests (nav2/ros2_control/MoveIt/net/RPC 포함)
+│   ├── tests/                     # core 59 tests (nav2/control/sensor/MoveIt/net/RPC 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp, net_bench.cpp
 ├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
 │   ├── main.cpp                   # krosc_simulator 실행기 (Krosc + Simulator + 창)
 │   ├── include/krosc/simulator/    # Simulator, world, maze_world, turtlebot3, runner, snapshot, view_window
 │   ├── core/                      # Simulator/월드/ 브리지/러너 소스
-│   └── tests/                     # simulator 3 tests
+│   └── tests/                     # simulator 4 tests
 ├── viz/                           # krosc_viz (Qt6 Widgets)
 │   ├── CMakeLists.txt
 │   ├── main.cpp                   # krosc_viz_app
@@ -303,19 +304,20 @@ tf lookup           :   ~0.6 us/op   (300개 이력, 보간)
 lidar 360 rays      :  60-70 us/scan (20개 벽)
 ```
 
-nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)와 `kros/benchmarks/nav2_bench.py`(Python)로 같은 맵/횟수에서 돌린다.
-결과와 해석은 [`docs/performance-vs-python.md`](docs/performance-vs-python.md) 9장에 있다.
+nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)로 돌린다.
+결과와 해석은 [`docs/performance-vs-python.md`](docs/performance-vs-python.md) 9장에 있다(당시 Python 비교 기록).
 
 ## 테스트
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 54 + sim 3 = 57 tests, 2 executables
+# core 59 + sim 4 = 63 tests, 2 executables
 ```
 
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
-- ros2_control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
+- control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
+- sensor: SensorManager(init/activate/read/deactivate, 실패 롤백), 이름 중복/read 실패 집계
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + move_group/scrub + 상태 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - RPC: 서비스/액션/파라미터 포워딩(discovery, timeout, latched), 웹 JSON RPC
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
@@ -340,7 +342,7 @@ ctest --test-dir build --output-on-failure
 - discovery: 서비스 생성/삭제 시 `__services` control로 이름 목록을 광고한다. 아직 광고 전이면
   연결된 피어에 broadcast하고, 응답이 없으면 timeout.
 - 타입 코덱: `engine/core/rpc.cpp`. `std_msgs`, `std_srvs`, nav2 map 서비스, `rcl_interfaces`
-  파라미터, `ros2_control` 컨트롤러 서비스, 액션 goal/feedback/result를 등록한다.
+  파라미터, `control` 컨트롤러 서비스, 액션 goal/feedback/result를 등록한다.
 - 액션: 기존 `ActionServer`/`ActionClient` API 그대로. `send_goal`/`cancel_goal` 서비스와
   `/_action/event` 이벤트를 PeerNetwork가 인코딩한다. `register_action_codec()`로 프로젝트 액션을 추가한다.
 - 파라미터: 모든 `Node`가 `<node>/get_parameters`, `set_parameters`, `set_parameters_atomically`,
@@ -348,15 +350,15 @@ ctest --test-dir build --output-on-failure
 
 ## 플러그인 구조
 
-nav2/ros2_control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파생 클래스 + 이름→팩토리 레지스트리**로 되어 있다.
+nav2/control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파생 클래스 + 이름→팩토리 레지스트리**로 되어 있다.
 `builtin_*()` 함수는 알고리즘이 아니라 "등록"만 한다.
 
 | 영역 | 베이스 | 구현 (파일 한 세트씩) |
 |---|---|---|
 | nav2 controller | `NavControllerPlugin` (`nodes/nav2/controllers/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController`, `RotationShimController` |
 | nav2 planner | `NavPlannerPlugin` (`nodes/nav2/planners/global_planner.hpp`) | `NavfnPlanner`, `ThetaStarPlanner`, `SmacPlanner2D`, `SmacPlannerHybrid` |
-| ros2_control hardware | `SystemInterface` (`ros2_control/hardware_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
-| ros2_control controller | `ControllerInterface` (`ros2_control/controller_interface.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
+| control hardware | `SystemInterface` (`control/hardware_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
+| control controller | `ControllerInterface` (`control/controller_interface.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
 | MoveIt kinematics | `MoveItKinematicsPlugin` (`moveit/kinematics/kinematics_base.hpp`) | `ArmChainKinematics` |
 | MoveIt planner | `MoveItPlannerPlugin` (`moveit/planners/planner_manager.hpp`) | `CartesianPlanner`, `JointSpacePlanner` |
 | MoveIt controller manager | `MoveItControllerManagerPlugin` (`moveit/controllers/controller_manager.hpp`) | `SimpleControllerManager` |
@@ -420,7 +422,7 @@ ROS 2와 맞춘 노드 이름:
 - [ ] `DiagnosticUpdater`/`DiagnosticAggregator`
 - [ ] MapServer/MapSaver (yaml + pgm), Cartographer 스타일 SLAM
 - [x] nav2: costmap(`Costmap2DROS`), planner/controller 플러그인, `planner_server`/`controller_server`, `bt_navigator`, `behavior_server`
-- [x] ros2_control: `controller_manager`, JSB/JTC/forward controller, command interface 점유와 `switch_controller`
+- [x] control: `controller_manager`, JSB/JTC/forward controller, command interface 점유와 `switch_controller`
 - [x] MoveIt: kinematics/planner/controller_manager 플러그인 + `move_group` (`move_action`, 기존 `moveit_*` 호환)
 - [ ] 진짜 하드웨어: OpenCR 시리얼, LDS-03 시리얼
 - [ ] 네트워크 심화: 파라미터/서비스/액션, 다중 클라이언트, 보안, rosbag 기록/재생

@@ -8,7 +8,7 @@
   OpenCRSerial (115200, C/S/I/E/A) ─┐
   LDS-03     (230400, 10Hz) ────────┤
                                     ├─ TurtleBot3Driver ─ scan/imu/arm_status/diagnostics
-                                    ├─ controller_manager (ros2_control)
+                                    ├─ controller_manager (control)
                                     │    ├─ OpenCrSystem (hardware plugin)
                                     │    ├─ joint_state_broadcaster ─ joint_states
                                     │    ├─ diff_drive_controller ─ odom
@@ -134,7 +134,7 @@ cmake --build build -j
 - URDF: `robot/description/urdf/turtlebot3_real.urdf` (공식 visual STL + collision 근사, C++ Viz는 visual STL을 12mm 격자로 간소화해 렌더)
 - 장착: 3층 판 맨 앞 중앙, `base_link` 기준 `x=+0.047985, y=-0.000230, z=+0.130175`
 - OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`firmware/opencr/turtlebot_opencr/arm_config.h`)
-- `joint_states`는 ros2_control `joint_state_broadcaster`가 바퀴+팔 관절을 모두 발행한다
+- `joint_states`는 control `joint_state_broadcaster`가 바퀴+팔 관절을 모두 발행한다
 - 팔 명령은 MoveIt → `joint_trajectory_controller/follow_joint_trajectory` 액션으로 내려간다.
   수동 `arm_joint_command`(`sensor_msgs/JointState`)는 `arm_command_controller`(forward controller)가
   활성일 때만 하드웨어로 간다. Viz가 슬라이더를 움직이면
@@ -321,7 +321,7 @@ ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 우선 찾고,
 없으면 Homebrew prefix(`/opt/homebrew`)도 본다. 둘 다 없으면 RL은 fallback 전용으로 빌드된다.
 `KROSC_WS_BUILD_RL_NAV=OFF`면 플러그인/노드를 아예 빌드하지 않고 main이 RPP를 쓴다.
 
-## MoveIt / ros2_control
+## MoveIt / control
 
 Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 플러그인이다.
 코어 `krosc/viz`에는 MoveIt이 없고, 프로젝트 Viz 앱에서만 로드한다.
@@ -334,7 +334,7 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 - `controller_manager.plugin` — `krosc_moveit/SimpleControllerManager`
 - `move_action` 액션(`moveit_msgs/action/MoveGroup` 축소판) + `move_group/scrub` 서비스
 
-하드웨어는 `ros2_control` 구조를 따른다:
+하드웨어는 `control` 구조를 따른다:
 
 - `controller_manager` 노드: `hardware_plugin`(OpenCR) → state/command interfaces → controllers
 - `joint_state_broadcaster`: `joint_states` 발행
@@ -344,6 +344,13 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 - `controller_manager/list_controllers`, `load_controller`, `configure_controller`,
   `switch_controller` 서비스
 - command interface는 한 컨트롤러만 잡을 수 있다 (ROS 2와 같은 규칙)
+
+센서는 `sensor` 레이어를 따른다:
+
+- `Sensor`: on_init → on_activate → read → on_deactivate (read-only 센서 수명주기)
+- `SensorManager`: 여러 센서의 수명주기와 read를 한 곳에서 관리, 실패 시 롤백
+- `RealTurtleBot3::tick()`이 OpenCR tick과 함께 `SensorManager::read()`를 호출한다
+- LDS-03은 `krosc::sensor::Sensor` 구현이고, 실제 스캔은 드라이버가 `scan` 토픽으로 낸다
 
 - 그룹: `base_link` → `end_effector_link`, 관절 `joint1`~`joint4`
 - 목표: TCP `x,y,z` + 접근 `pitch` (4축이라 full 6D는 불가)
@@ -357,10 +364,11 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 
 핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, MoveIt 플러그인/노드는
 `krosc/engine/include/krosc/nodes/moveit/`와 `krosc/engine/core/nodes/moveit/move_group.cpp`에 있다.
-ros2_control 레이어는 `krosc/engine/include/krosc/ros2_control/`, 실기 하드웨어 플러그인은
+control 레이어는 `krosc/engine/include/krosc/control/`, 실기 하드웨어 플러그인은
 `krosc_ws/robot/hardwares/opencr/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
-LDS-03은 `SensorInterface`(on_init → on_activate → read → on_deactivate)를 따르며
-`krosc_ws/robot/hardwares/lds03/lds03.cpp`에 있다.
+LDS-03은 `krosc::sensor::Sensor`(on_init → on_activate → read → on_deactivate)를 따르며
+`krosc_ws/robot/hardwares/lds03/lds03.cpp`에 있다. 센서 레이어는
+`krosc/engine/include/krosc/sensor/`에 있고 `SensorManager`가 수명주기와 read를 묶는다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
 ## 구성
@@ -377,11 +385,11 @@ krosc_ws/
 │   ├── hardwares/
 │   │   ├── serial.cpp/.hpp          # POSIX termios
 │   │   ├── opencr/
-│   │   │   ├── opencr_system.cpp/.hpp   # ros2_control SystemInterface (바퀴+팔)
+│   │   │   ├── opencr_system.cpp/.hpp   # control SystemInterface (바퀴+팔)
 │   │   │   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 50Hz C/A 명령
 │   │   │   └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
 │   │   └── lds03/
-│   │       └── lds03.cpp/.hpp       # SensorInterface(read-only) + 패킷 파서 + 몸통 필터
+│   │       └── lds03.cpp/.hpp       # sensor::Sensor(read-only) + 패킷 파서 + 몸통 필터
 │   └── description/urdf/turtlebot3_real.urdf
 ├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp
@@ -437,7 +445,7 @@ ctest --test-dir build --output-on-failure
 - LDS-03 패킷 체크섬/링 시작/역방향 각도
 - PTY를 이용한 OpenCrSerial 왕복 (S/I 읽기, C 쓰기)
 - `map_server/load_map`·`unload_map`, `map_saver/save_map` 왕복
-- ros2_control diff drive odom, MoveIt 실제 URDF IK→계획→JTC 실행
+- control diff drive odom, MoveIt 실제 URDF IK→계획→JTC 실행
 - RL 모델 폴더 스캔/선택 (`rl_nav_model_list`)
 
 ## 아직 안 된 것
@@ -446,5 +454,5 @@ ctest --test-dir build --output-on-failure
 - 파라미터/서비스/액션의 네트워크 전달, rosbag
 - Cartographer 전체 기능(loop closure, submap) — 현재는 scan matching + occupancy map 수준
 
-지금은 **실기 SLAM + nav2 주행 + Multi Goal + ros2_control MoveIt 팔 계획/실행 + 원격 Viz**까지
+지금은 **실기 SLAM + nav2 주행 + Multi Goal + control MoveIt 팔 계획/실행 + 원격 Viz**까지
 `krosc_ws` 안에서 동작한다.

@@ -8,11 +8,11 @@
 
 #include "krosc/action.hpp"
 #include "krosc/msgs/control_msgs.hpp"
-#include "krosc/ros2_control/controller_interface.hpp"
+#include "krosc/control/controller_interface.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
-// ros2_control joint_trajectory_controller 흉내.
+// control joint_trajectory_controller 흉내.
 //   FollowJointTrajectory 액션으로 궤적을 받아 update()에서 위치 command interface로 보간해 쓴다.
 class JointTrajectoryController final : public ControllerInterface {
  public:
@@ -73,4 +73,4 @@ class JointTrajectoryController final : public ControllerInterface {
       action_;
 };
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

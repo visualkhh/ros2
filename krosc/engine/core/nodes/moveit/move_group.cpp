@@ -11,7 +11,7 @@
 
 #include "krosc/tf/math.hpp"
 #include "krosc/qos.hpp"
-#include "krosc/ros2_control/controller_manager.hpp"
+#include "krosc/control/controller_manager.hpp"
 #include "krosc/urdf.hpp"
 
 namespace krosc::moveit {
@@ -703,7 +703,7 @@ void MoveGroup::ensure_trajectory_controller() {
   if (switch_service_.value().empty() || trajectory_controller_.value().empty()) {
     return;
   }
-  ros2_control::SwitchControllerRequest request;
+  krosc::control::SwitchControllerRequest request;
   request.start_controllers.push_back(trajectory_controller_.value());
   if (!manual_controller_.value().empty()) {
     request.stop_controllers.push_back(manual_controller_.value());
@@ -711,7 +711,7 @@ void MoveGroup::ensure_trajectory_controller() {
   request.strictness = 1;
   try {
     const auto response =
-        call_service<ros2_control::SwitchControllerRequest, ros2_control::SwitchControllerResponse>(
+        call_service<krosc::control::SwitchControllerRequest, krosc::control::SwitchControllerResponse>(
             switch_service_.value(), request);
     if (!response.ok) {
       logger().warn("MoveGroup: %s 활성화 실패: %s", trajectory_controller_.value().c_str(),

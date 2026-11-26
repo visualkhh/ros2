@@ -9,11 +9,11 @@
 #include <vector>
 
 #include "krosc/node.hpp"
-#include "krosc/ros2_control/controller_interface.hpp"
-#include "krosc/ros2_control/hardware_interface.hpp"
+#include "krosc/control/controller_interface.hpp"
+#include "krosc/control/hardware_interface.hpp"
 #include "krosc/time/timer.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 // controller_manager 서비스 타입 (controller_manager_msgs의 축소판).
 struct ListControllersRequest {};
@@ -51,7 +51,7 @@ struct SwitchControllerResponse {
   std::string message;
 };
 
-// ros2_control controller_manager 흉내.
+// control controller_manager 흉내.
 //   hardware(plugin) -> state/command interfaces -> controller(plugin) -> update loop.
 //   서비스: list_controllers / load_controller / configure_controller / switch_controller.
 //   실제 ROS2와 같이 command interface 하나를 두 컨트롤러가 동시에 쓸 수 없다.
@@ -124,4 +124,4 @@ class ControllerManager final : public Node {
   ServiceServer switch_service_;
 };
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

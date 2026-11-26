@@ -11,7 +11,7 @@
 #include "krosc/node.hpp"
 
 // MoveIt의 MoveItControllerManager 플러그인 흉내.
-//   move_group이 만든 궤적을 ros2_control 컨트롤러(JTC)의 FollowJointTrajectory 액션으로 보낸다.
+//   move_group이 만든 궤적을 control 컨트롤러(JTC)의 FollowJointTrajectory 액션으로 보낸다.
 namespace krosc::moveit {
 
 using FollowJointTrajectoryHandle =

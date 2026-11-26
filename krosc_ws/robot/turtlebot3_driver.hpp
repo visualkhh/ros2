@@ -14,7 +14,7 @@ namespace krosc_ws {
 
 // 실기 하드웨어와 krosc 토픽/서비스를 잇는 접착제.
 // OpenCR/LDS-03 하드웨어 드라이버: scan/imu/arm_status/diagnostics 발행과 팔/부저 서비스를 담당한다.
-// cmd_vel은 ros2_control diff_drive_controller, joint_states는 joint_state_broadcaster가 낸다.
+// cmd_vel은 control diff_drive_controller, joint_states는 joint_state_broadcaster가 낸다.
 // 센서 발행은 메인 실시간 루프가 poll()로 당긴다 (발행 스레드를 따로 두지 않는다).
 class TurtleBot3Driver final : public krosc::Node {
  public:

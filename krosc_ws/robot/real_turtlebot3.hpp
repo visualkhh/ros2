@@ -6,6 +6,7 @@
 #include <string>
 
 #include "krosc/msgs.hpp"
+#include "krosc/sensor/sensor_manager.hpp"
 #include "hardwares/lds03/lds03.hpp"
 #include "hardwares/opencr/opencr_serial.hpp"
 
@@ -33,13 +34,15 @@ class RealTurtleBot3 {
   RealTurtleBot3(const RealTurtleBot3&) = delete;
   RealTurtleBot3& operator=(const RealTurtleBot3&) = delete;
 
-  void tick();
+  void tick(double time, double period);
   void stop();
 
   [[nodiscard]] OpenCrSerial& opencr() { return opencr_; }
   [[nodiscard]] const OpenCrSerial& opencr() const { return opencr_; }
-  [[nodiscard]] Lds03* lidar() { return lidar_.get(); }
-  [[nodiscard]] const Lds03* lidar() const { return lidar_.get(); }
+  [[nodiscard]] krosc::sensor::SensorManager& sensors() { return sensors_; }
+  [[nodiscard]] const krosc::sensor::SensorManager& sensors() const { return sensors_; }
+  [[nodiscard]] Lds03* lidar() { return lidar_; }
+  [[nodiscard]] const Lds03* lidar() const { return lidar_; }
   [[nodiscard]] bool has_lidar() const { return lidar_ != nullptr; }
 
   [[nodiscard]] std::map<std::string, double> joint_positions() const;
@@ -49,7 +52,8 @@ class RealTurtleBot3 {
 
  private:
   OpenCrSerial opencr_;
-  std::unique_ptr<Lds03> lidar_;
+  krosc::sensor::SensorManager sensors_;
+  Lds03* lidar_ = nullptr;
 };
 
 }  // namespace krosc_ws

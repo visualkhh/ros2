@@ -1,4 +1,4 @@
-#include "krosc/ros2_control/diff_drive_controller.hpp"
+#include "krosc/control/diff_drive_controller.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,7 +7,7 @@
 #include "krosc/tf/math.hpp"
 #include "krosc/qos.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 namespace {
 
@@ -195,4 +195,4 @@ void DiffDriveController::publish_odometry(double time, double linear, double an
   }
 }
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

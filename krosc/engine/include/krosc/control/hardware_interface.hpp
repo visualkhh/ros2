@@ -7,11 +7,11 @@
 #include <utility>
 #include <vector>
 
-// ros2_control의 hardware_interface 흉내.
+// control의 hardware_interface 흉내.
 //   SystemInterface: 하드웨어 하나(로봇 팔, 보드)의 read/write.
 //   StateInterface/CommandInterface: joint1/position 같은 이름의 값 하나.
 // 실제 ROS2는 pluginlib로 hardware plugin을 dlopen하지만, krosc는 정적 레지스트리로 같은 구조를 만든다.
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 class StateInterface {
  public:
@@ -47,7 +47,7 @@ struct HardwareInfo {
   std::string group;
 };
 
-// ros2_control의 SystemInterface. on_init -> on_activate -> read/write 반복 -> on_deactivate.
+// control의 SystemInterface. on_init -> on_activate -> read/write 반복 -> on_deactivate.
 class SystemInterface {
  public:
   virtual ~SystemInterface() = default;
@@ -94,4 +94,4 @@ class HardwareRegistry {
   std::map<std::string, SystemFactory> factories_;
 };
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

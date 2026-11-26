@@ -4,7 +4,7 @@
 대상: TurtleBot3 실기 + Raspberry Pi + PC Viz
 
 > **2026-11-25 갱신**
-> C++ `krosc_ws`는 이제 nav2 풀스택(Navfn/Smac, RPP/DWB/MPPI, costmap, BT), ros2_control
+> C++ `krosc_ws`는 이제 nav2 풀스택(Navfn/Smac, RPP/DWB/MPPI, costmap, BT), control
 > (`controller_manager`, JSB/JTC/diff_drive), MoveIt 플러그인까지 돌린다. 아래 Pi 수치는
 > 2026-11-24의 **A* + pure pursuit** 시점이므로 현재 C++ 풀스택의 수치가 아니다.
 > 현재 스택의 알고리즘 비용은 **10장의 Mac 마이크로벤치마크**를 참고하고, Pi는 8장 샘플러로
@@ -33,7 +33,7 @@
 - Python은 GIL 때문에 코어 1개를 거의 혼자 쓰는 구조였고, 33~36%에서도 여유가 크지 않았다.
 - 단일 클라이언트 주행 기준으로는 **약 8~9배**, 2 clients를 포함해도 **6.5배 이상** 낮다.
 - **단, 이 Pi 수치는 C++이 아직 A* + pure pursuit 최소 nav이던 시점의 값**이다. 2026-11-25 이후
-  C++도 nav2 풀스택 + ros2_control + MoveIt을 돌리므로, Pi 수치는 다시 측정해야 한다.
+  C++도 nav2 풀스택 + control + MoveIt을 돌리므로, Pi 수치는 다시 측정해야 한다.
   언어/구현 차이는 10장의 동일 알고리즘 마이크로벤치마크로 분리했다.
 
 ---
@@ -307,7 +307,7 @@ C++는 Release `-O2`, Python은 CPython이다. 맵은 200x200(0.05 m, 10 m x 10 
   1Hz 재계획에는 충분하지만, 200x200 맵에서는 Navfn/Smac2D가 더 낫다.
 - **MPPI**는 C++ 0.18 ms/op, Python 3.7 ms/op다. 20Hz 제어 주기(50 ms) 기준으로 둘 다 여유가
   있지만, Pi에서는 C++ 쪽이 훨씬 안전하다.
-- MoveIt/ros2_control은 Python `kros`에 동일 구현이 없어 이 표에 넣지 않았다. C++ 쪽은
+- MoveIt/control은 Python `kros`에 동일 구현이 없어 이 표에 넣지 않았다. C++ 쪽은
   `krosc_ws/tests/test_moveit_stack.cpp`에서 실제 OpenMANIPULATOR URDF로 IK → 계획 → JTC 실행을
   확인했다.
 
@@ -320,5 +320,5 @@ C++는 Release `-O2`, Python은 CPython이다. 맵은 200x200(0.05 m, 10 m x 10 
 Python 풀스택 대비 주행 중 CPU가 **단일 클라이언트 기준 약 8~9배 낮고**, 멀티 클라이언트 2명이 붙어도 **1코어의 5%** 수준이다. 지금 상태라면 SLAM, 자율주행, 원격 Viz, 추가 디버그 도구를 동시에 돌려도 Pi가 병목이 될 가능성은 낮다.
 
 다만 위 Pi 수치는 C++이 A* + pure pursuit이던 시점의 값이다. 현재 C++은 nav2 풀스택 +
-ros2_control + MoveIt을 돌리므로, **Pi에서 같은 주행 시나리오로 다시 측정**해야 한다. 그 전까지는
+control + MoveIt을 돌리므로, **Pi에서 같은 주행 시나리오로 다시 측정**해야 한다. 그 전까지는
 9장의 Mac 마이크로벤치마크가 알고리즘별 비용 비교의 기준이다.

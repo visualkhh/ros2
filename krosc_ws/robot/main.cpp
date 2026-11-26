@@ -39,7 +39,7 @@
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/nodes/twist_mux.hpp"
 #include "krosc/nodes/velocity_smoother.hpp"
-#include "krosc/ros2_control/controller_manager.hpp"
+#include "krosc/control/controller_manager.hpp"
 #include "krosc/time/time.hpp"
 
 #include "hardwares/opencr/opencr_system.hpp"
@@ -202,12 +202,12 @@ int main(int argc, char** argv) {
   krosc_ws::TurtleBot3Driver driver(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});
-  // ros2_control: OpenCR을 SystemInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
+  // control: OpenCR을 SystemInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
   // joint_states는 이제 joint_state_broadcaster가 내고, MoveIt은 JTC의 FollowJointTrajectory 액션으로 움직인다.
-  krosc::ros2_control::HardwareRegistry hardware_registry;
+  krosc::control::HardwareRegistry hardware_registry;
   hardware_registry.add("krosc_ws/OpenCrSystem",
                         [&robot] { return std::make_unique<krosc_ws::OpenCrSystem>(robot); });
-  krosc::ros2_control::ControllerManager controller_manager(
+  krosc::control::ControllerManager controller_manager(
       context, "controller_manager",
       {{"update_rate", 100.0},
        {"hardware.plugin", std::string("krosc_ws/OpenCrSystem")},
@@ -393,10 +393,11 @@ int main(int argc, char** argv) {
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);
   constexpr auto kPeriod = std::chrono::milliseconds(10);
+  constexpr double kPeriodSeconds = 0.01;
   auto next = std::chrono::steady_clock::now();
   auto last_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
-    robot.tick();
+    robot.tick(context.now(), kPeriodSeconds);
     driver.poll();
     next += kPeriod;
     std::this_thread::sleep_until(next);

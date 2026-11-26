@@ -6,12 +6,12 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
-#include "krosc/ros2_control/controller_interface.hpp"
+#include "krosc/control/controller_interface.hpp"
 #include "krosc/topic.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
-// ros2_control forward_command_controller 흉내: 토픽으로 받은 JointState를 그대로 command interface에 쓴다.
+// control forward_command_controller 흉내: 토픽으로 받은 JointState를 그대로 command interface에 쓴다.
 // krosc viz의 수동 팔 슬라이더(arm_joint_command)가 이 컨트롤러를 통해 하드웨어로 간다.
 class ForwardCommandController final : public ControllerInterface {
  public:
@@ -40,4 +40,4 @@ class ForwardCommandController final : public ControllerInterface {
   bool has_pending_ = false;
 };
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

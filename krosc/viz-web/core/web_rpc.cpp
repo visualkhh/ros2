@@ -19,7 +19,7 @@
 #include "krosc/msgs/nav2_srv.hpp"
 #include "krosc/msgs/rcl_interfaces.hpp"
 #include "krosc/parameter_rpc.hpp"
-#include "krosc/ros2_control/controller_manager.hpp"
+#include "krosc/control/controller_manager.hpp"
 
 namespace krosc::viz_web {
 
@@ -548,7 +548,7 @@ void register_default_web_rpc(WebRpc& rpc, Context& context) {
   });
 
   rpc.add("controller/switch", [&context](const Json& params, const WebRpc::Notify&) {
-    ros2_control::SwitchControllerRequest request;
+    krosc::control::SwitchControllerRequest request;
     for (const auto& item : params["start"].as_array()) {
       request.start_controllers.push_back(item.as_string());
     }
@@ -556,8 +556,8 @@ void register_default_web_rpc(WebRpc& rpc, Context& context) {
       request.stop_controllers.push_back(item.as_string());
     }
     request.strictness = params["strictness"].as_int(1);
-    const auto response = context.services().call<ros2_control::SwitchControllerRequest,
-                                                  ros2_control::SwitchControllerResponse>(
+    const auto response = context.services().call<krosc::control::SwitchControllerRequest,
+                                                  krosc::control::SwitchControllerResponse>(
         "controller_manager/switch_controller", request);
     Json result = Json::object();
     result["ok"] = response.ok;

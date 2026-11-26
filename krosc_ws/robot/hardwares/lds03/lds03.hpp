@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
-#include "krosc/ros2_control/sensor_interface.hpp"
+#include "krosc/sensor/sensor.hpp"
 
 namespace krosc_ws {
 
@@ -51,7 +51,7 @@ class LdsParser {
 
 // 실제 LDS-03 시리얼: 230400, 10Hz 스캔. USB2LDS는 DTR을 내려야 데이터를 보낸다.
 // 로봇 몸통(1층 판/바퀴/지지대)이 찍힌 점은 base_link 기준 상자 안이면 지운다.
-class Lds03 : public krosc::ros2_control::SensorInterface {
+class Lds03 : public krosc::sensor::Sensor {
  public:
   explicit Lds03(std::string port, double mount_x = 0.060,
                  std::string frame_id = "base_scan", bool reverse = true, bool body_filter = true,
@@ -61,8 +61,8 @@ class Lds03 : public krosc::ros2_control::SensorInterface {
   Lds03(const Lds03&) = delete;
   Lds03& operator=(const Lds03&) = delete;
 
-  // read-only 센서 하드웨어 수명주기 (ros2_control SensorInterface).
-  bool on_init(const krosc::ros2_control::HardwareInfo& info) override;
+  // read-only 센서 하드웨어 수명주기 (sensor Sensor).
+  bool on_init(const krosc::sensor::SensorInfo& info) override;
   bool on_activate() override;
   bool on_deactivate() override;
   bool read(double time, double period) override;

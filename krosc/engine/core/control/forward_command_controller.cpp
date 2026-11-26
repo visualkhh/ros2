@@ -1,11 +1,11 @@
-#include "krosc/ros2_control/forward_command_controller.hpp"
+#include "krosc/control/forward_command_controller.hpp"
 
 #include <algorithm>
 #include <utility>
 
 #include "krosc/qos.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 bool ForwardCommandController::on_init(ControllerContext& context) {
   if (!ControllerInterface::on_init(context)) {
@@ -95,4 +95,4 @@ std::vector<std::string> ForwardCommandController::command_interface_names() con
   return names;
 }
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

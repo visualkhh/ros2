@@ -5,11 +5,11 @@
 #include <utility>
 #include <vector>
 
-#include "krosc/ros2_control/controller_interface.hpp"
+#include "krosc/control/controller_interface.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
-// ros2_control joint_state_broadcaster 흉내: state interface의 position을 모아 sensor_msgs/JointState로 낸다.
+// control joint_state_broadcaster 흉내: state interface의 position을 모아 sensor_msgs/JointState로 낸다.
 class JointStateBroadcaster final : public ControllerInterface {
  public:
   bool on_init(ControllerContext& context) override;
@@ -25,4 +25,4 @@ class JointStateBroadcaster final : public ControllerInterface {
   Parameter<std::vector<std::string>> joints_parameter_;
 };
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

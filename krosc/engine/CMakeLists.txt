@@ -13,7 +13,7 @@ add_library(krosc_core STATIC
   core/msgs/codec_basic.cpp
   core/msgs/codec_nav2.cpp
   core/msgs/codec_parameters.cpp
-  core/msgs/codec_ros2_control.cpp
+  core/msgs/codec_control.cpp
   core/msgs/codec_actions.cpp
   core/msgs/codec_arm.cpp
   core/node.cpp
@@ -26,6 +26,7 @@ add_library(krosc_core STATIC
   core/tf/tf_ros.cpp
   core/urdf.cpp
   core/manipulation/arm_chain.cpp
+  core/sensor/sensor_manager.cpp
   core/nodes/cartographer.cpp
   core/nodes/collision_monitor.cpp
   core/nodes/velocity_smoother.cpp
@@ -55,11 +56,11 @@ add_library(krosc_core STATIC
   core/nodes/nav2/planners/smac_planner_2d.cpp
   core/nodes/nav2/planners/smac_planner_hybrid.cpp
   core/nodes/nav2/planners/theta_star_planner.cpp
-  core/ros2_control/controller_manager.cpp
-  core/ros2_control/diff_drive_controller.cpp
-  core/ros2_control/forward_command_controller.cpp
-  core/ros2_control/joint_state_broadcaster.cpp
-  core/ros2_control/joint_trajectory_controller.cpp
+  core/control/controller_manager.cpp
+  core/control/diff_drive_controller.cpp
+  core/control/forward_command_controller.cpp
+  core/control/joint_state_broadcaster.cpp
+  core/control/joint_trajectory_controller.cpp
   core/nodes/moveit/kinematics/arm_chain_kinematics.cpp
   core/nodes/moveit/planners/cartesian_planner.cpp
   core/nodes/moveit/controllers/controller_manager_plugins.cpp
@@ -97,7 +98,8 @@ if(KROSC_BUILD_TESTS)
     tests/test_map_nodes.cpp
     tests/test_net.cpp
     tests/test_nav2.cpp
-    tests/test_ros2_control.cpp
+    tests/test_control.cpp
+    tests/test_sensor.cpp
   )
   target_link_libraries(krosc_core_tests PRIVATE krosc::core)
   target_compile_options(krosc_core_tests PRIVATE -Wall -Wextra -Wpedantic)

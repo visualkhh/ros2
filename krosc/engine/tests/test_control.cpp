@@ -13,7 +13,7 @@
 #include "krosc/msgs/control_msgs.hpp"
 #include "krosc/msgs/moveit_msgs.hpp"
 #include "krosc/node.hpp"
-#include "krosc/ros2_control/controller_manager.hpp"
+#include "krosc/control/controller_manager.hpp"
 #include "krosc/urdf.hpp"
 
 #include "test_framework.hpp"
@@ -58,27 +58,27 @@ const std::vector<std::string>& arm_joints() {
   return joints;
 }
 
-class MockArmSystem final : public krosc::ros2_control::SystemInterface {
+class MockArmSystem final : public krosc::control::SystemInterface {
  public:
   MockArmSystem() {
     for (const auto& joint : arm_joints()) {
-      state_[joint] = std::make_shared<krosc::ros2_control::StateInterface>(joint + "/position");
-      command_[joint] = std::make_shared<krosc::ros2_control::CommandInterface>(joint + "/position");
+      state_[joint] = std::make_shared<krosc::control::StateInterface>(joint + "/position");
+      command_[joint] = std::make_shared<krosc::control::CommandInterface>(joint + "/position");
     }
-    wheel_left_ = std::make_shared<krosc::ros2_control::StateInterface>("wheel_left_joint/position");
-    wheel_right_ = std::make_shared<krosc::ros2_control::StateInterface>("wheel_right_joint/position");
+    wheel_left_ = std::make_shared<krosc::control::StateInterface>("wheel_left_joint/position");
+    wheel_right_ = std::make_shared<krosc::control::StateInterface>("wheel_right_joint/position");
     wheel_left_velocity_ =
-        std::make_shared<krosc::ros2_control::StateInterface>("wheel_left_joint/velocity");
+        std::make_shared<krosc::control::StateInterface>("wheel_left_joint/velocity");
     wheel_right_velocity_ =
-        std::make_shared<krosc::ros2_control::StateInterface>("wheel_right_joint/velocity");
+        std::make_shared<krosc::control::StateInterface>("wheel_right_joint/velocity");
     wheel_left_command_ =
-        std::make_shared<krosc::ros2_control::CommandInterface>("wheel_left_joint/velocity");
+        std::make_shared<krosc::control::CommandInterface>("wheel_left_joint/velocity");
     wheel_right_command_ =
-        std::make_shared<krosc::ros2_control::CommandInterface>("wheel_right_joint/velocity");
+        std::make_shared<krosc::control::CommandInterface>("wheel_right_joint/velocity");
   }
 
-  std::vector<std::shared_ptr<krosc::ros2_control::StateInterface>> export_state_interfaces() override {
-    std::vector<std::shared_ptr<krosc::ros2_control::StateInterface>> result;
+  std::vector<std::shared_ptr<krosc::control::StateInterface>> export_state_interfaces() override {
+    std::vector<std::shared_ptr<krosc::control::StateInterface>> result;
     for (const auto& [joint, state] : state_) {
       (void)joint;
       result.push_back(state);
@@ -90,8 +90,8 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
     return result;
   }
 
-  std::vector<std::shared_ptr<krosc::ros2_control::CommandInterface>> export_command_interfaces() override {
-    std::vector<std::shared_ptr<krosc::ros2_control::CommandInterface>> result;
+  std::vector<std::shared_ptr<krosc::control::CommandInterface>> export_command_interfaces() override {
+    std::vector<std::shared_ptr<krosc::control::CommandInterface>> result;
     for (const auto& [joint, command] : command_) {
       (void)joint;
       result.push_back(command);
@@ -132,14 +132,14 @@ class MockArmSystem final : public krosc::ros2_control::SystemInterface {
   }
 
  private:
-  std::map<std::string, std::shared_ptr<krosc::ros2_control::StateInterface>> state_;
-  std::map<std::string, std::shared_ptr<krosc::ros2_control::CommandInterface>> command_;
-  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_left_;
-  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_right_;
-  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_left_velocity_;
-  std::shared_ptr<krosc::ros2_control::StateInterface> wheel_right_velocity_;
-  std::shared_ptr<krosc::ros2_control::CommandInterface> wheel_left_command_;
-  std::shared_ptr<krosc::ros2_control::CommandInterface> wheel_right_command_;
+  std::map<std::string, std::shared_ptr<krosc::control::StateInterface>> state_;
+  std::map<std::string, std::shared_ptr<krosc::control::CommandInterface>> command_;
+  std::shared_ptr<krosc::control::StateInterface> wheel_left_;
+  std::shared_ptr<krosc::control::StateInterface> wheel_right_;
+  std::shared_ptr<krosc::control::StateInterface> wheel_left_velocity_;
+  std::shared_ptr<krosc::control::StateInterface> wheel_right_velocity_;
+  std::shared_ptr<krosc::control::CommandInterface> wheel_left_command_;
+  std::shared_ptr<krosc::control::CommandInterface> wheel_right_command_;
   double left_angle_ = 0.0;
   double right_angle_ = 0.0;
 };
@@ -198,17 +198,17 @@ bool wait_until(Predicate predicate, double seconds = 3.0) {
 
 }  // namespace
 
-KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
+KROSC_TEST(control_manager_jsb_jtc_and_switch) {
   krosc::Context context;
   MockArmSystem* hardware = nullptr;
-  krosc::ros2_control::HardwareRegistry hardware_registry;
+  krosc::control::HardwareRegistry hardware_registry;
   hardware_registry.add("test/MockArmSystem", [&hardware] {
     auto system = std::make_unique<MockArmSystem>();
     hardware = system.get();
     return system;
   });
 
-  krosc::ros2_control::ControllerManager manager(
+  krosc::control::ControllerManager manager(
       context, "controller_manager",
       {{"update_rate", 50.0},
        {"hardware.plugin", std::string("test/MockArmSystem")},
@@ -236,13 +236,13 @@ KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
       hardware_registry);
   CHECK(hardware != nullptr);
   CHECK(manager.state_of("joint_state_broadcaster") ==
-        krosc::ros2_control::ControllerManager::State::Active);
+        krosc::control::ControllerManager::State::Active);
   CHECK(manager.state_of("joint_trajectory_controller") ==
-        krosc::ros2_control::ControllerManager::State::Active);
+        krosc::control::ControllerManager::State::Active);
   CHECK(manager.state_of("diff_drive_controller") ==
-        krosc::ros2_control::ControllerManager::State::Active);
+        krosc::control::ControllerManager::State::Active);
   CHECK(manager.state_of("arm_command_controller") ==
-        krosc::ros2_control::ControllerManager::State::Inactive);
+        krosc::control::ControllerManager::State::Inactive);
 
   krosc::Node monitor(context, "monitor");
   std::atomic<int> joint_states{0};
@@ -264,8 +264,8 @@ KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
       2.0));
   CHECK(wait_until([&] { return odom.pose.pose.position.x > 0.01; }, 2.0));
 
-  const auto list = context.services().call<krosc::ros2_control::ListControllersRequest,
-                                             krosc::ros2_control::ListControllersResponse>(
+  const auto list = context.services().call<krosc::control::ListControllersRequest,
+                                             krosc::control::ListControllersResponse>(
       "controller_manager/list_controllers", {});
   CHECK_EQ(4u, list.name.size());
   CHECK_EQ(4u, list.type.size());
@@ -297,7 +297,7 @@ KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
   // JTC가 command interface를 잡고 있는 동안 forward controller를 켜면 충돌한다.
   CHECK(!manager.switch_controller({"arm_command_controller"}, {}, 1));
   CHECK(manager.state_of("arm_command_controller") ==
-        krosc::ros2_control::ControllerManager::State::Inactive);
+        krosc::control::ControllerManager::State::Inactive);
 
   // JTC를 내리고 forward controller를 켜면 수동 토픽이 하드웨어로 간다.
   CHECK(manager.switch_controller({"arm_command_controller"}, {"joint_trajectory_controller"}, 1));
@@ -312,13 +312,13 @@ KROSC_TEST(ros2_control_manager_jsb_jtc_and_switch) {
 KROSC_TEST(moveit_move_group_action_with_plugins) {
   krosc::Context context;
   MockArmSystem* hardware = nullptr;
-  krosc::ros2_control::HardwareRegistry hardware_registry;
+  krosc::control::HardwareRegistry hardware_registry;
   hardware_registry.add("test/MockArmSystem", [&hardware] {
     auto system = std::make_unique<MockArmSystem>();
     hardware = system.get();
     return system;
   });
-  krosc::ros2_control::ControllerManager manager(
+  krosc::control::ControllerManager manager(
       context, "controller_manager",
       {{"update_rate", 50.0},
        {"hardware.plugin", std::string("test/MockArmSystem")},

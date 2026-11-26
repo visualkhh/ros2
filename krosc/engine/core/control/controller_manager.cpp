@@ -1,15 +1,15 @@
-#include "krosc/ros2_control/controller_manager.hpp"
+#include "krosc/control/controller_manager.hpp"
 
 #include <algorithm>
 #include <exception>
 #include <utility>
 
-#include "krosc/ros2_control/diff_drive_controller.hpp"
-#include "krosc/ros2_control/forward_command_controller.hpp"
-#include "krosc/ros2_control/joint_state_broadcaster.hpp"
-#include "krosc/ros2_control/joint_trajectory_controller.hpp"
+#include "krosc/control/diff_drive_controller.hpp"
+#include "krosc/control/forward_command_controller.hpp"
+#include "krosc/control/joint_state_broadcaster.hpp"
+#include "krosc/control/joint_trajectory_controller.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 namespace {
 
@@ -360,4 +360,4 @@ ControllerRegistry builtin_controllers() {
   return registry;
 }
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

@@ -1,11 +1,11 @@
-#include "krosc/ros2_control/joint_state_broadcaster.hpp"
+#include "krosc/control/joint_state_broadcaster.hpp"
 
 #include <utility>
 
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 bool JointStateBroadcaster::on_init(ControllerContext& context) {
   if (!ControllerInterface::on_init(context)) {
@@ -56,4 +56,4 @@ void JointStateBroadcaster::update(double time, double period) {
   context().node->publish("joint_states", std::move(message), QOS_DEFAULT);
 }
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

@@ -7,12 +7,12 @@
 #include <vector>
 
 #include "krosc/node.hpp"
-#include "krosc/ros2_control/hardware_interface.hpp"
+#include "krosc/control/hardware_interface.hpp"
 
-// ros2_control의 controller_interface 흉내.
+// control의 controller_interface 흉내.
 //   unconfigured -> inactive -> active 수명 주기를 가진다.
 //   컨트롤러는 command interface를 읽고/쓰며, update()가 controller_manager 주기마다 불린다.
-namespace krosc::ros2_control {
+namespace krosc::control {
 
 struct ControllerContext {
   Node* node = nullptr;
@@ -88,4 +88,4 @@ class ControllerRegistry {
 // JSB, JTC, forward command controller를 등록해 돌려준다.
 ControllerRegistry builtin_controllers();
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control

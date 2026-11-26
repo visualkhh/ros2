@@ -5,7 +5,7 @@
 
 #include "krosc/msgs/rcl_interfaces.hpp"
 #include "krosc/parameter_rpc.hpp"
-#include "krosc/ros2_control/controller_manager.hpp"
+#include "krosc/control/controller_manager.hpp"
 
 namespace krosc::viz {
 
@@ -373,14 +373,14 @@ std::optional<ParamValue> VizModel::get_parameter(const std::string& node_name,
 bool VizModel::switch_controller(const std::vector<std::string>& start,
                                  const std::vector<std::string>& stop, int strictness,
                                  std::string& error) {
-  ros2_control::SwitchControllerRequest request;
+  krosc::control::SwitchControllerRequest request;
   request.start_controllers = start;
   request.stop_controllers = stop;
   request.strictness = strictness;
   try {
     const auto response =
-        node_.call_service<ros2_control::SwitchControllerRequest,
-                           ros2_control::SwitchControllerResponse>(
+        node_.call_service<krosc::control::SwitchControllerRequest,
+                           krosc::control::SwitchControllerResponse>(
             "controller_manager/switch_controller", request);
     error = response.message;
     return response.ok;

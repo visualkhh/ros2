@@ -7,13 +7,13 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
-#include "krosc/ros2_control/controller_interface.hpp"
+#include "krosc/control/controller_interface.hpp"
 #include "krosc/tf/tf_ros.hpp"
 #include "krosc/topic.hpp"
 
-namespace krosc::ros2_control {
+namespace krosc::control {
 
-// ros2_control diff_drive_controller 흉내.
+// control diff_drive_controller 흉내.
 //   cmd_vel -> 바퀴 velocity command, 바퀴 position state -> odom(+선택 TF).
 //   실제 ROS2처럼 바퀴 명령은 hardware interface를 통해 나간다.
 class DiffDriveController final : public ControllerInterface {
@@ -67,4 +67,4 @@ class DiffDriveController final : public ControllerInterface {
   double last_publish_ = -1e18;
 };
 
-}  // namespace krosc::ros2_control
+}  // namespace krosc::control
