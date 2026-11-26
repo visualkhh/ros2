@@ -392,11 +392,12 @@ krosc_ws/
 │   ├── ml/model_catalog.hpp     # artifacts/models/rl_nav_controller 스캔
 │   ├── hardwares/
 │   │   ├── serial.cpp/.hpp          # POSIX termios (공용)
+│   │   ├── opencr/                  # 공용 OpenCR 디바이스 계층
+│   │   │   ├── opencr_serial.cpp/.hpp   # 유일한 시리얼 읽기 스레드 + 50Hz C/A 명령
+│   │   │   └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
 │   │   ├── controls/
 │   │   │   └── opencr/
-│   │   │       ├── opencr_system.cpp/.hpp   # control SystemInterface (바퀴+팔)
-│   │   │       ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 50Hz C/A 명령
-│   │   │       └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
+│   │   │       └── opencr_system.cpp/.hpp   # control SystemInterface (바퀴+팔)
 │   │   └── sensors/
 │   │       ├── lds03/
 │   │       │   └── lds03.cpp/.hpp   # sensor::Sensor(read-only) + 패킷 파서 + scan 발행

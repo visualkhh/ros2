@@ -2,7 +2,7 @@
 
 #include <utility>
 
-#include "hardwares/controls/opencr/opencr_serial.hpp"
+#include "hardwares/opencr/opencr_serial.hpp"
 #include "krosc/qos.hpp"
 
 namespace krosc_ws {
