@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # krosc + krosc_ws 빌드 단일 진입점.
-# 실행 스크립트(run.sh/run-slam.sh/run-sim.sh/run-tests.sh/run-viz.sh/run-viz-web.sh)는
+# 실행 스크립트(run.sh/run-slam.sh/run-simulator.sh/run-tests.sh/run-viz.sh/run-viz-web.sh)는
 # 항상 이 스크립트를 먼저 호출해서 최신 바이너리를 보장한다.
 #
-#   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot, PC: robot+sim+viz+viz-web)
+#   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot, PC: robot+simulator+viz+viz-web)
 #   ./build.sh robot           # krosc_real
-#   ./build.sh sim             # krosc_simulator + krosc_ws_simulator (PC 전용)
+#   ./build.sh simulator       # krosc_simulator + krosc_ws_simulator (PC 전용)
 #   ./build.sh tests           # krosc_core_tests + krosc_simulator_tests + krosc_ws_tests
 #   ./build.sh viz             # krosc_ws_viz_app (PC 전용, Qt6)
 #   ./build.sh viz-web         # krosc_ws_viz_web (PC 전용, 로봇 9000에 접속)
@@ -68,8 +68,8 @@ build_robot() {
   cmake --build "$here/build" -j"$jobs" --target krosc_real
 }
 
-build_sim() {
-  require_pc sim
+build_simulator() {
+  require_pc simulator
   require_qt
   echo "[build] krosc: krosc_simulator + viz"
   configure_krosc -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=ON
@@ -116,18 +116,18 @@ case "$target" in
       build_robot
     else
       build_robot
-      build_sim
+      build_simulator
       build_viz
       build_viz_web
     fi
     ;;
   robot) build_robot ;;
-  sim) build_sim ;;
+  simulator) build_simulator ;;
   tests) build_tests ;;
   viz) build_viz ;;
   viz-web|viz_web) build_viz_web ;;
   *)
-    echo "usage: $0 [all|robot|sim|tests|viz|viz-web]" >&2
+    echo "usage: $0 [all|robot|simulator|tests|viz|viz-web]" >&2
     exit 2
     ;;
 esac
