@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -9,16 +10,19 @@
 #include <thread>
 #include <vector>
 
+#include "krosc/executor.hpp"
 #include "krosc/sensor/sensor.hpp"
 
 namespace krosc::sensor {
 
 // 여러 센서의 수명주기와 주기 실행을 관리한다.
-// start()는 각 센서의 period에 맞춰 on_update()를 부르는 전용 스레드를 띄운다.
+// 스케줄러 스레드 1개가 센서별 period를 보고 due인 센서를 Executor 워커 풀로 post한다.
+// 같은 센서의 on_update()가 끝나기 전에 다음 주기가 오면 그 주기는 건너뛰고 missed로 센다.
 // 시간은 steady_clock 기준이며, 메시지 stamp는 각 센서가 Context 시각으로 찍는다.
 class SensorManager {
  public:
-  SensorManager() = default;
+  // workers: on_update()를 실행할 워커 수. 0이면 inline(테스트/수동 poll용).
+  explicit SensorManager(std::size_t workers = 2);
   ~SensorManager();
 
   SensorManager(const SensorManager&) = delete;
@@ -38,17 +42,19 @@ class SensorManager {
   // 이후에는 start()할 수 없다. 소멸자에서도 자동 호출된다.
   void finish();
 
-  // 주기가 된 센서만 read한다. 이번 호출에서 실패한 센서 수를 돌려준다.
-  // run_loop=true인 동안에는 내부 스레드만 호출해야 한다.
+  // 주기가 된 센서만 on_update()를 워커 풀로 보낸다.
+  // inline 모드(workers=0)에서는 이번 호출에서 실패한 센서 수를 돌려주고,
+  // 워커 풀 모드에서는 0을 돌려주며 실패는 read_failures()로 집계된다.
+  // run_loop=true인 동안에는 내부 스케줄러만 호출해야 한다.
   std::size_t poll(double time);
 
   [[nodiscard]] Sensor* find(const std::string& name);
   [[nodiscard]] const Sensor* find(const std::string& name) const;
   [[nodiscard]] std::size_t size() const { return entries_.size(); }
   [[nodiscard]] std::size_t active_count() const;
-  [[nodiscard]] std::uint64_t read_failures() const { return read_failures_; }
-  [[nodiscard]] std::uint64_t deactivate_failures() const { return deactivate_failures_; }
-  [[nodiscard]] std::uint64_t missed() const { return missed_; }
+  [[nodiscard]] std::uint64_t read_failures() const { return read_failures_.load(); }
+  [[nodiscard]] std::uint64_t deactivate_failures() const { return deactivate_failures_.load(); }
+  [[nodiscard]] std::uint64_t missed() const { return missed_.load(); }
   [[nodiscard]] bool finished() const { return finished_; }
 
  private:
@@ -59,20 +65,23 @@ class SensorManager {
     bool initialized = false;
     bool active = false;
     bool finished = false;
+    bool busy = false;  // 워커가 on_update()를 실행 중
     double next_due = 0.0;  // steady_clock epoch 기준 [s]
     std::uint64_t consecutive_failures = 0;
   };
 
   void loop();
   [[nodiscard]] double next_due() const;
+  bool run_update(Entry& entry, double time, double period);
   void report_error(Entry& entry, SensorError::Stage stage, double time);
   [[nodiscard]] Entry* find_entry(const std::string& name);
   [[nodiscard]] const Entry* find_entry(const std::string& name) const;
 
+  Executor executor_;
   std::vector<Entry> entries_;
-  std::uint64_t read_failures_ = 0;
-  std::uint64_t deactivate_failures_ = 0;
-  std::uint64_t missed_ = 0;
+  std::atomic<std::uint64_t> read_failures_{0};
+  std::atomic<std::uint64_t> deactivate_failures_{0};
+  std::atomic<std::uint64_t> missed_{0};
   bool started_ = false;
   bool finished_ = false;
   bool running_ = false;

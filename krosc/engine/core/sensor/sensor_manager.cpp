@@ -18,6 +18,8 @@ double monotonic_seconds() {
 
 }  // namespace
 
+SensorManager::SensorManager(std::size_t workers) : executor_(workers) {}
+
 SensorManager::~SensorManager() { finish(); }
 
 bool SensorManager::add(std::string name, double period, std::unique_ptr<Sensor> sensor) {
@@ -71,6 +73,8 @@ void SensorManager::stop() {
   if (thread_.joinable()) {
     thread_.join();
   }
+  // 워커에서 실행 중이거나 큐에 남은 on_update()를 모두 끝낸다.
+  executor_.join();
   // 켠 역순으로 내린다.
   for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
     if (it->active) {
@@ -95,31 +99,54 @@ void SensorManager::finish() {
       entry.finished = true;
     }
   }
+  executor_.shutdown();
   finished_ = true;
 }
 
 std::size_t SensorManager::poll(double time) {
-  std::size_t failures = 0;
-  for (auto& entry : entries_) {
-    if (!entry.active || time + 1e-9 < entry.next_due) {
-      continue;
-    }
-    if (!entry.sensor->on_update(time, entry.period)) {
-      ++failures;
-      ++read_failures_;
-      ++entry.consecutive_failures;
-      report_error(entry, SensorError::Stage::Read, time);
-    } else {
-      entry.consecutive_failures = 0;
-    }
-    entry.next_due += entry.period;
-    if (entry.next_due <= time + 1e-9) {
-      // 지연으로 밀린 주기는 몰아서 호출하지 않고 다음 주기부터 다시 맞춘다.
-      ++missed_;
-      entry.next_due = time + entry.period;
+  std::vector<Entry*> due;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& entry : entries_) {
+      if (!entry.active || time + 1e-9 < entry.next_due) {
+        continue;
+      }
+      if (entry.busy) {
+        // 이전 on_update()가 아직 끝나지 않았다. 이번 주기는 건너뛴다.
+        ++missed_;
+        entry.next_due += entry.period;
+        if (entry.next_due <= time + 1e-9) {
+          ++missed_;
+          entry.next_due = time + entry.period;
+        }
+        continue;
+      }
+      entry.busy = true;
+      due.push_back(&entry);
+      entry.next_due += entry.period;
+      if (entry.next_due <= time + 1e-9) {
+        // 지연으로 밀린 주기는 몰아서 호출하지 않고 다음 주기부터 다시 맞춘다.
+        ++missed_;
+        entry.next_due = time + entry.period;
+      }
     }
   }
-  return failures;
+
+  if (executor_.inline_mode()) {
+    std::size_t failures = 0;
+    for (Entry* entry : due) {
+      if (!run_update(*entry, time, entry->period)) {
+        ++failures;
+      }
+    }
+    return failures;
+  }
+  for (Entry* entry : due) {
+    executor_.post([this, entry, time, period = entry->period] {
+      (void)run_update(*entry, time, period);
+    });
+  }
+  return 0;  // 워커 풀 모드에서는 실패가 비동기로 집계된다
 }
 
 void SensorManager::loop() {
@@ -157,6 +184,29 @@ double SensorManager::next_due() const {
 
 void SensorManager::report_error(Entry& entry, SensorError::Stage stage, double time) {
   entry.sensor->on_error(SensorError{stage, entry.consecutive_failures, time});
+}
+
+bool SensorManager::run_update(Entry& entry, double time, double period) {
+  bool ok = true;
+  try {
+    ok = entry.sensor->on_update(time, period);
+  } catch (...) {
+    ok = false;
+  }
+  if (!ok) {
+    ++read_failures_;
+    ++entry.consecutive_failures;
+    try {
+      report_error(entry, SensorError::Stage::Read, time);
+    } catch (...) {
+      // on_error()가 던져도 busy를 반드시 풀어야 한다.
+    }
+  } else {
+    entry.consecutive_failures = 0;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  entry.busy = false;
+  return ok;
 }
 
 Sensor* SensorManager::find(const std::string& name) {

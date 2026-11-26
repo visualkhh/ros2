@@ -349,8 +349,8 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 
 - `Sensor`: `on_init → on_activate → on_update → on_deactivate → on_finish`
   (on_error로 init/activate/update/deactivate 실패를 구현체가 직접 처리)
-- `SensorManager`: `add(name, period, sensor)`로 등록하고 센서별 `period`에 맞춰
-  전용 스레드에서 `on_update()`를 호출, 실패 시 롤백
+- `SensorManager`: `add(name, period, sensor)`로 등록한다. 스케줄러 스레드가 due인 센서를
+  Executor 워커 풀로 post하고(기본 2), 이전 `on_update()`가 안 끝났으면 그 주기를 건너뛴다
 - 발행 토픽/프레임은 구현체 생성자가 소유한다 (`Lds03`, `OpenCrImu`)
 - LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)를 각자 발행한다
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`

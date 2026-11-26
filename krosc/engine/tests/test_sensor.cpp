@@ -58,7 +58,7 @@ class FakeSensor final : public Sensor {
 
 KROSC_TEST(sensor_manager_add_rules) {
   krosc::Context context;
-  SensorManager manager;
+  SensorManager manager(0);
   CHECK(manager.add("lidar", 0.1, std::make_unique<FakeSensor>(context, "lidar")));
   CHECK(!manager.add("lidar", 0.1, std::make_unique<FakeSensor>(context, "lidar2")));
   CHECK(!manager.add("", 0.1, std::make_unique<FakeSensor>(context, "empty")));
@@ -72,7 +72,7 @@ KROSC_TEST(sensor_manager_add_rules) {
 
 KROSC_TEST(sensor_manager_lifecycle_and_read) {
   krosc::Context context;
-  SensorManager manager;
+  SensorManager manager(0);
   auto first = std::make_unique<FakeSensor>(context, "a");
   auto second = std::make_unique<FakeSensor>(context, "b");
   FakeSensor* first_ptr = first.get();
@@ -124,7 +124,7 @@ KROSC_TEST(sensor_manager_lifecycle_and_read) {
 
 KROSC_TEST(sensor_manager_reports_read_errors) {
   krosc::Context context;
-  SensorManager manager;
+  SensorManager manager(0);
   auto fake = std::make_unique<FakeSensor>(context, "imu");
   FakeSensor* fake_ptr = fake.get();
   CHECK(manager.add("imu", 0.1, std::move(fake)));
@@ -150,7 +150,7 @@ KROSC_TEST(sensor_manager_reports_read_errors) {
 
 KROSC_TEST(sensor_manager_schedules_by_period) {
   krosc::Context context;
-  SensorManager manager;
+  SensorManager manager(0);
   auto fast = std::make_unique<FakeSensor>(context, "fast");
   auto slow = std::make_unique<FakeSensor>(context, "slow");
   FakeSensor* fast_ptr = fast.get();
@@ -182,7 +182,7 @@ KROSC_TEST(sensor_manager_schedules_by_period) {
 
 KROSC_TEST(sensor_manager_rolls_back_on_failure) {
   krosc::Context context;
-  SensorManager manager;
+  SensorManager manager(0);
   auto first = std::make_unique<FakeSensor>(context, "a");
   auto second = std::make_unique<FakeSensor>(context, "b");
   FakeSensor* first_ptr = first.get();
@@ -205,7 +205,7 @@ KROSC_TEST(sensor_manager_rolls_back_on_failure) {
 
 KROSC_TEST(sensor_manager_thread_loop) {
   krosc::Context context;
-  SensorManager manager;
+  SensorManager manager(2);
   auto fake = std::make_unique<FakeSensor>(context, "imu");
   FakeSensor* fake_ptr = fake.get();
   CHECK(manager.add("imu", 0.02, std::move(fake)));
