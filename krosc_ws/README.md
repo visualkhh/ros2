@@ -54,6 +54,7 @@ cd ~/ros2/krosc_ws
 KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 ./run-simulator.sh        # krosc_ws 로봇 스택 시뮬레이터 (Qt, PC 전용)
 ./run-simulator-vizqt.sh   # 시뮬레이터 + Qt Viz 한 번에
+./run-simulator-vizweb.sh # 시뮬레이터 + 웹 Viz 한 번에
 ./run-viz-web.sh    # 웹 Viz 게이트웨이 (로봇 9000에 접속)
 ```
 

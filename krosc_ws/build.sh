@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # krosc + krosc_ws 빌드 단일 진입점.
-# 실행 스크립트(run.sh/run-slam.sh/run-simulator.sh/run-simulator-vizqt.sh/run-tests.sh/run-viz.sh/run-viz-web.sh)는
+# 실행 스크립트(run.sh/run-slam.sh/run-simulator.sh/run-simulator-vizqt.sh/run-simulator-vizweb.sh/run-tests.sh/run-viz.sh/run-viz-web.sh)는
 # 항상 이 스크립트를 먼저 호출해서 최신 바이너리를 보장한다.
 #
 #   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot, PC: robot+simulator+viz+viz-web)
