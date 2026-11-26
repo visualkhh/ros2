@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "hardwares/sensors/opencr_imu/opencr_imu.hpp"
+#include "hardwares/opencr/sensor/opencr_imu.hpp"
 
 namespace krosc_ws {
 

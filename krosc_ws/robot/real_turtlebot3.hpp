@@ -9,7 +9,7 @@
 #include "krosc/context.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/sensor/sensor_manager.hpp"
-#include "hardwares/sensors/lds03/lds03.hpp"
+#include "hardwares/lds03/sensor/lds03.hpp"
 #include "hardwares/opencr/opencr_serial.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
