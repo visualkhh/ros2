@@ -323,7 +323,10 @@ bool NavBehaviorNode::run_hide(std::string& error) {
 }
 
 bool NavBehaviorNode::run_approach(std::string& error) {
-  constexpr double kStopDistance = 0.22;
+  // 충돌 모니터가 footprint 때문에 0.22 m보다 먼저 멈출 수 있다. 정지 목표를
+  // 조금 여유 있게 두고, 정체 시에도 이미 벽에 가까우면 성공으로 본다.
+  constexpr double kStopDistance = 0.28;
+  constexpr double kCloseEnough = 0.35;
   const auto started = std::chrono::steady_clock::now();
   auto last_progress = started;
   double last_distance = std::numeric_limits<double>::infinity();
@@ -374,6 +377,10 @@ bool NavBehaviorNode::run_approach(std::string& error) {
       publish<krosc::msgs::Twist>(
           "cmd_vel_nav",
           krosc::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}});
+      if (front <= kCloseEnough) {
+        // 충돌 모니터/차체 때문에 더 못 가지만 벽에는 충분히 붙었다.
+        return true;
+      }
       error = "approach stalled (collision?)";
       return false;
     }
