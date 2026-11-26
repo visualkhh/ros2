@@ -38,6 +38,8 @@ class HttpServer {
 
   void broadcast_binary(std::vector<std::uint8_t> body);
   void broadcast_text(const std::string& text);
+  // 로봇 연결이 끊기면 늦게 붙는 브라우저에 옛 프레임을 보내지 않도록 캐시를 비운다.
+  void clear_cache();
   // 새 WebSocket 클라이언트가 붙을 때 보낼 현재 상태(예: 로봇 연결 여부).
   void set_text_on_connect(std::function<std::string()> handler) {
     text_on_connect_ = std::move(handler);

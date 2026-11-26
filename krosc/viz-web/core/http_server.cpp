@@ -566,4 +566,9 @@ void HttpServer::broadcast_text(const std::string& text) {
   }
 }
 
+void HttpServer::clear_cache() {
+  std::lock_guard<std::mutex> lock(cache_mutex_);
+  cache_.clear();
+}
+
 }  // namespace krosc::viz_web

@@ -107,6 +107,10 @@ bool VizWeb::initialize(std::string& error) {
     std::printf("[viz-web] robot %s: %s\n", connected ? "connected" : "disconnected",
                 link_->endpoint().c_str());
     std::fflush(stdout);
+    if (!connected) {
+      // 늦게 접속한 브라우저가 끊기기 전 지도를 다시 받지 않게 한다.
+      server_->clear_cache();
+    }
     server_->broadcast_text(std::string("{\"type\":\"robot\",\"connected\":") +
                             (connected ? "true" : "false") + "}");
   });

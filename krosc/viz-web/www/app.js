@@ -1117,6 +1117,29 @@ async function setTopicSubscribed(name, subscribed) {
   return response;
 }
 
+function enhancePanel(section) {
+  if (!section || section.dataset.collapsible === '1') return;
+  const heading = section.querySelector(':scope > h2');
+  if (!heading) return;
+  section.dataset.collapsible = '1';
+  heading.setAttribute('role', 'button');
+  heading.setAttribute('tabindex', '0');
+  heading.setAttribute('aria-expanded', String(!section.classList.contains('collapsed')));
+
+  const toggle = () => {
+    const collapsed = !section.classList.contains('collapsed');
+    section.classList.toggle('collapsed', collapsed);
+    heading.setAttribute('aria-expanded', String(!collapsed));
+  };
+  heading.addEventListener('click', toggle);
+  heading.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault();
+      toggle();
+    }
+  });
+}
+
 const host = {
   onTopic,
   registerTopic,
@@ -1230,6 +1253,7 @@ const host = {
     bodyElement.className = 'body';
     section.append(heading, bodyElement);
     (currentPluginView ?? $('control-panel-panels')).append(section);
+    enhancePanel(section);
     return bodyElement;
   },
   addRow(parent, left, right) {
@@ -1346,9 +1370,22 @@ setInterval(() => {
   }
 }, 500);
 
+function clearRobotData() {
+  state.latest.clear();
+  state.stats.clear();
+  state.tf.clear();
+  for (const entry of topicEntries.values()) {
+    entry.hz.textContent = '';
+  }
+  window.dispatchEvent(new CustomEvent('robot-offline'));
+}
+
 function updateRobotStatus() {
-  $('robot-dot').className = `dot ${state.robotConnected ? 'on' : 'off'}`;
-  $('robot-text').textContent = state.robotConnected ? 'robot connected' : 'robot offline';
+  const connected = state.robotConnected;
+  $('robot-dot').className = `dot ${connected ? 'on' : 'off'}`;
+  $('robot-text').textContent = connected ? 'robot connected' : 'robot offline';
+  const overlay = $('offline-overlay');
+  if (overlay) overlay.hidden = connected;
 }
 function updateWsStatus() {
   $('ws-dot').className = `dot ${state.wsOpen ? 'on' : 'off'}`;
@@ -1374,6 +1411,7 @@ function connect() {
   socket.onclose = () => {
     state.wsOpen = false;
     state.robotConnected = false;
+    clearRobotData();
     for (const pending of rpcPending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new Error('websocket closed'));
@@ -1406,7 +1444,9 @@ function connect() {
           return;
         }
         if (message.type === 'robot') {
-          state.robotConnected = Boolean(message.connected);
+          const connected = Boolean(message.connected);
+          if (!connected) clearRobotData();
+          state.robotConnected = connected;
           updateRobotStatus();
         }
       } catch (error) { console.error(error); }
@@ -2659,6 +2699,23 @@ canvas3d.addEventListener('wheel', (event) => {
 
 function render() {
   try {
+  if (!state.robotConnected) {
+    if (activeView === '3d') {
+      const width = canvas3d.clientWidth;
+      const height = canvas3d.clientHeight;
+      if (width >= 2 && height >= 2) {
+        context3d.clearRect(0, 0, width, height);
+        draw3dGrid();
+      }
+    } else {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      context.clearRect(0, 0, width, height);
+      drawGrid();
+    }
+    requestAnimationFrame(render);
+    return;
+  }
   if (activeView === '3d') {
     draw3d();
     requestAnimationFrame(render);
@@ -2860,5 +2917,8 @@ async function loadPlugins() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && openTopicName) closeTopicModal();
   });
+}
+for (const section of document.querySelectorAll('#left > .panel')) {
+  enhancePanel(section);
 }
 loadPlugins();
