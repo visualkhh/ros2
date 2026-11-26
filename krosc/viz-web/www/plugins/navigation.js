@@ -156,18 +156,109 @@ export function init(host) {
   const costmapGrid = document.createElement('div');
   costmapGrid.className = 'moveit-grid';
   body.append(costmapGrid);
+  // 값 입력은 라이브 input 대신 클릭 → 확인 다이얼로그로 받는다.
+  // 주행/파라미터 갱신 중에 입력 중인 값이 서버 값으로 덮어써지지 않게 한다.
+  const editDialog = document.createElement('dialog');
+  editDialog.className = 'edit-dialog';
+  const editForm = document.createElement('form');
+  const editTitle = document.createElement('div');
+  editTitle.className = 'edit-title';
+  const editCurrent = document.createElement('div');
+  editCurrent.className = 'edit-current';
+  const editLabel = document.createElement('label');
+  const editCaption = document.createElement('span');
+  editCaption.textContent = '새 값';
+  const editInput = document.createElement('input');
+  editInput.type = 'number';
+  editInput.step = 'any';
+  editInput.required = true;
+  editLabel.append(editCaption, editInput);
+  const editButtons = document.createElement('div');
+  editButtons.className = 'btn-row';
+  editForm.append(editTitle, editCurrent, editLabel, editButtons);
+  editDialog.append(editForm);
+  body.append(editDialog);
+
+  let editResolve = null;
+  const finishEdit = (value) => {
+    if (!editResolve) return;
+    const resolve = editResolve;
+    editResolve = null;
+    if (editDialog.open) editDialog.close();
+    resolve(value);
+  };
+  editForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const value = Number(editInput.value);
+    if (!Number.isFinite(value)) {
+      editInput.reportValidity();
+      return;
+    }
+    finishEdit(value);
+  });
+  editDialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    finishEdit(null);
+  });
+  editDialog.addEventListener('close', () => finishEdit(null));
+  const cancelEdit = document.createElement('button');
+  cancelEdit.type = 'button';
+  cancelEdit.textContent = '취소';
+  cancelEdit.addEventListener('click', () => finishEdit(null));
+  const applyEdit = document.createElement('button');
+  applyEdit.type = 'button';
+  applyEdit.className = 'primary';
+  applyEdit.textContent = '확인';
+  applyEdit.addEventListener('click', () => editForm.requestSubmit());
+  editButtons.append(cancelEdit, applyEdit);
+
+  const openNumberDialog = (caption, value, step) => new Promise((resolve) => {
+    editResolve = resolve;
+    editTitle.textContent = caption;
+    editCurrent.textContent = `현재값: ${value}`;
+    editCaption.textContent = '새 값';
+    editInput.step = 'any';
+    editInput.value = String(value);
+    editDialog.showModal();
+    editInput.focus();
+    editInput.select();
+  });
+
   const numberField = (label, value, step) => {
     const wrapper = document.createElement('div');
     wrapper.className = 'moveit-field';
     const name = document.createElement('label');
     name.textContent = label;
-    const field = document.createElement('input');
-    field.type = 'number';
-    field.step = String(step);
-    field.value = String(value);
+    const field = document.createElement('button');
+    field.type = 'button';
+    field.className = 'value-button';
+    field.title = '클릭해서 수정';
+    let current = Number(value);
+    let edited = false;
+    const render = () => {
+      field.textContent = String(current);
+    };
+    render();
+    field.addEventListener('click', async () => {
+      const next = await openNumberDialog(label, current, step);
+      if (next === null) return;
+      current = next;
+      edited = true;
+      render();
+    });
     wrapper.append(name, field);
     costmapGrid.append(wrapper);
-    return field;
+    return {
+      element: field,
+      get value() { return current; },
+      set value(next) {
+        if (edited) return;  // 사용자가 수정한 값은 서버 응답으로 덮지 않는다
+        const parsed = Number(next);
+        if (!Number.isFinite(parsed)) return;
+        current = parsed;
+        render();
+      },
+    };
   };
   const globalInflation = numberField('global infl (m)', 0.55, 0.05);
   const globalScaling = numberField('global scale', 3.0, 0.5);

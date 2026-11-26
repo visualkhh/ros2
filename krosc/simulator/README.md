@@ -40,9 +40,10 @@ auto snapshot = simulator.snapshots().latest(); // 화면/텔레메트리용
 시뮬레이터용 URDF는 `krosc_ws/simulator/robot/urdf/turtlebot3_real.urdf`에
 의도적으로 복제해 두고, 실기 쪽 `krosc_ws/engine/description`과 분리한다.
 
-노이즈는 하드웨어 스텁이 아니라 `TurtleBot`/`WafflePiArm` 모델이 생성한다
-(바퀴 슬립, 엔코더 양자화, IMU 바이어스, 라이다 거리/드롭아웃). 스텁은 센서값을
-실기 장치처럼 전달하고, truth view는 잡음 없는 스냅샷을 사용한다.
+물리 차체 슬립은 로봇 모델(`WafflePiArm`)이 만들고, 실제 센서 잡음은
+`krosc_ws/simulator/hardwares`의 `SimulatorOpenCr`/`SimulatorLds`가
+엔코더 양자화, IMU 바이어스, 라이다 거리/드롭아웃으로 입혀 engine에 전달한다.
+truth view는 잡음 없는 스냅샷을 사용한다.
 
 ## Qt truth view
 

@@ -105,6 +105,8 @@ RobotStatus::RobotStatus(krosc::Context& context, OpenCrDevice& opencr, LdsDevic
   logger().info("로봇 %s: OpenCR=%s, LDS-03=%s", "turtlebot3_waffle_pi",
                 opencr_.port().c_str(), (lidar_ != nullptr) ? lidar_->port().c_str() : "없음");
   logger().info("OpenCR IMU는 켠 뒤 2초 동안 가만히 둬야 자이로 편향을 잡는다");
+  // main loop와 무관하게 진단/arm_status를 주기적으로 발행한다.
+  poll_timer_ = create_timer(0.1, [this] { poll(); });
 }
 
 void RobotStatus::poll() {

@@ -33,14 +33,6 @@ std::pair<double, double> wheel_speeds(const msgs::Twist& command, double wheel_
           (command.linear.x + command.angular.z * half) / wheel_radius};
 }
 
-double quantize(double angle, int ticks_per_rev) {
-  if (ticks_per_rev <= 0) {
-    return angle;
-  }
-  const double step = kTwoPi / ticks_per_rev;
-  return std::round(angle / step) * step;
-}
-
 }  // namespace
 
 WafflePiArm::WafflePiArm(bool noisy, std::optional<std::uint32_t> seed,
@@ -98,8 +90,8 @@ void WafflePiArm::tick(double time, double dt) {
     right_velocity_ = right_target;
     left_angle_ += left_velocity_ * dt;
     right_angle_ += right_velocity_ * dt;
-    left_position_ = noisy_ ? quantize(left_angle_, kEncoderTicks) : left_angle_;
-    right_position_ = noisy_ ? quantize(right_angle_, kEncoderTicks) : right_angle_;
+    left_position_ = left_angle_;
+    right_position_ = right_angle_;
   }
 
   // 정지 중에는 바퀴 슬립 잡음을 넣지 않는다. 실제 바퀴도 구동하지 않으면
@@ -224,8 +216,7 @@ void WafflePiArm::sample_scan(double time) {
   } else {
     hits.assign(static_cast<std::size_t>(kScanBeams), std::numeric_limits<float>::infinity());
   }
-  std::vector<float> truth = hits;
-  for (auto& range : truth) {
+  for (auto& range : hits) {
     if (!(static_cast<double>(range) >= kScanRangeMin &&
           static_cast<double>(range) <= kScanRangeMax)) {
       range = std::numeric_limits<float>::infinity();
@@ -233,21 +224,8 @@ void WafflePiArm::sample_scan(double time) {
   }
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    truth_scan_ranges_ = std::move(truth);
+    truth_scan_ranges_ = hits;
     truth_scan_pose_ = {sensor_x, sensor_y, pose.theta};
-  }
-  for (auto& range : hits) {
-    const double distance = static_cast<double>(range);
-    if (!(distance >= kScanRangeMin && distance <= kScanRangeMax)) {
-      range = std::numeric_limits<float>::infinity();
-    } else if (noisy_) {
-      std::uniform_real_distribution<double> uniform(0.0, 1.0);
-      if (uniform(rng_) < lidar_dropout_) {
-        range = std::numeric_limits<float>::infinity();
-      } else {
-        range = static_cast<float>(lidar_range_.apply(distance, rng_));
-      }
-    }
   }
   msgs::LaserScan scan;
   scan.header.stamp = time;
@@ -264,47 +242,21 @@ void WafflePiArm::sample_scan(double time) {
 }
 
 void WafflePiArm::sample_imu(double time, double imu_dt) {
+  // 여기서는 진실 IMU만 만든다. 실제 센서 잡음은 SimulatorOpenCr이 입힌다.
   const double true_linear = last_linear_velocity_;
   const double true_angular = last_angular_velocity_;
-
-  double measured_angular = true_angular;
-  if (noisy_) {
-    std::normal_distribution<double> walk(0.0, 1.0);
-    bias_walk_ += walk(rng_) * gyro_bias_walk_ * std::sqrt(imu_dt);
-    measured_angular = gyro_.apply(true_angular, rng_) + bias_walk_;
-  }
-  yaw_error_ += (measured_angular - true_angular) * imu_dt;
-  integrated_time_ += imu_dt;
-
-  const double yaw = pose.theta + yaw_error_;
   const double forward_accel =
       imu_dt > 0.0 ? (true_linear - last_imu_linear_velocity_) / imu_dt : 0.0;
   const double lateral_accel = true_linear * true_angular;
   last_imu_linear_velocity_ = true_linear;
-  const double measured_forward_accel = noisy_ ? accel_.apply(forward_accel, rng_) : forward_accel;
-  const double measured_lateral_accel = noisy_ ? accel_.apply(lateral_accel, rng_) : lateral_accel;
   const double gravity = world != nullptr ? world->gravity() : 9.81;
 
   msgs::Imu imu;
   imu.header.stamp = time;
   imu.header.frame_id = "imu_link";
-  imu.orientation = tfmath::from_yaw(yaw);
-  imu.angular_velocity = {0.0, 0.0, measured_angular};
-  imu.linear_acceleration = {measured_forward_accel, measured_lateral_accel,
-                             noisy_ ? accel_.apply(gravity, rng_) : gravity};
-  if (noisy_) {
-    const double yaw_sigma = std::abs(gyro_.bias) * integrated_time_ +
-                             gyro_.sigma * std::sqrt(integrated_time_);
-    imu.orientation_covariance[8] = yaw_sigma * yaw_sigma;
-    const double gyro_variance = gyro_.variance();
-    imu.angular_velocity_covariance[0] = gyro_variance;
-    imu.angular_velocity_covariance[4] = gyro_variance;
-    imu.angular_velocity_covariance[8] = gyro_variance;
-    const double accel_variance = accel_.variance();
-    imu.linear_acceleration_covariance[0] = accel_variance;
-    imu.linear_acceleration_covariance[4] = accel_variance;
-    imu.linear_acceleration_covariance[8] = accel_variance;
-  }
+  imu.orientation = tfmath::from_yaw(pose.theta);
+  imu.angular_velocity = {0.0, 0.0, true_angular};
+  imu.linear_acceleration = {forward_accel, lateral_accel, gravity};
   if (imu_callback_) {
     imu_callback_(imu);
   }
@@ -349,6 +301,17 @@ ArmStatus WafflePiArm::arm_status() const {
   status.position = manual_ ? manual_position_ : controller_position_;
   status.present = true;
   return status;
+}
+
+std::string WafflePiArm::noise_summary() const {
+  if (!noisy_) {
+    return "off (--no-noise)";
+  }
+  char buffer[192];
+  std::snprintf(buffer, sizeof(buffer),
+                "wheel slip sigma=%.3f m/s scale=%+.1f%%/%+.1f%% (physical)",
+                left_slip_.sigma, left_slip_.scale * 100.0, right_slip_.scale * 100.0);
+  return buffer;
 }
 
 void WafflePiArm::step_towards(std::array<double, 5>& position,

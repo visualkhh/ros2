@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
   std::uint32_t seed = 42;
   bool noisy = true;
   bool slam = false;
-  bool arm = false;
+  bool arm = true;  // krosc_ws 로봇은 매니퓰레이터/MoveIt 포함이 기본
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -102,22 +102,23 @@ int main(int argc, char** argv) {
   auto robot_holder = std::make_unique<krosc_ws::sim::WafflePiArm>(noisy, seed, KROSC_WS_URDF_PATH);
   auto* robot_model = static_cast<krosc_ws::sim::WafflePiArm*>(
       world->add(std::move(robot_holder)));
+  // MoveIt이 기본 제어자다. 패널에서 슬라이더를 움직이면 수동으로 전환된다.
   robot_model->set_manual_arm(!arm);
 
   krosc::simulator::Simulator simulator(context, *world, *robot_model);
 
-  krosc_ws::sim::SimulatorOpenCr opencr(*robot_model);
-  krosc_ws::sim::SimulatorLds lds(*robot_model);
+  krosc_ws::sim::SimulatorOpenCr opencr(*robot_model, noisy, seed);
+  krosc_ws::sim::SimulatorLds lds(*robot_model, noisy, seed);
 
   krosc_ws::RobotOptions options;
   options.urdf_path = KROSC_WS_URDF_PATH;
   options.maps_dir = KROSC_WS_MAPS_DIR;
-  options.enable_moveit = arm;
+  options.enable_moveit = true;
   // 맵 목록/로드/저장은 SLAM 여부와 무관하게 항상 쓸 수 있어야 한다.
   options.enable_map = true;
   options.slam = slam;
-  options.enable_rl = false;
-  options.enable_arm = arm;
+  options.enable_rl = true;
+  options.enable_arm = true;
   options.enable_status = true;
   options.enable_robot_state_publisher = true;
   options.wheel_radius = krosc_ws::sim::WafflePiArm::kWheelRadius;
@@ -147,6 +148,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  std::printf("[krosc_ws_sim] noise: body[%s] opencr[%s] lds[%s]\n",
+              robot_model->noise_summary().c_str(), opencr.noise_summary().c_str(),
+              lds.noise_summary().c_str());
   std::printf("[krosc_ws_sim] world: pucks=%d seed=%u port=%d\n", pucks, seed, port);
   std::printf("[krosc_ws_sim] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);

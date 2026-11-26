@@ -106,8 +106,24 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
     krosc::core krosc::simulator_assets krosc::simulator krosc::simulator_qt)
   target_compile_definitions(krosc_ws_simulator PRIVATE
     KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/simulator/robot/urdf/turtlebot3_real.urdf"
-    KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps")
+    KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"
+    KROSC_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models")
   target_compile_options(krosc_ws_simulator PRIVATE -Wall -Wextra -Wpedantic)
+  if(KROSC_WS_BUILD_RL_NAV)
+    target_sources(krosc_ws_simulator PRIVATE
+      engine/ml/onnx_policy.cpp
+      engine/nodes/rl_nav_controller.cpp)
+    target_compile_definitions(krosc_ws_simulator PRIVATE KROSC_WS_ENABLE_RL_NAV=1)
+    if(KROSC_WS_RL_NAV_FOUND)
+      target_include_directories(krosc_ws_simulator PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+      target_link_libraries(krosc_ws_simulator PRIVATE ${ONNXRUNTIME_LIBRARY})
+      target_compile_definitions(krosc_ws_simulator PRIVATE KROSC_WS_HAS_ONNXRUNTIME=1)
+      get_filename_component(ONNXRUNTIME_LIBRARY_DIR "${ONNXRUNTIME_LIBRARY}" DIRECTORY)
+      set_target_properties(krosc_ws_simulator PROPERTIES
+        BUILD_RPATH "${ONNXRUNTIME_LIBRARY_DIR}"
+        INSTALL_RPATH "${ONNXRUNTIME_LIBRARY_DIR}")
+    endif()
+  endif()
 endif()
 
 option(KROSC_WS_BUILD_TESTS "Build krosc_ws tests" ON)

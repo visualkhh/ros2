@@ -51,6 +51,7 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   void set_arm_target(const std::array<double, 5>& target);            // 수동
   void set_controller_arm_target(const std::array<double, 5>& target); // SimulatorOpenCr write_arm
   [[nodiscard]] ArmStatus arm_status() const;
+  [[nodiscard]] std::string noise_summary() const;
 
   static constexpr std::array<double, 5> kHome{0.5, -1.8, 1.4, 0.8, 0.0};
   static constexpr std::array<double, 5> kStow{0.0, -1.9024, 1.3440, 0.9023, 0.0};
@@ -66,7 +67,6 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   static constexpr double kScanRangeMin = 0.12;
   static constexpr double kScanRangeMax = 3.5;
   static constexpr double kImuPeriod = 0.01;
-  static constexpr int kEncoderTicks = 4096;
 
  private:
   struct Noise {
@@ -96,13 +96,8 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   krosc::msgs::Twist command_;
   bool noisy_ = false;
   std::mt19937 rng_;
-  Noise left_slip_{0.05, 0.0, -0.01};
-  Noise right_slip_{0.05, 0.0, 0.015};
-  Noise gyro_{0.01, 0.005, 0.0};
-  Noise accel_{0.05, 0.02, 0.0};
-  Noise lidar_range_{0.01, 0.0, 0.0};
-  double lidar_dropout_ = 0.01;
-  double gyro_bias_walk_ = 2e-5;
+  Noise left_slip_{0.012, 0.0, -0.015};
+  Noise right_slip_{0.012, 0.0, 0.018};
 
   double left_angle_ = 0.0;
   double right_angle_ = 0.0;
@@ -112,9 +107,6 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   double right_velocity_ = 0.0;
   double imu_accum_ = 0.0;
   double scan_accum_ = 0.0;
-  double yaw_error_ = 0.0;
-  double bias_walk_ = 0.0;
-  double integrated_time_ = 0.0;
   double last_linear_velocity_ = 0.0;
   double last_angular_velocity_ = 0.0;
   double last_imu_linear_velocity_ = 0.0;

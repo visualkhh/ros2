@@ -31,6 +31,7 @@ class RobotStatus final : public krosc::Node {
   krosc::Parameter<double> diagnostics_period_;
   krosc::Parameter<double> data_timeout_;
   krosc::Parameter<bool> arm_torque_on_start_;
+  krosc::Timer poll_timer_;
   double last_diagnostics_ = 0.0;
   double last_arm_status_ = 0.0;
 };

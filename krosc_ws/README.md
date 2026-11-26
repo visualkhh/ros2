@@ -344,10 +344,15 @@ Pi에서는 타깃을 만들지 않는다.
 Qt 창에서 `W/A/S/D` 텔레옵, `L` 라이다 표시 토글, 드래그 orbit, 휠 zoom을 쓸 수 있다.
 오른쪽에는 `MANIPULATOR` 패널이 붙어 joint1~4/gripper를 수동 조작하고 HOME/STOW를 실행한다.
 
-기본은 노이즈 모드다. 바퀴 슬립, 엔코더 양자화, 자이로/가속도 바이어스,
-라이다 거리 잡음/드롭아웃이 `WafflePiArm(TurtleBot)` 모델에서 생성되고,
-`SimulatorOpenCr`/`SimulatorLds`는 그 값을 실기 장치처럼 전달만 한다.
+기본은 노이즈 모드다. **물리 차체 슬립**은 `WafflePiArm`이 만들고,
+**엔코더 양자화/IMU 바이어스/라이다 거리 잡음·드롭아웃**은 하드웨어 경계인
+`SimulatorOpenCr`/`SimulatorLds`가 센서값에 입혀 engine으로 전달한다.
 `--no-noise`로 끌 수 있으며, Qt truth view는 잡음 없는 진실 값을 그린다.
+
+```text
+WafflePiArm(truth) → SimulatorOpenCr(encoder/IMU noise) ┐
+                   → SimulatorLds(range/dropout noise) ┴→ Robot engine
+```
 
 실기/시뮬레이터는 `engine/robot.cpp`의 공통 `Robot` 클래스에
 `OpenCrDevice`/`LdsDevice`만 다르게 주입한다. 시뮬레이터는
