@@ -413,18 +413,107 @@ export function init(host) {
   const grid = document.createElement('div');
   grid.className = 'moveit-grid';
   body.append(grid);
+  // 숫자 입력은 라이브 input 대신 클릭 → 확인 다이얼로그로 받는다 (costmap과 같은 패턴).
+  const editDialog = document.createElement('dialog');
+  editDialog.className = 'edit-dialog';
+  const editForm = document.createElement('form');
+  const editTitle = document.createElement('div');
+  editTitle.className = 'edit-title';
+  const editCurrent = document.createElement('div');
+  editCurrent.className = 'edit-current';
+  const editLabel = document.createElement('label');
+  const editCaption = document.createElement('span');
+  editCaption.textContent = '새 값';
+  const editInput = document.createElement('input');
+  editInput.type = 'number';
+  editInput.step = 'any';
+  editInput.required = true;
+  editLabel.append(editCaption, editInput);
+  const editButtons = document.createElement('div');
+  editButtons.className = 'btn-row';
+  editForm.append(editTitle, editCurrent, editLabel, editButtons);
+  editDialog.append(editForm);
+  body.append(editDialog);
+
+  let editResolve = null;
+  const finishEdit = (value) => {
+    if (!editResolve) return;
+    const resolve = editResolve;
+    editResolve = null;
+    if (editDialog.open) editDialog.close();
+    resolve(value);
+  };
+  editForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const value = Number(editInput.value);
+    if (!Number.isFinite(value)) {
+      editInput.reportValidity();
+      return;
+    }
+    finishEdit(value);
+  });
+  editDialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    finishEdit(null);
+  });
+  editDialog.addEventListener('close', () => finishEdit(null));
+  const cancelEdit = document.createElement('button');
+  cancelEdit.type = 'button';
+  cancelEdit.textContent = '취소';
+  cancelEdit.addEventListener('click', () => finishEdit(null));
+  const applyEdit = document.createElement('button');
+  applyEdit.type = 'button';
+  applyEdit.className = 'primary';
+  applyEdit.textContent = '확인';
+  applyEdit.addEventListener('click', () => editForm.requestSubmit());
+  editButtons.append(cancelEdit, applyEdit);
+
+  const openNumberDialog = (caption, value, step) => new Promise((resolve) => {
+    editResolve = resolve;
+    editTitle.textContent = caption;
+    editCurrent.textContent = `현재값: ${value}`;
+    editCaption.textContent = '새 값';
+    editInput.step = step > 0 ? String(step) : 'any';
+    editInput.value = String(value);
+    editDialog.showModal();
+    editInput.focus();
+    editInput.select();
+  });
+
   const numeric = (label, value, step) => {
     const wrapper = document.createElement('div');
     wrapper.className = 'moveit-field';
     const name = document.createElement('label');
     name.textContent = label;
-    const field = document.createElement('input');
-    field.type = 'number';
-    field.step = String(step);
-    field.value = String(value);
-    wrapper.append(name, field);
+    const field = document.createElement('button');
+    field.type = 'button';
+    field.className = 'value-button';
+    field.title = '클릭해서 수정';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = String(step);
+    input.hidden = true;
+    let current = String(value);
+    // 기존 코드는 input.value를 읽고 쓴다. 드래그/Current/상태 갱신도
+    // 버튼 텍스트에 바로 반영되도록 value를 own accessor로 가린다.
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get() { return current; },
+      set(next) {
+        current = String(next);
+        field.textContent = current;
+      },
+    });
+    field.textContent = current;
+    field.addEventListener('click', async () => {
+      const next = await openNumberDialog(label, current, step);
+      if (next === null) return;
+      input.value = String(next);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    wrapper.append(name, field, input);
     grid.append(wrapper);
-    return field;
+    return input;
   };
   const xInput = numeric('X', 0.334, 0.001);
   const yInput = numeric('Y', 0.0, 0.001);
