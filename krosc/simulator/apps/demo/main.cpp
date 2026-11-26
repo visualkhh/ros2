@@ -114,8 +114,8 @@ int main(int argc, char** argv) {
   }
 
   auto world = std::make_unique<krosc::simulator::MazeWorld>(pucks, seed);
-  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(noisy, seed);
-  auto* robot = static_cast<krosc::simulator::TurtleBot3*>(
+  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot>(noisy, seed);
+  auto* robot = static_cast<krosc::simulator::TurtleBot*>(
       world->add(std::move(robot_holder)));
 
   const std::string urdf = read_text(KROSC_SIMULATOR_URDF);
@@ -132,8 +132,8 @@ int main(int argc, char** argv) {
       app.context(), "diff_drive_odometry",
       std::map<std::string, krosc::ParamValue>{
           {"publish_tf", false},
-          {"wheel_radius", krosc::simulator::TurtleBot3::kWheelRadius},
-          {"wheel_separation", krosc::simulator::TurtleBot3::kWheelSeparation}});
+          {"wheel_radius", krosc::simulator::TurtleBot::kWheelRadius},
+          {"wheel_separation", krosc::simulator::TurtleBot::kWheelSeparation}});
   krosc::nodes::Ekf ekf(
       app.context(), "ekf_filter_node",
       std::map<std::string, krosc::ParamValue>{

@@ -345,7 +345,7 @@ Qt 창에서 `W/A/S/D` 텔레옵, `L` 라이다 표시 토글, 드래그 orbit, 
 오른쪽에는 `MANIPULATOR` 패널이 붙어 joint1~4/gripper를 수동 조작하고 HOME/STOW를 실행한다.
 
 기본은 노이즈 모드다. 바퀴 슬립, 엔코더 양자화, 자이로/가속도 바이어스,
-라이다 거리 잡음/드롭아웃이 `WafflePiArm(TurtleBot3)` 모델에서 생성되고,
+라이다 거리 잡음/드롭아웃이 `WafflePiArm(TurtleBot)` 모델에서 생성되고,
 `SimulatorOpenCr`/`SimulatorLds`는 그 값을 실기 장치처럼 전달만 한다.
 `--no-noise`로 끌 수 있으며, Qt truth view는 잡음 없는 진실 값을 그린다.
 

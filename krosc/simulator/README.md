@@ -8,7 +8,7 @@ krosc/simulator/
   core/       World/SimulatorRobot 런타임, SimulationRunner, Snapshot, Qt truth view
   worlds/     바로 쓰는 월드 예제 (MazeWorld, RoomWorld)
   objects/    바로 쓰는 오브젝트 예제 (Puck, BoxObstacle, CylinderObstacle)
-  robots/     바로 쓰는 로봇 예제 (TurtleBot3 + URDF)
+  robots/     바로 쓰는 로봇 예제 (TurtleBot + URDF)
   apps/demo/  krosc_simulator 데모 앱. RobotBridge/MapPublisher 같은 ROS 접착제는 여기에만 있다.
 ```
 
@@ -40,7 +40,7 @@ auto snapshot = simulator.snapshots().latest(); // 화면/텔레메트리용
 시뮬레이터용 URDF는 `krosc_ws/simulator/robot/urdf/turtlebot3_real.urdf`에
 의도적으로 복제해 두고, 실기 쪽 `krosc_ws/engine/description`과 분리한다.
 
-노이즈는 하드웨어 스텁이 아니라 `TurtleBot3`/`WafflePiArm` 모델이 생성한다
+노이즈는 하드웨어 스텁이 아니라 `TurtleBot`/`WafflePiArm` 모델이 생성한다
 (바퀴 슬립, 엔코더 양자화, IMU 바이어스, 라이다 거리/드롭아웃). 스텁은 센서값을
 실기 장치처럼 전달하고, truth view는 잡음 없는 스냅샷을 사용한다.
 

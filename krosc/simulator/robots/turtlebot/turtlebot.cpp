@@ -56,7 +56,7 @@ RobotVisual cylinder_visual(const msgs::Transform& transform, double radius, dou
 
 }  // namespace
 
-TurtleBot3::TurtleBot3(bool noisy, std::optional<std::uint32_t> seed)
+TurtleBot::TurtleBot(bool noisy, std::optional<std::uint32_t> seed)
     : noisy_(noisy), rng_(seed ? *seed : std::random_device{}()) {
   radius = kBodyRadius;
   height = kBodyHeight;
@@ -65,17 +65,17 @@ TurtleBot3::TurtleBot3(bool noisy, std::optional<std::uint32_t> seed)
   movable = false;
 }
 
-void TurtleBot3::set_command(const msgs::Twist& command) {
+void TurtleBot::set_command(const msgs::Twist& command) {
   std::lock_guard<std::mutex> lock(command_mutex_);
   command_ = command;
 }
 
-msgs::Twist TurtleBot3::command() const {
+msgs::Twist TurtleBot::command() const {
   std::lock_guard<std::mutex> lock(command_mutex_);
   return command_;
 }
 
-RobotState TurtleBot3::state() const {
+RobotState TurtleBot::state() const {
   RobotState result;
   result.command = command();
   result.joints = joint_positions();
@@ -105,7 +105,7 @@ RobotState TurtleBot3::state() const {
   return result;
 }
 
-void TurtleBot3::tick(double time, double dt) {
+void TurtleBot::tick(double time, double dt) {
   if (dt <= 0.0) {
     return;
   }
@@ -151,7 +151,7 @@ void TurtleBot3::tick(double time, double dt) {
   }
 }
 
-void TurtleBot3::apply_motion(double dt, double linear, double angular) {
+void TurtleBot::apply_motion(double dt, double linear, double angular) {
   const int steps = std::max(1, static_cast<int>(std::ceil(std::abs(linear) * dt / kMaxSubstep)));
   const double h = dt / static_cast<double>(steps);
   for (int i = 0; i < steps; ++i) {
@@ -171,41 +171,41 @@ void TurtleBot3::apply_motion(double dt, double linear, double angular) {
   last_angular_velocity_ = angular;
 }
 
-msgs::Pose2D TurtleBot3::scan_pose() const {
+msgs::Pose2D TurtleBot::scan_pose() const {
   return {pose.x + kLidarMountX * std::cos(pose.theta), pose.y + kLidarMountX * std::sin(pose.theta), pose.theta};
 }
 
-std::map<std::string, double> TurtleBot3::joint_positions() const {
+std::map<std::string, double> TurtleBot::joint_positions() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   return {{"wheel_left_joint", left_position_}, {"wheel_right_joint", right_position_}};
 }
 
-double TurtleBot3::left_position() const {
+double TurtleBot::left_position() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   return left_position_;
 }
-double TurtleBot3::right_position() const {
+double TurtleBot::right_position() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   return right_position_;
 }
-double TurtleBot3::left_velocity() const {
+double TurtleBot::left_velocity() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   return left_velocity_;
 }
-double TurtleBot3::right_velocity() const {
+double TurtleBot::right_velocity() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   return right_velocity_;
 }
 
-void TurtleBot3::set_scan_callback(std::function<void(const msgs::LaserScan&)> callback) {
+void TurtleBot::set_scan_callback(std::function<void(const msgs::LaserScan&)> callback) {
   scan_callback_ = std::move(callback);
 }
 
-void TurtleBot3::set_imu_callback(std::function<void(const msgs::Imu&)> callback) {
+void TurtleBot::set_imu_callback(std::function<void(const msgs::Imu&)> callback) {
   imu_callback_ = std::move(callback);
 }
 
-void TurtleBot3::sample_scan(double time) {
+void TurtleBot::sample_scan(double time) {
   const double inc = kTwoPi / kScanBeams;
   const double sensor_x = pose.x + kLidarMountX * std::cos(pose.theta);
   const double sensor_y = pose.y + kLidarMountX * std::sin(pose.theta);
@@ -257,7 +257,7 @@ void TurtleBot3::sample_scan(double time) {
   }
 }
 
-void TurtleBot3::sample_imu(double time, double imu_dt) {
+void TurtleBot::sample_imu(double time, double imu_dt) {
   const double true_linear = last_linear_velocity_;
   const double true_angular = last_angular_velocity_;
 

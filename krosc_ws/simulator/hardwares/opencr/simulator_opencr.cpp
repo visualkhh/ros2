@@ -5,7 +5,7 @@
 
 namespace krosc_ws::sim {
 
-// 바퀴 슬립/엔코더/IMU 잡음은 WafflePiArm(TurtleBot3) 모델이 만든다.
+// 바퀴 슬립/엔코더/IMU 잡음은 WafflePiArm 모델이 만든다.
 // 이 어댑터는 실기 OpenCR처럼 값만 전달한다.
 SimulatorOpenCr::SimulatorOpenCr(WafflePiArm& robot) : robot_(robot) {
   robot_.set_imu_callback([this](const krosc::msgs::Imu& imu) {

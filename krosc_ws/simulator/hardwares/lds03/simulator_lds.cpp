@@ -5,9 +5,9 @@
 
 namespace krosc_ws::sim {
 
-// 라이다 거리 잡음/드롭아웃은 TurtleBot3 모델이 만든다.
+// 라이다 거리 잡음/드롭아웃은 WafflePiArm 모델이 만든다.
 // 이 어댑터는 실기 LDS-03처럼 값만 전달한다.
-SimulatorLds::SimulatorLds(krosc::simulator::TurtleBot3& robot) : robot_(robot) {
+SimulatorLds::SimulatorLds(WafflePiArm& robot) : robot_(robot) {
   robot_.set_scan_callback([this](const krosc::msgs::LaserScan& scan) {
     std::lock_guard<std::mutex> lock(scan_mutex_);
     scan_ = scan;

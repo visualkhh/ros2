@@ -8,7 +8,7 @@
 
 namespace krosc::simulator {
 
-RobotBridge::RobotBridge(krosc::Context& context, krosc::simulator::TurtleBot3& robot)
+RobotBridge::RobotBridge(krosc::Context& context, krosc::simulator::TurtleBot& robot)
     : Node(context, "RobotBridge"), robot_(robot) {
   robot_.set_scan_callback(
       [this](const krosc::msgs::LaserScan& scan) { publish("scan", scan, krosc::QOS_SENSOR_DATA); });

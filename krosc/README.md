@@ -166,7 +166,7 @@ krosc/
 │   ├── core/                      # Simulator/스냅샷/러너/Qt truth view
 │   ├── worlds/                    # MazeWorld, RoomWorld
 │   ├── objects/                   # Puck, Box/CylinderObstacle
-│   ├── robots/                    # TurtleBot3 + turtlebot.urdf
+│   ├── robots/                    # TurtleBot + turtlebot.urdf
 │   └── tests/                     # simulator 4 tests
 ├── viz/                           # krosc_viz (Qt6 Widgets)
 │   ├── CMakeLists.txt
@@ -280,8 +280,8 @@ const auto response = node.call_service<krosc::msgs::SetBoolRequest, krosc::msgs
 ```cpp
 krosc::Krosc app(nullptr, network);  // network를 주면 Viz/VizWeb이 PeerNetwork로 붙는다
 auto world = std::make_unique<krosc::simulator::MazeWorld>(10, 42);
-auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(true, 42);
-auto* robot = static_cast<krosc::simulator::TurtleBot3*>(
+auto robot_holder = std::make_unique<krosc::simulator::TurtleBot>(true, 42);
+auto* robot = static_cast<krosc::simulator::TurtleBot*>(
     world->add(std::move(robot_holder)));
 
 // 데모 앱이 자기 ROS 노드/브리지를 소유한다.

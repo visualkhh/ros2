@@ -16,7 +16,6 @@
 #include "krosc/node.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/simulator/worlds/maze_world.hpp"
-#include "krosc/simulator/robots/turtlebot/turtlebot.hpp"
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/snapshot.hpp"
 #include "krosc/simulator/simulator_window.hpp"
@@ -121,8 +120,8 @@ int main(int argc, char** argv) {
   options.enable_arm = arm;
   options.enable_status = true;
   options.enable_robot_state_publisher = true;
-  options.wheel_radius = krosc::simulator::TurtleBot3::kWheelRadius;
-  options.wheel_separation = krosc::simulator::TurtleBot3::kWheelSeparation;
+  options.wheel_radius = krosc_ws::sim::WafflePiArm::kWheelRadius;
+  options.wheel_separation = krosc_ws::sim::WafflePiArm::kWheelSeparation;
   options.scan_topic = "scan";
   options.scan_frame = "base_scan";
   options.scan_period = 0.1;

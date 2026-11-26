@@ -12,12 +12,12 @@ namespace krosc::simulator {
 // cmd_vel -> robot.command, 라이다/IMU 측정 -> scan/imu, 바퀴 위치 -> joint_states.
 class RobotBridge final : public krosc::Node {
  public:
-  RobotBridge(krosc::Context& context, krosc::simulator::TurtleBot3& robot);
+  RobotBridge(krosc::Context& context, krosc::simulator::TurtleBot& robot);
 
  private:
   void publish_joint_states();
 
-  krosc::simulator::TurtleBot3& robot_;
+  krosc::simulator::TurtleBot& robot_;
   krosc::Timer joint_states_timer_;
 };
 

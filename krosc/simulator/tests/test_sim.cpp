@@ -24,7 +24,7 @@ namespace {
 
 class Bridge final : public krosc::Node {
  public:
-  Bridge(krosc::Context& context, krosc::simulator::TurtleBot3& robot)
+  Bridge(krosc::Context& context, krosc::simulator::TurtleBot& robot)
       : Node(context, "TestBridge"), robot_(robot) {
     robot_.set_scan_callback([this](const krosc::msgs::LaserScan& scan) {
       publish("scan", scan, krosc::QOS_SENSOR_DATA);
@@ -45,7 +45,7 @@ class Bridge final : public krosc::Node {
   }
 
  private:
-  krosc::simulator::TurtleBot3& robot_;
+  krosc::simulator::TurtleBot& robot_;
   krosc::Timer timer_;
 };
 
@@ -83,8 +83,8 @@ class Recorder final : public krosc::Node {
 
 KROSC_TEST(world_rays_and_straight_motion) {
   krosc::simulator::MazeWorld world(0);
-  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>();
-  auto* actual = static_cast<krosc::simulator::TurtleBot3*>(world.add(std::move(robot_holder)));
+  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot>();
+  auto* actual = static_cast<krosc::simulator::TurtleBot*>(world.add(std::move(robot_holder)));
   const double ahead = world.ray_distance(0.0, 0.0, 0.0);
   CHECK(std::isfinite(ahead));
   CHECK(ahead > 0.5);
@@ -105,8 +105,8 @@ KROSC_TEST(simulation_publishes_scan_imu_odom_and_filtered) {
   krosc::Context context(options);
 
   krosc::simulator::MazeWorld world(0, 7);
-  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(true, 7);
-  auto* robot = static_cast<krosc::simulator::TurtleBot3*>(world.add(std::move(robot_holder)));
+  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot>(true, 7);
+  auto* robot = static_cast<krosc::simulator::TurtleBot*>(world.add(std::move(robot_holder)));
 
   Bridge bridge(context, *robot);
   krosc::nodes::DiffDriveOdometry odometry(context, "odom_node", {{"publish_tf", false}});
@@ -177,8 +177,8 @@ KROSC_TEST(simulation_runner_steps_world) {
 KROSC_TEST(simulator_uses_injected_world_and_robot) {
   krosc::Context context;
   krosc::simulator::MazeWorld world(0, 42);
-  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(false, 42);
-  auto* robot = static_cast<krosc::simulator::TurtleBot3*>(world.add(std::move(robot_holder)));
+  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot>(false, 42);
+  auto* robot = static_cast<krosc::simulator::TurtleBot*>(world.add(std::move(robot_holder)));
   krosc::simulator::Simulator simulator(context, world, *robot,
                                         krosc::simulator::SimulatorOptions{100.0});
   robot->set_command(krosc::msgs::Twist{{0.16, 0.0, 0.0}, {0.0, 0.0, 0.28}});
