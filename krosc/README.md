@@ -152,7 +152,7 @@ krosc/
 │   │   ├── sensor/                # Sensor/SensorManager (read-only 센서 수명주기)
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 59 tests (nav2/control/sensor/MoveIt/net/RPC 포함)
+│   ├── tests/                     # core 62 tests (nav2/control/sensor/MoveIt/net/RPC 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp, net_bench.cpp
 ├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
@@ -311,13 +311,13 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)로 돌린다.
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 59 + sim 4 = 63 tests, 2 executables
+# core 62 + sim 4 = 66 tests, 2 executables
 ```
 
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
-- sensor: SensorManager(init/activate/read/deactivate, 실패 롤백), 이름 중복/read 실패 집계
+- sensor: Sensor lifecycle(init/activate/read/deactivate/finish/error), SensorManager(센서별 주기 스레드, 실패 롤백/집계)
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + move_group/scrub + 상태 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - RPC: 서비스/액션/파라미터 포워딩(discovery, timeout, latched), 웹 JSON RPC
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner

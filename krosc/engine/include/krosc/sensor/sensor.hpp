@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace krosc::sensor {
@@ -9,10 +10,24 @@ namespace krosc::sensor {
 struct SensorInfo {
   std::string name = "sensor";
   std::string type;
+  std::string topic;       // 데이터를 발행할 토픽 (빈 값이면 발행하지 않음)
+  std::string frame_id;    // 메시지 header.frame_id
+  double period = 0.1;     // read 주기 [s]. 0보다 커야 한다.
 };
 
-// read-only 센서의 수명주기: on_init -> on_activate -> read 반복 -> on_deactivate.
-// LaserScan 같은 배열 데이터는 드라이버가 토픽으로 내보내고, 이 인터페이스는 상태와 수명만 다룬다.
+// 센서 lifecycle 실패 알림. 구현체는 on_error()에서 로그/진단/복구를 할 수 있다.
+struct SensorError {
+  enum class Stage { Init, Activate, Read, Deactivate };
+  Stage stage = Stage::Read;
+  std::uint64_t consecutive_failures = 0;  // read 연속 실패 횟수
+  double time = 0.0;                       // 실패 시각 (steady clock)
+};
+
+// read-only 센서의 수명주기:
+//   on_init -> on_activate -> read 반복 -> on_deactivate -> ... -> on_finish
+// on_deactivate는 스트리밍만 멈추고(재시작 가능), on_finish는 최종 정리다.
+// 센서는 자기 주기로 SensorManager가 호출할 때 read()에서 데이터를 읽고,
+// 설정된 토픽으로 직접 발행한다.
 class Sensor {
  public:
   virtual ~Sensor() = default;
@@ -24,6 +39,12 @@ class Sensor {
   virtual bool on_activate() { return true; }
   virtual bool on_deactivate() { return true; }
   virtual bool read(double time, double period) = 0;
+
+  // 최종 정리. Context가 아직 살아 있을 때 한 번 호출된다.
+  // 마지막 상태 publish나 서비스 호출을 해도 되지만, 오래 블록하지 않는다.
+  virtual void on_finish() {}
+  // 실패 알림. read 실패는 매번, init/activate/deactivate 실패는 전이 시점에 불린다.
+  virtual void on_error(const SensorError&) {}
 
   [[nodiscard]] const SensorInfo& info() const { return info_; }
 

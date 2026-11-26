@@ -113,9 +113,12 @@ std::vector<std::string> local_addresses() {
 }
 
 void usage() {
-  std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--maps DIR] [--no-lidar] [--slam]\n"
+  std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--maps DIR]\n"
+               "                  [--scan-topic NAME] [--scan-rate HZ] [--imu-topic NAME] [--imu-rate HZ]\n"
+               "                  [--no-lidar] [--slam]\n"
                "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
-               "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR\n";
+               "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR,\n"
+               "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu)\n";
 }
 
 }  // namespace
@@ -136,6 +139,10 @@ int main(int argc, char** argv) {
   }
   bool enable_lidar = true;
   bool slam = false;
+  std::string scan_topic = env_or("KROSC_SCAN_TOPIC", "scan");
+  std::string imu_topic = env_or("KROSC_IMU_TOPIC", "imu");
+  double scan_rate = 10.0;
+  double imu_rate = 50.0;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--opencr" && i + 1 < argc) {
@@ -148,6 +155,14 @@ int main(int argc, char** argv) {
       urdf_path = argv[++i];
     } else if (argument == "--maps" && i + 1 < argc) {
       maps_dir = argv[++i];
+    } else if (argument == "--scan-topic" && i + 1 < argc) {
+      scan_topic = argv[++i];
+    } else if (argument == "--scan-rate" && i + 1 < argc) {
+      scan_rate = std::stod(argv[++i]);
+    } else if (argument == "--imu-topic" && i + 1 < argc) {
+      imu_topic = argv[++i];
+    } else if (argument == "--imu-rate" && i + 1 < argc) {
+      imu_rate = std::stod(argv[++i]);
     } else if (argument == "--no-lidar") {
       enable_lidar = false;
     } else if (argument == "--slam") {
@@ -160,6 +175,10 @@ int main(int argc, char** argv) {
       usage();
       return 2;
     }
+  }
+  if (!(scan_rate > 0.0) || !(imu_rate > 0.0)) {
+    std::cerr << "[krosc_ws] scan-rate/imu-rate는 0보다 커야 한다\n";
+    return 2;
   }
 
   const std::string urdf = read_text(urdf_path);
@@ -198,7 +217,16 @@ int main(int argc, char** argv) {
     std::fflush(stdout);
   }
 
-  krosc_ws::RealTurtleBot3 robot(opencr_port, lidar_port, enable_lidar);
+  krosc_ws::SensorOptions sensor_options;
+  sensor_options.scan_topic = scan_topic;
+  sensor_options.scan_frame = "base_scan";
+  sensor_options.scan_period = 1.0 / scan_rate;
+  sensor_options.imu_topic = imu_topic;
+  sensor_options.imu_frame = "imu_link";
+  sensor_options.imu_period = 1.0 / imu_rate;
+  krosc_ws::RealTurtleBot3 robot(context, opencr_port, lidar_port, enable_lidar, sensor_options);
+  std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
+              scan_rate, imu_topic.c_str(), imu_rate);
   krosc_ws::TurtleBot3Driver driver(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});
@@ -393,11 +421,10 @@ int main(int argc, char** argv) {
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);
   constexpr auto kPeriod = std::chrono::milliseconds(10);
-  constexpr double kPeriodSeconds = 0.01;
   auto next = std::chrono::steady_clock::now();
   auto last_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
-    robot.tick(context.now(), kPeriodSeconds);
+    robot.tick();
     driver.poll();
     next += kPeriod;
     std::this_thread::sleep_until(next);

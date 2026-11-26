@@ -9,7 +9,6 @@
 
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
-#include "krosc/tf/tf_ros.hpp"
 
 namespace krosc_ws {
 
@@ -109,14 +108,6 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
 
 void TurtleBot3Driver::poll() {
   const double current = now();
-  if (auto imu = robot_.opencr().consume_imu()) {
-    imu->header.stamp = current;
-    imu->header.frame_id = "imu_link";
-    publish("imu", std::move(*imu), krosc::QOS_SENSOR_DATA);
-  }
-  if (auto scan = robot_.scan(current)) {
-    publish("scan", std::move(*scan), krosc::QOS_SENSOR_DATA);
-  }
   if (current - last_diagnostics_ >= diagnostics_period_.value()) {
     publish_diagnostics();
     last_diagnostics_ = current;

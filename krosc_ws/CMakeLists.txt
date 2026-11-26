@@ -19,6 +19,7 @@ set(KROSC_REAL_SOURCES
   robot/real_turtlebot3.cpp
   robot/hardwares/controls/opencr/opencr_system.cpp
   robot/hardwares/sensors/lds03/lds03.cpp
+  robot/hardwares/sensors/opencr_imu/opencr_imu.cpp
   robot/hardwares/controls/opencr/opencr_protocol.cpp
   robot/hardwares/controls/opencr/opencr_serial.cpp
   robot/hardwares/serial.cpp

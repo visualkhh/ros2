@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
+#include "krosc/context.hpp"
 #include "krosc/sensor/sensor.hpp"
 
 namespace krosc_ws {
@@ -51,9 +52,10 @@ class LdsParser {
 
 // 실제 LDS-03 시리얼: 230400, 10Hz 스캔. USB2LDS는 DTR을 내려야 데이터를 보낸다.
 // 로봇 몸통(1층 판/바퀴/지지대)이 찍힌 점은 base_link 기준 상자 안이면 지운다.
+// SensorManager가 설정한 주기마다 read()가 호출되고, 설정한 토픽으로 LaserScan을 발행한다.
 class Lds03 : public krosc::sensor::Sensor {
  public:
-  explicit Lds03(std::string port, double mount_x = 0.060,
+  explicit Lds03(krosc::Context& context, std::string port, double mount_x = 0.060,
                  std::string frame_id = "base_scan", bool reverse = true, bool body_filter = true,
                  int baud = 230400);
   ~Lds03();
@@ -84,8 +86,10 @@ class Lds03 : public krosc::sensor::Sensor {
   static constexpr std::array<double, 4> kBodyBox{-0.21, 0.075, -0.17, 0.17};
 
   std::string port_;
+  krosc::Context& context_;
   const double mount_x_;
-  const std::string frame_id_;
+  std::string frame_id_;
+  std::string topic_ = "scan";
   const bool body_filter_;
   const int baud_;
   LdsParser parser_;

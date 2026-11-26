@@ -1,5 +1,7 @@
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "krosc/sensor/sensor.hpp"
@@ -10,8 +12,17 @@
 namespace {
 
 using krosc::sensor::Sensor;
+using krosc::sensor::SensorError;
 using krosc::sensor::SensorInfo;
 using krosc::sensor::SensorManager;
+
+SensorInfo make_info(const std::string& name, double period) {
+  SensorInfo info;
+  info.name = name;
+  info.type = "fake";
+  info.period = period;
+  return info;
+}
 
 class FakeSensor final : public Sensor {
  public:
@@ -19,7 +30,10 @@ class FakeSensor final : public Sensor {
   bool fail_activate = false;
   bool fail_read = false;
   int reads = 0;
+  int finishes = 0;
+  double last_period = 0.0;
   std::vector<std::string> events;
+  std::vector<SensorError> errors;
 
   bool on_init(const SensorInfo& info) override {
     events.push_back("init:" + info.name);
@@ -33,8 +47,11 @@ class FakeSensor final : public Sensor {
     events.push_back("deactivate");
     return true;
   }
-  bool read(double, double) override {
+  void on_finish() override { ++finishes; }
+  void on_error(const SensorError& error) override { errors.push_back(error); }
+  bool read(double, double period) override {
     ++reads;
+    last_period = period;
     events.push_back("read");
     return !fail_read;
   }
@@ -44,10 +61,11 @@ class FakeSensor final : public Sensor {
 
 KROSC_TEST(sensor_manager_add_rules) {
   SensorManager manager;
-  CHECK(manager.add("lidar", "lds03", std::make_unique<FakeSensor>()));
-  CHECK(!manager.add("lidar", "other", std::make_unique<FakeSensor>()));
-  CHECK(!manager.add("", "empty", std::make_unique<FakeSensor>()));
-  CHECK(!manager.add("null", "null", nullptr));
+  CHECK(manager.add(make_info("lidar", 0.1), std::make_unique<FakeSensor>()));
+  CHECK(!manager.add(make_info("lidar", 0.1), std::make_unique<FakeSensor>()));
+  CHECK(!manager.add(make_info("", 0.1), std::make_unique<FakeSensor>()));
+  CHECK(!manager.add(make_info("zero", 0.0), std::make_unique<FakeSensor>()));
+  CHECK(!manager.add(make_info("null", 0.1), nullptr));
   CHECK_EQ(1u, manager.size());
   CHECK(manager.find("lidar") != nullptr);
   CHECK(manager.find("nope") == nullptr);
@@ -60,34 +78,105 @@ KROSC_TEST(sensor_manager_lifecycle_and_read) {
   auto second = std::make_unique<FakeSensor>();
   FakeSensor* first_ptr = first.get();
   FakeSensor* second_ptr = second.get();
-  CHECK(manager.add("b", "type_b", std::move(second)));
-  CHECK(manager.add("a", "type_a", std::move(first)));
+  CHECK(manager.add(make_info("b", 0.1), std::move(second)));
+  CHECK(manager.add(make_info("a", 0.2), std::move(first)));
 
-  CHECK(manager.start());
+  CHECK(manager.start(false));
   CHECK_EQ(2u, manager.active_count());
   CHECK_EQ(2u, second_ptr->events.size());
   CHECK_EQ(std::string("init:b"), second_ptr->events[0]);
   CHECK_EQ(std::string("activate"), second_ptr->events[1]);
   CHECK_EQ(std::string("init:a"), first_ptr->events[0]);
   CHECK_EQ(std::string("activate"), first_ptr->events[1]);
-  CHECK_EQ(0u, manager.read(1.0, 0.01));
 
-  first_ptr->fail_read = true;
-  CHECK_EQ(1u, manager.read(1.1, 0.01));
+  CHECK_EQ(0u, manager.poll(1.0));
+  CHECK_EQ(1, first_ptr->reads);
+  CHECK_EQ(1, second_ptr->reads);
+  CHECK_EQ(0u, manager.poll(1.0));  // 아직 다음 주기가 아니다
+
+  second_ptr->fail_read = true;
+  CHECK_EQ(1u, manager.poll(1.1));
   CHECK_EQ(1u, manager.read_failures());
-  first_ptr->fail_read = false;
-  CHECK_EQ(0u, manager.read(1.2, 0.01));
-  CHECK_EQ(3, first_ptr->reads);
-  CHECK_EQ(3, second_ptr->reads);
+  CHECK_NEAR(0.2, first_ptr->last_period, 1e-9);
+  CHECK_NEAR(0.1, second_ptr->last_period, 1e-9);
+  CHECK_EQ(1u, second_ptr->errors.size());
+  CHECK(second_ptr->errors[0].stage == SensorError::Stage::Read);
+  CHECK_EQ(1u, second_ptr->errors[0].consecutive_failures);
+  second_ptr->fail_read = false;
 
   manager.stop();
   CHECK_EQ(0u, manager.active_count());
   CHECK_EQ(std::string("deactivate"), first_ptr->events.back());
   CHECK_EQ(std::string("deactivate"), second_ptr->events.back());
+  CHECK_EQ(0, first_ptr->finishes);  // stop은 finish가 아니다
 
   // stop 뒤에는 read가 호출되지 않는다.
-  CHECK_EQ(0u, manager.read(2.0, 0.01));
-  CHECK_EQ(3, first_ptr->reads);
+  CHECK_EQ(0u, manager.poll(2.0));
+  CHECK_EQ(1, first_ptr->reads);
+  CHECK_EQ(2, second_ptr->reads);
+
+  manager.finish();
+  CHECK_EQ(1, first_ptr->finishes);
+  CHECK_EQ(1, second_ptr->finishes);
+  manager.finish();
+  CHECK_EQ(1, first_ptr->finishes);  // finish는 한 번만
+  CHECK(!manager.start(false));      // finish 뒤 재시작 불가
+}
+
+KROSC_TEST(sensor_manager_reports_read_errors) {
+  SensorManager manager;
+  auto fake = std::make_unique<FakeSensor>();
+  FakeSensor* fake_ptr = fake.get();
+  CHECK(manager.add(make_info("imu", 0.1), std::move(fake)));
+  CHECK(manager.start(false));
+
+  fake_ptr->fail_read = true;
+  CHECK_EQ(1u, manager.poll(0.0));
+  CHECK_EQ(1u, fake_ptr->errors.size());
+  CHECK_EQ(1u, fake_ptr->errors[0].consecutive_failures);
+  CHECK_EQ(1u, manager.poll(0.1));
+  CHECK_EQ(2u, fake_ptr->errors.size());
+  CHECK_EQ(2u, fake_ptr->errors[1].consecutive_failures);
+
+  fake_ptr->fail_read = false;
+  CHECK_EQ(0u, manager.poll(0.2));
+  CHECK_EQ(2u, fake_ptr->errors.size());  // 성공하면 on_error는 늘지 않는다
+
+  fake_ptr->fail_read = true;
+  CHECK_EQ(1u, manager.poll(0.3));
+  CHECK_EQ(3u, fake_ptr->errors.size());
+  CHECK_EQ(1u, fake_ptr->errors[2].consecutive_failures);  // 성공 후 리셋
+}
+
+KROSC_TEST(sensor_manager_schedules_by_period) {
+  SensorManager manager;
+  auto fast = std::make_unique<FakeSensor>();
+  auto slow = std::make_unique<FakeSensor>();
+  FakeSensor* fast_ptr = fast.get();
+  FakeSensor* slow_ptr = slow.get();
+  CHECK(manager.add(make_info("fast", 0.1), std::move(fast)));
+  CHECK(manager.add(make_info("slow", 0.25), std::move(slow)));
+  CHECK(manager.start(false));
+
+  CHECK_EQ(0u, manager.poll(0.0));
+  CHECK_EQ(1, fast_ptr->reads);
+  CHECK_EQ(1, slow_ptr->reads);
+
+  CHECK_EQ(0u, manager.poll(0.05));
+  CHECK_EQ(1, fast_ptr->reads);
+  CHECK_EQ(1, slow_ptr->reads);
+
+  CHECK_EQ(0u, manager.poll(0.1));
+  CHECK_EQ(2, fast_ptr->reads);
+  CHECK_EQ(1, slow_ptr->reads);
+
+  CHECK_EQ(0u, manager.poll(0.25));
+  CHECK_EQ(3, fast_ptr->reads);  // 0.2에 밀린 주기를 한 번만 따라잡는다
+  CHECK_EQ(2, slow_ptr->reads);
+
+  CHECK_EQ(0u, manager.poll(0.29));
+  CHECK_EQ(3, fast_ptr->reads);
+  CHECK_EQ(2, slow_ptr->reads);
 }
 
 KROSC_TEST(sensor_manager_rolls_back_on_failure) {
@@ -97,15 +186,29 @@ KROSC_TEST(sensor_manager_rolls_back_on_failure) {
   FakeSensor* first_ptr = first.get();
   FakeSensor* second_ptr = second.get();
   second_ptr->fail_activate = true;
-  CHECK(manager.add("a", "type_a", std::move(first)));
-  CHECK(manager.add("b", "type_b", std::move(second)));
+  CHECK(manager.add(make_info("a", 0.1), std::move(first)));
+  CHECK(manager.add(make_info("b", 0.1), std::move(second)));
 
-  CHECK(!manager.start());
+  CHECK(!manager.start(false));
   CHECK_EQ(0u, manager.active_count());
   CHECK_EQ(0, first_ptr->reads);
   CHECK_EQ(std::string("deactivate"), first_ptr->events.back());
+  CHECK_EQ(1u, second_ptr->errors.size());
+  CHECK(second_ptr->errors[0].stage == SensorError::Stage::Activate);
 
   second_ptr->fail_activate = false;
-  CHECK(manager.start());
+  CHECK(manager.start(false));
   CHECK_EQ(2u, manager.active_count());
+}
+
+KROSC_TEST(sensor_manager_thread_loop) {
+  SensorManager manager;
+  auto fake = std::make_unique<FakeSensor>();
+  FakeSensor* fake_ptr = fake.get();
+  CHECK(manager.add(make_info("imu", 0.02), std::move(fake)));
+  CHECK(manager.start());
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  manager.stop();
+  CHECK(fake_ptr->reads >= 2);
+  CHECK_EQ(0u, manager.active_count());
 }
