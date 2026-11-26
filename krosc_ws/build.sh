@@ -5,7 +5,7 @@
 #
 #   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot, PC: robot+sim+viz+viz-web)
 #   ./build.sh robot           # krosc_real
-#   ./build.sh sim             # krosc_simulator (PC 전용)
+#   ./build.sh sim             # krosc_simulator + krosc_ws_simulator (PC 전용)
 #   ./build.sh tests           # krosc_core_tests + krosc_simulator_tests + krosc_ws_tests
 #   ./build.sh viz             # krosc_ws_viz_app (PC 전용, Qt6)
 #   ./build.sh viz-web         # krosc_ws_viz_web (PC 전용, 로봇 9000에 접속)
@@ -74,6 +74,9 @@ build_sim() {
   echo "[build] krosc: krosc_simulator + viz"
   configure_krosc -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=ON
   cmake --build "$root/krosc/build" -j"$jobs" --target krosc_simulator
+  echo "[build] krosc_ws: krosc_ws_simulator"
+  configure_ws
+  cmake --build "$here/build" -j"$jobs" --target krosc_ws_simulator
 }
 
 build_tests() {

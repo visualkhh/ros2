@@ -43,6 +43,10 @@ class TurtleBot3 final : public WorldObject {
   [[nodiscard]] std::string kind() const override { return "turtlebot3"; }
 
   [[nodiscard]] std::map<std::string, double> joint_positions() const;
+  [[nodiscard]] double left_position() const;
+  [[nodiscard]] double right_position() const;
+  [[nodiscard]] double left_velocity() const;
+  [[nodiscard]] double right_velocity() const;
   [[nodiscard]] msgs::Pose2D scan_pose() const;
 
   void set_scan_callback(std::function<void(const msgs::LaserScan&)> callback);
@@ -67,6 +71,7 @@ class TurtleBot3 final : public WorldObject {
   void apply_motion(double dt, double linear, double angular);
 
   mutable std::mutex command_mutex_;
+  mutable std::mutex state_mutex_;
   msgs::Twist command_;
 
   bool noisy_ = false;

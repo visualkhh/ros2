@@ -26,6 +26,9 @@ struct SimulatorOptions {
   std::uint32_t seed = 42;
   double step_hz = 100.0;
   std::string urdf_path;
+  bool bridge = true;    // scan/imu/joint_states/cmd_vel 토픽 브리지
+  bool odometry = true;  // DiffDriveOdometry 노드
+  bool ekf = true;       // EKF 노드
 };
 
 class Simulator {

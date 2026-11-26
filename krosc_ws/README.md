@@ -1,7 +1,8 @@
 # krosc_ws — 실기 TurtleBot3 (C++ krosc)
 
 라즈베리파이에서 **OpenCR + LDS-03를 직접 돌리는 C++ 워크스페이스**다.
-시뮬레이터/월드/Qt 창은 없다. Pi는 하드웨어와 토픽만 돌리고, 맥의 C++ `viz`/웹 Viz가 PeerNetwork(9000)로 붙어서 본다.
+Pi는 하드웨어와 토픽만 돌리고, PC의 C++ `viz`/웹 Viz가 PeerNetwork(9000)로 붙어서 본다.
+PC에서는 같은 로봇 스택을 `krosc/simulator` 월드 위에서 돌리는 `run-sim-ws.sh`도 쓸 수 있다.
 
 ```
 [라즈베리파이] krosc_real
@@ -51,7 +52,8 @@ cd ~/ros2/krosc_ws
 # PC에서 (Qt6 필요)
 ./run-viz.sh        # 빌드 후 pak.local:9000 C++ Viz (fixed frame map)
 KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
-./run-sim.sh        # 시뮬레이터(진실) + Viz 데모
+./run-sim.sh        # 엔진 시뮬레이터(진실) + Viz 데모
+./run-sim-ws.sh     # krosc_ws 로봇 스택 시뮬레이터 (PC 전용)
 ./run-viz-web.sh    # 웹 Viz 게이트웨이 (로봇 9000에 접속)
 ```
 
@@ -323,6 +325,29 @@ ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 우선 찾고,
 없으면 Homebrew prefix(`/opt/homebrew`)도 본다. 둘 다 없으면 RL은 fallback 전용으로 빌드된다.
 `KROSC_WS_BUILD_RL_NAV=OFF`면 플러그인/노드를 아예 빌드하지 않고 main이 RPP를 쓴다.
 
+## 시뮬레이터 (PC 전용)
+
+`run-sim-ws.sh`는 `krosc/simulator`의 월드/로봇 위에서 **krosc_ws의 ControlManager,
+SensorManager, ControllerManager, nav2**를 그대로 돌린다. Pi에서는 타깃을 만들지 않는다.
+
+```bash
+./run-sim-ws.sh                         # PeerNetwork 9000
+./run-sim-ws.sh --pucks 10 --no-noise
+./run-sim-ws.sh --port 0 --duration 5   # 네트워크 없이 5초
+```
+
+실기 하드웨어 대신 `simulator/sim_control.cpp`(Control)와
+`simulator/sim_sensors.cpp`(Imu/Scan Sensor)가 월드 로봇을 사용한다.
+맵은 `MazeWorld` 벽에서 생성되고, `map -> odom` 정적 TF와 `robot_state_publisher`는
+`krosc/simulator`가 제공한다.
+
+웹 Viz로 보려면:
+
+```bash
+KROSC_VIZ_HOST=127.0.0.1 KROSC_VIZ_PORT=9000 ./run-viz-web.sh
+# http://localhost:8080/
+```
+
 ## MoveIt / control
 
 Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 플러그인이다.
@@ -411,6 +436,7 @@ krosc_ws/
 │   │   └── lds03/
 │   │       └── lds03_sensor.cpp/.hpp    # scan -> scan 토픽
 │   └── description/urdf/turtlebot3_real.urdf
+├── simulator/                   # PC 전용 krosc_ws 시뮬레이터 (Pi 미빌드)
 ├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp
 │   ├── CMakeLists.txt

@@ -56,25 +56,31 @@ struct Simulator::Impl {
     if (urdf.empty()) {
       throw std::runtime_error("URDF를 읽지 못했다: " + options.urdf_path);
     }
-    bridge = std::make_unique<RobotBridge>(context_value, *robot);
+    if (options.bridge) {
+      bridge = std::make_unique<RobotBridge>(context_value, *robot);
+    }
     map_publisher = std::make_unique<MapPublisher>(context_value, world->walls());
     robot_state = std::make_unique<krosc::nodes::RobotStatePublisher>(
         context_value, "robot_state_publisher",
         std::map<std::string, krosc::ParamValue>{{"robot_description", urdf}});
-    odometry = std::make_unique<krosc::nodes::DiffDriveOdometry>(
-        context_value, "diff_drive_odometry",
-        std::map<std::string, krosc::ParamValue>{
-            {"publish_tf", false},
-            {"wheel_radius", TurtleBot3::kWheelRadius},
-            {"wheel_separation", TurtleBot3::kWheelSeparation}});
-    ekf = std::make_unique<krosc::nodes::Ekf>(
-        context_value, "ekf_filter_node",
-        std::map<std::string, krosc::ParamValue>{
-            {"odom0", std::string("odom")},
-            {"odom0_config", ekf_config({6, 11})},
-            {"imu0", std::string("imu")},
-            {"imu0_config", ekf_config({11})},
-            {"publish_tf", true}});
+    if (options.odometry) {
+      odometry = std::make_unique<krosc::nodes::DiffDriveOdometry>(
+          context_value, "diff_drive_odometry",
+          std::map<std::string, krosc::ParamValue>{
+              {"publish_tf", false},
+              {"wheel_radius", TurtleBot3::kWheelRadius},
+              {"wheel_separation", TurtleBot3::kWheelSeparation}});
+    }
+    if (options.ekf) {
+      ekf = std::make_unique<krosc::nodes::Ekf>(
+          context_value, "ekf_filter_node",
+          std::map<std::string, krosc::ParamValue>{
+              {"odom0", std::string("odom")},
+              {"odom0_config", ekf_config({6, 11})},
+              {"imu0", std::string("imu")},
+              {"imu0_config", ekf_config({11})},
+              {"publish_tf", true}});
+    }
     recorder = std::make_unique<SnapshotRecorder>(*world, *robot);
     runner = std::make_unique<SimulationRunner>(*world, options.step_hz);
     auto* time_source = dynamic_cast<SimulatedTimeSource*>(&context_value.time_source());
@@ -128,12 +134,18 @@ void Simulator::stop() {
 }
 
 void Simulator::set_demo_command() {
+  if (!impl_->bridge) {
+    return;
+  }
   impl_->bridge->publish("cmd_vel",
                          krosc::msgs::Twist{{0.16, 0.0, 0.0}, {0.0, 0.0, 0.28}},
                          krosc::QOS_COMMAND);
 }
 
 void Simulator::set_stop_command() {
+  if (!impl_->bridge) {
+    return;
+  }
   impl_->bridge->publish("cmd_vel",
                          krosc::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},
                          krosc::QOS_COMMAND);

@@ -64,12 +64,15 @@ void TurtleBot3::tick(double time, double dt) {
   }
   const auto [left_target, right_target] = wheel_speeds(command, kWheelRadius, kWheelSeparation);
 
-  left_velocity_ = left_target;
-  right_velocity_ = right_target;
-  left_angle_ += left_velocity_ * dt;
-  right_angle_ += right_velocity_ * dt;
-  left_position_ = noisy_ ? quantize(left_angle_, kEncoderTicks) : left_angle_;
-  right_position_ = noisy_ ? quantize(right_angle_, kEncoderTicks) : right_angle_;
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    left_velocity_ = left_target;
+    right_velocity_ = right_target;
+    left_angle_ += left_velocity_ * dt;
+    right_angle_ += right_velocity_ * dt;
+    left_position_ = noisy_ ? quantize(left_angle_, kEncoderTicks) : left_angle_;
+    right_position_ = noisy_ ? quantize(right_angle_, kEncoderTicks) : right_angle_;
+  }
 
   const double contact_left = noisy_ ? left_slip_.apply(left_velocity_, rng_) : left_velocity_;
   const double contact_right = noisy_ ? right_slip_.apply(right_velocity_, rng_) : right_velocity_;
@@ -115,7 +118,25 @@ msgs::Pose2D TurtleBot3::scan_pose() const {
 }
 
 std::map<std::string, double> TurtleBot3::joint_positions() const {
+  std::lock_guard<std::mutex> lock(state_mutex_);
   return {{"wheel_left_joint", left_position_}, {"wheel_right_joint", right_position_}};
+}
+
+double TurtleBot3::left_position() const {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  return left_position_;
+}
+double TurtleBot3::right_position() const {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  return right_position_;
+}
+double TurtleBot3::left_velocity() const {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  return left_velocity_;
+}
+double TurtleBot3::right_velocity() const {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  return right_velocity_;
 }
 
 void TurtleBot3::set_scan_callback(std::function<void(const msgs::LaserScan&)> callback) {

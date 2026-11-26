@@ -77,6 +77,25 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 target_compile_options(krosc_real PRIVATE -Wall -Wextra -Wpedantic)
 
+# PC 전용 시뮬레이터. Pi(ARM)에서는 타깃을 만들지 않는다.
+if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
+  add_subdirectory(../krosc/simulator simulator_build)
+
+  add_executable(krosc_ws_simulator
+    simulator/main.cpp
+    simulator/sim_control.cpp
+    simulator/sim_sensors.cpp
+  )
+  target_include_directories(krosc_ws_simulator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/robot
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/simulator)
+  target_link_libraries(krosc_ws_simulator PRIVATE krosc::core krosc::simulator)
+  target_compile_definitions(krosc_ws_simulator PRIVATE
+    KROSC_WS_SIM_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../krosc/simulator/description/turtlebot3_waffle_pi.urdf")
+  target_compile_options(krosc_ws_simulator PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 option(KROSC_WS_BUILD_TESTS "Build krosc_ws tests" ON)
 if(KROSC_WS_BUILD_TESTS)
   enable_testing()
