@@ -2,7 +2,7 @@
 
 라즈베리파이에서 **OpenCR + LDS-03를 직접 돌리는 C++ 워크스페이스**다.
 Pi는 하드웨어와 토픽만 돌리고, PC의 C++ `viz`/웹 Viz가 PeerNetwork(9000)로 붙어서 본다.
-PC에서는 같은 로봇 스택을 `krosc/simulator` 월드 위에서 돌리는 `run-robot-simulator.sh`를 쓴다.
+PC에서는 같은 로봇 스택을 `krosc/simulator` 월드 위에서 돌리는 `run-simulator.sh`를 쓴다.
 
 ```
 [라즈베리파이] krosc_real
@@ -52,7 +52,8 @@ cd ~/ros2/krosc_ws
 # PC에서 (Qt6 필요)
 ./run-viz.sh        # 빌드 후 pak.local:9000 C++ Viz (fixed frame map)
 KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
-./run-robot-simulator.sh  # krosc_ws 로봇 스택 시뮬레이터 (PC 전용)
+./run-simulator.sh        # krosc_ws 로봇 스택 시뮬레이터 (Qt, PC 전용)
+./run-simulator-vizqt.sh   # 시뮬레이터 + Qt Viz 한 번에
 ./run-viz-web.sh    # 웹 Viz 게이트웨이 (로봇 9000에 접속)
 ```
 
@@ -326,14 +327,14 @@ ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 우선 찾고,
 
 ## 시뮬레이터 (PC 전용)
 
-`run-robot-simulator.sh`는 `krosc/simulator`의 월드/로봇 위에서 **krosc_ws의 ControlManager,
+`run-simulator.sh`는 `krosc/simulator`의 월드/로봇 위에서 **krosc_ws의 ControlManager,
 SensorManager, ControllerManager, nav2**를 그대로 돌리고 **Qt 진실 뷰 창**을 띄운다.
 Pi에서는 타깃을 만들지 않는다.
 
 ```bash
-./run-robot-simulator.sh               # Qt 창 + PeerNetwork 9000
-./run-robot-simulator.sh --pucks 10 --no-noise
-./run-robot-simulator.sh --port 0 --duration 5  # 네트워크 없이 5초
+./run-simulator.sh               # Qt 창 + PeerNetwork 9000
+./run-simulator.sh --pucks 10 --no-noise
+./run-simulator.sh --port 0 --duration 5  # 네트워크 없이 5초
 ```
 
 Qt 창에서 `W/A/S/D` 텔레옵, 드래그 orbit, 휠 zoom을 쓸 수 있다.
