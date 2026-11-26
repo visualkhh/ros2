@@ -314,6 +314,13 @@ ctest --test-dir build --output-on-failure
 # core 62 + sim 4 = 66 tests, 2 executables
 ```
 
+동시성 스트레스(선택):
+
+```bash
+KROSC_STRESS=1 KROSC_TEST_FILTER=concurrency ./build/engine/krosc_core_tests
+# TSan: -fsanitize=thread 빌드에서 위 명령 실행
+```
+
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller

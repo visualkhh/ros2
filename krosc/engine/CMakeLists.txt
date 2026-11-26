@@ -100,6 +100,7 @@ if(KROSC_BUILD_TESTS)
     tests/test_nav2.cpp
     tests/test_control.cpp
     tests/test_sensor.cpp
+    tests/test_concurrency.cpp
   )
   target_link_libraries(krosc_core_tests PRIVATE krosc::core)
   target_compile_options(krosc_core_tests PRIVATE -Wall -Wextra -Wpedantic)
