@@ -349,9 +349,10 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 
 - `Sensor`: `on_init → on_activate → on_update → on_deactivate → on_finish`
   (on_error로 init/activate/update/deactivate 실패를 구현체가 직접 처리)
-- `SensorManager`: 센서별 `period`에 맞춰 전용 스레드에서 `on_update()`를 호출, 실패 시 롤백
-- `SensorInfo`의 `topic`/`frame_id`/`period`로 발행 토픽·프레임·주기를 정한다
-- LDS-03은 `scan`(기본 10Hz), OpenCR IMU는 `imu`(기본 50Hz)를 각자 발행한다
+- `SensorManager`: `add(name, period, sensor)`로 등록하고 센서별 `period`에 맞춰
+  전용 스레드에서 `on_update()`를 호출, 실패 시 롤백
+- 발행 토픽/프레임은 구현체 생성자가 소유한다 (`Lds03`, `OpenCrImu`)
+- LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)를 각자 발행한다
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`
   (환경 변수 `KROSC_SCAN_TOPIC`, `KROSC_IMU_TOPIC`)
 - `RealTurtleBot3::tick()`은 OpenCR 시리얼만 돌리고, 센서 루프는 SensorManager가 담당한다

@@ -7,21 +7,10 @@
 
 namespace krosc_ws {
 
-OpenCrImu::OpenCrImu(krosc::Context& context, OpenCrSerial& opencr)
-    : krosc::sensor::Sensor(context), opencr_(opencr) {}
-
-bool OpenCrImu::on_init(const krosc::sensor::SensorInfo& info) {
-  if (!krosc::sensor::Sensor::on_init(info)) {
-    return false;
-  }
-  if (!info.topic.empty()) {
-    topic_ = info.topic;
-  }
-  if (!info.frame_id.empty()) {
-    frame_id_ = info.frame_id;
-  }
-  return true;
-}
+OpenCrImu::OpenCrImu(krosc::Context& context, OpenCrSerial& opencr, std::string topic,
+                     std::string frame_id)
+    : krosc::sensor::Sensor(context), opencr_(opencr), topic_(std::move(topic)),
+      frame_id_(std::move(frame_id)) {}
 
 bool OpenCrImu::on_update(double time, double period) {
   (void)time;

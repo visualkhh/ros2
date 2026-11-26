@@ -26,7 +26,7 @@ class SensorManager {
 
   // 이름은 중복될 수 없고, period는 0보다 커야 한다.
   // start() 전에만 추가할 수 있다.
-  [[nodiscard]] bool add(SensorInfo info, std::unique_ptr<Sensor> sensor);
+  [[nodiscard]] bool add(std::string name, double period, std::unique_ptr<Sensor> sensor);
 
   // 모든 센서를 on_init -> on_activate 순서로 올린다.
   // 하나라도 실패하면 이미 활성화한 센서를 모두 내리고 false.
@@ -53,7 +53,8 @@ class SensorManager {
 
  private:
   struct Entry {
-    SensorInfo info;
+    std::string name;
+    double period = 0.1;
     std::unique_ptr<Sensor> sensor;
     bool initialized = false;
     bool active = false;

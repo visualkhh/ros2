@@ -13,9 +13,9 @@ class OpenCrSerial;
 // 실제 시리얼 파싱은 OpenCrSerial이 하고, 여기서는 최신 IMU 한 개를 꺼내 publish만 한다.
 class OpenCrImu final : public krosc::sensor::Sensor {
  public:
-  OpenCrImu(krosc::Context& context, OpenCrSerial& opencr);
+  OpenCrImu(krosc::Context& context, OpenCrSerial& opencr, std::string topic = "imu",
+            std::string frame_id = "imu_link");
 
-  bool on_init(const krosc::sensor::SensorInfo& info) override;
   bool on_update(double time, double period) override;
 
  private:

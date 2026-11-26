@@ -12,28 +12,16 @@ RealTurtleBot3::RealTurtleBot3(krosc::Context& context, std::string opencr_port,
     : context_(context),
       opencr_(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0, kMaxWheel) {
   // 이 로봇은 두 모터 모두 +속도 = 뒤로 (ROS robot.yaml left_dir/right_dir = -1).
-  krosc::sensor::SensorInfo imu_info;
-  imu_info.name = "imu";
-  imu_info.type = "opencr_imu";
-  imu_info.topic = options.imu_topic;
-  imu_info.frame_id = options.imu_frame;
-  imu_info.period = options.imu_period;
-  auto imu = std::make_unique<OpenCrImu>(context_, opencr_);
-  if (!sensors_.add(imu_info, std::move(imu))) {
+  auto imu = std::make_unique<OpenCrImu>(context_, opencr_, options.imu_topic, options.imu_frame);
+  if (!sensors_.add("imu", options.imu_period, std::move(imu))) {
     throw std::runtime_error("RealTurtleBot3: IMU 센서를 등록하지 못했다 (imu 주기 확인)");
   }
 
   if (enable_lidar) {
-    auto lidar = std::make_unique<Lds03>(context_, std::move(lidar_port), kLidarMountX,
-                                         options.scan_frame, true, true);
+    auto lidar = std::make_unique<Lds03>(context_, std::move(lidar_port), options.scan_topic,
+                                         options.scan_frame, kLidarMountX, true, true);
     lidar_ = lidar.get();
-    krosc::sensor::SensorInfo lidar_info;
-    lidar_info.name = "lidar";
-    lidar_info.type = "lds03";
-    lidar_info.topic = options.scan_topic;
-    lidar_info.frame_id = options.scan_frame;
-    lidar_info.period = options.scan_period;
-    if (!sensors_.add(lidar_info, std::move(lidar))) {
+    if (!sensors_.add("lidar", options.scan_period, std::move(lidar))) {
       throw std::runtime_error("RealTurtleBot3: 라이다 센서를 등록하지 못했다 (scan 주기 확인)");
     }
   }

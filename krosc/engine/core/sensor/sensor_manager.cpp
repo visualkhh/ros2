@@ -20,13 +20,14 @@ double monotonic_seconds() {
 
 SensorManager::~SensorManager() { finish(); }
 
-bool SensorManager::add(SensorInfo info, std::unique_ptr<Sensor> sensor) {
-  if (started_ || finished_ || info.name.empty() || !(info.period > 0.0) || !sensor ||
-      find_entry(info.name) != nullptr) {
+bool SensorManager::add(std::string name, double period, std::unique_ptr<Sensor> sensor) {
+  if (started_ || finished_ || name.empty() || !(period > 0.0) || !sensor ||
+      find_entry(name) != nullptr) {
     return false;
   }
   Entry entry;
-  entry.info = std::move(info);
+  entry.name = std::move(name);
+  entry.period = period;
   entry.sensor = std::move(sensor);
   entries_.push_back(std::move(entry));
   return true;
@@ -38,7 +39,7 @@ bool SensorManager::start(bool run_loop) {
   }
   for (auto& entry : entries_) {
     if (!entry.initialized) {
-      if (!entry.sensor->on_init(entry.info)) {
+      if (!entry.sensor->on_init()) {
         report_error(entry, SensorError::Stage::Init, 0.0);
         stop();
         return false;
@@ -103,7 +104,7 @@ std::size_t SensorManager::poll(double time) {
     if (!entry.active || time + 1e-9 < entry.next_due) {
       continue;
     }
-    if (!entry.sensor->on_update(time, entry.info.period)) {
+    if (!entry.sensor->on_update(time, entry.period)) {
       ++failures;
       ++read_failures_;
       ++entry.consecutive_failures;
@@ -111,11 +112,11 @@ std::size_t SensorManager::poll(double time) {
     } else {
       entry.consecutive_failures = 0;
     }
-    entry.next_due += entry.info.period;
+    entry.next_due += entry.period;
     if (entry.next_due <= time + 1e-9) {
       // 지연으로 밀린 주기는 몰아서 호출하지 않고 다음 주기부터 다시 맞춘다.
       ++missed_;
-      entry.next_due = time + entry.info.period;
+      entry.next_due = time + entry.period;
     }
   }
   return failures;
@@ -175,13 +176,13 @@ std::size_t SensorManager::active_count() const {
 
 SensorManager::Entry* SensorManager::find_entry(const std::string& name) {
   const auto found = std::find_if(entries_.begin(), entries_.end(),
-                                  [&name](const Entry& entry) { return entry.info.name == name; });
+                                  [&name](const Entry& entry) { return entry.name == name; });
   return found == entries_.end() ? nullptr : &*found;
 }
 
 const SensorManager::Entry* SensorManager::find_entry(const std::string& name) const {
   const auto found = std::find_if(entries_.begin(), entries_.end(),
-                                  [&name](const Entry& entry) { return entry.info.name == name; });
+                                  [&name](const Entry& entry) { return entry.name == name; });
   return found == entries_.end() ? nullptr : &*found;
 }
 

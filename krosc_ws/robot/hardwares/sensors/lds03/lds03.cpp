@@ -172,11 +172,10 @@ std::optional<std::vector<float>> LdsParser::take_scan() {
   return scan;
 }
 
-Lds03::Lds03(krosc::Context& context, std::string port, double mount_x, std::string frame_id,
-             bool reverse, bool body_filter, int baud)
+Lds03::Lds03(krosc::Context& context, std::string port, std::string topic, std::string frame_id,
+             double mount_x, bool reverse, bool body_filter, int baud)
     : krosc::sensor::Sensor(context), port_(std::move(port)), mount_x_(mount_x),
-      frame_id_(std::move(frame_id)),
-      body_filter_(body_filter),
+      frame_id_(std::move(frame_id)), topic_(std::move(topic)), body_filter_(body_filter),
       baud_(baud),
       parser_(LdsParser::kBeams, reverse) {
   if (port_.empty()) {
@@ -185,19 +184,6 @@ Lds03::Lds03(krosc::Context& context, std::string port, double mount_x, std::str
 }
 
 Lds03::~Lds03() { stop(); }
-
-bool Lds03::on_init(const krosc::sensor::SensorInfo& info) {
-  if (!krosc::sensor::Sensor::on_init(info)) {
-    return false;
-  }
-  if (!info.topic.empty()) {
-    topic_ = info.topic;
-  }
-  if (!info.frame_id.empty()) {
-    frame_id_ = info.frame_id;
-  }
-  return true;
-}
 
 bool Lds03::on_activate() {
   start();
