@@ -31,7 +31,7 @@ std::string state_name(ControllerManager::State state) {
 
 ControllerManager::ControllerManager(Context& context, std::string name,
                                      std::map<std::string, ParamValue> parameters,
-                                     const HardwareRegistry& hardware_registry,
+                                     const ControlRegistry& hardware_registry,
                                      ControllerRegistry controllers)
     : Node(context, std::move(name), std::move(parameters)),
       update_rate_(declare_parameter<double>("update_rate", 50.0,
@@ -45,12 +45,13 @@ ControllerManager::ControllerManager(Context& context, std::string name,
     logger().error("controller_manager: hardware.plugin이 비어 있다");
     throw std::runtime_error("controller_manager: hardware.plugin is required");
   }
-  hardware_ = hardware_registry.create(hardware_plugin_.value());
-  if (!hardware_) {
+  owned_hardware_ = hardware_registry.create(hardware_plugin_.value());
+  if (!owned_hardware_) {
     throw std::runtime_error("controller_manager: hardware plugin not found: " +
                              hardware_plugin_.value());
   }
-  const HardwareInfo info{hardware_name_.value(), hardware_plugin_.value(), "krosc"};
+  hardware_ = owned_hardware_.get();
+  const ControlInfo info{hardware_name_.value(), hardware_plugin_.value(), "krosc"};
   if (!hardware_->on_init(info)) {
     throw std::runtime_error("controller_manager: hardware on_init failed");
   }
@@ -67,6 +68,40 @@ ControllerManager::ControllerManager(Context& context, std::string name,
   // 컨트롤러를 활성화하기 전에 한 번 읽어 실제 상태를 채운다 (JTC가 0을 hold하지 않게).
   (void)hardware_->read(now(), 1.0 / update_rate_.value());
 
+  configure_controllers();
+  update_timer_ = create_timer(1.0 / update_rate_.value(), [this] { update(); });
+  logger().info("controller_manager: hardware=%s interfaces=%zu/%zu controllers=%zu rate=%.0fHz",
+                hardware_plugin_.value().c_str(), state_interfaces_.size(),
+                command_interfaces_.size(), entries_.size(), update_rate_.value());
+}
+
+ControllerManager::ControllerManager(Context& context, std::string name,
+                                     std::map<std::string, ParamValue> parameters,
+                                     ControlInterface& hardware,
+                                     ControllerRegistry controllers)
+    : Node(context, std::move(name), std::move(parameters)),
+      update_rate_(declare_parameter<double>("update_rate", 50.0,
+                                             [](double value) { return value > 0.0; })),
+      hardware_plugin_(declare_parameter<std::string>("hardware.plugin", "")),
+      hardware_name_(declare_parameter<std::string>("hardware.name", "controller_manager_hardware")),
+      controller_plugins_(declare_parameter<std::vector<std::string>>("controller_plugins",
+                                                                      std::vector<std::string>{})),
+      registry_(std::move(controllers)) {
+  hardware_ = &hardware;
+  external_hardware_ = true;
+  hardware_active_ = true;
+  for (const auto& state : hardware_->export_state_interfaces()) {
+    state_interfaces_[state->name()] = state;
+  }
+  for (const auto& command : hardware_->export_command_interfaces()) {
+    command_interfaces_[command->name()] = command;
+  }
+  configure_controllers();
+  logger().info("controller_manager: external hardware interfaces=%zu/%zu controllers=%zu",
+                state_interfaces_.size(), command_interfaces_.size(), entries_.size());
+}
+
+void ControllerManager::configure_controllers() {
   for (const auto& controller_name : controller_plugins_.value()) {
     if (!load_controller(controller_name)) {
       throw std::runtime_error("controller_manager: failed to load controller '" + controller_name +
@@ -128,10 +163,6 @@ ControllerManager::ControllerManager(Context& context, std::string name,
         response.message = response.ok ? "switched" : "switch failed";
         return response;
       });
-  update_timer_ = create_timer(1.0 / update_rate_.value(), [this] { update(); });
-  logger().info("controller_manager: hardware=%s interfaces=%zu/%zu controllers=%zu rate=%.0fHz",
-                hardware_plugin_.value().c_str(), state_interfaces_.size(),
-                command_interfaces_.size(), entries_.size(), update_rate_.value());
 }
 
 ControllerManager::~ControllerManager() {
@@ -147,7 +178,7 @@ ControllerManager::~ControllerManager() {
       entry->state = State::Finalized;
     }
   }
-  if (hardware_ && hardware_active_) {
+  if (hardware_ && hardware_active_ && !external_hardware_) {
     hardware_->on_deactivate();
     hardware_active_ = false;
   }
@@ -332,6 +363,9 @@ std::vector<std::string> ControllerManager::controller_names() const {
 std::string ControllerManager::state_text(State state) const { return state_name(state); }
 
 void ControllerManager::update() {
+  if (external_hardware_) {
+    return;  // HardwareManager가 update(time, period)를 직접 호출한다
+  }
   std::lock_guard<std::mutex> lock(mutex_);
   if (!hardware_active_) {
     return;
@@ -345,6 +379,18 @@ void ControllerManager::update() {
     }
   }
   hardware_->write(time, period);
+}
+
+void ControllerManager::update(double time, double period) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!hardware_active_) {
+    return;
+  }
+  for (auto& entry : entries_) {
+    if (entry->state == State::Active) {
+      entry->controller->update(time, period);
+    }
+  }
 }
 
 ControllerRegistry builtin_controllers() {

@@ -34,8 +34,8 @@ OpenCrSystem::OpenCrSystem(RealTurtleBot3& robot) : robot_(robot) {
       std::make_shared<krosc::control::CommandInterface>("wheel_right_joint/velocity");
 }
 
-bool OpenCrSystem::on_init(const krosc::control::HardwareInfo& info) {
-  if (!krosc::control::SystemInterface::on_init(info)) {
+bool OpenCrSystem::on_init(const krosc::control::ControlInfo& info) {
+  if (!krosc::control::ControlInterface::on_init(info)) {
     return false;
   }
   last_write_time_ = -1e18;

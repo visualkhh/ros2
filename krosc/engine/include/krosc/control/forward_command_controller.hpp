@@ -6,14 +6,14 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
-#include "krosc/control/controller_interface.hpp"
+#include "krosc/control/controller.hpp"
 #include "krosc/topic.hpp"
 
 namespace krosc::control {
 
 // control forward_command_controller 흉내: 토픽으로 받은 JointState를 그대로 command interface에 쓴다.
 // krosc viz의 수동 팔 슬라이더(arm_joint_command)가 이 컨트롤러를 통해 하드웨어로 간다.
-class ForwardCommandController final : public ControllerInterface {
+class ForwardCommandController final : public Controller {
  public:
   bool on_init(ControllerContext& context) override;
   bool on_activate() override;

@@ -153,7 +153,7 @@ krosc/
 │   │   ├── hardware/              # Hardware (물리 장치 start/stop/connected)
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 62 tests (nav2/control/sensor/MoveIt/net/RPC 포함)
+│   ├── tests/                     # core 66 tests (nav2/control/hardware/sensor/MoveIt/net/RPC 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp, net_bench.cpp
 ├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
@@ -312,7 +312,7 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)로 돌린다.
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 62 + sim 4 = 66 tests, 2 executables
+# core 66 + sim 4 = 70 tests, 2 executables
 ```
 
 동시성 스트레스(선택):
@@ -365,8 +365,8 @@ nav2/control/MoveIt은 **가상 베이스 클래스 + 알고리즘별 파생 클
 |---|---|---|
 | nav2 controller | `NavControllerPlugin` (`nodes/nav2/controllers/controller.hpp`) | `RegulatedPurePursuitController`, `DWBLocalPlanner`, `MPPIController`, `RotationShimController` |
 | nav2 planner | `NavPlannerPlugin` (`nodes/nav2/planners/global_planner.hpp`) | `NavfnPlanner`, `ThetaStarPlanner`, `SmacPlanner2D`, `SmacPlannerHybrid` |
-| control hardware | `SystemInterface` (`control/hardware_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
-| control controller | `ControllerInterface` (`control/controller_interface.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
+| control hardware | `ControlInterface` (`control/control_interface.hpp`) | `OpenCrSystem` (krosc_ws), `MockArmSystem` (test) |
+| control controller | `Controller` (`control/controller.hpp`) | `JointStateBroadcaster`, `JointTrajectoryController`, `ForwardCommandController`, `DiffDriveController` |
 | MoveIt kinematics | `MoveItKinematicsPlugin` (`moveit/kinematics/kinematics_base.hpp`) | `ArmChainKinematics` |
 | MoveIt planner | `MoveItPlannerPlugin` (`moveit/planners/planner_manager.hpp`) | `CartesianPlanner`, `JointSpacePlanner` |
 | MoveIt controller manager | `MoveItControllerManagerPlugin` (`moveit/controllers/controller_manager.hpp`) | `SimpleControllerManager` |

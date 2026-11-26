@@ -36,7 +36,7 @@ bool valid_diagonal(const std::vector<double>& value) {
 }  // namespace
 
 bool DiffDriveController::on_init(ControllerContext& context) {
-  if (!ControllerInterface::on_init(context)) {
+  if (!Controller::on_init(context)) {
     return false;
   }
   left_wheel_ = context.node->declare_parameter<std::string>(context.name + ".left_wheel",

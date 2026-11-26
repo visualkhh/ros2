@@ -396,7 +396,7 @@ krosc_ws/
 │   │   │   ├── opencr_serial.cpp/.hpp   # hardware::Hardware + 시리얼 읽기/캐시
 │   │   │   ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서
 │   │   │   ├── control/
-│   │   │   │   └── opencr_system.cpp/.hpp # control SystemInterface (바퀴+팔)
+│   │   │   │   └── opencr_system.cpp/.hpp # control ControlInterface (바퀴+팔)
 │   │   │   └── sensor/
 │   │   │       └── opencr_imu.cpp/.hpp # OpenCR IMU -> imu 토픽
 │   │   └── lds03/

@@ -8,13 +8,13 @@
 
 #include "krosc/action.hpp"
 #include "krosc/msgs/control_msgs.hpp"
-#include "krosc/control/controller_interface.hpp"
+#include "krosc/control/controller.hpp"
 
 namespace krosc::control {
 
 // control joint_trajectory_controller 흉내.
 //   FollowJointTrajectory 액션으로 궤적을 받아 update()에서 위치 command interface로 보간해 쓴다.
-class JointTrajectoryController final : public ControllerInterface {
+class JointTrajectoryController final : public Controller {
  public:
   ~JointTrajectoryController() override;
 

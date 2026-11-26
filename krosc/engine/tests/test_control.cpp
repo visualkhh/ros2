@@ -58,7 +58,7 @@ const std::vector<std::string>& arm_joints() {
   return joints;
 }
 
-class MockArmSystem final : public krosc::control::SystemInterface {
+class MockArmSystem final : public krosc::control::ControlInterface {
  public:
   MockArmSystem() {
     for (const auto& joint : arm_joints()) {
@@ -201,7 +201,7 @@ bool wait_until(Predicate predicate, double seconds = 3.0) {
 KROSC_TEST(control_manager_jsb_jtc_and_switch) {
   krosc::Context context;
   MockArmSystem* hardware = nullptr;
-  krosc::control::HardwareRegistry hardware_registry;
+  krosc::control::ControlRegistry hardware_registry;
   hardware_registry.add("test/MockArmSystem", [&hardware] {
     auto system = std::make_unique<MockArmSystem>();
     hardware = system.get();
@@ -312,7 +312,7 @@ KROSC_TEST(control_manager_jsb_jtc_and_switch) {
 KROSC_TEST(moveit_move_group_action_with_plugins) {
   krosc::Context context;
   MockArmSystem* hardware = nullptr;
-  krosc::control::HardwareRegistry hardware_registry;
+  krosc::control::ControlRegistry hardware_registry;
   hardware_registry.add("test/MockArmSystem", [&hardware] {
     auto system = std::make_unique<MockArmSystem>();
     hardware = system.get();

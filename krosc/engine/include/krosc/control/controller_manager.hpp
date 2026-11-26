@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "krosc/node.hpp"
-#include "krosc/control/controller_interface.hpp"
-#include "krosc/control/hardware_interface.hpp"
+#include "krosc/control/controller.hpp"
+#include "krosc/control/control_interface.hpp"
 #include "krosc/time/timer.hpp"
 
 namespace krosc::control {
@@ -61,12 +61,21 @@ class ControllerManager final : public Node {
 
   explicit ControllerManager(Context& context, std::string name = "controller_manager",
                              std::map<std::string, ParamValue> parameters = {},
-                             const HardwareRegistry& hardware_registry = {},
+                             const ControlRegistry& hardware_registry = {},
                              ControllerRegistry controllers = builtin_controllers());
+  // 외부(HardwareManager)가 하드웨어 lifecycle/read/write를 소유하는 모드.
+  // 이 모드에서는 타이머를 만들지 않고 update(time, period)만 제공한다.
+  ControllerManager(Context& context, std::string name,
+                    std::map<std::string, ParamValue> parameters,
+                    ControlInterface& hardware,
+                    ControllerRegistry controllers = builtin_controllers());
   ~ControllerManager() override;
 
   ControllerManager(const ControllerManager&) = delete;
   ControllerManager& operator=(const ControllerManager&) = delete;
+
+  // 외부 모드에서 HardwareManager의 control tick이 호출한다.
+  void update(double time, double period);
 
   [[nodiscard]] bool load_controller(const std::string& controller_name);
   [[nodiscard]] bool configure_controller(const std::string& controller_name);
@@ -88,13 +97,14 @@ class ControllerManager final : public Node {
   struct Entry {
     std::string name;
     std::string type;
-    std::unique_ptr<ControllerInterface> controller;
+    std::unique_ptr<Controller> controller;
     std::unique_ptr<ControllerContext> context;
     State state = State::Unconfigured;
     bool auto_activate = true;
   };
 
   void update();
+  void configure_controllers();
   [[nodiscard]] Entry* find(const std::string& controller_name);
   [[nodiscard]] const Entry* find(const std::string& controller_name) const;
   [[nodiscard]] bool activate_locked(Entry& entry);
@@ -109,7 +119,9 @@ class ControllerManager final : public Node {
   Parameter<std::vector<std::string>> controller_plugins_;
 
   ControllerRegistry registry_;
-  std::unique_ptr<SystemInterface> hardware_;
+  std::unique_ptr<ControlInterface> owned_hardware_;
+  ControlInterface* hardware_ = nullptr;
+  bool external_hardware_ = false;
   bool hardware_active_ = false;
   std::map<std::string, std::shared_ptr<StateInterface>> state_interfaces_;
   std::map<std::string, std::shared_ptr<CommandInterface>> command_interfaces_;

@@ -18,7 +18,7 @@ JointTrajectoryController::~JointTrajectoryController() {
 }
 
 bool JointTrajectoryController::on_init(ControllerContext& context) {
-  if (!ControllerInterface::on_init(context)) {
+  if (!Controller::on_init(context)) {
     return false;
   }
   joints_ = context.node->declare_parameter<std::vector<std::string>>(

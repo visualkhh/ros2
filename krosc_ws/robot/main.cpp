@@ -267,9 +267,9 @@ int main(int argc, char** argv) {
   krosc_ws::TurtleBot3Driver driver(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});
-  // control: OpenCR을 SystemInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
+  // control: OpenCR을 ControlInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
   // joint_states는 이제 joint_state_broadcaster가 내고, MoveIt은 JTC의 FollowJointTrajectory 액션으로 움직인다.
-  krosc::control::HardwareRegistry hardware_registry;
+  krosc::control::ControlRegistry hardware_registry;
   hardware_registry.add("krosc_ws/OpenCrSystem",
                         [&robot] { return std::make_unique<krosc_ws::OpenCrSystem>(robot); });
   krosc::control::ControllerManager controller_manager(

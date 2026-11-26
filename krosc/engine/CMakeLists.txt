@@ -27,6 +27,7 @@ add_library(krosc_core STATIC
   core/urdf.cpp
   core/manipulation/arm_chain.cpp
   core/sensor/sensor_manager.cpp
+  core/hardware/hardware_manager.cpp
   core/nodes/cartographer.cpp
   core/nodes/collision_monitor.cpp
   core/nodes/velocity_smoother.cpp
@@ -100,6 +101,7 @@ if(KROSC_BUILD_TESTS)
     tests/test_nav2.cpp
     tests/test_control.cpp
     tests/test_sensor.cpp
+    tests/test_hardware_manager.cpp
     tests/test_concurrency.cpp
   )
   target_link_libraries(krosc_core_tests PRIVATE krosc::core)

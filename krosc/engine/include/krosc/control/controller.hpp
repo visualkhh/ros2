@@ -7,9 +7,9 @@
 #include <vector>
 
 #include "krosc/node.hpp"
-#include "krosc/control/hardware_interface.hpp"
+#include "krosc/control/control_interface.hpp"
 
-// control의 controller_interface 흉내.
+// control의 controller 기반 클래스.
 //   unconfigured -> inactive -> active 수명 주기를 가진다.
 //   컨트롤러는 command interface를 읽고/쓰며, update()가 controller_manager 주기마다 불린다.
 namespace krosc::control {
@@ -30,9 +30,9 @@ struct ControllerContext {
   }
 };
 
-class ControllerInterface {
+class Controller {
  public:
-  virtual ~ControllerInterface() = default;
+  virtual ~Controller() = default;
 
   virtual bool on_init(ControllerContext& context) {
     context_ = &context;
@@ -62,12 +62,12 @@ class ControllerInterface {
   }
 };
 
-using ControllerFactory = std::function<std::unique_ptr<ControllerInterface>()>;
+using ControllerFactory = std::function<std::unique_ptr<Controller>()>;
 
 class ControllerRegistry {
  public:
   void add(const std::string& type, ControllerFactory factory) { factories_[type] = std::move(factory); }
-  [[nodiscard]] std::unique_ptr<ControllerInterface> create(const std::string& type) const {
+  [[nodiscard]] std::unique_ptr<Controller> create(const std::string& type) const {
     const auto it = factories_.find(type);
     return it == factories_.end() ? nullptr : it->second();
   }

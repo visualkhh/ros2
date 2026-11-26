@@ -8,7 +8,7 @@
 namespace krosc::control {
 
 bool ForwardCommandController::on_init(ControllerContext& context) {
-  if (!ControllerInterface::on_init(context)) {
+  if (!Controller::on_init(context)) {
     return false;
   }
   const auto configured = context.node->declare_parameter<std::vector<std::string>>(
