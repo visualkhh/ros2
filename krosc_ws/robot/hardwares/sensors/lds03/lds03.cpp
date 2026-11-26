@@ -208,7 +208,7 @@ bool Lds03::on_deactivate() {
   return true;
 }
 
-bool Lds03::read(double time, double period) {
+bool Lds03::on_update(double time, double period) {
   (void)time;
   (void)period;
   if (auto scan = take_scan(context_.now())) {

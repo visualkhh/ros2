@@ -347,9 +347,9 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 
 센서는 `sensor` 레이어를 따른다:
 
-- `Sensor`: `on_init → on_activate → read → on_deactivate → on_finish`
-  (on_error로 init/activate/read/deactivate 실패를 구현체가 직접 처리)
-- `SensorManager`: 센서별 `period`에 맞춰 전용 스레드에서 `read()`를 호출, 실패 시 롤백
+- `Sensor`: `on_init → on_activate → on_update → on_deactivate → on_finish`
+  (on_error로 init/activate/update/deactivate 실패를 구현체가 직접 처리)
+- `SensorManager`: 센서별 `period`에 맞춰 전용 스레드에서 `on_update()`를 호출, 실패 시 롤백
 - `SensorInfo`의 `topic`/`frame_id`/`period`로 발행 토픽·프레임·주기를 정한다
 - LDS-03은 `scan`(기본 10Hz), OpenCR IMU는 `imu`(기본 50Hz)를 각자 발행한다
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`
@@ -370,7 +370,7 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 `krosc/engine/include/krosc/nodes/moveit/`와 `krosc/engine/core/nodes/moveit/move_group.cpp`에 있다.
 control 레이어는 `krosc/engine/include/krosc/control/`, 실기 하드웨어 플러그인은
 `krosc_ws/robot/hardwares/controls/opencr/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
-LDS-03은 `krosc::sensor::Sensor`(on_init → on_activate → read → on_deactivate → on_finish)를 따르며
+LDS-03은 `krosc::sensor::Sensor`(on_init → on_activate → on_update → on_deactivate → on_finish)를 따르며
 `krosc_ws/robot/hardwares/sensors/lds03/lds03.cpp`에 있다. 센서 레이어는
 `krosc/engine/include/krosc/sensor/`에 있고 `SensorManager`가 주기 실행과 수명주기를 묶는다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.

@@ -52,7 +52,7 @@ class LdsParser {
 
 // 실제 LDS-03 시리얼: 230400, 10Hz 스캔. USB2LDS는 DTR을 내려야 데이터를 보낸다.
 // 로봇 몸통(1층 판/바퀴/지지대)이 찍힌 점은 base_link 기준 상자 안이면 지운다.
-// SensorManager가 설정한 주기마다 read()가 호출되고, 설정한 토픽으로 LaserScan을 발행한다.
+// SensorManager가 설정한 주기마다 on_update()가 호출되고, 설정한 토픽으로 LaserScan을 발행한다.
 class Lds03 : public krosc::sensor::Sensor {
  public:
   explicit Lds03(krosc::Context& context, std::string port, double mount_x = 0.060,
@@ -67,7 +67,7 @@ class Lds03 : public krosc::sensor::Sensor {
   bool on_init(const krosc::sensor::SensorInfo& info) override;
   bool on_activate() override;
   bool on_deactivate() override;
-  bool read(double time, double period) override;
+  bool on_update(double time, double period) override;
 
   [[nodiscard]] std::optional<krosc::msgs::LaserScan> take_scan(double stamp);
   [[nodiscard]] bool connected() const { return connected_.load(); }

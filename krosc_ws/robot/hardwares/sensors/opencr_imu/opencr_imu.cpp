@@ -23,7 +23,7 @@ bool OpenCrImu::on_init(const krosc::sensor::SensorInfo& info) {
   return true;
 }
 
-bool OpenCrImu::read(double time, double period) {
+bool OpenCrImu::on_update(double time, double period) {
   (void)time;
   (void)period;
   if (auto imu = opencr_.consume_imu()) {

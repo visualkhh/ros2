@@ -16,7 +16,7 @@ class OpenCrImu final : public krosc::sensor::Sensor {
   OpenCrImu(krosc::Context& context, OpenCrSerial& opencr);
 
   bool on_init(const krosc::sensor::SensorInfo& info) override;
-  bool read(double time, double period) override;
+  bool on_update(double time, double period) override;
 
  private:
   krosc::Context& context_;

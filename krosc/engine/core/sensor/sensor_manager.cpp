@@ -103,7 +103,7 @@ std::size_t SensorManager::poll(double time) {
     if (!entry.active || time + 1e-9 < entry.next_due) {
       continue;
     }
-    if (!entry.sensor->read(time, entry.info.period)) {
+    if (!entry.sensor->on_update(time, entry.info.period)) {
       ++failures;
       ++read_failures_;
       ++entry.consecutive_failures;

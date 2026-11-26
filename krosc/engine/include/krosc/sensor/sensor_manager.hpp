@@ -14,7 +14,7 @@
 namespace krosc::sensor {
 
 // 여러 센서의 수명주기와 주기 실행을 관리한다.
-// start()는 각 센서의 period에 맞춰 read()를 부르는 전용 스레드를 띄운다.
+// start()는 각 센서의 period에 맞춰 on_update()를 부르는 전용 스레드를 띄운다.
 // 시간은 steady_clock 기준이며, 메시지 stamp는 각 센서가 Context 시각으로 찍는다.
 class SensorManager {
  public:

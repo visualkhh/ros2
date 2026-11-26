@@ -49,7 +49,7 @@ class FakeSensor final : public Sensor {
   }
   void on_finish() override { ++finishes; }
   void on_error(const SensorError& error) override { errors.push_back(error); }
-  bool read(double, double period) override {
+  bool on_update(double, double period) override {
     ++reads;
     last_period = period;
     events.push_back("read");
