@@ -149,7 +149,8 @@ krosc/
 │   ├── include/krosc/             # node/context/topic/tf/time/parameter/service/action/msgs/net(rpc)
 │   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
 │   │   ├── control/               # ControllerManager, JSB/JTC/forward/diff_drive
-│   │   ├── hardware/              # Hardware/HardwareManager (장치 read/write 주기)
+│   │   ├── hardware/              # Hardware/HardwareManager (물리 lifecycle + 실행 스케줄)
+│   │   ├── sensor/                # Sensor (논리 센서: read/publish)
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
 │   ├── tests/                     # core 60 tests (nav2/control/hardware/MoveIt/net/RPC 포함)
@@ -324,7 +325,7 @@ KROSC_STRESS=1 KROSC_TEST_FILTER=concurrency ./build/engine/krosc_core_tests
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
-- hardware: Hardware lifecycle, HardwareManager가 등록 구조체의 read/write 주기로 실행, read→control→write 순서와 실패 집계
+- hardware: Hardware lifecycle, HardwareManager가 SensorConfig/ControlConfig 주기로 sensor read→control read→control hook→control write 실행, 실패/지연 집계
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + move_group/scrub + 상태 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - RPC: 서비스/액션/파라미터 포워딩(discovery, timeout, latched), 웹 JSON RPC
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner

@@ -8,7 +8,7 @@
 #include <vector>
 
 // control의 control_interface. hardware_interface라는 ROS2 이름 대신 역할 기준으로 둔다.
-//   ControlInterface: 하드웨어 하나(로봇 팔, 보드)의 control 인터페이스.
+//   Control: 하드웨어 하나(로봇 팔, 보드)의 control 인터페이스.
 //   StateInterface/CommandInterface: joint1/position 같은 이름의 값 하나.
 namespace krosc::control {
 
@@ -48,9 +48,9 @@ struct ControlInfo {
 
 // control 역할 어댑터. 물리 장치 공통 lifecycle은 krosc/hardware/hardware.hpp의 Hardware다.
 // on_init -> on_activate -> read/write 반복 -> on_deactivate.
-class ControlInterface {
+class Control {
  public:
-  virtual ~ControlInterface() = default;
+  virtual ~Control() = default;
 
   virtual bool on_init(const ControlInfo& info) {
     info_ = info;
@@ -71,12 +71,12 @@ class ControlInterface {
   ControlInfo info_;
 };
 
-using ControlFactory = std::function<std::unique_ptr<ControlInterface>()>;
+using ControlFactory = std::function<std::unique_ptr<Control>()>;
 
 class ControlRegistry {
  public:
   void add(const std::string& type, ControlFactory factory) { factories_[type] = std::move(factory); }
-  [[nodiscard]] std::unique_ptr<ControlInterface> create(const std::string& type) const {
+  [[nodiscard]] std::unique_ptr<Control> create(const std::string& type) const {
     const auto it = factories_.find(type);
     return it == factories_.end() ? nullptr : it->second();
   }

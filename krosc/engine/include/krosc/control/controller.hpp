@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "krosc/node.hpp"
-#include "krosc/control/control_interface.hpp"
+#include "krosc/control/control.hpp"
 
 // control의 controller 기반 클래스.
 //   unconfigured -> inactive -> active 수명 주기를 가진다.

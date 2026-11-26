@@ -36,7 +36,7 @@ const std::vector<std::string>& arm_joints() {
   return joints;
 }
 
-class MockArmSystem final : public krosc::control::ControlInterface {
+class MockArmSystem final : public krosc::control::Control {
  public:
   MockArmSystem() {
     for (const auto& joint : arm_joints()) {

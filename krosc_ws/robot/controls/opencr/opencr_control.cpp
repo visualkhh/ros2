@@ -35,12 +35,8 @@ OpenCrControl::OpenCrControl(OpenCrSerial& opencr, double wheel_radius, double w
       std::make_shared<krosc::control::CommandInterface>("wheel_right_joint/velocity");
 }
 
-void OpenCrControl::start() { opencr_.start(); }
-void OpenCrControl::stop() { opencr_.stop(); }
-bool OpenCrControl::connected() const { return opencr_.connected(); }
-
 bool OpenCrControl::on_init(const krosc::control::ControlInfo& info) {
-  if (!krosc::control::ControlInterface::on_init(info)) {
+  if (!krosc::control::Control::on_init(info)) {
     return false;
   }
   last_write_time_ = -1e18;

@@ -274,14 +274,6 @@ int main(int argc, char** argv) {
   hardware_options.imu_frame = "imu_link";
   hardware_options.imu_period = 1.0 / imu_rate;
 
-  const auto hw_config = [](std::string name, double read_period, double write_period) {
-    krosc::hardware::HardwareConfig config;
-    config.name = std::move(name);
-    config.read_period = read_period;
-    config.write_period = write_period;
-    return config;
-  };
-
   krosc_ws::OpenCrSerial opencr(kWheelRadius, kWheelSeparation,
                                 std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0,
                                 kMaxWheel);
@@ -291,21 +283,26 @@ int main(int argc, char** argv) {
                                                     true, true);
   }
 
-  krosc::hardware::HardwareManager hardware;
-  auto control = std::make_unique<krosc_ws::OpenCrControl>(opencr, kWheelRadius,
-                                                           kWheelSeparation);
-  auto* control_ptr = control.get();
-  hardware.add(std::move(control),
-               hw_config("opencr_control", hardware_options.control_read_period,
-                         hardware_options.control_write_period));
-  hardware.add(std::make_unique<krosc_ws::OpenCrImu>(context, opencr, hardware_options.imu_topic,
-                                                     hardware_options.imu_frame),
-               hw_config("opencr_imu", hardware_options.imu_period, 0.0));
+  krosc_ws::OpenCrControl control(opencr, kWheelRadius, kWheelSeparation);
+  krosc_ws::OpenCrImu imu(context, opencr, hardware_options.imu_topic,
+                          hardware_options.imu_frame);
+  std::unique_ptr<krosc_ws::Lds03Sensor> scan;
   if (lidar) {
-    hardware.add(std::make_unique<krosc_ws::Lds03Sensor>(context, *lidar,
-                                                         hardware_options.scan_topic,
-                                                         hardware_options.scan_frame),
-                 hw_config("lds03_scan", hardware_options.scan_period, 0.0));
+    scan = std::make_unique<krosc_ws::Lds03Sensor>(context, *lidar,
+                                                   hardware_options.scan_topic,
+                                                   hardware_options.scan_frame);
+  }
+
+  krosc::hardware::HardwareManager hardware;
+  hardware.add_hardware(opencr, {"opencr"});
+  if (lidar) {
+    hardware.add_hardware(*lidar, {"lds03"});
+  }
+  hardware.add_control(control, {"opencr_control", hardware_options.control_read_period,
+                                 hardware_options.control_write_period});
+  hardware.add_sensor(imu, {"opencr_imu", hardware_options.imu_period});
+  if (scan) {
+    hardware.add_sensor(*scan, {"lds03_scan", hardware_options.scan_period});
   }
   opencr.start();
   krosc_ws::RobotStatus driver(context, opencr, lidar.get());
@@ -347,7 +344,7 @@ int main(int argc, char** argv) {
         std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
        {"arm_command_controller.command_topic", std::string("arm_joint_command")},
        {"arm_command_controller.auto_activate", false}},
-      *control_ptr);
+      control);
   // MoveIt move_group: kinematics/planner/controller_manager 플러그인을 골라 조립한다.
   // Viz 명령은 move_action 액션 + move_group/scrub 서비스로 들어온다.
   krosc::moveit::MoveGroup move_group(

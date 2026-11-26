@@ -77,7 +77,7 @@ ControllerManager::ControllerManager(Context& context, std::string name,
 
 ControllerManager::ControllerManager(Context& context, std::string name,
                                      std::map<std::string, ParamValue> parameters,
-                                     ControlInterface& hardware,
+                                     Control& hardware,
                                      ControllerRegistry controllers)
     : Node(context, std::move(name), std::move(parameters)),
       update_rate_(declare_parameter<double>("update_rate", 50.0,

@@ -20,36 +20,85 @@ double monotonic_seconds() {
 
 HardwareManager::~HardwareManager() { stop(); }
 
-bool HardwareManager::add(std::unique_ptr<Hardware> hardware, HardwareConfig config) {
-  if (started_ || config.name.empty() || !hardware || !(config.read_period > 0.0) ||
-      config.write_period < 0.0 || find(config.name) != nullptr) {
+bool HardwareManager::name_used(const std::string& name) const {
+  for (const auto& config : hardware_configs_) {
+    if (config.name == name) {
+      return true;
+    }
+  }
+  for (const auto& entry : sensors_) {
+    if (entry.config.name == name) {
+      return true;
+    }
+  }
+  for (const auto& entry : controls_) {
+    if (entry.config.name == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool HardwareManager::add_hardware(Hardware& hardware, HardwareConfig config) {
+  if (started_ || config.name.empty() || name_used(config.name)) {
     return false;
   }
-  Entry entry;
-  entry.config = std::move(config);
-  entry.hardware = std::move(hardware);
-  entries_.push_back(std::move(entry));
+  hardware_.push_back(&hardware);
+  hardware_configs_.push_back(std::move(config));
   return true;
 }
 
-void HardwareManager::set_control_hook(ControlHook hook, double control_period) {
-  if (started_ || !(control_period > 0.0)) {
-    control_hook_ = {};
-    control_period_ = 0.0;
+bool HardwareManager::add_sensor(sensor::Sensor& sensor, SensorConfig config) {
+  if (started_ || config.name.empty() || !(config.period > 0.0) || name_used(config.name)) {
+    return false;
+  }
+  SensorEntry entry;
+  entry.config = std::move(config);
+  entry.sensor = &sensor;
+  sensors_.push_back(entry);
+  return true;
+}
+
+bool HardwareManager::add_control(control::Control& control, ControlConfig config) {
+  if (started_ || config.name.empty() || !(config.read_period > 0.0) ||
+      config.write_period < 0.0 || name_used(config.name)) {
+    return false;
+  }
+  ControlEntry entry;
+  entry.config = std::move(config);
+  entry.control = &control;
+  controls_.push_back(entry);
+  return true;
+}
+
+void HardwareManager::set_control_hook(ControlHook hook, double period) {
+  if (started_ || !(period > 0.0)) {
     return;
   }
   control_hook_ = std::move(hook);
-  control_period_ = control_period;
+  control_period_ = period;
 }
 
 bool HardwareManager::start(bool run_loop) {
   if (started_) {
     return false;
   }
-  for (auto& entry : entries_) {
-    entry.hardware->start();
+  for (Hardware* hardware : hardware_) {
+    hardware->start();
+  }
+  for (auto& entry : controls_) {
+    const control::ControlInfo info{entry.config.name, "control", "krosc"};
+    if (!entry.control->on_init(info) || !entry.control->on_activate()) {
+      ++control_failures_;
+      stop();
+      return false;
+    }
     entry.next_read = 0.0;
     entry.next_write = 0.0;
+  }
+  for (auto& entry : sensors_) {
+    entry.sensor->start();
+    entry.next_read = 0.0;
   }
   next_control_ = 0.0;
   started_ = true;
@@ -69,8 +118,14 @@ void HardwareManager::stop() {
   if (thread_.joinable()) {
     thread_.join();
   }
-  for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
-    it->hardware->stop();
+  for (auto it = sensors_.rbegin(); it != sensors_.rend(); ++it) {
+    it->sensor->stop();
+  }
+  for (auto it = controls_.rbegin(); it != controls_.rend(); ++it) {
+    it->control->on_deactivate();
+  }
+  for (auto it = hardware_.rbegin(); it != hardware_.rend(); ++it) {
+    (*it)->stop();
   }
   started_ = false;
 }
@@ -78,17 +133,33 @@ void HardwareManager::stop() {
 std::size_t HardwareManager::poll(double time) {
   std::size_t failures = 0;
 
-  for (auto& entry : entries_) {
-    if (entry.config.read_period <= 0.0 || time + 1e-9 < entry.next_read) {
+  for (auto& entry : sensors_) {
+    if (time + 1e-9 < entry.next_read) {
       continue;
     }
     try {
-      if (!entry.hardware->read(time, entry.config.read_period)) {
-        ++read_failures_;
+      if (!entry.sensor->read(time, entry.config.period)) {
+        ++sensor_failures_;
         ++failures;
       }
     } catch (...) {
-      ++read_failures_;
+      ++sensor_failures_;
+      ++failures;
+    }
+    advance(entry.next_read, entry.config.period, time);
+  }
+
+  for (auto& entry : controls_) {
+    if (time + 1e-9 < entry.next_read) {
+      continue;
+    }
+    try {
+      if (!entry.control->read(time, entry.config.read_period)) {
+        ++control_read_failures_;
+        ++failures;
+      }
+    } catch (...) {
+      ++control_read_failures_;
       ++failures;
     }
     advance(entry.next_read, entry.config.read_period, time);
@@ -104,17 +175,17 @@ std::size_t HardwareManager::poll(double time) {
     advance(next_control_, control_period_, time);
   }
 
-  for (auto& entry : entries_) {
+  for (auto& entry : controls_) {
     if (entry.config.write_period <= 0.0 || time + 1e-9 < entry.next_write) {
       continue;
     }
     try {
-      if (!entry.hardware->write(time, entry.config.write_period)) {
-        ++write_failures_;
+      if (!entry.control->write(time, entry.config.write_period)) {
+        ++control_write_failures_;
         ++failures;
       }
     } catch (...) {
-      ++write_failures_;
+      ++control_write_failures_;
       ++failures;
     }
     advance(entry.next_write, entry.config.write_period, time);
@@ -126,7 +197,6 @@ std::size_t HardwareManager::poll(double time) {
 void HardwareManager::advance(double& due, double period, double time) {
   due += period;
   if (due <= time + 1e-9) {
-    // 밀린 주기는 몰아서 부르지 않는다.
     ++missed_;
     due = time + period;
   }
@@ -157,10 +227,11 @@ void HardwareManager::loop() {
 
 double HardwareManager::next_due() const {
   double due = std::numeric_limits<double>::infinity();
-  for (const auto& entry : entries_) {
-    if (entry.config.read_period > 0.0) {
-      due = std::min(due, entry.next_read);
-    }
+  for (const auto& entry : sensors_) {
+    due = std::min(due, entry.next_read);
+  }
+  for (const auto& entry : controls_) {
+    due = std::min(due, entry.next_read);
     if (entry.config.write_period > 0.0) {
       due = std::min(due, entry.next_write);
     }
@@ -169,15 +240,6 @@ double HardwareManager::next_due() const {
     due = std::min(due, next_control_);
   }
   return due;
-}
-
-Hardware* HardwareManager::find(const std::string& name) {
-  for (auto& entry : entries_) {
-    if (entry.config.name == name) {
-      return entry.hardware.get();
-    }
-  }
-  return nullptr;
 }
 
 }  // namespace krosc::hardware

@@ -10,7 +10,7 @@
 
 #include "krosc/node.hpp"
 #include "krosc/control/controller.hpp"
-#include "krosc/control/control_interface.hpp"
+#include "krosc/control/control.hpp"
 #include "krosc/time/timer.hpp"
 
 namespace krosc::control {
@@ -67,7 +67,7 @@ class ControllerManager final : public Node {
   // 이 모드에서는 타이머를 만들지 않고 update(time, period)만 제공한다.
   ControllerManager(Context& context, std::string name,
                     std::map<std::string, ParamValue> parameters,
-                    ControlInterface& hardware,
+                    Control& hardware,
                     ControllerRegistry controllers = builtin_controllers());
   ~ControllerManager() override;
 
@@ -119,8 +119,8 @@ class ControllerManager final : public Node {
   Parameter<std::vector<std::string>> controller_plugins_;
 
   ControllerRegistry registry_;
-  std::unique_ptr<ControlInterface> owned_hardware_;
-  ControlInterface* hardware_ = nullptr;
+  std::unique_ptr<Control> owned_hardware_;
+  Control* hardware_ = nullptr;
   bool external_hardware_ = false;
   bool hardware_active_ = false;
   std::map<std::string, std::shared_ptr<StateInterface>> state_interfaces_;

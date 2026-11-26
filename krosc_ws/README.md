@@ -349,11 +349,14 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 물리/논리 레이어는 이렇게 나뉜다:
 
 - `hardwares/`: 물리 장치만 (`opencr`, `lds03`)
-- `controls/opencr/`: state/command interface와 명령 매핑 (`ControlInterface`)
+- `controls/opencr/`: state/command interface와 명령 매핑 (`Control`)
 - `sensors/opencr/`: IMU 읽기 → `imu` 발행
 - `sensors/lds03/`: 스캔 읽기 → `scan` 발행
-- `HardwareManager`: `HardwareConfig{name, read_period, write_period}`로 등록하고
-  `read → control hook → write` 순서로 실행한다. 주기는 Hardware 안이 아니라 등록 구조체에 있다
+- `hardwares/`는 `Hardware`(물리 lifecycle), `controls/`는 `Control`(state/command),
+  `sensors/`는 `Sensor`(read/publish)를 상속한다
+- `HardwareManager`: `add_hardware` + `add_sensor(SensorConfig{name, period})` +
+  `add_control(ControlConfig{name, read_period, write_period})`로 등록하고
+  `sensor read → control read → control hook → control write` 순서로 실행한다
 - control hook은 `controller_manager.update()`다. `main`이 HardwareManager/장치/유닛을 조립하고 소유한다
 - LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`,
@@ -399,7 +402,7 @@ krosc_ws/
 │   │       └── lds03_device.cpp/.hpp    # hardware::Hardware + 패킷 파서
 │   ├── controls/                # 논리 제어
 │   │   └── opencr/
-│   │       └── opencr_control.cpp/.hpp  # ControlInterface (바퀴+팔)
+│   │       └── opencr_control.cpp/.hpp  # Control (바퀴+팔)
 │   ├── sensors/                 # 논리 센서
 │   │   ├── opencr/
 │   │   │   └── opencr_imu.cpp/.hpp      # IMU -> imu 토픽
