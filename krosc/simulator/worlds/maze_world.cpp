@@ -56,6 +56,19 @@ MazeWorld::MazeWorld(int puck_count, std::optional<std::uint32_t> seed) {
     auto* raw = static_cast<Puck*>(add(std::move(puck), free_spot(rng, 0.06)));
     pucks_.push_back(raw);
   }
+  // 그리퍼 최대 벌림(약 6.2cm) 안에 들어가는 노란 퍽. 지름 4cm, 높이 12cm.
+  // 기존 12cm 퍽은 장애물로 남기고, 이 물체만 매니퓰레이터가 집는다.
+  auto graspable = std::make_unique<Puck>(
+      PuckShape::Circle, std::array<double, 3>{0.95, 0.85, 0.15});
+  graspable->radius = 0.02;
+  graspable->height = 0.12;
+  graspable->sides = 24;
+  graspable->mass = 0.03;
+  graspable->friction = 0.5;
+  graspable->graspable = true;
+  graspable_ = static_cast<Puck*>(
+      add(std::move(graspable), msgs::Pose2D{0.28, 0.0, 0.0}));
+  pucks_.push_back(graspable_);
 }
 
 msgs::Pose2D MazeWorld::free_spot(std::mt19937& rng, double radius) const {

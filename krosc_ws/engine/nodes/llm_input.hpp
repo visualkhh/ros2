@@ -48,10 +48,15 @@ class LlmInput final : public krosc::Node {
   void publish_status(std::uint64_t id, const std::string& stage,
                       const std::string& extra_json = {});
   void dispatch(std::uint64_t id, const std::string& intent, double meters,
-                const std::string& preset, const std::string& question,
-                const std::string& target);
-  void start_drive(std::uint64_t id, double meters);
+                double degrees, const std::string& direction,
+                const std::string& preset, const std::string& melody,
+                const std::string& question, const std::string& target);
+  std::string play_melody(const std::string& name, std::string& error);
+  void start_drive(std::uint64_t id, double meters, double sign);
+  void start_turn(std::uint64_t id, const std::string& direction, double degrees);
   void drive_tick();
+  void drive_tick_linear();
+  void drive_tick_turn();
   void stop_drive();
   void send_arm_preset(std::uint64_t id, const std::string& preset);
   std::string call_optional(const std::string& service, const std::string& payload,
@@ -70,10 +75,13 @@ class LlmInput final : public krosc::Node {
   mutable std::mutex odom_mutex_;
   double odom_x_ = 0.0;
   double odom_y_ = 0.0;
+  double odom_yaw_ = 0.0;
   bool odom_seen_ = false;
 
   std::atomic<bool> drive_active_{false};
   std::uint64_t drive_request_ = 0;
+  int drive_mode_ = 0;  // 0=linear, 1=turn
+  double drive_sign_ = 1.0;
   double drive_target_ = 0.0;
   double drive_start_x_ = 0.0;
   double drive_start_y_ = 0.0;
@@ -82,6 +90,9 @@ class LlmInput final : public krosc::Node {
   double drive_progress_time_ = 0.0;
   double drive_timeout_ = 30.0;
   double drive_speed_ = 0.15;
+  double turn_start_yaw_ = 0.0;
+  double turn_target_ = 0.0;
+  double turn_angular_ = 0.0;
 
   std::mutex move_mutex_;
   std::string move_goal_id_;

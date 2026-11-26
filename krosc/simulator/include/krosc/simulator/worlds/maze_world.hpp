@@ -20,6 +20,7 @@ class MazeWorld final : public World {
 
   [[nodiscard]] const msgs::Pose2D& start_pose() const { return start_pose_; }
   [[nodiscard]] const std::vector<Puck*>& pucks() const { return pucks_; }
+  [[nodiscard]] Puck* graspable() const { return graspable_; }
 
   static constexpr std::array<double, 2> kCenter{0.0, 0.0};
   static constexpr std::array<double, 2> kSize{4.48, 6.37};
@@ -29,6 +30,7 @@ class MazeWorld final : public World {
 
   msgs::Pose2D start_pose_{0.0, 0.0, 0.0};
   std::vector<Puck*> pucks_;
+  Puck* graspable_ = nullptr;
 };
 
 }  // namespace krosc::simulator

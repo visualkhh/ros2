@@ -113,9 +113,13 @@ void SimulatorView::set_follow(bool follow) {
   update();
 }
 
+void SimulatorView::set_move_object_handler(std::function<void(int, double, double, double)> handler) {
+  move_object_ = std::move(handler);
+}
+
 QString SimulatorView::help_text() const {
   return QStringLiteral(
-      "truth view · W/A/S/D drive · Q/Z speed · F follow · L lidar · C overview · drag orbit · wheel zoom");
+      "truth view · W/A/S/D drive · Q/Z speed · F follow · L lidar · C overview · Alt+drag puck · Alt+Shift height · drag orbit · wheel zoom");
 }
 
 void SimulatorView::update_camera() {
@@ -159,6 +163,76 @@ SimulatorView::Projected SimulatorView::project(const QVector3D& point) const {
   return {QPointF((ndc.x() + 1.0F) * 0.5F * static_cast<float>(view_width_),
                   (1.0F - ndc.y()) * 0.5F * static_cast<float>(view_height_)),
           true};
+}
+
+// 커서를 z 높이의 월드 평면으로 역투영한다. Alt+드래그 이동에 쓴다.
+bool SimulatorView::cursor_on_plane(const QPointF& cursor, double z, double& x, double& y) const {
+  bool invertible = false;
+  const QMatrix4x4 inverse = matrix_.inverted(&invertible);
+  if (!invertible || view_width_ <= 0 || view_height_ <= 0) {
+    return false;
+  }
+  const float ndc_x = static_cast<float>(2.0 * cursor.x() / static_cast<double>(view_width_) - 1.0);
+  const float ndc_y = static_cast<float>(1.0 - 2.0 * cursor.y() / static_cast<double>(view_height_));
+  QVector4D near_world = inverse * QVector4D(ndc_x, ndc_y, -1.0F, 1.0F);
+  QVector4D far_world = inverse * QVector4D(ndc_x, ndc_y, 1.0F, 1.0F);
+  if (std::abs(near_world.w()) < 1e-6F || std::abs(far_world.w()) < 1e-6F) {
+    return false;
+  }
+  near_world /= near_world.w();
+  far_world /= far_world.w();
+  const QVector3D direction = far_world.toVector3D() - near_world.toVector3D();
+  if (std::abs(direction.z()) < 1e-6F) {
+    return false;
+  }
+  const float t = (static_cast<float>(z) - near_world.z()) / direction.z();
+  const QVector3D point = near_world.toVector3D() + direction * t;
+  x = point.x();
+  y = point.y();
+  return true;
+}
+
+// 커서 근처의 퍽을 찾는다. 그리퍼가 든 물체는 건드리지 않는다.
+bool SimulatorView::begin_object_drag(const QPointF& cursor) {
+  const auto snapshot = store_.latest();
+  if (!snapshot) {
+    return false;
+  }
+  constexpr double kPickRadiusPx = 26.0;
+  int best_id = -1;
+  double best_distance = kPickRadiusPx;
+  for (const auto& object : snapshot->objects) {
+    if (object.held) {
+      continue;
+    }
+    const QVector3D center(static_cast<float>(object.pose.x), static_cast<float>(object.pose.y),
+                           static_cast<float>(object.z + object.height * 0.5));
+    const Projected projected = project(center);
+    if (!projected.visible) {
+      continue;
+    }
+    const double distance = std::hypot(projected.point.x() - cursor.x(), projected.point.y() - cursor.y());
+    if (distance < best_distance) {
+      best_distance = distance;
+      best_id = object.id;
+    }
+  }
+  if (best_id < 0) {
+    return false;
+  }
+  drag_object_id_ = best_id;
+  drag_object_x_ = 0.0;
+  drag_object_y_ = 0.0;
+  drag_object_z_ = 0.0;
+  for (const auto& object : snapshot->objects) {
+    if (object.id == best_id) {
+      drag_object_x_ = object.pose.x;
+      drag_object_y_ = object.pose.y;
+      drag_object_z_ = object.z;
+      break;
+    }
+  }
+  return true;
 }
 
 void SimulatorView::draw_line(QPainter& painter, const QVector3D& a, const QVector3D& b, const QColor& color,
@@ -338,7 +412,7 @@ void SimulatorView::draw_walls() {
 
 void SimulatorView::draw_objects(const SimulatorSnapshot& snapshot) {
   for (const auto& object : snapshot.objects) {
-    const msgs::Transform transform{{object.pose.x, object.pose.y, object.height / 2.0},
+    const msgs::Transform transform{{object.pose.x, object.pose.y, object.z + object.height / 2.0},
                                     tfmath::from_yaw(object.pose.theta)};
     const QColor color(static_cast<int>(object.color[0] * 255.0), static_cast<int>(object.color[1] * 255.0),
                        static_cast<int>(object.color[2] * 255.0), 230);
@@ -483,6 +557,15 @@ void SimulatorView::paintEvent(QPaintEvent* event) {
 void SimulatorView::mousePressEvent(QMouseEvent* event) {
   setFocus(Qt::MouseFocusReason);
   last_mouse_ = event->position().toPoint();
+  if (event->button() == Qt::LeftButton && event->modifiers().testFlag(Qt::AltModifier)) {
+    if (begin_object_drag(event->position())) {
+      dragging_object_ = true;
+      drag_height_mode_ = event->modifiers().testFlag(Qt::ShiftModifier);
+      setCursor(Qt::ClosedHandCursor);
+      update();
+    }
+    return;
+  }
   if (event->button() == Qt::LeftButton) {
     orbiting_ = true;
   } else if (event->button() == Qt::RightButton || event->button() == Qt::MiddleButton) {
@@ -494,6 +577,25 @@ void SimulatorView::mouseMoveEvent(QMouseEvent* event) {
   const QPoint current = event->position().toPoint();
   const QPoint delta = current - last_mouse_;
   last_mouse_ = current;
+  if (dragging_object_) {
+    if (drag_height_mode_) {
+      // Alt+Shift: 커서 상하 움직임으로 높이만 바꾼다. 위로 올리면 z 증가.
+      drag_object_z_ = std::clamp(drag_object_z_ - delta.y() * 0.0015, 0.0, 1.0);
+      if (move_object_) {
+        move_object_(drag_object_id_, drag_object_x_, drag_object_y_, drag_object_z_);
+      }
+    } else {
+      double x = 0.0;
+      double y = 0.0;
+      if (cursor_on_plane(event->position(), drag_object_z_, x, y) && move_object_) {
+        drag_object_x_ = x;
+        drag_object_y_ = y;
+        move_object_(drag_object_id_, x, y, drag_object_z_);
+      }
+    }
+    update();
+    return;
+  }
   if (orbiting_) {
     camera_.yaw -= delta.x() * 0.008;
     camera_.pitch = std::clamp(camera_.pitch + delta.y() * 0.008, 0.08, 1.5);
@@ -515,6 +617,14 @@ void SimulatorView::mouseMoveEvent(QMouseEvent* event) {
 
 void SimulatorView::mouseReleaseEvent(QMouseEvent* event) {
   (void)event;
+  if (dragging_object_) {
+    dragging_object_ = false;
+    drag_height_mode_ = false;
+    drag_object_id_ = -1;
+    unsetCursor();
+    update();
+    return;
+  }
   orbiting_ = false;
   panning_ = false;
 }

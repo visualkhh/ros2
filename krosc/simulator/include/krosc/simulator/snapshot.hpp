@@ -13,10 +13,13 @@ namespace krosc::simulator {
 
 // 시뮬레이션 스레드가 만드는 불변 스냅샷. 화면(Qt 스레드)은 이 값만 읽는다.
 struct SnapshotObject {
+  int id = -1;  // world.objects() 인덱스. 화면에서 퍽을 집어 옮길 때 쓴다.
   msgs::Pose2D pose;
   double radius = 0.06;
   double height = 0.04;
+  double z = 0.0;
   int sides = 32;
+  bool held = false;  // 그리퍼가 들고 있으면 드래그로 옮기지 않는다.
   std::array<double, 3> color{1.0, 1.0, 1.0};
 };
 

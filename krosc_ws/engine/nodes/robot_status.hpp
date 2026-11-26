@@ -1,8 +1,11 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <map>
+#include <mutex>
 #include <string>
+#include <vector>
 
 #include "krosc/node.hpp"
 #include "krosc/parameter.hpp"
@@ -23,8 +26,15 @@ class RobotStatus final : public krosc::Node {
   void poll();
 
  private:
+  struct MelodyNote {
+    int frequency_hz = 0;
+    int duration_ms = 0;
+  };
+
   void publish_diagnostics();
   void publish_arm_status();
+  bool play_melody(const std::string& name);
+  void melody_tick();
 
   OpenCrDevice& opencr_;
   LdsDevice* lidar_;
@@ -34,6 +44,13 @@ class RobotStatus final : public krosc::Node {
   krosc::Timer poll_timer_;
   double last_diagnostics_ = 0.0;
   double last_arm_status_ = 0.0;
+
+  std::mutex melody_mutex_;
+  std::vector<MelodyNote> melody_;
+  std::size_t melody_index_ = 0;
+  double melody_next_ = 0.0;
+  bool melody_active_ = false;
+  krosc::Timer melody_timer_;
 };
 
 }  // namespace krosc_ws

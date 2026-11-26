@@ -24,6 +24,8 @@ class SimulationRunner {
 
   [[nodiscard]] double dt() const { return dt_; }
   void add_listener(std::function<void(World&)> listener);
+  // 다른 스레드(UI 등)에서 월드 변경을 예약한다. 다음 스텝에서 시뮬레이션 스레드가 실행한다.
+  void post(std::function<void(World&)> task);
   void step_once();
   void start();
   void stop();
@@ -34,6 +36,7 @@ class SimulationRunner {
   World& world_;
   double dt_;
   std::vector<std::function<void(World&)>> listeners_;
+  std::vector<std::function<void(World&)>> posted_;
   std::thread thread_;
   std::mutex mutex_;
   std::condition_variable wake_;

@@ -5,11 +5,14 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <string>
 #include <utility>
 
+#include "krosc/control/controller_manager.hpp"
 #include "krosc/msgs.hpp"
+#include "krosc/tf/math.hpp"
 
 #include "llm_json.hpp"
 
@@ -20,9 +23,12 @@ namespace {
 constexpr const char* kSchema = R"({
   "type": "object",
   "properties": {
-    "intent": {"type": "string", "enum": ["drive", "arm_preset", "stop", "vlm_query", "vla_pick", "unsupported"]},
-    "meters": {"type": "number", "description": "forward distance in meters; 0 when not driving"},
+    "intent": {"type": "string", "enum": ["drive", "arm_preset", "stop", "buzzer", "pick", "place", "hide", "approach", "vlm_query", "vla_pick", "unsupported"]},
+    "meters": {"type": "number", "description": "forward/backward distance in meters; 0 otherwise"},
+    "degrees": {"type": "number", "description": "turn angle in degrees for left/right; 0 otherwise"},
+    "direction": {"type": "string", "enum": ["forward", "backward", "left", "right"]},
     "preset": {"type": "string", "enum": ["home", "stow"]},
+    "melody": {"type": "string", "enum": ["mario_death", "success", "alarm", "beep"]},
     "question": {"type": "string"},
     "target": {"type": "string"}
   },
@@ -31,11 +37,19 @@ constexpr const char* kSchema = R"({
 
 constexpr const char* kSystemPrompt = R"(You are the command parser for a TurtleBot3 Waffle Pi with an OpenMANIPULATOR-X arm.
 Convert the user's Korean or English request into exactly one intent.
-- drive: move the base forward by the stated distance. meters is REQUIRED and must be a number ("1m" -> 1.0, "50cm" -> 0.5).
+- drive: move or turn the base. direction = forward|backward|left|right. meters is REQUIRED and must be a number ("1m" -> 1.0, "50cm" -> 0.5; 0 for left/right turns).
+  For left/right, turn in place and put the angle in degrees (default 90 if the user did not say).
+  Examples: "뒤로 0.5m" -> direction backward, meters 0.5; "왼쪽으로 90도" -> direction left, degrees 90, meters 0.
 - arm_preset: move the arm to a preset. preset must be "home" or "stow".
 - stop: stop the robot immediately.
+- buzzer: play a buzzer melody. melody = "mario_death" for Mario death/game over, "success", "alarm", or "beep".
+- pick: pick up a puck with the manipulator. Put the color (yellow/red/blue) in target.
+- place: put the held puck down. target = floor (default) or body (on the robot's own deck).
+  Use body ONLY for "내 몸/몸 위" (on me). "내려놔/바닥/다시 내려놔" must be floor.
+- hide: move to a place that is not visible from here (behind a wall/cover). No arguments.
+- approach: drive forward close to the visible wall or object ahead using the lidar. No arguments.
 - vlm_query: ask the camera/scene a question. Put the question in question.
-- vla_pick: pick or place an object with the learned policy. Put the object/color in target.
+- vla_pick: use the learned VLA policy, only when the user explicitly asks for it (red/blue cube).
 - unsupported: multiple actions, missing distance/preset, or anything else.
 Always include meters in the JSON. Use 0 when the intent is not drive.
 Return only the JSON object. Do not explain.)";
@@ -64,6 +78,64 @@ std::string quoted(const std::string& value) {
   return "\"" + llm::escape_json(value) + "\"";
 }
 
+constexpr double kPi = 3.14159265358979323846;
+
+double wrap_angle(double angle) { return std::atan2(std::sin(angle), std::cos(angle)); }
+
+// LLM이 "오른쪽으로 45도"를 arm_preset으로 오분류하는 경우가 있어,
+// 방향/회전 문구는 결정적으로 drive로 보정한다.
+void apply_direction_hint(const std::string& text, llm::Plan& plan) {
+  const std::string lowered = lower(text);
+  if (lowered.find("팔") != std::string::npos ||
+      lowered.find("매니") != std::string::npos ||
+      lowered.find("arm") != std::string::npos) {
+    return;
+  }
+  const bool left = lowered.find("왼") != std::string::npos ||
+                    lowered.find("좌") != std::string::npos ||
+                    lowered.find("left") != std::string::npos;
+  const bool right = lowered.find("오른") != std::string::npos ||
+                     lowered.find("우") != std::string::npos ||
+                     lowered.find("right") != std::string::npos;
+  const bool turn = lowered.find("돌") != std::string::npos ||
+                    lowered.find("회전") != std::string::npos ||
+                    lowered.find("turn") != std::string::npos ||
+                    lowered.find("rotate") != std::string::npos;
+  const bool backward = lowered.find("뒤") != std::string::npos ||
+                        lowered.find("후진") != std::string::npos ||
+                        lowered.find("back") != std::string::npos;
+
+  double value = -1.0;
+  for (std::size_t index = 0; index < text.size(); ++index) {
+    if (std::isdigit(static_cast<unsigned char>(text[index])) == 0) {
+      continue;
+    }
+    const char* begin = text.c_str() + index;
+    char* end = nullptr;
+    value = std::strtod(begin, &end);
+    if (end != begin) {
+      break;
+    }
+  }
+
+  if ((left || right) && (turn || value >= 0.0)) {
+    plan.intent = "drive";
+    plan.direction = left ? "left" : "right";
+    plan.meters = 0.0;
+    plan.degrees = value >= 0.0 ? value : 90.0;
+    plan.preset.clear();
+    return;
+  }
+  if (backward && !left && !right) {
+    plan.intent = "drive";
+    plan.direction = "backward";
+    if (plan.meters <= 0.0 && value >= 0.0) {
+      plan.meters = value;
+    }
+    plan.preset.clear();
+  }
+}
+
 }  // namespace
 
 LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string model,
@@ -77,6 +149,7 @@ LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string 
         std::lock_guard<std::mutex> lock(odom_mutex_);
         odom_x_ = message.pose.pose.position.x;
         odom_y_ = message.pose.pose.position.y;
+        odom_yaw_ = krosc::tfmath::yaw_of(message.pose.pose.orientation);
         odom_seen_ = true;
       });
   drive_timer_ = create_timer(0.1, [this] { drive_tick(); });
@@ -106,6 +179,14 @@ LlmInput::~LlmInput() {
 
 void LlmInput::emergency_stop() {
   stop_drive();
+  for (const char* service : {"vla/stop", "pick/stop", "nav/stop"}) {
+    try {
+      (void)context().services().call<krosc::msgs::TriggerRequest,
+                                      krosc::msgs::TriggerResponse>(
+          service, krosc::msgs::TriggerRequest{});
+    } catch (const std::exception&) {
+    }
+  }
   std::lock_guard<std::mutex> lock(move_mutex_);
   if (move_ && !move_goal_id_.empty()) {
     move_->cancel(move_goal_id_);
@@ -161,40 +242,61 @@ void LlmInput::process(const Request& request) {
     publish_status(request.id, "error", ",\"error\":" + quoted(reply.error));
     return;
   }
-  const auto plan = llm::parse_plan(reply.content);
-  if (!plan) {
+  const auto parsed = llm::parse_plan(reply.content);
+  if (!parsed) {
     publish_status(request.id, "error",
                    ",\"error\":" + quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
     return;
   }
-  std::string plan_json = "{\"intent\":" + quoted(plan->intent);
-  if (plan->meters != 0.0) {
-    plan_json += ",\"meters\":" + number(plan->meters);
+  llm::Plan plan = *parsed;
+  apply_direction_hint(request.text, plan);
+  std::string plan_json = "{\"intent\":" + quoted(plan.intent);
+  if (plan.meters != 0.0) {
+    plan_json += ",\"meters\":" + number(plan.meters);
   }
-  if (!plan->preset.empty()) {
-    plan_json += ",\"preset\":" + quoted(plan->preset);
+  if (plan.degrees != 0.0) {
+    plan_json += ",\"degrees\":" + number(plan.degrees);
   }
-  if (!plan->question.empty()) {
-    plan_json += ",\"question\":" + quoted(plan->question);
+  if (!plan.direction.empty()) {
+    plan_json += ",\"direction\":" + quoted(plan.direction);
   }
-  if (!plan->target.empty()) {
-    plan_json += ",\"target\":" + quoted(plan->target);
+  if (!plan.preset.empty()) {
+    plan_json += ",\"preset\":" + quoted(plan.preset);
+  }
+  if (!plan.melody.empty()) {
+    plan_json += ",\"melody\":" + quoted(plan.melody);
+  }
+  if (!plan.question.empty()) {
+    plan_json += ",\"question\":" + quoted(plan.question);
+  }
+  if (!plan.target.empty()) {
+    plan_json += ",\"target\":" + quoted(plan.target);
   }
   plan_json += "}";
   publish_status(request.id, "plan", ",\"plan\":" + plan_json);
-  dispatch(request.id, plan->intent, plan->meters, plan->preset, plan->question,
-           plan->target);
+  dispatch(request.id, plan.intent, plan.meters, plan.degrees, plan.direction,
+           plan.preset, plan.melody, plan.question, plan.target);
 }
 
 void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double meters,
-                        const std::string& preset, const std::string& question,
-                        const std::string& target) {
+                        double degrees, const std::string& direction,
+                        const std::string& preset, const std::string& melody,
+                        const std::string& question, const std::string& target) {
   if (intent == "drive") {
+    const std::string heading = lower(direction.empty() ? "forward" : direction);
+    if (heading == "left" || heading == "right") {
+      start_turn(id, heading, degrees > 0.0 ? degrees : 90.0);
+      return;
+    }
+    if (heading != "forward" && heading != "backward") {
+      publish_status(id, "error", ",\"error\":\"direction은 forward|backward|left|right\"");
+      return;
+    }
     if (!(meters > 0.0)) {
       publish_status(id, "error", ",\"error\":\"drive에 meters가 없다\"");
       return;
     }
-    start_drive(id, std::clamp(meters, 0.05, 5.0));
+    start_drive(id, std::clamp(meters, 0.05, 5.0), heading == "forward" ? 1.0 : -1.0);
     return;
   }
   if (intent == "arm_preset") {
@@ -209,6 +311,56 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
   if (intent == "stop") {
     emergency_stop();
     publish_status(id, "done", ",\"tool\":\"stop\"");
+    return;
+  }
+  if (intent == "buzzer") {
+    const std::string name = lower(melody.empty() ? "beep" : melody);
+    std::string error;
+    (void)play_melody(name, error);
+    if (!error.empty()) {
+      publish_status(id, "error", ",\"error\":" + quoted("버저 실패: " + error));
+      return;
+    }
+    publish_status(id, "done", ",\"tool\":\"buzzer\",\"melody\":" + quoted(name));
+    return;
+  }
+  if (intent == "pick" || intent == "place") {
+    const std::string normalized = lower(target);
+    const bool body_place =
+        normalized == "body" || normalized == "deck" || normalized == "robot" ||
+        target.find("몸") != std::string::npos;
+    const std::string place_target = body_place ? "body" : "floor";
+    const std::string color = intent == "pick"
+                                  ? (target.empty() ? "yellow" : target)
+                                  : "yellow";
+    const std::string payload = "{\"action\":" + quoted(intent) +
+                                ",\"color\":" + quoted(color) +
+                                ",\"target\":" +
+                                quoted(intent == "place" ? place_target : color) + "}";
+    std::string error;
+    const std::string result = call_optional("pick/command", payload, error);
+    if (!error.empty()) {
+      publish_status(id, "error",
+                     ",\"error\":" + quoted("pick node 없음: " + error));
+      return;
+    }
+    publish_status(id, "done", ",\"tool\":" + quoted(intent) +
+                                   ",\"target\":" +
+                                   quoted(intent == "place" ? place_target : color) +
+                                   ",\"result\":" + quoted(result));
+    return;
+  }
+  if (intent == "hide" || intent == "approach") {
+    const std::string service = intent == "hide" ? "nav/hide" : "nav/approach";
+    std::string error;
+    const std::string result = call_optional(service, "{}", error);
+    if (!error.empty()) {
+      publish_status(id, "error",
+                     ",\"error\":" + quoted("nav behavior 없음: " + error));
+      return;
+    }
+    publish_status(id, "done", ",\"tool\":" + quoted(intent) +
+                                   ",\"result\":" + quoted(result));
     return;
   }
   if (intent == "vlm_query") {
@@ -236,7 +388,7 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
   publish_status(id, "done", ",\"tool\":\"unsupported\"");
 }
 
-void LlmInput::start_drive(std::uint64_t id, double meters) {
+void LlmInput::start_drive(std::uint64_t id, double meters, double sign) {
   double x = 0.0;
   double y = 0.0;
   bool seen = false;
@@ -251,7 +403,9 @@ void LlmInput::start_drive(std::uint64_t id, double meters) {
     return;
   }
   stop_drive();
+  drive_mode_ = 0;
   drive_request_ = id;
+  drive_sign_ = sign;
   drive_target_ = meters;
   drive_start_x_ = x;
   drive_start_y_ = y;
@@ -260,7 +414,39 @@ void LlmInput::start_drive(std::uint64_t id, double meters) {
   drive_progress_time_ = drive_started_;
   drive_active_.store(true);
   publish_status(id, "executing",
-                 ",\"tool\":\"drive\",\"meters\":" + number(meters));
+                 ",\"tool\":\"drive\",\"direction\":" +
+                     quoted(sign >= 0.0 ? "forward" : "backward") +
+                     ",\"meters\":" + number(meters));
+}
+
+void LlmInput::start_turn(std::uint64_t id, const std::string& direction,
+                          double degrees) {
+  double yaw = 0.0;
+  bool seen = false;
+  {
+    std::lock_guard<std::mutex> lock(odom_mutex_);
+    yaw = odom_yaw_;
+    seen = odom_seen_;
+  }
+  if (!seen) {
+    publish_status(id, "error", ",\"error\":\"odom이 아직 없다\"");
+    return;
+  }
+  const double angle = std::clamp(degrees, 5.0, 360.0);
+  stop_drive();
+  drive_mode_ = 1;
+  drive_request_ = id;
+  drive_sign_ = direction == "left" ? 1.0 : -1.0;
+  turn_start_yaw_ = yaw;
+  turn_target_ = angle * kPi / 180.0;
+  turn_angular_ = 0.8 * drive_sign_;
+  drive_started_ = now();
+  drive_last_distance_ = 0.0;
+  drive_progress_time_ = drive_started_;
+  drive_active_.store(true);
+  publish_status(id, "executing",
+                 ",\"tool\":\"turn\",\"direction\":" + quoted(direction) +
+                     ",\"degrees\":" + number(angle));
 }
 
 void LlmInput::drive_tick() {
@@ -269,9 +455,18 @@ void LlmInput::drive_tick() {
   }
   if (now() - drive_started_ > drive_timeout_) {
     stop_drive();
-    publish_status(drive_request_, "error", ",\"error\":\"drive timeout\"");
+    publish_status(drive_request_, "error",
+                   ",\"error\":\"drive timeout\"");
     return;
   }
+  if (drive_mode_ == 1) {
+    drive_tick_turn();
+  } else {
+    drive_tick_linear();
+  }
+}
+
+void LlmInput::drive_tick_linear() {
   double x = 0.0;
   double y = 0.0;
   {
@@ -297,8 +492,38 @@ void LlmInput::drive_tick() {
                        number(distance));
     return;
   }
-  publish<krosc::msgs::Twist>("cmd_vel_nav",
-                              krosc::msgs::Twist{{drive_speed_, 0.0, 0.0}, {0.0, 0.0, 0.0}});
+  publish<krosc::msgs::Twist>(
+      "cmd_vel_nav",
+      krosc::msgs::Twist{{drive_speed_ * drive_sign_, 0.0, 0.0}, {0.0, 0.0, 0.0}});
+}
+
+void LlmInput::drive_tick_turn() {
+  double yaw = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(odom_mutex_);
+    yaw = odom_yaw_;
+  }
+  const double turned = std::abs(wrap_angle(yaw - turn_start_yaw_));
+  if (turned + 0.02 >= turn_target_) {
+    stop_drive();
+    publish_status(drive_request_, "done",
+                   ",\"tool\":\"turn\",\"degrees\":" +
+                       number(turned * 180.0 / kPi));
+    return;
+  }
+  if (turned > drive_last_distance_ + 0.02) {
+    drive_last_distance_ = turned;
+    drive_progress_time_ = now();
+  } else if (now() - drive_progress_time_ > 2.0) {
+    stop_drive();
+    publish_status(drive_request_, "error",
+                   ",\"error\":\"turn stalled (collision?)\",\"degrees\":" +
+                       number(turned * 180.0 / kPi));
+    return;
+  }
+  publish<krosc::msgs::Twist>(
+      "cmd_vel_nav",
+      krosc::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, turn_angular_}});
 }
 
 void LlmInput::stop_drive() {
@@ -312,6 +537,19 @@ void LlmInput::send_arm_preset(std::uint64_t id, const std::string& preset) {
   if (!move_) {
     publish_status(id, "error", ",\"error\":\"MoveIt client 없음\"");
     return;
+  }
+  // VLA/pick이 arm_command_controller를 켜 둘 수 있다. MoveIt 전에 trajectory로 되돌린다.
+  {
+    krosc::control::SwitchControllerRequest request;
+    request.start_controllers = {"joint_trajectory_controller"};
+    request.stop_controllers = {"arm_command_controller"};
+    request.strictness = 0;
+    try {
+      (void)context().services().call<krosc::control::SwitchControllerRequest,
+                                      krosc::control::SwitchControllerResponse>(
+          "controller_manager/switch_controller", request);
+    } catch (const std::exception&) {
+    }
   }
   krosc::msgs::moveit::MoveGroupGoal goal;
   goal.preset = preset;
@@ -359,6 +597,22 @@ void LlmInput::send_arm_preset(std::uint64_t id, const std::string& preset) {
     publish_status(id, "error", ",\"error\":" + quoted(detail));
   } catch (const std::exception& error) {
     publish_status(id, "error", ",\"error\":" + quoted(error.what()));
+  }
+}
+
+std::string LlmInput::play_melody(const std::string& name, std::string& error) {
+  try {
+    const auto response =
+        context().services().call<krosc::msgs::String, krosc::msgs::TriggerResponse>(
+            "buzzer/melody", krosc::msgs::String{name});
+    if (!response.success) {
+      error = response.message;
+      return {};
+    }
+    return response.message;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return {};
   }
 }
 

@@ -134,7 +134,8 @@ double World::ray_distance(double x, double y, double angle, double height) cons
     best = std::min(best, ray_hit_box(wall, x, y, dx, dy));
   }
   for (const auto& object : objects_) {
-    if (object->radius > 0.0 && object->height > height) {
+    if (!object->held && !object->on_robot && object->radius > 0.0 &&
+        object->z <= height && object->z + object->height > height) {
       best = std::min(best, ray_hit_circle(object->pose.x, object->pose.y, object->radius, x, y, dx, dy));
     }
   }
@@ -168,7 +169,7 @@ double World::friction_with_ground(const WorldObject& object) const {
 void World::resolve_objects(double dt) {
   // movable 객체(퍽)가 미끄러진다: 벽/서로/로봇에 막힌 만큼만 실제 속도가 된다.
   for (auto& object : objects_) {
-    if (!object->movable || object->is_static) {
+    if (!object->movable || object->is_static || object->held || object->on_robot) {
       continue;
     }
     const double vx = object->velocity.first;
@@ -197,7 +198,9 @@ void World::resolve_objects(double dt) {
     for (std::size_t j = i + 1; j < objects_.size(); ++j) {
       WorldObject& a = *objects_[i];
       WorldObject& b = *objects_[j];
-      if (a.radius <= 0.0 || b.radius <= 0.0 || a.is_static || b.is_static || (!a.movable && !b.movable)) {
+      if (a.radius <= 0.0 || b.radius <= 0.0 || a.is_static || b.is_static ||
+          a.held || b.held || a.on_robot || b.on_robot ||
+          (!a.movable && !b.movable)) {
         continue;
       }
       const double dx = b.pose.x - a.pose.x;
@@ -230,7 +233,8 @@ void World::resolve_objects(double dt) {
 
 void World::resolve_walls() {
   for (auto& object : objects_) {
-    if (!object->is_static && object->radius > 0.0) {
+    if (!object->is_static && !object->held && !object->on_robot &&
+        object->radius > 0.0) {
       const auto [x, y] = push_out(object->pose.x, object->pose.y, object->radius);
       object->pose.x = x;
       object->pose.y = y;

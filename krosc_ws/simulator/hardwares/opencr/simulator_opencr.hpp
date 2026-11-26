@@ -4,12 +4,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <random>
 #include <string>
 
 #include "hardwares/opencr/opencr_device.hpp"
+#include "hardwares/opencr/simulator_buzzer.hpp"
 #include "robot/waffle_pi_arm.hpp"
 
 namespace krosc_ws::sim {
@@ -70,6 +72,7 @@ class SimulatorOpenCr final : public OpenCrDevice {
   double integrated_time_ = 0.0;
   double last_imu_stamp_ = -1.0;
   std::string port_ = "sim";
+  std::unique_ptr<SimulatorBuzzer> buzzer_;
   std::chrono::steady_clock::time_point started_{std::chrono::steady_clock::now()};
   mutable std::mutex imu_mutex_;
   std::optional<krosc::msgs::Imu> imu_;

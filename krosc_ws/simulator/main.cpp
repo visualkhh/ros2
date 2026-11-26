@@ -1,21 +1,29 @@
 #include <QApplication>
 #include <QTimer>
 
+#include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <cstdio>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "krosc/context.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/qos.hpp"
+#include "krosc/tf/math.hpp"
 #include "krosc/simulator/worlds/maze_world.hpp"
+#include "krosc/simulator/runner.hpp"
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/snapshot.hpp"
 #include "krosc/simulator/simulator_window.hpp"
@@ -40,6 +48,65 @@ namespace {
 
 std::atomic<bool> g_stop{false};
 void request_stop(int) { g_stop.store(true); }
+
+// 상판 빈 자리. 시뮬레이션 스레드(listener)가 갱신하고 서비스는 이 값만 읽는다.
+struct DeckFreeSpot {
+  std::atomic<bool> valid{false};
+  std::atomic<double> x{0.05};
+  std::atomic<double> y{0.0};
+};
+
+// 고정물(LDS/팔 베이스)과 이미 올려둔 payload를 피해 상판 위 빈 자리를 고른다.
+// D435는 상판보다 낮아서 상판 공간을 차지하지 않는다. 로봇은 상판을 볼 수 없으므로
+// 카메라 대신 로봇 모델+payload로 계산한다.
+std::optional<std::pair<double, double>> find_deck_free(
+    const krosc::simulator::World& world,
+    const krosc_ws::sim::WafflePiArm& robot) {
+  constexpr double kPuckRadius = 0.02;
+  constexpr double kMargin = 0.015;
+  constexpr double kMinArmReach = 0.09;   // 팔 베이스에서 너무 가까우면 IK 불가
+  constexpr double kMaxArmReach = 0.32;
+  constexpr double kLdsRadius = 0.034;    // LDS 박스 반대각
+  const double robot_x = robot.pose.x;
+  const double robot_y = robot.pose.y;
+  const double robot_yaw = robot.pose.theta;
+  const double c = std::cos(robot_yaw);
+  const double s = std::sin(robot_yaw);
+  const std::array<double, 11> xs{0.05, 0.04, 0.03, 0.02, 0.01, 0.0,
+                                  -0.01, -0.02, -0.03, -0.04, -0.05};
+  const std::array<double, 7> ys{0.0, 0.04, -0.04, 0.08, -0.08, 0.10, -0.10};
+  for (double bx : xs) {
+    for (double by : ys) {
+      const double arm_distance = std::hypot(bx + 0.092, by);
+      if (arm_distance < kMinArmReach + kPuckRadius + kMargin ||
+          arm_distance > kMaxArmReach) {
+        continue;
+      }
+      if (std::hypot(bx + 0.024, by) < kLdsRadius + kPuckRadius + kMargin) {
+        continue;
+      }
+      bool free = true;
+      for (const auto& object : world.objects()) {
+        if (!object || !object->on_robot) {
+          continue;
+        }
+        const double dx = object->pose.x - robot_x;
+        const double dy = object->pose.y - robot_y;
+        const double local_x = c * dx + s * dy;
+        const double local_y = -s * dx + c * dy;
+        if (std::hypot(bx - local_x, by - local_y) <
+            object->radius + kPuckRadius + kMargin) {
+          free = false;
+          break;
+        }
+      }
+      if (free) {
+        return std::make_pair(bx, by);
+      }
+    }
+  }
+  return std::nullopt;
+}
 
 }  // namespace
 
@@ -138,10 +205,53 @@ int main(int argc, char** argv) {
   options.control_period = 0.01;
 
   krosc_ws::Engine engine(context, opencr, &lds, options, &camera);
+  // 상판 빈 자리는 시뮬레이션 스레드에서 매 스텝 계산해 두고, 서비스는 캐시만 읽는다.
+  // (서비스 핸들러가 world.objects()를 직접 읽으면 시뮬레이션 스레드와 경쟁한다.)
+  DeckFreeSpot deck_free;
+  simulator.runner().add_listener(
+      [&deck_free, robot_model](krosc::simulator::World& current) {
+        const auto spot = find_deck_free(current, *robot_model);
+        if (spot) {
+          deck_free.x.store(spot->first);
+          deck_free.y.store(spot->second);
+          deck_free.valid.store(true);
+        } else {
+          deck_free.valid.store(false);
+        }
+      });
+  ui_node.create_service<krosc::msgs::String, krosc::msgs::String>(
+      "sim/deck_free", [&deck_free](const krosc::msgs::String&) {
+        if (!deck_free.valid.load()) {
+          return krosc::msgs::String{
+              R"({"ok":false,"error":"상판에 빈 자리가 없다"})"};
+        }
+        char buffer[128];
+        std::snprintf(buffer, sizeof(buffer),
+                      "{\"ok\":true,\"x\":%.4f,\"y\":%.4f,\"yaw\":0}",
+                      deck_free.x.load(), deck_free.y.load());
+        return krosc::msgs::String{buffer};
+      });
   auto* arm_panel = new krosc_ws::sim::ArmPanel(*robot_model);
   auto* camera_panel = new krosc_ws::sim::CameraPanel(camera);
   krosc::simulator::SimulatorWindow window(world->walls(), simulator.snapshots(), ui_node,
                                      "cmd_vel_teleop", {camera_panel, arm_panel});
+  // Alt+드래그: 화면에서 퍽을 집어 바닥으로 옮긴다. 월드는 시뮬레이션 스레드만 만진다.
+  window.view().set_move_object_handler([&simulator](int id, double x, double y, double z) {
+    simulator.runner().post([id, x, y, z](krosc::simulator::World& current) {
+      auto& objects = current.objects();
+      if (id < 0 || static_cast<std::size_t>(id) >= objects.size()) {
+        return;
+      }
+      auto& object = objects[static_cast<std::size_t>(id)];
+      if (!object || object->held || object->on_robot) {
+        return;
+      }
+      object->pose.x = x;
+      object->pose.y = y;
+      object->z = std::clamp(z, 0.0, 1.0);
+      object->velocity = {0.0, 0.0};
+    });
+  });
   window.show();
   window.raise();
   window.activateWindow();
@@ -162,10 +272,25 @@ int main(int argc, char** argv) {
 
   const auto start_time = std::chrono::steady_clock::now();
   auto last_sim_status = std::chrono::steady_clock::now();
+  auto last_objects = last_sim_status;
   while (!g_stop.load()) {
     application.processEvents();
     engine.log_status();
     const auto now = std::chrono::steady_clock::now();
+    if (now - last_objects >= std::chrono::milliseconds(250)) {
+      last_objects = now;
+      krosc::msgs::Path path;
+      path.header = krosc::msgs::Header{context.now(), "odom"};
+      if (const auto* object = world->graspable(); object != nullptr) {
+        krosc::msgs::PoseStamped pose;
+        pose.header = path.header;
+        pose.pose.position = {object->pose.x, object->pose.y,
+                              object->z + object->height / 2.0};
+        pose.pose.orientation = krosc::tfmath::from_yaw(object->pose.theta);
+        path.poses.push_back(pose);
+      }
+      ui_node.publish<krosc::msgs::Path>("sim_graspable", std::move(path));
+    }
     if (now - last_sim_status >= std::chrono::seconds(2)) {
       last_sim_status = now;
       if (auto snapshot = simulator.snapshots().latest()) {

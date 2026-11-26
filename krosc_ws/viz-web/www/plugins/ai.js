@@ -7,6 +7,8 @@ export function init(host) {
   const status = row(body, 'llm');
   const plan = row(body, 'plan');
   plan.classList.add('nowrap');
+  const action = row(body, 'action');
+  action.classList.add('nowrap');
 
   const inputRow = document.createElement('div');
   inputRow.style.display = 'block';
@@ -56,6 +58,35 @@ export function init(host) {
   };
   button(actions, '보내기', send, 'primary');
   button(actions, '정지', () => host.rpc('llm/command', { text: 'stop' }).catch(() => {}), 'danger');
+  const fun = buttonRow(body);
+  button(fun, 'Mario', () => {
+    input.value = '마리오 죽을 때 효과음 내줘';
+    send();
+  }, 'primary');
+  button(fun, '성공음', () => {
+    input.value = '성공 효과음 내줘';
+    send();
+  });
+  button(fun, 'Pick', () => {
+    input.value = '앞에 있는 노란색 퍽을 집어 올려';
+    send();
+  }, 'primary');
+  button(fun, 'Place', () => {
+    input.value = '내려놔';
+    send();
+  });
+  button(fun, 'On body', () => {
+    input.value = '잡은 물건을 내 몸에 올려놔';
+    send();
+  });
+  button(fun, 'Hide', () => {
+    input.value = '안 보이는 곳으로 숨어';
+    send();
+  }, 'primary');
+  button(fun, 'Wall', () => {
+    input.value = '앞에 보이는 벽까지 가까이 붙어';
+    send();
+  });
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -114,4 +145,48 @@ export function init(host) {
       log.textContent = log.textContent.split('\n').slice(0, 6).join('\n');
     }
   });
+
+  const armStages = {
+    switching: '컨트롤러 전환',
+    planning: '계획',
+    executing: '실행',
+    approach: '접근',
+    approaching: '벽/물체 접근',
+    navigating: '숨을 곳으로 이동',
+    descend: '내려가기',
+    close: '그리퍼 닫기',
+    lift: '들기',
+    lower: '내리기',
+    open: '그리퍼 열기',
+    retreat: '후퇴',
+    body_approach: '몸 위 접근',
+    body_lower: '몸 위로 내리기',
+    body_open: '몸 위에 놓기',
+    body_retreat: '후퇴',
+    done: '완료',
+    cancelled: '취소',
+    error: '오류',
+  };
+  const showArmStatus = (message) => {
+    let event;
+    try {
+      event = JSON.parse(message.data);
+    } catch {
+      return;
+    }
+    const stage = armStages[event.stage] || event.stage || '-';
+    const request = event.request_id ? `#${event.request_id} ` : '';
+    const progress = event.steps
+      ? ` · ${event.index || 0}/${event.steps}`
+      : '';
+    setLevel(action, `${request}${stage}${progress}`,
+             event.stage === 'error' ? 'bad'
+               : event.stage === 'done' ? 'ok' : 'warn');
+    if (event.error) {
+      setLevel(plan, event.error, 'bad');
+    }
+  };
+  host.onTopic('pick/status', showArmStatus);
+  host.onTopic('vla/status', showArmStatus);
+  host.onTopic('nav/status', showArmStatus);
 }

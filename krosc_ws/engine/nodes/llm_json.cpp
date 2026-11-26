@@ -230,6 +230,12 @@ std::optional<Plan> parse_plan(std::string_view content) {
   if (const auto meters = number_field(text, "meters")) {
     plan.meters = *meters;
   }
+  if (const auto degrees = number_field(text, "degrees")) {
+    plan.degrees = *degrees;
+  }
+  if (const auto direction = string_field(text, "direction")) {
+    plan.direction = *direction;
+  }
   if (const auto preset = string_field(text, "preset")) {
     plan.preset = *preset;
   }
@@ -238,6 +244,9 @@ std::optional<Plan> parse_plan(std::string_view content) {
   }
   if (const auto target = string_field(text, "target")) {
     plan.target = *target;
+  }
+  if (const auto melody = string_field(text, "melody")) {
+    plan.melody = *melody;
   }
   return plan;
 }

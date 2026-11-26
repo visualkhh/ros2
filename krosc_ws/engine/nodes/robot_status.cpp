@@ -63,8 +63,20 @@ RobotStatus::RobotStatus(krosc::Context& context, OpenCrDevice& opencr, LdsDevic
         if (request.frequency <= 0 || request.duration <= 0) {
           return krosc::msgs::BuzzerResponse{false, "frequency/duration은 0보다 커야 한다"};
         }
+        {
+          std::lock_guard<std::mutex> lock(melody_mutex_);
+          melody_active_ = false;
+        }
         opencr_.buzzer(request.frequency, request.duration);
         return krosc::msgs::BuzzerResponse{true, "buzzer"};
+      });
+  create_service<krosc::msgs::String, krosc::msgs::TriggerResponse>(
+      "buzzer/melody", [this](const krosc::msgs::String& request) {
+        if (!play_melody(request.data)) {
+          return krosc::msgs::TriggerResponse{
+              false, "melody: mario_death|success|alarm|beep"};
+        }
+        return krosc::msgs::TriggerResponse{true, "melody " + request.data};
       });
   create_service<krosc::msgs::ArmResetRequest, krosc::msgs::ArmResetResponse>(
       "arm/reset", [this](const krosc::msgs::ArmResetRequest& request) {
@@ -107,6 +119,53 @@ RobotStatus::RobotStatus(krosc::Context& context, OpenCrDevice& opencr, LdsDevic
   logger().info("OpenCR IMU는 켠 뒤 2초 동안 가만히 둬야 자이로 편향을 잡는다");
   // main loop와 무관하게 진단/arm_status를 주기적으로 발행한다.
   poll_timer_ = create_timer(0.1, [this] { poll(); });
+  melody_timer_ = create_timer(0.02, [this] { melody_tick(); });
+}
+
+bool RobotStatus::play_melody(const std::string& name) {
+  std::vector<MelodyNote> notes;
+  if (name == "mario_death") {
+    // Super Mario Bros. death jingle (RTTTL smbdeath, tempo 90)
+    notes = {
+        {1047, 80}, {1047, 80}, {1047, 80}, {0, 320},  {988, 160}, {1397, 160},
+        {0, 160},   {1397, 160}, {1397, 240}, {1319, 240}, {1175, 160}, {1047, 160},
+        {0, 160},   {659, 160},  {0, 160},   {523, 160},
+    };
+  } else if (name == "success") {
+    notes = {{523, 100}, {659, 100}, {784, 100}, {1047, 200}};
+  } else if (name == "alarm") {
+    notes = {{880, 180}, {0, 80}, {880, 180}, {0, 80}, {880, 180}};
+  } else if (name == "beep") {
+    notes = {{2000, 150}};
+  } else {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(melody_mutex_);
+  melody_ = std::move(notes);
+  melody_index_ = 0;
+  melody_next_ = now();
+  melody_active_ = true;
+  return true;
+}
+
+void RobotStatus::melody_tick() {
+  std::lock_guard<std::mutex> lock(melody_mutex_);
+  if (!melody_active_) {
+    return;
+  }
+  const double current = now();
+  if (current < melody_next_) {
+    return;
+  }
+  if (melody_index_ >= melody_.size()) {
+    melody_active_ = false;
+    return;
+  }
+  const MelodyNote note = melody_[melody_index_++];
+  if (note.frequency_hz > 0) {
+    opencr_.buzzer(note.frequency_hz, note.duration_ms);
+  }
+  melody_next_ = current + static_cast<double>(note.duration_ms) / 1000.0 + 0.02;
 }
 
 void RobotStatus::poll() {

@@ -1,0 +1,291 @@
+{
+  "method": "phase-conditioned ridge behavioral cloning",
+  "steps": 92,
+  "checkpoint_sha256": "4f7df7f829d177bd63f0993c3c489da6c5ea64e43e1161f5606c68a9c5222840",
+  "seed": 73,
+  "parent_sha256": "d26c2e456f75926d8af414be0733993fdd47ca42cdc65a71fa9d63cbe55f479a",
+  "hf": [
+    {
+      "episode": 0,
+      "revision": "f840ca6171f19987d6e4248ecbb1219231a4287a",
+      "sha256": "106ca0119fd814be40839e4a824d788bc340df19ca63fc9897108828d76067d9",
+      "frames": 44
+    },
+    {
+      "episode": 1,
+      "revision": "f840ca6171f19987d6e4248ecbb1219231a4287a",
+      "sha256": "d3af4922dd3817c560f5a71c016e4bd0a33041237870841951a68529f8cf3fad",
+      "frames": 44
+    },
+    {
+      "episode": 2,
+      "revision": "f840ca6171f19987d6e4248ecbb1219231a4287a",
+      "sha256": "e37781e10d65be35738aaf1c4d3e3237ec023d1b57cb43247c0fb0d7384c0df3",
+      "frames": 44
+    },
+    {
+      "episode": 3,
+      "revision": "f840ca6171f19987d6e4248ecbb1219231a4287a",
+      "sha256": "ec378e545b68d22f0ca8dbb97d64b1a244fe39bda7ea5cca2cd01300e949dfbb",
+      "frames": 44
+    }
+  ],
+  "color_demos": [
+    {
+      "episode": "00-red",
+      "initial": {
+        "red": [
+          0.22777342796325684,
+          -0.0249810591340065,
+          0.05059169977903366
+        ],
+        "blue": [
+          0.20397920906543732,
+          0.04446334019303322,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "00-blue",
+      "initial": {
+        "red": [
+          0.22777342796325684,
+          -0.0249810591340065,
+          0.05059169977903366
+        ],
+        "blue": [
+          0.20397920906543732,
+          0.04446334019303322,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    },
+    {
+      "episode": "01-red",
+      "initial": {
+        "red": [
+          0.20850934088230133,
+          0.046273645013570786,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.2027130424976349,
+          -0.026273325085639954,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "01-blue",
+      "initial": {
+        "red": [
+          0.20850934088230133,
+          0.046273645013570786,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.2027130424976349,
+          -0.026273325085639954,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    },
+    {
+      "episode": "02-red",
+      "initial": {
+        "red": [
+          0.22007490694522858,
+          -0.02423887886106968,
+          0.05055951327085495
+        ],
+        "blue": [
+          0.20895035564899445,
+          0.04426470398902893,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "02-blue",
+      "initial": {
+        "red": [
+          0.22007490694522858,
+          -0.02423887886106968,
+          0.05055951327085495
+        ],
+        "blue": [
+          0.20895035564899445,
+          0.04426470398902893,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    },
+    {
+      "episode": "03-red",
+      "initial": {
+        "red": [
+          0.21913965046405792,
+          0.04603031650185585,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.20335640013217926,
+          -0.026029998436570168,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "03-blue",
+      "initial": {
+        "red": [
+          0.21913965046405792,
+          0.04603031650185585,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.20335640013217926,
+          -0.026029998436570168,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    },
+    {
+      "episode": "04-red",
+      "initial": {
+        "red": [
+          0.22258727252483368,
+          -0.025910528376698494,
+          0.050559937953948975
+        ],
+        "blue": [
+          0.2098461538553238,
+          0.045382946729660034,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "04-blue",
+      "initial": {
+        "red": [
+          0.22258727252483368,
+          -0.025910528376698494,
+          0.050559937953948975
+        ],
+        "blue": [
+          0.2098461538553238,
+          0.045382946729660034,
+          0.04999995231628418
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    },
+    {
+      "episode": "05-red",
+      "initial": {
+        "red": [
+          0.2103407382965088,
+          0.04372416436672211,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.22638151049613953,
+          -0.024321112781763077,
+          0.05061659961938858
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "05-blue",
+      "initial": {
+        "red": [
+          0.2103407382965088,
+          0.04372416436672211,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.22638151049613953,
+          -0.024321112781763077,
+          0.05061659961938858
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    },
+    {
+      "episode": "06-red",
+      "initial": {
+        "red": [
+          0.20819592475891113,
+          -0.022241361439228058,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.22733448445796967,
+          0.042743079364299774,
+          0.05053407698869705
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "06-blue",
+      "initial": {
+        "red": [
+          0.20819592475891113,
+          -0.022241361439228058,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.22733448445796967,
+          0.042743079364299774,
+          0.05053407698869705
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    },
+    {
+      "episode": "07-red",
+      "initial": {
+        "red": [
+          0.20270226895809174,
+          0.042805805802345276,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.2275984287261963,
+          -0.023465873673558235,
+          0.05065275356173515
+        ]
+      },
+      "instruction": "Pick up the red cube and place it on the green square."
+    },
+    {
+      "episode": "07-blue",
+      "initial": {
+        "red": [
+          0.20270226895809174,
+          0.042805805802345276,
+          0.04999995231628418
+        ],
+        "blue": [
+          0.2275984287261963,
+          -0.023465873673558235,
+          0.05065275356173515
+        ]
+      },
+      "instruction": "Pick up the blue cube and place it on the green square."
+    }
+  ]
+}

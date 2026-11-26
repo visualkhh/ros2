@@ -56,15 +56,17 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   [[nodiscard]] ArmStatus arm_status() const;
   [[nodiscard]] std::string noise_summary() const;
 
-  static constexpr std::array<double, 5> kHome{0.5, -1.8, 1.4, 0.8, 0.0};
-  static constexpr std::array<double, 5> kStow{0.0, -1.9024, 1.3440, 0.9023, 0.0};
+  static constexpr std::array<double, 5> kHome{0.5, -1.75, 1.35, 0.8, 0.0};
+  static constexpr std::array<double, 5> kStow{0.0, -1.75, 1.3440, 0.9023, 0.0};
 
   static constexpr double kWheelRadius = 0.033;
   static constexpr double kWheelSeparation = 0.288;
-  static constexpr double kBodyRadius = 0.22;
+  // 바닥 퍽과의 물리 충돌은 실제 차체 상자(URDF base 0.266 x 0.266)의 내접원만 쓴다.
+  // 0.22는 팔을 편 Nav2 footprint라 시뮬 물리에서 쓰면 퍽이 허공에서 밀린다.
+  static constexpr double kBodyRadius = 0.133;
   static constexpr double kBodyHeight = 0.141;
-  static constexpr double kLidarMountX = -0.064;
-  static constexpr double kLidarMountHeight = 0.132;
+  static constexpr double kLidarMountX = -0.024;
+  static constexpr double kLidarMountHeight = 0.122;
   static constexpr int kScanBeams = 360;
   static constexpr double kScanPeriod = 0.1;
   static constexpr double kScanRangeMin = 0.12;
@@ -89,9 +91,19 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
     [[nodiscard]] double variance() const { return sigma * sigma + bias * bias; }
   };
 
+  struct Tcp {
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+    double yaw = 0.0;
+  };
+
   void apply_motion(double dt, double linear, double angular);
   void sample_scan(double time);
   void sample_imu(double time, double imu_dt);
+  [[nodiscard]] Tcp tcp_pose(const std::array<double, 5>& joints) const;
+  void update_grasp();
+  void update_payload();
   static void step_towards(std::array<double, 5>& position,
                            const std::array<double, 5>& target, double dt);
 
@@ -129,6 +141,23 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   std::array<double, 5> manual_target_{};
   std::array<double, 5> controller_position_{};
   std::array<double, 5> controller_target_{};
+
+  // grasp attach: 그리퍼가 닫히면 가까운 graspable 물체를 TCP에 붙인다.
+  krosc::simulator::WorldObject* held_ = nullptr;
+  double held_dx_ = 0.0;
+  double held_dy_ = 0.0;
+  double held_dz_ = 0.0;
+  double held_dyaw_ = 0.0;
+
+  // 로봇 상판에 내려놓은 물체들. 각자 로봇 pose 기준 상대 위치를 들고 따라간다.
+  struct Payload {
+    krosc::simulator::WorldObject* object = nullptr;
+    double dx = 0.0;
+    double dy = 0.0;
+    double dz = 0.0;
+    double dyaw = 0.0;
+  };
+  std::vector<Payload> payloads_;
 };
 
 }  // namespace krosc_ws::sim

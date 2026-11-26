@@ -11,6 +11,7 @@
 
 #include <array>
 #include <deque>
+#include <functional>
 #include <initializer_list>
 #include <optional>
 #include <string>
@@ -45,6 +46,8 @@ class SimulatorView final : public QWidget {
   void reset_camera();
   void set_camera_distance(double distance);
   void set_follow(bool follow);
+  // Alt+드래그로 퍽을 옮길 때 부른다. (world object id, x, y, z)
+  void set_move_object_handler(std::function<void(int, double, double, double)> handler);
   [[nodiscard]] bool follow() const { return follow_; }
   [[nodiscard]] QString help_text() const;
 
@@ -79,6 +82,8 @@ class SimulatorView final : public QWidget {
   void update_camera();
   void compute_matrix();
   [[nodiscard]] Projected project(const QVector3D& point) const;
+  [[nodiscard]] bool cursor_on_plane(const QPointF& cursor, double z, double& x, double& y) const;
+  [[nodiscard]] bool begin_object_drag(const QPointF& cursor);
   void draw_line(QPainter& painter, const QVector3D& a, const QVector3D& b, const QColor& color,
                  double width = 1.0) const;
   void queue_face(const std::vector<QVector3D>& points, const QColor& fill, const QColor& outline);
@@ -110,6 +115,13 @@ class SimulatorView final : public QWidget {
   QPoint last_mouse_;
   bool orbiting_ = false;
   bool panning_ = false;
+  bool dragging_object_ = false;
+  bool drag_height_mode_ = false;
+  int drag_object_id_ = -1;
+  double drag_object_x_ = 0.0;
+  double drag_object_y_ = 0.0;
+  double drag_object_z_ = 0.0;
+  std::function<void(int, double, double, double)> move_object_;
   bool follow_ = true;
   bool show_scan_ = true;
   QVector3D follow_target_{0.0F, 0.0F, 0.1F};

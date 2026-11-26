@@ -33,6 +33,59 @@ std::pair<double, double> wheel_speeds(const msgs::Twist& command, double wheel_
           (command.linear.x + command.angular.z * half) / wheel_radius};
 }
 
+struct Mat34 {
+  double m[3][4]{};
+};
+
+Mat34 multiply(const Mat34& a, const Mat34& b) {
+  Mat34 result;
+  for (int row = 0; row < 3; ++row) {
+    for (int column = 0; column < 3; ++column) {
+      result.m[row][column] = a.m[row][0] * b.m[0][column] +
+                              a.m[row][1] * b.m[1][column] +
+                              a.m[row][2] * b.m[2][column];
+    }
+    result.m[row][3] = a.m[row][0] * b.m[0][3] + a.m[row][1] * b.m[1][3] +
+                       a.m[row][2] * b.m[2][3] + a.m[row][3];
+  }
+  return result;
+}
+
+Mat34 translate(double x, double y, double z) {
+  Mat34 matrix;
+  matrix.m[0][0] = 1.0;
+  matrix.m[1][1] = 1.0;
+  matrix.m[2][2] = 1.0;
+  matrix.m[0][3] = x;
+  matrix.m[1][3] = y;
+  matrix.m[2][3] = z;
+  return matrix;
+}
+
+Mat34 rotate_y(double angle) {
+  Mat34 matrix;
+  const double c = std::cos(angle);
+  const double s = std::sin(angle);
+  matrix.m[0][0] = c;
+  matrix.m[0][2] = s;
+  matrix.m[1][1] = 1.0;
+  matrix.m[2][0] = -s;
+  matrix.m[2][2] = c;
+  return matrix;
+}
+
+Mat34 rotate_z(double angle) {
+  Mat34 matrix;
+  const double c = std::cos(angle);
+  const double s = std::sin(angle);
+  matrix.m[0][0] = c;
+  matrix.m[0][1] = -s;
+  matrix.m[1][0] = s;
+  matrix.m[1][1] = c;
+  matrix.m[2][2] = 1.0;
+  return matrix;
+}
+
 }  // namespace
 
 WafflePiArm::WafflePiArm(bool noisy, std::optional<std::uint32_t> seed,
@@ -133,6 +186,112 @@ void WafflePiArm::tick(double time, double dt) {
     } else {
       controller_position_ = controller_target_;
     }
+  }
+  update_grasp();
+  update_payload();
+}
+
+WafflePiArm::Tcp WafflePiArm::tcp_pose(const std::array<double, 5>& joints) const {
+  // URDF 체인: base_footprint -> base_link -> arm_base -> link1..link5 -> TCP
+  Mat34 transform = translate(pose.x, pose.y, 0.0);
+  transform = multiply(transform, rotate_z(pose.theta));
+  transform = multiply(transform, translate(0.0, 0.0, 0.010));
+  transform = multiply(transform, translate(-0.092, 0.0, 0.091));
+  transform = multiply(transform, translate(0.012, 0.0, 0.017));
+  transform = multiply(transform, rotate_z(joints[0]));
+  transform = multiply(transform, translate(0.0, 0.0, 0.0595));
+  transform = multiply(transform, rotate_y(joints[1]));
+  transform = multiply(transform, translate(0.024, 0.0, 0.128));
+  transform = multiply(transform, rotate_y(joints[2]));
+  transform = multiply(transform, translate(0.124, 0.0, 0.0));
+  transform = multiply(transform, rotate_y(joints[3]));
+  transform = multiply(transform, translate(0.126, 0.0, 0.0));
+  return {transform.m[0][3], transform.m[1][3], transform.m[2][3],
+          pose.theta + joints[0]};
+}
+
+void WafflePiArm::update_grasp() {
+  std::array<double, 5> joints{};
+  {
+    std::lock_guard<std::mutex> lock(arm_mutex_);
+    joints = manual_ ? manual_position_ : controller_position_;
+  }
+  const Tcp tcp = tcp_pose(joints);
+  if (held_ == nullptr) {
+    if (joints[4] > 0.012 || world == nullptr) {
+      return;
+    }
+    for (auto& object : world->objects()) {
+      if (!object || !object->graspable || object->held) {
+        continue;
+      }
+      const double dx = object->pose.x - tcp.x;
+      const double dy = object->pose.y - tcp.y;
+      if (std::hypot(dx, dy) > 0.05) {
+        continue;
+      }
+      if (tcp.z < object->z - 0.03 || tcp.z > object->z + object->height + 0.03) {
+        continue;
+      }
+      held_ = object.get();
+      held_->held = true;
+      held_->on_robot = false;
+      payloads_.erase(
+          std::remove_if(payloads_.begin(), payloads_.end(),
+                         [&](const Payload& payload) {
+                           return payload.object == held_;
+                         }),
+          payloads_.end());
+      const double c = std::cos(tcp.yaw);
+      const double s = std::sin(tcp.yaw);
+      held_dx_ = c * dx + s * dy;
+      held_dy_ = -s * dx + c * dy;
+      held_dz_ = object->z - tcp.z;
+      held_dyaw_ = object->pose.theta - tcp.yaw;
+      return;
+    }
+    return;
+  }
+  if (joints[4] > 0.015) {
+    const double c = std::cos(pose.theta);
+    const double s = std::sin(pose.theta);
+    const double tx = tcp.x - pose.x;
+    const double ty = tcp.y - pose.y;
+    const double local_x = c * tx + s * ty;
+    const double local_y = -s * tx + c * ty;
+    // 상판 위(로봇 base_link x/y, deck 높이)에서 열면 payload로 로봇에 붙인다.
+    const bool on_body = local_x > -0.20 && local_x < 0.07 &&
+                         std::abs(local_y) < 0.14 && tcp.z > 0.11;
+    held_->held = false;
+    if (on_body) {
+      held_->on_robot = true;
+      payloads_.push_back(Payload{held_, local_x, local_y, 0.104,
+                                  held_->pose.theta - pose.theta});
+    } else {
+      held_->z = std::max(0.0, held_->z);
+    }
+    held_ = nullptr;
+    return;
+  }
+  const double c = std::cos(tcp.yaw);
+  const double s = std::sin(tcp.yaw);
+  held_->pose.x = tcp.x + c * held_dx_ - s * held_dy_;
+  held_->pose.y = tcp.y + s * held_dx_ + c * held_dy_;
+  held_->pose.theta = tcp.yaw + held_dyaw_;
+  held_->z = std::max(0.0, tcp.z + held_dz_);
+}
+
+void WafflePiArm::update_payload() {
+  const double c = std::cos(pose.theta);
+  const double s = std::sin(pose.theta);
+  for (const Payload& payload : payloads_) {
+    if (payload.object == nullptr) {
+      continue;
+    }
+    payload.object->pose.x = pose.x + c * payload.dx - s * payload.dy;
+    payload.object->pose.y = pose.y + s * payload.dx + c * payload.dy;
+    payload.object->pose.theta = pose.theta + payload.dyaw;
+    payload.object->z = payload.dz;
   }
 }
 

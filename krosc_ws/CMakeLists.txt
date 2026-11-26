@@ -20,6 +20,11 @@ set(KROSC_REAL_SOURCES
   engine/nodes/llm_input.cpp
   engine/nodes/llm_client.cpp
   engine/nodes/llm_json.cpp
+  engine/nodes/http_client.cpp
+  engine/nodes/vla_node.cpp
+  engine/nodes/vlm_node.cpp
+  engine/nodes/pick_place_node.cpp
+  engine/nodes/nav_behavior_node.cpp
   engine/controls/opencr/opencr_control.cpp
   engine/hardwares/lds03/lds03_device.cpp
   engine/sensors/lds03/lds03_sensor.cpp
@@ -159,10 +164,23 @@ target_compile_options(krosc_real PRIVATE -Wall -Wextra -Wpedantic)
 # PC 전용 시뮬레이터. Pi(ARM)에서는 타깃을 만들지 않는다.
 if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|armv.*)$"))
   add_subdirectory(../krosc/simulator simulator_build)
+  # 시뮬레이터 버저 소리: Qt Multimedia가 있으면 실제 스피커로 낸다.
+  find_package(Qt6 QUIET COMPONENTS Multimedia)
+  # macOS SDK에는 AGL.framework가 없다. Qt가 WrapOpenGL에 다시 넣는 경우가 있어
+  # Multimedia find 이후 한 번 더 걷어낸다 (krosc/simulator 쪽 필터와 같은 처리).
+  if(APPLE AND TARGET WrapOpenGL::WrapOpenGL)
+    get_target_property(_krosc_ws_wrap_libs WrapOpenGL::WrapOpenGL INTERFACE_LINK_LIBRARIES)
+    if(_krosc_ws_wrap_libs)
+      list(FILTER _krosc_ws_wrap_libs EXCLUDE REGEX "AGL")
+      set_target_properties(WrapOpenGL::WrapOpenGL PROPERTIES
+        INTERFACE_LINK_LIBRARIES "${_krosc_ws_wrap_libs}")
+    endif()
+  endif()
 
   add_executable(krosc_ws_simulator
     simulator/main.cpp
     simulator/hardwares/opencr/simulator_opencr.cpp
+    simulator/hardwares/opencr/simulator_buzzer.cpp
     simulator/hardwares/lds03/simulator_lds.cpp
     simulator/robot/waffle_pi_arm.cpp
     simulator/robot/urdf_robot_visualizer.cpp
@@ -173,6 +191,11 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     engine/nodes/llm_input.cpp
     engine/nodes/llm_client.cpp
     engine/nodes/llm_json.cpp
+    engine/nodes/http_client.cpp
+    engine/nodes/vla_node.cpp
+    engine/nodes/vlm_node.cpp
+    engine/nodes/pick_place_node.cpp
+    engine/nodes/nav_behavior_node.cpp
     engine/controls/opencr/opencr_control.cpp
     engine/sensors/lds03/lds03_sensor.cpp
     engine/sensors/opencr/opencr_imu.cpp
@@ -188,6 +211,13 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
   endif()
   target_link_libraries(krosc_ws_simulator PRIVATE
     krosc::core krosc::simulator_assets krosc::simulator krosc::simulator_qt)
+  if(TARGET Qt6::Multimedia)
+    target_link_libraries(krosc_ws_simulator PRIVATE Qt6::Multimedia)
+    target_compile_definitions(krosc_ws_simulator PRIVATE KROSC_WS_SIM_AUDIO=1)
+    message(STATUS "krosc_ws: 시뮬레이터 버저 소리 활성 (Qt6Multimedia)")
+  else()
+    message(STATUS "krosc_ws: Qt6Multimedia 없음 — 시뮬레이터 버저 소리 비활성")
+  endif()
   target_compile_definitions(krosc_ws_simulator PRIVATE
     KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/simulator/robot/urdf/turtlebot3_real.urdf"
     KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"

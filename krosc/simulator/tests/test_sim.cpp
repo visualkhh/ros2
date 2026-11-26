@@ -84,8 +84,10 @@ class Recorder final : public krosc::Node {
 KROSC_TEST(world_rays_and_straight_motion) {
   krosc::simulator::MazeWorld world(0);
   auto robot_holder = std::make_unique<krosc::simulator::TurtleBot>();
-  auto* actual = static_cast<krosc::simulator::TurtleBot*>(world.add(std::move(robot_holder)));
-  const double ahead = world.ray_distance(0.0, 0.0, 0.0);
+  // (0.28, 0)의 노란 graspable 퍽을 피해 (0, 0.5)에서 +x로 출발한다.
+  auto* actual = static_cast<krosc::simulator::TurtleBot*>(
+      world.add(std::move(robot_holder), krosc::msgs::Pose2D{0.0, 0.5, 0.0}));
+  const double ahead = world.ray_distance(0.0, 0.5, 0.0);
   CHECK(std::isfinite(ahead));
   CHECK(ahead > 0.5);
   CHECK(ahead < 2.3);
@@ -94,7 +96,7 @@ KROSC_TEST(world_rays_and_straight_motion) {
     world.step(1.0 / 60.0);  // 2초
   }
   CHECK_NEAR(0.4, actual->pose.x, 0.02);
-  CHECK_NEAR(0.0, actual->pose.y, 0.02);
+  CHECK_NEAR(0.5, actual->pose.y, 0.02);
   CHECK_NEAR(0.0, actual->pose.theta, 0.02);
 }
 
@@ -172,6 +174,21 @@ KROSC_TEST(simulation_runner_steps_world) {
   }
   runner.stop();
   CHECK(steps >= 5);
+}
+
+KROSC_TEST(simulation_runner_post_runs_on_step_thread) {
+  krosc::simulator::World world;
+  auto object = std::make_unique<krosc::simulator::WorldObject>();
+  object->radius = 0.02;
+  object->height = 0.12;
+  object->movable = true;
+  auto* puck = world.add(std::move(object), krosc::msgs::Pose2D{0.28, 0.0, 0.0});
+  krosc::simulator::SimulationRunner runner(world, 120.0);
+  runner.post([](krosc::simulator::World& current) {
+    current.objects().front()->pose.x = 1.25;
+  });
+  runner.step_once();
+  CHECK_NEAR(1.25, puck->pose.x, 1e-12);
 }
 
 KROSC_TEST(simulator_uses_injected_world_and_robot) {

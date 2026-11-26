@@ -11,9 +11,12 @@ namespace krosc_ws::llm {
 struct Plan {
   std::string intent;
   double meters = 0.0;
+  double degrees = 0.0;
+  std::string direction;
   std::string preset;
   std::string question;
   std::string target;
+  std::string melody;
 };
 
 // JSON 문자열 값으로 넣을 수 있게 이스케이프한다. UTF-8은 그대로 통과시킨다.

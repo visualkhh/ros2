@@ -48,6 +48,10 @@ class Lds03Sensor;
 class RealSenseSensor;
 class RobotStatus;
 class LlmInput;
+class VlaNode;
+class VlmNode;
+class PickPlaceNode;
+class NavBehaviorNode;
 
 struct EngineOptions {
   std::string urdf_path;
@@ -65,6 +69,18 @@ struct EngineOptions {
   std::string llm_ollama_url = "http://127.0.0.1:11434";
   std::string llm_model = "gemma3:4b";
   double llm_timeout = 10.0;
+  bool enable_vla = true;
+  bool enable_vlm = true;
+  bool enable_pick = true;
+  bool enable_nav_behavior = true;
+  std::string vla_url = "http://127.0.0.1:8765/plan";
+  std::string vlm_url = "http://127.0.0.1:8766/query";
+  std::string pick_objects_topic = "sim_graspable";
+  std::string nav_costmap_topic = "global_costmap/costmap";
+  std::string nav_scan_topic = "scan";
+  double vla_period = 0.25;
+  double vla_timeout = 180.0;
+  double vlm_timeout = 60.0;
   double wheel_radius = 0.033;
   double wheel_separation = 0.287;
 
@@ -124,6 +140,10 @@ class Engine {
   std::unique_ptr<RealSenseSensor> camera_sensor_;
   std::unique_ptr<RobotStatus> status_;
   std::unique_ptr<LlmInput> llm_;
+  std::unique_ptr<VlaNode> vla_;
+  std::unique_ptr<VlmNode> vlm_;
+  std::unique_ptr<PickPlaceNode> pick_;
+  std::unique_ptr<NavBehaviorNode> nav_behavior_;
   std::unique_ptr<krosc::sensor::SensorManager> sensors_;
   std::unique_ptr<krosc::control::ControlManager> controls_;
   std::unique_ptr<krosc::control::ControllerManager> controller_manager_;

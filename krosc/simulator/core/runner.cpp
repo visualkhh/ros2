@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace krosc::simulator {
 
@@ -19,7 +20,23 @@ void SimulationRunner::add_listener(std::function<void(World&)> listener) {
   }
 }
 
+void SimulationRunner::post(std::function<void(World&)> task) {
+  if (!task) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  posted_.push_back(std::move(task));
+}
+
 void SimulationRunner::step_once() {
+  std::vector<std::function<void(World&)>> tasks;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    tasks.swap(posted_);
+  }
+  for (auto& task : tasks) {
+    task(world_);
+  }
   world_.step(dt_);
   for (auto& listener : listeners_) {
     listener(world_);

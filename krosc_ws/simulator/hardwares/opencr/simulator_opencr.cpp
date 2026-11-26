@@ -16,6 +16,7 @@ namespace krosc_ws::sim {
 // 이 어댑터는 실기 OpenCR처럼 값만 전달한다.
 SimulatorOpenCr::SimulatorOpenCr(WafflePiArm& robot, bool noisy, std::uint32_t seed)
     : robot_(robot), noisy_(noisy), rng_(seed) {
+  buzzer_ = std::make_unique<SimulatorBuzzer>();
   robot_.set_imu_callback([this](const krosc::msgs::Imu& imu) {
     std::lock_guard<std::mutex> lock(imu_mutex_);
     imu_ = imu;
@@ -29,7 +30,13 @@ void SimulatorOpenCr::write_arm(const std::array<double, 5>& position) {
 }
 
 void SimulatorOpenCr::set_arm_torque(bool) {}
-void SimulatorOpenCr::buzzer(int, int) {}
+void SimulatorOpenCr::buzzer(int frequency_hz, int duration_ms) {
+  std::printf("[krosc_ws_sim] buzzer %d Hz %d ms\n", frequency_hz, duration_ms);
+  std::fflush(stdout);
+  if (buzzer_) {
+    buzzer_->play(frequency_hz, duration_ms);
+  }
+}
 void SimulatorOpenCr::reboot_arm(const std::array<bool, 5>&) {}
 
 std::optional<krosc::msgs::Imu> SimulatorOpenCr::consume_imu() {

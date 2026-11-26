@@ -32,10 +32,14 @@ class WorldObject {
   msgs::Pose2D pose;
   double radius = 0.0;    // 충돌 판정용 원 반지름 (0이면 충돌하지 않는다)
   double height = 0.0;    // 바닥에서 윗면까지 (센서 높이보다 낮으면 센서가 못 본다)
+  double z = 0.0;         // 바닥 기준 아래면 높이 (들었을 때만 변한다)
   double mass = 1.0;
   double friction = 0.3;
   bool is_static = false;  // 월드 지형: 움직이지 않는다
   bool movable = false;    // 월드 물리가 움직인다 (로봇은 false: 스스로 움직인다)
+  bool graspable = false;  // 매니퓰레이터가 집을 수 있는 물체
+  bool held = false;       // 로봇 그리퍼가 들고 있다 (충돌/벽 밀림 제외)
+  bool on_robot = false;   // 로봇 상판에 실려 로봇과 함께 움직인다
   std::pair<double, double> velocity{0.0, 0.0};
   // 화면 표시 힌트. sides가 0이면 스냅샷에 넣지 않는다.
   int sides = 32;

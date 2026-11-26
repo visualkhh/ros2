@@ -33,16 +33,20 @@ void SnapshotRecorder::record() {
   snapshot->scan_pose = state.scan_pose;
   snapshot->visuals = state.visuals;
 
-  for (const auto& object : world_.objects()) {
+  for (std::size_t index = 0; index < world_.objects().size(); ++index) {
+    const auto& object = world_.objects()[index];
     if (!object || object.get() == &robot_ || object->sides <= 0 || object->radius <= 0.0 ||
         object->height <= 0.0) {
       continue;
     }
     SnapshotObject body;
+    body.id = static_cast<int>(index);
     body.pose = object->pose;
     body.radius = object->radius;
     body.height = object->height;
+    body.z = object->z;
     body.sides = object->sides;
+    body.held = object->held;
     body.color = object->color;
     snapshot->objects.push_back(body);
   }

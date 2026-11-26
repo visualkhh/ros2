@@ -34,7 +34,11 @@
 #include "hardwares/lds03/lds_device.hpp"
 #include "hardwares/opencr/opencr_device.hpp"
 #include "nodes/llm_input.hpp"
+#include "nodes/nav_behavior_node.hpp"
+#include "nodes/pick_place_node.hpp"
 #include "nodes/robot_status.hpp"
+#include "nodes/vla_node.hpp"
+#include "nodes/vlm_node.hpp"
 #include "sensors/lds03/lds03_sensor.hpp"
 #include "sensors/opencr/opencr_imu.hpp"
 #include "sensors/realsense/realsense_sensor.hpp"
@@ -105,6 +109,23 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
   if (options_.enable_llm) {
     llm_ = std::make_unique<LlmInput>(context_, options_.llm_ollama_url,
                                       options_.llm_model, options_.llm_timeout);
+  }
+  if (options_.enable_vla) {
+    vla_ = std::make_unique<VlaNode>(context_, options_.vla_url,
+                                     options_.camera_color_topic,
+                                     options_.vla_period, options_.vla_timeout);
+  }
+  if (options_.enable_vlm) {
+    vlm_ = std::make_unique<VlmNode>(context_, options_.vlm_url,
+                                     options_.camera_color_topic,
+                                     options_.vlm_timeout);
+  }
+  if (options_.enable_pick) {
+    pick_ = std::make_unique<PickPlaceNode>(context_, options_.pick_objects_topic);
+  }
+  if (options_.enable_nav_behavior) {
+    nav_behavior_ = std::make_unique<NavBehaviorNode>(
+        context_, options_.nav_costmap_topic, options_.nav_scan_topic);
   }
 
   std::vector<std::string> controller_plugins{"joint_state_broadcaster", "diff_drive_controller"};
@@ -407,6 +428,15 @@ void Engine::stop() {
   }
   if (llm_) {
     llm_->emergency_stop();
+  }
+  if (vla_) {
+    vla_->emergency_stop();
+  }
+  if (pick_) {
+    pick_->emergency_stop();
+  }
+  if (nav_behavior_) {
+    nav_behavior_->emergency_stop();
   }
   controls_->stop();
   sensors_->stop();
