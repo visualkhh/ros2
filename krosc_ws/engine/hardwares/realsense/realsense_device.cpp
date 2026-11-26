@@ -88,6 +88,97 @@ std::string camera_info(const rs2::device& device, rs2_camera_info info) {
   }
 }
 
+// RealSense 워커 스레드에서만 호출한다. SensorManager가 take_*로 가져갈 때는
+// 이미 decimation/JPEG encoding이 끝난 최신 이미지만 복사한다.
+std::optional<RealSenseImage> make_color_image(const rs2::frame& stored, int decimation,
+                                               int quality) {
+  if (!stored) {
+    return std::nullopt;
+  }
+  const rs2::video_frame frame(stored);
+  const int width = frame.get_width();
+  const int height = frame.get_height();
+  const int stride = frame.get_stride_in_bytes();
+  const auto format = frame.get_profile().as<rs2::video_stream_profile>().format();
+  if (format != RS2_FORMAT_RGB8 && format != RS2_FORMAT_BGR8) {
+    return std::nullopt;
+  }
+  const auto* bytes = static_cast<const std::uint8_t*>(frame.get_data());
+  const int factor = std::max(1, decimation);
+  const int output_width = width / factor;
+  const int output_height = height / factor;
+  if (output_width <= 0 || output_height <= 0) {
+    return std::nullopt;
+  }
+  std::vector<std::uint8_t> rgb(static_cast<std::size_t>(output_width) *
+                                static_cast<std::size_t>(output_height) * 3);
+  const bool bgr = format == RS2_FORMAT_BGR8;
+  for (int y = 0; y < output_height; ++y) {
+    const auto* source =
+        bytes + static_cast<std::size_t>(y * factor) * static_cast<std::size_t>(stride);
+    auto* target =
+        rgb.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(output_width) * 3;
+    for (int x = 0; x < output_width; ++x) {
+      const std::size_t source_index = static_cast<std::size_t>(x * factor) * 3;
+      const std::size_t target_index = static_cast<std::size_t>(x) * 3;
+      target[target_index + 0] = source[source_index + (bgr ? 2 : 0)];
+      target[target_index + 1] = source[source_index + 1];
+      target[target_index + 2] = source[source_index + (bgr ? 0 : 2)];
+    }
+  }
+  auto jpeg = encode_jpeg(rgb.data(), output_width, output_height, output_width * 3, quality);
+  if (jpeg.empty()) {
+    return std::nullopt;
+  }
+  RealSenseImage image;
+  image.width = static_cast<std::uint32_t>(output_width);
+  image.height = static_cast<std::uint32_t>(output_height);
+  image.encoding = "jpeg";
+  image.step = 0;
+  image.data = std::move(jpeg);
+  return image;
+}
+
+std::optional<RealSenseImage> make_depth_image(const rs2::frame& stored, int decimation) {
+  if (!stored) {
+    return std::nullopt;
+  }
+  const rs2::depth_frame frame(stored);
+  const auto format = frame.get_profile().as<rs2::video_stream_profile>().format();
+  if (format != RS2_FORMAT_Z16) {
+    return std::nullopt;
+  }
+  const int width = frame.get_width();
+  const int height = frame.get_height();
+  const int stride = frame.get_stride_in_bytes();
+  const auto* bytes = static_cast<const std::uint8_t*>(frame.get_data());
+  const int factor = std::max(1, decimation);
+  const int output_width = width / factor;
+  const int output_height = height / factor;
+  if (output_width <= 0 || output_height <= 0) {
+    return std::nullopt;
+  }
+  const std::size_t output_row_bytes = static_cast<std::size_t>(output_width) * 2;
+  RealSenseImage image;
+  image.width = static_cast<std::uint32_t>(output_width);
+  image.height = static_cast<std::uint32_t>(output_height);
+  image.encoding = "16UC1";
+  image.step = static_cast<std::uint32_t>(output_row_bytes);
+  image.data.resize(output_row_bytes * static_cast<std::size_t>(output_height));
+  for (int y = 0; y < output_height; ++y) {
+    const auto* source_row =
+        bytes + static_cast<std::size_t>(y * factor) * static_cast<std::size_t>(stride);
+    auto* target_row =
+        image.data.data() + static_cast<std::size_t>(y) * output_row_bytes;
+    for (int x = 0; x < output_width; ++x) {
+      const std::size_t source = static_cast<std::size_t>(x * factor) * 2;
+      target_row[static_cast<std::size_t>(x) * 2 + 0] = source_row[source + 0];
+      target_row[static_cast<std::size_t>(x) * 2 + 1] = source_row[source + 1];
+    }
+  }
+  return image;
+}
+
 }  // namespace
 
 struct RealSenseDevice::Impl {
@@ -99,8 +190,8 @@ struct RealSenseDevice::Impl {
   std::atomic<bool> running{false};
 
   mutable std::mutex mutex;
-  rs2::frame color_frame;
-  rs2::frame depth_frame;
+  RealSenseImage color_image;
+  RealSenseImage depth_image;
   std::uint64_t color_seq = 0;
   std::uint64_t depth_seq = 0;
   std::uint64_t color_taken = 0;
@@ -178,6 +269,15 @@ void RealSenseDevice::start() {
                            RS2_FORMAT_Z16, impl_->options.fps);
     }
     impl_->pipeline.start(config);
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      impl_->color_image = {};
+      impl_->depth_image = {};
+      impl_->color_seq = 0;
+      impl_->depth_seq = 0;
+      impl_->color_taken = 0;
+      impl_->depth_taken = 0;
+    }
     impl_->running.store(true);
     impl_->worker = std::thread([this] {
       try {
@@ -189,21 +289,42 @@ void RealSenseDevice::start() {
           bool received = false;
           if (impl_->options.enable_color) {
             if (const rs2::frame color = frames.get_color_frame()) {
-              std::lock_guard<std::mutex> lock(impl_->mutex);
-              impl_->color_frame = color;
-              ++impl_->color_seq;
-              ++impl_->color_frames;
-              impl_->color_time = Clock::now();
+              bool encode = false;
+              {
+                std::lock_guard<std::mutex> lock(impl_->mutex);
+                ++impl_->color_frames;
+                impl_->color_time = Clock::now();
+                // 아직 센서가 이전 프레임을 가져가지 않았으면 인코딩을 건너뛴다.
+                // 인코딩/decimation은 소비자(SensorManager)가 아니라 이 워커가 한다.
+                encode = impl_->color_seq == impl_->color_taken;
+              }
+              if (encode) {
+                if (auto image = make_color_image(color, impl_->options.color_decimation,
+                                                  impl_->options.jpeg_quality)) {
+                  std::lock_guard<std::mutex> lock(impl_->mutex);
+                  impl_->color_image = std::move(*image);
+                  ++impl_->color_seq;
+                }
+              }
               received = true;
             }
           }
           if (impl_->options.enable_depth) {
             if (const rs2::frame depth = frames.get_depth_frame()) {
-              std::lock_guard<std::mutex> lock(impl_->mutex);
-              impl_->depth_frame = depth;
-              ++impl_->depth_seq;
-              ++impl_->depth_frames;
-              impl_->depth_time = Clock::now();
+              bool encode = false;
+              {
+                std::lock_guard<std::mutex> lock(impl_->mutex);
+                ++impl_->depth_frames;
+                impl_->depth_time = Clock::now();
+                encode = impl_->depth_seq == impl_->depth_taken;
+              }
+              if (encode) {
+                if (auto image = make_depth_image(depth, impl_->options.depth_decimation)) {
+                  std::lock_guard<std::mutex> lock(impl_->mutex);
+                  impl_->depth_image = std::move(*image);
+                  ++impl_->depth_seq;
+                }
+              }
               received = true;
             }
           }
@@ -256,6 +377,10 @@ void RealSenseDevice::stop() {
     }
     impl_->worker.join();
   }
+  // 연결이 끊긴 뒤 늦게 take_*가 불려도 옛 프레임을 내보내지 않는다.
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->color_image = {};
+  impl_->depth_image = {};
 }
 
 void RealSenseDevice::connect() {
@@ -275,116 +400,21 @@ bool RealSenseDevice::is_connected() const {
 }
 
 std::optional<RealSenseImage> RealSenseDevice::take_color() {
-  if (!impl_) {
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->color_image.data.empty() || impl_->color_seq == impl_->color_taken) {
     return std::nullopt;
   }
-  rs2::frame stored;
-  std::uint64_t sequence = 0;
-  {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (!impl_->color_frame || impl_->color_seq == impl_->color_taken) {
-      return std::nullopt;
-    }
-    stored = impl_->color_frame;
-    sequence = impl_->color_seq;
-  }
-  impl_->color_taken = sequence;
-
-  const rs2::video_frame frame(stored);
-  const int width = frame.get_width();
-  const int height = frame.get_height();
-  const int stride = frame.get_stride_in_bytes();
-  const auto format = frame.get_profile().as<rs2::video_stream_profile>().format();
-  if (format != RS2_FORMAT_RGB8 && format != RS2_FORMAT_BGR8) {
-    return std::nullopt;
-  }
-  const auto* bytes = static_cast<const std::uint8_t*>(frame.get_data());
-  const int factor = std::max(1, impl_->options.color_decimation);
-  const int output_width = width / factor;
-  const int output_height = height / factor;
-  if (output_width <= 0 || output_height <= 0) {
-    return std::nullopt;
-  }
-  std::vector<std::uint8_t> rgb(static_cast<std::size_t>(output_width) *
-                                static_cast<std::size_t>(output_height) * 3);
-  const bool bgr = format == RS2_FORMAT_BGR8;
-  for (int y = 0; y < output_height; ++y) {
-    const auto* source =
-        bytes + static_cast<std::size_t>(y * factor) * static_cast<std::size_t>(stride);
-    auto* target =
-        rgb.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(output_width) * 3;
-    for (int x = 0; x < output_width; ++x) {
-      const std::size_t source_index = static_cast<std::size_t>(x * factor) * 3;
-      const std::size_t target_index = static_cast<std::size_t>(x) * 3;
-      target[target_index + 0] = source[source_index + (bgr ? 2 : 0)];
-      target[target_index + 1] = source[source_index + 1];
-      target[target_index + 2] = source[source_index + (bgr ? 0 : 2)];
-    }
-  }
-  auto jpeg = encode_jpeg(rgb.data(), output_width, output_height, output_width * 3,
-                          impl_->options.jpeg_quality);
-  if (jpeg.empty()) {
-    return std::nullopt;
-  }
-  RealSenseImage image;
-  image.width = static_cast<std::uint32_t>(output_width);
-  image.height = static_cast<std::uint32_t>(output_height);
-  image.encoding = "jpeg";
-  image.step = 0;
-  image.data = std::move(jpeg);
-  return image;
+  impl_->color_taken = impl_->color_seq;
+  return impl_->color_image;
 }
 
 std::optional<RealSenseImage> RealSenseDevice::take_depth() {
-  if (!impl_) {
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->depth_image.data.empty() || impl_->depth_seq == impl_->depth_taken) {
     return std::nullopt;
   }
-  rs2::frame stored;
-  std::uint64_t sequence = 0;
-  {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (!impl_->depth_frame || impl_->depth_seq == impl_->depth_taken) {
-      return std::nullopt;
-    }
-    stored = impl_->depth_frame;
-    sequence = impl_->depth_seq;
-  }
-  impl_->depth_taken = sequence;
-
-  const rs2::depth_frame frame(stored);
-  const auto format = frame.get_profile().as<rs2::video_stream_profile>().format();
-  if (format != RS2_FORMAT_Z16) {
-    return std::nullopt;
-  }
-  const int width = frame.get_width();
-  const int height = frame.get_height();
-  const int stride = frame.get_stride_in_bytes();
-  const auto* bytes = static_cast<const std::uint8_t*>(frame.get_data());
-  const int factor = std::max(1, impl_->options.depth_decimation);
-  const int output_width = width / factor;
-  const int output_height = height / factor;
-  if (output_width <= 0 || output_height <= 0) {
-    return std::nullopt;
-  }
-  const std::size_t output_row_bytes = static_cast<std::size_t>(output_width) * 2;
-  RealSenseImage image;
-  image.width = static_cast<std::uint32_t>(output_width);
-  image.height = static_cast<std::uint32_t>(output_height);
-  image.encoding = "16UC1";
-  image.step = static_cast<std::uint32_t>(output_row_bytes);
-  image.data.resize(output_row_bytes * static_cast<std::size_t>(output_height));
-  for (int y = 0; y < output_height; ++y) {
-    const auto* source_row =
-        bytes + static_cast<std::size_t>(y * factor) * static_cast<std::size_t>(stride);
-    auto* target_row =
-        image.data.data() + static_cast<std::size_t>(y) * output_row_bytes;
-    for (int x = 0; x < output_width; ++x) {
-      const std::size_t source = static_cast<std::size_t>(x * factor) * 2;
-      target_row[static_cast<std::size_t>(x) * 2 + 0] = source_row[source + 0];
-      target_row[static_cast<std::size_t>(x) * 2 + 1] = source_row[source + 1];
-    }
-  }
-  return image;
+  impl_->depth_taken = impl_->depth_seq;
+  return impl_->depth_image;
 }
 
 RealSenseStats RealSenseDevice::stats() const {

@@ -8,7 +8,8 @@
 namespace krosc_ws {
 
 // Intel RealSense D435. UVC 비디오 스트림을 librealsense2로 읽어
-// color는 JPEG, depth는 16UC1 raw로 최신 프레임만 보관한다.
+// 워커 스레드에서 color는 decimation + JPEG, depth는 16UC1 raw로 가공해
+// 최신 프레임만 보관한다. take_color/take_depth는 캐시 복사만 한다.
 // 토픽 발행/프레임/진단은 Sensor 레이어(RealSenseSensor)가 담당한다.
 class RealSenseDevice final : public RealSenseCamera {
  public:
