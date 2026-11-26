@@ -4,6 +4,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
+# shellcheck source=paths.sh
+source "$here/paths.sh"
 
 "$here/build.sh" tests
 
@@ -21,8 +23,8 @@ run_test() {
   fi
 }
 
-run_test "$root/krosc/build/engine/krosc_core_tests"
-run_test "$root/krosc/build/simulator/krosc_simulator_tests"
-run_test "$here/build/krosc_ws_tests"
+run_test "$KROSC_BUILD_DIR/engine/krosc_core_tests"
+run_test "$KROSC_BUILD_DIR/simulator/krosc_simulator_tests"
+run_test "$KROSC_WS_BUILD_DIR/krosc_ws_tests"
 
 exit "$status"

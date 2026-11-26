@@ -5,6 +5,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
+# shellcheck source=paths.sh
+source "$here/paths.sh"
 
 robot_port="${KROSC_VIZ_PORT:-9000}"
 args=("$@")
@@ -26,20 +28,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-"$root/krosc_ws/build/krosc_ws_simulator" "$@" > /tmp/krosc_ws_simulator.log 2>&1 &
+"$KROSC_WS_BUILD_DIR/krosc_ws_simulator" "$@" > /tmp/krosc_ws_simulator.log 2>&1 &
 sim_pid=$!
 
 # PeerNetwork가 열릴 때까지 잠깐 기다린다.
-for _ in $(seq 1 30); do
-  if (exec 3<>"/dev/tcp/127.0.0.1/$robot_port") 2>/dev/null; then
-    exec 3>&- 3<&-
-    break
-  fi
-  sleep 0.2
-done
+wait_tcp "$robot_port" 30 || true
 
 echo "[run-simulator-vizqt] simulator=127.0.0.1:$robot_port  (Qt Viz)"
-"$root/krosc/build/viz/krosc_ws_viz_app" --server "127.0.0.1:$robot_port" \
+"$KROSC_BUILD_DIR/viz/krosc_ws_viz_app" --server "127.0.0.1:$robot_port" \
   --fixed-frame map > /tmp/krosc_ws_simulator_vizqt.log 2>&1 &
 viz_pid=$!
 

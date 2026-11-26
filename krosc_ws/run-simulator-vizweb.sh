@@ -5,6 +5,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
+# shellcheck source=paths.sh
+source "$here/paths.sh"
 
 robot_port="${KROSC_VIZ_PORT:-9000}"
 web_port="${KROSC_VIZ_WEB_PORT:-8080}"
@@ -27,19 +29,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-"$root/krosc_ws/build/krosc_ws_simulator" "$@" > /tmp/krosc_ws_simulator.log 2>&1 &
+"$KROSC_WS_BUILD_DIR/krosc_ws_simulator" "$@" > /tmp/krosc_ws_simulator.log 2>&1 &
 sim_pid=$!
 
-for _ in $(seq 1 30); do
-  if (exec 3<>"/dev/tcp/127.0.0.1/$robot_port") 2>/dev/null; then
-    exec 3>&- 3<&-
-    break
-  fi
-  sleep 0.2
-done
+wait_tcp "$robot_port" 30 || true
 
 echo "[run-simulator-vizweb] http://localhost:$web_port/  (simulator 127.0.0.1:$robot_port)"
-"$root/krosc/build/viz-web/krosc_ws_viz_web" --robot "127.0.0.1:$robot_port" \
+"$KROSC_BUILD_DIR/viz-web/krosc_ws_viz_web" --robot "127.0.0.1:$robot_port" \
   --port "$web_port" --bind "${KROSC_VIZ_WEB_BIND:-0.0.0.0}" > /tmp/krosc_ws_simulator_vizweb.log 2>&1 &
 gateway_pid=$!
 

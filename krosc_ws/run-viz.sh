@@ -6,6 +6,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
+# shellcheck source=paths.sh
+source "$here/paths.sh"
 host="${KROSC_VIZ_HOST:-pak.local}"
 port="${KROSC_VIZ_PORT:-9000}"
 frame="${KROSC_VIZ_FIXED_FRAME:-map}"
@@ -21,4 +23,4 @@ if [ -n "$plugins" ] && [ "$plugins" != "none" ]; then
 else
   plugin_args=(--no-plugins)
 fi
-exec "$root/krosc/build/viz/krosc_ws_viz_app" --server "$host:$port" --fixed-frame "$frame" --tab "$tab" --manual "${plugin_args[@]}" "$@"
+exec "$KROSC_BUILD_DIR/viz/krosc_ws_viz_app" --server "$host:$port" --fixed-frame "$frame" --tab "$tab" --manual "${plugin_args[@]}" "$@"

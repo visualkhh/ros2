@@ -16,6 +16,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
+# shellcheck source=paths.sh
+source "$here/paths.sh"
 target="${1:-all}"
 
 jobs="${KROSC_JOBS:-}"
@@ -54,7 +56,7 @@ if [ "${KROSC_PULL:-0}" = "1" ]; then
 fi
 
 configure_krosc() {
-  cmake -S "$root/krosc" -B "$root/krosc/build" \
+  cmake -S "$root/krosc" -B "$KROSC_BUILD_DIR" \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo "$@"
 }
 
@@ -70,15 +72,15 @@ configure_ws() {
   if [ -n "${KROSC_WS_REALSENSE_ROOT:-}" ]; then
     rs_args+=(-DKROSC_WS_REALSENSE_ROOT="$KROSC_WS_REALSENSE_ROOT")
   fi
-  cmake -S "$here" -B "$here/build" \
+  cmake -S "$here" -B "$KROSC_WS_BUILD_DIR" \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo -DKROSC_WS_BUILD_TESTS=ON \
-        "${ort_args[@]}" "${rs_args[@]}"
+        ${ort_args[@]+"${ort_args[@]}"} ${rs_args[@]+"${rs_args[@]}"}
 }
 
 build_robot() {
   echo "[build] krosc_ws: krosc_real"
   configure_ws
-  cmake --build "$here/build" -j"$jobs" --target krosc_real
+  cmake --build "$KROSC_WS_BUILD_DIR" -j"$jobs" --target krosc_real
 }
 
 build_simulator() {
@@ -86,7 +88,7 @@ build_simulator() {
   require_qt
   echo "[build] krosc_ws: krosc_ws_simulator"
   configure_ws
-  cmake --build "$here/build" -j"$jobs" --target krosc_ws_simulator
+  cmake --build "$KROSC_WS_BUILD_DIR" -j"$jobs" --target krosc_ws_simulator
 }
 
 build_tests() {
@@ -96,10 +98,10 @@ build_tests() {
   else
     configure_krosc -DKROSC_BUILD_TESTS=ON
   fi
-  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_core_tests krosc_simulator_tests
+  cmake --build "$KROSC_BUILD_DIR" -j"$jobs" --target krosc_core_tests krosc_simulator_tests
   echo "[build] krosc_ws: tests"
   configure_ws
-  cmake --build "$here/build" -j"$jobs" --target krosc_ws_tests
+  cmake --build "$KROSC_WS_BUILD_DIR" -j"$jobs" --target krosc_ws_tests
 }
 
 build_viz() {
@@ -108,7 +110,7 @@ build_viz() {
   echo "[build] krosc: krosc_ws_viz_app (Qt6)"
   configure_krosc -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=OFF \
                   -DKROSC_VIZ_PROJECT_DIR="$here/viz"
-  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_ws_viz_app
+  cmake --build "$KROSC_BUILD_DIR" -j"$jobs" --target krosc_ws_viz_app
 }
 
 build_viz_web() {
@@ -116,7 +118,7 @@ build_viz_web() {
   echo "[build] krosc: krosc_ws_viz_web"
   configure_krosc -DKROSC_BUILD_VIZ_WEB=ON -DKROSC_BUILD_EXAMPLES=OFF \
                   -DKROSC_VIZ_WEB_PROJECT_DIR="$here/viz-web"
-  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_ws_viz_web
+  cmake --build "$KROSC_BUILD_DIR" -j"$jobs" --target krosc_ws_viz_web
 }
 
 case "$target" in

@@ -6,6 +6,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
+# shellcheck source=paths.sh
+source "$here/paths.sh"
 
 "$here/build.sh" simulator
-exec "$root/krosc_ws/build/krosc_ws_simulator" "$@"
+exec "$KROSC_WS_BUILD_DIR/krosc_ws_simulator" "$@"
