@@ -2,7 +2,7 @@
 
 라즈베리파이에서 **OpenCR + LDS-03를 직접 돌리는 C++ 워크스페이스**다.
 Pi는 하드웨어와 토픽만 돌리고, PC의 C++ `viz`/웹 Viz가 PeerNetwork(9000)로 붙어서 본다.
-PC에서는 같은 로봇 스택을 `krosc/simulator` 월드 위에서 돌리는 `run-robot-simulator.sh`도 쓸 수 있다.
+PC에서는 같은 로봇 스택을 `krosc/simulator` 월드 위에서 돌리는 `run-robot-simulator.sh`를 쓴다.
 
 ```
 [라즈베리파이] krosc_real
@@ -52,7 +52,6 @@ cd ~/ros2/krosc_ws
 # PC에서 (Qt6 필요)
 ./run-viz.sh        # 빌드 후 pak.local:9000 C++ Viz (fixed frame map)
 KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
-./run-simulator.sh        # 엔진 시뮬레이터(월드) + Viz 데모
 ./run-robot-simulator.sh  # krosc_ws 로봇 스택 시뮬레이터 (PC 전용)
 ./run-viz-web.sh    # 웹 Viz 게이트웨이 (로봇 9000에 접속)
 ```

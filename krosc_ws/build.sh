@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # krosc + krosc_ws 빌드 단일 진입점.
-# 실행 스크립트(run.sh/run-slam.sh/run-simulator.sh/run-tests.sh/run-viz.sh/run-viz-web.sh)는
+# 실행 스크립트(run.sh/run-slam.sh/run-robot-simulator.sh/run-tests.sh/run-viz.sh/run-viz-web.sh)는
 # 항상 이 스크립트를 먼저 호출해서 최신 바이너리를 보장한다.
 #
 #   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot, PC: robot+simulator+viz+viz-web)
 #   ./build.sh robot           # krosc_real
-#   ./build.sh simulator       # krosc_simulator + krosc_ws_simulator (PC 전용)
+#   ./build.sh simulator       # krosc_ws_simulator (PC 전용, Qt)
 #   ./build.sh tests           # krosc_core_tests + krosc_simulator_tests + krosc_ws_tests
 #   ./build.sh viz             # krosc_ws_viz_app (PC 전용, Qt6)
 #   ./build.sh viz-web         # krosc_ws_viz_web (PC 전용, 로봇 9000에 접속)
@@ -71,9 +71,6 @@ build_robot() {
 build_simulator() {
   require_pc simulator
   require_qt
-  echo "[build] krosc: krosc_simulator + viz"
-  configure_krosc -DKROSC_BUILD_VIZ=ON -DKROSC_BUILD_EXAMPLES=ON
-  cmake --build "$root/krosc/build" -j"$jobs" --target krosc_simulator
   echo "[build] krosc_ws: krosc_ws_simulator"
   configure_ws
   cmake --build "$here/build" -j"$jobs" --target krosc_ws_simulator
