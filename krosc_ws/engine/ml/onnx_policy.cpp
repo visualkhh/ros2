@@ -1,6 +1,7 @@
 #include "onnx_policy.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <stdexcept>
 #include <utility>
 
@@ -81,22 +82,30 @@ std::vector<std::string> OnnxPolicy::available_providers() {
 void OnnxPolicy::load(const std::string& path) {
   provider_error_.clear();
   try {
+    // CUDA provider 초기화가 DefaultLogger를 찾으므로 Env를 먼저 만든다.
+    Ort::Env& env = environment();
     std::string provider = provider_;
     std::shared_ptr<Ort::Session> session;
     while (!session) {
       try {
         Ort::SessionOptions options;
         options.SetIntraOpNumThreads(1);  // 20Hz 작은 MLP — 한 스레드면 충분
-        if (provider != kCpuProvider) {
+        if (provider == "CUDAExecutionProvider") {
+          // CUDA는 shared provider라 문자열 API가 아니라 명시적 옵션으로 붙여야 한다.
+          OrtCUDAProviderOptions cuda_options{};
+          cuda_options.device_id = 0;
+          options.AppendExecutionProvider_CUDA(cuda_options);
+        } else if (provider != kCpuProvider) {
           options.AppendExecutionProvider(provider);
         }
-        session = std::make_shared<Ort::Session>(environment(), path.c_str(), options);
+        session = std::make_shared<Ort::Session>(env, path.c_str(), options);
       } catch (const std::exception& error) {
         if (provider == kCpuProvider) {
           throw;
         }
         // CUDA/CoreML이 목록에는 있어도 실제 장치가 없을 수 있다. CPU로 내린다.
         provider_error_ = provider + " 실패 → CPU fallback: " + error.what();
+        std::fprintf(stderr, "[onnx] %s\n", provider_error_.c_str());
         provider = kCpuProvider;
       }
     }

@@ -11,6 +11,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyri
 | [ai/](ai/) | AI(Claude Code)가 Pi를 비밀번호 없이 다루게 하기 (SSH 키 · sudo) | [ai-passwordless-robot-access.md](ai/ai-passwordless-robot-access.md) |
 | [docker/](docker/) | PC 시험대 (Lyrical 컨테이너 · 테스트 스크립트) | [docker/README.md](docker/README.md) |
 | [isaac/](isaac/) | Isaac Sim/Lab RL 정책 만들기 (lab PC 학습 → Nav2 `rl_nav_controller` 추론) · **개념 정리**(gain · 지연 · τ) | [isaac/README.md](isaac/README.md) · [isaac/concepts.md](isaac/concepts.md) |
+| [onnxruntime/](onnxruntime/) | ONNX Runtime GPU/CPU 설치 · CUDA provider · CPU fallback · 실제 `_ws` 모델/빌드 경로 | [onnxruntime/README.md](onnxruntime/README.md) |
 | [issue-tracking/](issue-tracking/) | 날짜별 작업·**시행착오** (증상 → 원인 → 해결 → 교훈) | [issue-tracking/README.md](issue-tracking/README.md) |
 | [turtle-bot/](turtle-bot/) | 로봇 실물 사진 (맨 위 판 제거 후, 위에서 — 위쪽이 앞) | [images/robot-top.jpg](turtle-bot/images/robot-top.jpg) |
 
