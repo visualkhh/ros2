@@ -12,7 +12,7 @@ Lds03Sensor::Lds03Sensor(krosc::Context& context, LdsDevice& device, std::string
     : krosc::sensor::Sensor(context), device_(device), topic_(std::move(topic)),
       frame_id_(std::move(frame_id)) {}
 
-bool Lds03Sensor::connected() const { return device_.connected(); }
+bool Lds03Sensor::is_connected() const { return device_.is_connected(); }
 
 bool Lds03Sensor::read(double time, double period) {
   (void)time;
@@ -24,7 +24,7 @@ bool Lds03Sensor::read(double time, double period) {
                                                         krosc::QOS_SENSOR_DATA);
     }
   }
-  return device_.connected() && device_.scan_age() <= 1.0;
+  return device_.is_connected() && device_.scan_age() <= 1.0;
 }
 
 }  // namespace krosc_ws

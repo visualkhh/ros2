@@ -16,7 +16,7 @@ class Sensor {
 
   virtual void start() {}
   virtual void stop() {}
-  [[nodiscard]] virtual bool connected() const { return true; }
+  [[nodiscard]] virtual bool is_connected() const { return true; }
   virtual bool read(double time, double period) = 0;
 
  private:

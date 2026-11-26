@@ -12,7 +12,7 @@ OpenCrImu::OpenCrImu(krosc::Context& context, OpenCrDevice& opencr, std::string 
     : krosc::sensor::Sensor(context), opencr_(opencr), topic_(std::move(topic)),
       frame_id_(std::move(frame_id)) {}
 
-bool OpenCrImu::connected() const { return opencr_.connected(); }
+bool OpenCrImu::is_connected() const { return opencr_.is_connected(); }
 
 bool OpenCrImu::read(double time, double period) {
   (void)time;
@@ -24,7 +24,7 @@ bool OpenCrImu::read(double time, double period) {
       context().topics().publish<krosc::msgs::Imu>(topic_, std::move(*imu), krosc::QOS_SENSOR_DATA);
     }
   }
-  return opencr_.connected();
+  return opencr_.is_connected();
 }
 
 }  // namespace krosc_ws

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <mutex>
@@ -17,9 +18,11 @@ class SimulatorLds final : public LdsDevice {
  public:
   explicit SimulatorLds(WafflePiArm& robot, bool noisy = true, std::uint32_t seed = 42);
 
-  void start() override {}
-  void stop() override {}
-  [[nodiscard]] bool connected() const override { return true; }
+  void start() override { connected_.store(true); }
+  void stop() override { connected_.store(false); }
+  void connect() override { connected_.store(true); }
+  void disconnect() override { connected_.store(false); }
+  [[nodiscard]] bool is_connected() const override { return connected_.load(); }
 
   [[nodiscard]] std::optional<krosc::msgs::LaserScan> take_scan(double stamp) override;
   [[nodiscard]] std::uint64_t scans() const override { return scans_; }
@@ -31,6 +34,7 @@ class SimulatorLds final : public LdsDevice {
  private:
   WafflePiArm& robot_;
   bool noisy_ = true;
+  std::atomic<bool> connected_{true};
   std::mt19937 rng_;
   double range_sigma_ = 0.004;
   double dropout_ = 0.003;

@@ -27,8 +27,9 @@ if [ -z "$jobs" ]; then
 fi
 
 is_arm() {
-  case "$(uname -m)" in
-    aarch64|arm*|armv*) return 0 ;;
+  # Apple Silicon(arm64)은 PC다. Pi/Linux ARM만 로봇 전용으로 본다.
+  case "$(uname -s):$(uname -m)" in
+    Linux:aarch64|Linux:arm*|Linux:armv*) return 0 ;;
     *) return 1 ;;
   esac
 }

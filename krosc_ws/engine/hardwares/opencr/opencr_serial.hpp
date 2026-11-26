@@ -35,6 +35,8 @@ class OpenCrSerial final : public OpenCrDevice {
 
   void start() override;
   void stop() override;
+  void connect() override;
+  void disconnect() override;
 
   void write(const krosc::msgs::Twist& command) override;
   void write_arm(const std::array<double, 5>& position) override;  // NaN = 그 관절 유지
@@ -45,7 +47,7 @@ class OpenCrSerial final : public OpenCrDevice {
   void reboot_arm_all();
   void tick() override;
 
-  [[nodiscard]] bool connected() const override { return connected_.load(); }
+  [[nodiscard]] bool is_connected() const override { return connected_.load(); }
   [[nodiscard]] std::optional<krosc::msgs::Imu> consume_imu() override;
   [[nodiscard]] ArmStatus arm_status() const override;
 
@@ -80,6 +82,7 @@ class OpenCrSerial final : public OpenCrDevice {
 
   std::atomic<bool> stop_{false};
   std::atomic<bool> connected_{false};
+  std::atomic<bool> auto_connect_{true};
   std::atomic<std::uint64_t> error_count_{0};
   std::atomic<std::uint64_t> bad_lines_{0};
   std::thread reader_thread_;

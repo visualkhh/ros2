@@ -28,7 +28,9 @@ class SimulatorRealSense final : public RealSenseCamera {
 
   void start() override;
   void stop() override;
-  [[nodiscard]] bool connected() const override { return running_.load(); }
+  void connect() override { start(); }
+  void disconnect() override { stop(); }
+  [[nodiscard]] bool is_connected() const override { return running_.load(); }
 
   [[nodiscard]] std::optional<RealSenseImage> take_color() override;
   [[nodiscard]] std::optional<RealSenseImage> take_depth() override;
@@ -63,7 +65,6 @@ class SimulatorRealSense final : public RealSenseCamera {
   std::chrono::steady_clock::time_point depth_time_{};
 
   double depth_sigma_ = 0.005;
-  double dropout_ = 0.0;
 };
 
 }  // namespace krosc_ws::sim

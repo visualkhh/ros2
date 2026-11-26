@@ -95,6 +95,12 @@ class Engine {
   void stop();
   void log_status();
 
+  // OpenCR/LDS/RealSense가 모두 연결됐는지. 선택 하드웨어(NULL/비활성)는 통과한다.
+  [[nodiscard]] bool is_connected() const;
+  // 링크만 연결/해제한다. 센서/컨트롤 루프는 계속 돈다 (수동 펌웨어 업로드 등).
+  void connect_hardware();
+  void disconnect_hardware();
+
   [[nodiscard]] OpenCrDevice& opencr() { return opencr_; }
   [[nodiscard]] LdsDevice* lidar() { return lidar_; }
 

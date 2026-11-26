@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
   int camera_width = 640;
   int camera_height = 480;
   int camera_fps = 15;
-  int camera_quality = 70;
+  [[maybe_unused]] int camera_quality = 70;
   int camera_color_decimation = 2;
   int camera_depth_decimation = 4;
   try {

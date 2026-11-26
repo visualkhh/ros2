@@ -66,10 +66,10 @@ KROSC_TEST(opencr_serial_pty_roundtrip) {
   opencr.start();
 
   const auto connected_deadline = std::chrono::steady_clock::now() + 2s;
-  while (!opencr.connected() && std::chrono::steady_clock::now() < connected_deadline) {
+  while (!opencr.is_connected() && std::chrono::steady_clock::now() < connected_deadline) {
     std::this_thread::sleep_for(10ms);
   }
-  CHECK(opencr.connected());
+  CHECK(opencr.is_connected());
 
   CHECK(write_all_fd(master, "S,1.0,0.5,2.0,0.25,1000,0.1,0.2,30,31,12.0\n"));
   CHECK(write_all_fd(master, "I,0.1,0.2,0.3,0.0,0.0,9.81,1.0,0.0,0.0,0.0\n"));
@@ -101,6 +101,18 @@ KROSC_TEST(opencr_serial_pty_roundtrip) {
     commands += read_available(master, 20);
   }
   CHECK(commands.find("C,") != std::string::npos);
+
+  // disconnect는 링크만 닫고, reader 루프가 곧바로 다시 열면 안 된다.
+  opencr.disconnect();
+  CHECK(!opencr.is_connected());
+  std::this_thread::sleep_for(300ms);
+  CHECK(!opencr.is_connected());
+  opencr.connect();
+  const auto reconnect_deadline = std::chrono::steady_clock::now() + 2s;
+  while (!opencr.is_connected() && std::chrono::steady_clock::now() < reconnect_deadline) {
+    std::this_thread::sleep_for(10ms);
+  }
+  CHECK(opencr.is_connected());
 
   opencr.stop();
   ::close(master);

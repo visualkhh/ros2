@@ -16,7 +16,7 @@ class OpenCrImu final : public krosc::sensor::Sensor {
   OpenCrImu(krosc::Context& context, OpenCrDevice& opencr, std::string topic = "imu",
             std::string frame_id = "imu_link");
 
-  [[nodiscard]] bool connected() const override;
+  [[nodiscard]] bool is_connected() const override;
   bool read(double time, double period) override;
 
  private:

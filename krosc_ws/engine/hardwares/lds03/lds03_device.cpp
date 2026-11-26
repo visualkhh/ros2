@@ -187,6 +187,7 @@ void Lds03Device::start() {
     return;
   }
   stop_.store(false);
+  auto_connect_.store(true);
   reader_thread_ = std::thread([this] { reader_loop(); });
 }
 
@@ -194,6 +195,7 @@ void Lds03Device::stop() {
   if (stop_.exchange(true)) {
     return;
   }
+  auto_connect_.store(false);
   {
     std::lock_guard<std::mutex> lock(fd_mutex_);
     if (fd_ >= 0) {
@@ -204,6 +206,27 @@ void Lds03Device::stop() {
   if (reader_thread_.joinable() && reader_thread_.get_id() != std::this_thread::get_id()) {
     reader_thread_.join();
   }
+}
+
+void Lds03Device::connect() {
+  if (is_connected()) {
+    return;
+  }
+  auto_connect_.store(true);
+  if (!reader_thread_.joinable()) {
+    start();
+  }
+}
+
+void Lds03Device::disconnect() {
+  auto_connect_.store(false);
+  {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (fd_ >= 0) {
+      (void)write_bytes(fd_, kStop.data(), kStop.size());
+    }
+  }
+  close_fd();
 }
 
 void Lds03Device::close_fd() {
@@ -232,6 +255,10 @@ void Lds03Device::reader_loop() {
       fd = fd_;
     }
     if (fd < 0) {
+      if (!auto_connect_.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        continue;
+      }
       const int opened = open_serial(port_, baud_);
       if (opened < 0) {
         for (int i = 0; i < 10 && !stop_.load(); ++i) {
@@ -244,6 +271,10 @@ void Lds03Device::reader_loop() {
         if (stop_.load()) {
           close_serial(opened);
           return;
+        }
+        if (!auto_connect_.load()) {
+          close_serial(opened);
+          continue;
         }
         fd_ = opened;
       }

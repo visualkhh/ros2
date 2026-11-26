@@ -154,7 +154,7 @@ endif()
 target_compile_options(krosc_real PRIVATE -Wall -Wextra -Wpedantic)
 
 # PC 전용 시뮬레이터. Pi(ARM)에서는 타깃을 만들지 않는다.
-if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
+if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|armv.*)$"))
   add_subdirectory(../krosc/simulator simulator_build)
 
   add_executable(krosc_ws_simulator
@@ -230,7 +230,7 @@ if(KROSC_WS_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests
   )
   target_link_libraries(krosc_ws_tests PRIVATE krosc::core)
-  if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
+  if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|armv.*)$"))
     target_sources(krosc_ws_tests PRIVATE
       tests/test_sim_robot.cpp
       tests/test_sim_realsense.cpp

@@ -23,7 +23,7 @@ class RealSenseSensor final : public krosc::sensor::Sensor {
                   std::string diagnostics_topic = "diagnostics",
                   double depth_period = 0.2);
 
-  [[nodiscard]] bool connected() const override;
+  [[nodiscard]] bool is_connected() const override;
   bool read(double time, double period) override;
 
   [[nodiscard]] std::uint64_t color_published() const { return color_published_; }

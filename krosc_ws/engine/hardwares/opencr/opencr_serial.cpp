@@ -55,6 +55,7 @@ void OpenCrSerial::start() {
     return;
   }
   stop_.store(false);
+  auto_connect_.store(true);
   reader_thread_ = std::thread([this] { reader_loop(); });
 }
 
@@ -62,6 +63,7 @@ void OpenCrSerial::stop() {
   if (stop_.exchange(true)) {
     return;
   }
+  auto_connect_.store(false);
   if (connected_.load()) {
     (void)write_command(format_command(0.0, 0.0));
   }
@@ -69,6 +71,24 @@ void OpenCrSerial::stop() {
   if (reader_thread_.joinable() && reader_thread_.get_id() != std::this_thread::get_id()) {
     reader_thread_.join();
   }
+}
+
+void OpenCrSerial::connect() {
+  if (is_connected()) {
+    return;
+  }
+  auto_connect_.store(true);
+  if (!reader_thread_.joinable()) {
+    start();
+  }
+}
+
+void OpenCrSerial::disconnect() {
+  auto_connect_.store(false);
+  if (connected_.load()) {
+    (void)write_command(format_command(0.0, 0.0));
+  }
+  close_fd();
 }
 
 void OpenCrSerial::write_arm(const std::array<double, 5>& position) {
@@ -235,6 +255,10 @@ void OpenCrSerial::reader_loop() {
       fd = fd_;
     }
     if (fd < 0) {
+      if (!auto_connect_.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        continue;
+      }
       const int opened = open_serial(port_, baud_);
       if (opened < 0) {
         for (int i = 0; i < 10 && !stop_.load(); ++i) {
@@ -247,6 +271,10 @@ void OpenCrSerial::reader_loop() {
         if (stop_.load()) {
           close_serial(opened);
           return;
+        }
+        if (!auto_connect_.load()) {
+          close_serial(opened);
+          continue;
         }
         fd_ = opened;
       }

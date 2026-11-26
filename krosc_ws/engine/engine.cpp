@@ -347,7 +347,53 @@ bool Engine::start() {
     return false;
   }
   started_ = true;
+  // 연결은 reader 스레드가 비동기로 연다. 시작 시 한 번 상태를 찍어 두고,
+  // 이후에는 RobotStatus diagnostics가 1초마다 갱신한다.
+  const bool opencr_ok = opencr_.is_connected();
+  const bool lidar_ok = lidar_ == nullptr || lidar_->is_connected();
+  const bool camera_ok =
+      camera_ == nullptr || !options_.enable_camera || camera_->is_connected();
+  std::fprintf(stderr, "[krosc_ws] hardware: %s (opencr=%s lidar=%s camera=%s)\n",
+               is_connected() ? "connected" : "waiting", opencr_ok ? "yes" : "no",
+               lidar_ok ? "yes" : "no", camera_ok ? "yes" : "no");
   return true;
+}
+
+bool Engine::is_connected() const {
+  if (!opencr_.is_connected()) {
+    return false;
+  }
+  if (lidar_ != nullptr && !lidar_->is_connected()) {
+    return false;
+  }
+  if (camera_ != nullptr && options_.enable_camera && !camera_->is_connected()) {
+    return false;
+  }
+  return true;
+}
+
+void Engine::connect_hardware() {
+  if (!opencr_.is_connected()) {
+    opencr_.connect();
+  }
+  if (lidar_ != nullptr && !lidar_->is_connected()) {
+    lidar_->connect();
+  }
+  if (camera_ != nullptr && options_.enable_camera && !camera_->is_connected()) {
+    camera_->connect();
+  }
+}
+
+void Engine::disconnect_hardware() {
+  if (opencr_.is_connected()) {
+    opencr_.disconnect();
+  }
+  if (lidar_ != nullptr && lidar_->is_connected()) {
+    lidar_->disconnect();
+  }
+  if (camera_ != nullptr && options_.enable_camera && camera_->is_connected()) {
+    camera_->disconnect();
+  }
 }
 
 void Engine::stop() {

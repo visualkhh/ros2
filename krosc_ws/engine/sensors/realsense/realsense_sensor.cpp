@@ -29,7 +29,7 @@ RealSenseSensor::RealSenseSensor(krosc::Context& context, RealSenseCamera& devic
       depth_frame_(std::move(depth_frame)), diagnostics_topic_(std::move(diagnostics_topic)),
       depth_period_(depth_period > 0.0 ? depth_period : 0.2) {}
 
-bool RealSenseSensor::connected() const { return device_.connected(); }
+bool RealSenseSensor::is_connected() const { return device_.is_connected(); }
 
 bool RealSenseSensor::read(double time, double period) {
   (void)period;
@@ -73,7 +73,7 @@ bool RealSenseSensor::read(double time, double period) {
     publish_diagnostics(time);
     last_diagnostics_ = time;
   }
-  return device_.connected();
+  return device_.is_connected();
 }
 
 void RealSenseSensor::update_rates(double time) {

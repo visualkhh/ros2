@@ -125,6 +125,16 @@ void RealSenseDevice::start() {
   if (impl_->running.load()) {
     return;
   }
+  // 워커가 예외로 끝나면 running=false지만 std::thread는 joinable로 남는다.
+  // 이 상태에서 새 스레드를 대입하면 std::terminate라서 먼저 정리한다.
+  if (impl_->worker.joinable()) {
+    impl_->worker.join();
+    try {
+      impl_->pipeline.stop();
+    } catch (...) {
+      // 이미 멈췄거나 장치가 뽑힌 경우.
+    }
+  }
   try {
     rs2::context context;
     const rs2::device_list devices = context.query_devices();
@@ -248,7 +258,19 @@ void RealSenseDevice::stop() {
   }
 }
 
-bool RealSenseDevice::connected() const {
+void RealSenseDevice::connect() {
+  if (!is_connected()) {
+    start();
+  }
+}
+
+void RealSenseDevice::disconnect() {
+  if (is_connected()) {
+    stop();
+  }
+}
+
+bool RealSenseDevice::is_connected() const {
   return impl_ && impl_->running.load();
 }
 

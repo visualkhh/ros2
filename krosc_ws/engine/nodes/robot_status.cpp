@@ -186,7 +186,7 @@ void RobotStatus::publish_diagnostics() {
   krosc::msgs::DiagnosticStatus drive;
   drive.name = "OpenCR";
   drive.hardware_id = "turtlebot3_waffle_pi";
-  if (!opencr.connected()) {
+  if (!opencr.is_connected()) {
     drive.level = 2;
     drive.message = "OpenCR가 연결되지 않았다";
   } else if (!board || status_age > data_timeout_.value()) {
@@ -196,7 +196,7 @@ void RobotStatus::publish_diagnostics() {
     drive.level = 0;
     drive.message = "ok";
   }
-  add_value(drive, "connected", opencr.connected() ? "true" : "false");
+  add_value(drive, "connected", opencr.is_connected() ? "true" : "false");
   add_value(drive, "port", opencr.port());
   add_value(drive, "bad_lines", std::to_string(opencr.bad_lines()));
   add_value(drive, "errors", std::to_string(opencr.error_count()));
@@ -221,7 +221,7 @@ void RobotStatus::publish_diagnostics() {
   } else {
     const auto& lidar = *lidar_;
     const double scan_age = lidar.scan_age();
-    if (!lidar.connected()) {
+    if (!lidar.is_connected()) {
       lidar_status.level = 2;
       lidar_status.message = "LDS-03가 연결되지 않았다";
     } else if (scan_age > data_timeout_.value()) {
@@ -231,7 +231,7 @@ void RobotStatus::publish_diagnostics() {
       lidar_status.level = 0;
       lidar_status.message = "ok";
     }
-    add_value(lidar_status, "connected", lidar.connected() ? "true" : "false");
+    add_value(lidar_status, "connected", lidar.is_connected() ? "true" : "false");
     add_value(lidar_status, "port", lidar.port());
     add_value(lidar_status, "scans", std::to_string(lidar.scans()));
     add_value(lidar_status, "bad_packets", std::to_string(lidar.bad_packets()));

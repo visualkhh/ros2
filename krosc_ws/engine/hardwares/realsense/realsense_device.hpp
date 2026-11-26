@@ -36,7 +36,9 @@ class RealSenseDevice final : public RealSenseCamera {
 
   void start() override;
   void stop() override;
-  [[nodiscard]] bool connected() const override;
+  void connect() override;
+  void disconnect() override;
+  [[nodiscard]] bool is_connected() const override;
 
   [[nodiscard]] std::optional<RealSenseImage> take_color() override;
   [[nodiscard]] std::optional<RealSenseImage> take_depth() override;

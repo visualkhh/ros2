@@ -64,7 +64,9 @@ class Lds03Device final : public LdsDevice {
 
   void start() override;
   void stop() override;
-  [[nodiscard]] bool connected() const override { return connected_.load(); }
+  void connect() override;
+  void disconnect() override;
+  [[nodiscard]] bool is_connected() const override { return connected_.load(); }
 
   // header.stamp만 채운다. frame_id/topic은 Sensor 레이어가 정한다.
   [[nodiscard]] std::optional<krosc::msgs::LaserScan> take_scan(double stamp) override;
@@ -88,6 +90,7 @@ class Lds03Device final : public LdsDevice {
 
   std::atomic<bool> stop_{false};
   std::atomic<bool> connected_{false};
+  std::atomic<bool> auto_connect_{true};
   std::atomic<std::uint64_t> scans_{0};
   std::thread reader_thread_;
   mutable std::mutex fd_mutex_;

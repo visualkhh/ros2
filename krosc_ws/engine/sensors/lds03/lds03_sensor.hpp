@@ -15,7 +15,7 @@ class Lds03Sensor final : public krosc::sensor::Sensor {
   Lds03Sensor(krosc::Context& context, LdsDevice& device, std::string topic = "scan",
               std::string frame_id = "base_scan");
 
-  [[nodiscard]] bool connected() const override;
+  [[nodiscard]] bool is_connected() const override;
   bool read(double time, double period) override;
 
  private:

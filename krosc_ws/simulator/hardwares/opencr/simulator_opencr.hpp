@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <mutex>
@@ -18,9 +19,11 @@ class SimulatorOpenCr final : public OpenCrDevice {
  public:
   explicit SimulatorOpenCr(WafflePiArm& robot, bool noisy = true, std::uint32_t seed = 42);
 
-  void start() override {}
-  void stop() override {}
-  [[nodiscard]] bool connected() const override { return true; }
+  void start() override { connected_.store(true); }
+  void stop() override { connected_.store(false); }
+  void connect() override { connected_.store(true); }
+  void disconnect() override { connected_.store(false); }
+  [[nodiscard]] bool is_connected() const override { return connected_.load(); }
 
   void write(const krosc::msgs::Twist& command) override;
   void write_arm(const std::array<double, 5>& position) override;
@@ -57,6 +60,7 @@ class SimulatorOpenCr final : public OpenCrDevice {
 
   WafflePiArm& robot_;
   bool noisy_ = true;
+  std::atomic<bool> connected_{true};
   std::mt19937 rng_;
   Noise gyro_{0.002, 0.0015, 0.0};
   Noise accel_{0.03, 0.01, 0.0};
