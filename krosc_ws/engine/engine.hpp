@@ -47,6 +47,7 @@ class OpenCrImu;
 class Lds03Sensor;
 class RealSenseSensor;
 class RobotStatus;
+class LlmInput;
 
 struct EngineOptions {
   std::string urdf_path;
@@ -59,6 +60,11 @@ struct EngineOptions {
   bool enable_status = true;
   bool enable_robot_state_publisher = true;
   bool enable_camera = true;
+  bool enable_llm = true;
+  // llm_input 노드가 직접 호출하는 Ollama 서버. 원격 서버는 KROSC_OLLAMA_URL로 덮어쓴다.
+  std::string llm_ollama_url = "http://127.0.0.1:11434";
+  std::string llm_model = "gemma3:4b";
+  double llm_timeout = 10.0;
   double wheel_radius = 0.033;
   double wheel_separation = 0.287;
 
@@ -117,6 +123,7 @@ class Engine {
   std::unique_ptr<Lds03Sensor> lds_sensor_;
   std::unique_ptr<RealSenseSensor> camera_sensor_;
   std::unique_ptr<RobotStatus> status_;
+  std::unique_ptr<LlmInput> llm_;
   std::unique_ptr<krosc::sensor::SensorManager> sensors_;
   std::unique_ptr<krosc::control::ControlManager> controls_;
   std::unique_ptr<krosc::control::ControllerManager> controller_manager_;

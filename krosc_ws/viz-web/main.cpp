@@ -164,6 +164,23 @@ void register_arm_rpc(krosc::viz_web::WebRpc& rpc, krosc::Context& context) {
           });
 }
 
+void register_llm_rpc(krosc::viz_web::WebRpc& rpc, krosc::Context& context) {
+  rpc.add("llm/command",
+          [&context](const krosc::viz_web::Json& params, const krosc::viz_web::WebRpc::Notify&) {
+            krosc::viz_web::Json result = krosc::viz_web::Json::object();
+            try {
+              const auto response = context.services().call<krosc::msgs::String,
+                                                            krosc::msgs::String>(
+                  "llm/command", krosc::msgs::String{params["text"].as_string()});
+              result["raw"] = response.data;
+            } catch (const std::exception& error) {
+              result["accepted"] = false;
+              result["error"] = error.what();
+            }
+            return result;
+          });
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -189,6 +206,7 @@ int main(int argc, char** argv) {
   registry.add("rl_nav", "RL Nav", "/plugins/rl_nav.js");
   registry.add("manipulator", "Manipulator", "/plugins/manipulator.js");
   registry.add("camera", "Camera", "/plugins/camera.js");
+  registry.add("ai", "AI", "/plugins/ai.js");
 
   // 프로젝트 플러그인이 쓰는 토픽. 코어 웹 게이트웨이는 기본 토픽만 안다.
   options.forward_topics = {
@@ -201,6 +219,7 @@ int main(int argc, char** argv) {
       {"moveit_path", krosc::net::Kind::Path, krosc::QOS_DEFAULT},
       {"rl_nav_status", krosc::net::Kind::String, krosc::QOS_LATCHED},
       {"rl_nav_model_list", krosc::net::Kind::String, krosc::QOS_LATCHED},
+      {"llm/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"camera/color/image_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
       {"camera/depth/image_rect_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
   };
@@ -214,6 +233,7 @@ int main(int argc, char** argv) {
   krosc::viz_web::VizWeb web(std::move(options), std::move(registry), app.context());
   register_move_rpc(web.rpc(), app.context());
   register_arm_rpc(web.rpc(), app.context());
+  register_llm_rpc(web.rpc(), app.context());
   if (!web.initialize(error)) {
     std::fprintf(stderr, "[viz-web] %s\n", error.c_str());
     return 1;

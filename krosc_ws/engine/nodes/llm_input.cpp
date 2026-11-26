@@ -1,0 +1,389 @@
+#include "llm_input.hpp"
+
+#include <algorithm>
+#include <any>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <exception>
+#include <string>
+#include <utility>
+
+#include "krosc/msgs.hpp"
+
+#include "llm_json.hpp"
+
+namespace krosc_ws {
+
+namespace {
+
+constexpr const char* kSchema = R"({
+  "type": "object",
+  "properties": {
+    "intent": {"type": "string", "enum": ["drive", "arm_preset", "stop", "vlm_query", "vla_pick", "unsupported"]},
+    "meters": {"type": "number", "description": "forward distance in meters; 0 when not driving"},
+    "preset": {"type": "string", "enum": ["home", "stow"]},
+    "question": {"type": "string"},
+    "target": {"type": "string"}
+  },
+  "required": ["intent", "meters"]
+})";
+
+constexpr const char* kSystemPrompt = R"(You are the command parser for a TurtleBot3 Waffle Pi with an OpenMANIPULATOR-X arm.
+Convert the user's Korean or English request into exactly one intent.
+- drive: move the base forward by the stated distance. meters is REQUIRED and must be a number ("1m" -> 1.0, "50cm" -> 0.5).
+- arm_preset: move the arm to a preset. preset must be "home" or "stow".
+- stop: stop the robot immediately.
+- vlm_query: ask the camera/scene a question. Put the question in question.
+- vla_pick: pick or place an object with the learned policy. Put the object/color in target.
+- unsupported: multiple actions, missing distance/preset, or anything else.
+Always include meters in the JSON. Use 0 when the intent is not drive.
+Return only the JSON object. Do not explain.)";
+
+std::string trim(std::string text) {
+  const auto not_space = [](unsigned char character) { return std::isspace(character) == 0; };
+  text.erase(text.begin(), std::find_if(text.begin(), text.end(), not_space));
+  text.erase(std::find_if(text.rbegin(), text.rend(), not_space).base(), text.end());
+  return text;
+}
+
+std::string lower(std::string text) {
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char character) {
+    return static_cast<char>(std::tolower(character));
+  });
+  return text;
+}
+
+std::string number(double value) {
+  char buffer[32];
+  std::snprintf(buffer, sizeof(buffer), "%.3f", value);
+  return buffer;
+}
+
+std::string quoted(const std::string& value) {
+  return "\"" + llm::escape_json(value) + "\"";
+}
+
+}  // namespace
+
+LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string model,
+                   double timeout_s)
+    : Node(context, "llm_input"),
+      client_(std::make_unique<OllamaClient>(std::move(ollama_url), std::move(model),
+                                             timeout_s)),
+      move_(std::make_unique<MoveClient>(context, krosc::msgs::moveit::MOVE_ACTION)) {
+  odom_subscription_ = subscribe<krosc::msgs::Odometry>(
+      "odom", [this](const krosc::msgs::Odometry& message) {
+        std::lock_guard<std::mutex> lock(odom_mutex_);
+        odom_x_ = message.pose.pose.position.x;
+        odom_y_ = message.pose.pose.position.y;
+        odom_seen_ = true;
+      });
+  drive_timer_ = create_timer(0.1, [this] { drive_tick(); });
+  create_service<krosc::msgs::String, krosc::msgs::String>(
+      "llm/command", [this](const krosc::msgs::String& request) {
+        return handle_command(request);
+      });
+  worker_ = std::thread([this] { worker_loop(); });
+  logger().info("LlmInput: ready (service=llm/command, topic=llm/status)");
+}
+
+LlmInput::~LlmInput() {
+  stopping_.store(true);
+  queue_cv_.notify_all();
+  if (worker_.joinable()) {
+    worker_.join();
+  }
+  drive_active_.store(false);
+  {
+    std::lock_guard<std::mutex> lock(move_mutex_);
+    if (move_ && !move_goal_id_.empty()) {
+      move_->cancel(move_goal_id_);
+    }
+  }
+  shutdown();
+}
+
+void LlmInput::emergency_stop() {
+  stop_drive();
+  std::lock_guard<std::mutex> lock(move_mutex_);
+  if (move_ && !move_goal_id_.empty()) {
+    move_->cancel(move_goal_id_);
+    move_goal_id_.clear();
+  }
+}
+
+krosc::msgs::String LlmInput::handle_command(const krosc::msgs::String& request) {
+  const std::string text = trim(request.data);
+  if (text.empty()) {
+    return krosc::msgs::String{R"({"accepted":false,"error":"빈 명령"})"};
+  }
+  const std::string keyword = lower(text);
+  if (keyword == "stop" || text == "정지" || text == "멈춰") {
+    emergency_stop();
+    return krosc::msgs::String{R"({"accepted":true,"tool":"stop"})"};
+  }
+  Request queued;
+  queued.id = next_id_.fetch_add(1);
+  queued.text = text;
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    queue_.push_back(queued);
+  }
+  queue_cv_.notify_one();
+  return krosc::msgs::String{"{\"accepted\":true,\"request_id\":" +
+                             std::to_string(queued.id) + "}"};
+}
+
+void LlmInput::worker_loop() {
+  while (true) {
+    Request request;
+    {
+      std::unique_lock<std::mutex> lock(queue_mutex_);
+      queue_cv_.wait(lock, [this] { return stopping_.load() || !queue_.empty(); });
+      if (queue_.empty()) {
+        if (stopping_.load()) {
+          return;
+        }
+        continue;
+      }
+      request = std::move(queue_.front());
+      queue_.pop_front();
+    }
+    process(request);
+  }
+}
+
+void LlmInput::process(const Request& request) {
+  publish_status(request.id, "thinking");
+  const OllamaReply reply = client_->chat(kSystemPrompt, request.text, kSchema);
+  if (!reply.ok) {
+    publish_status(request.id, "error", ",\"error\":" + quoted(reply.error));
+    return;
+  }
+  const auto plan = llm::parse_plan(reply.content);
+  if (!plan) {
+    publish_status(request.id, "error",
+                   ",\"error\":" + quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
+    return;
+  }
+  std::string plan_json = "{\"intent\":" + quoted(plan->intent);
+  if (plan->meters != 0.0) {
+    plan_json += ",\"meters\":" + number(plan->meters);
+  }
+  if (!plan->preset.empty()) {
+    plan_json += ",\"preset\":" + quoted(plan->preset);
+  }
+  if (!plan->question.empty()) {
+    plan_json += ",\"question\":" + quoted(plan->question);
+  }
+  if (!plan->target.empty()) {
+    plan_json += ",\"target\":" + quoted(plan->target);
+  }
+  plan_json += "}";
+  publish_status(request.id, "plan", ",\"plan\":" + plan_json);
+  dispatch(request.id, plan->intent, plan->meters, plan->preset, plan->question,
+           plan->target);
+}
+
+void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double meters,
+                        const std::string& preset, const std::string& question,
+                        const std::string& target) {
+  if (intent == "drive") {
+    if (!(meters > 0.0)) {
+      publish_status(id, "error", ",\"error\":\"drive에 meters가 없다\"");
+      return;
+    }
+    start_drive(id, std::clamp(meters, 0.05, 5.0));
+    return;
+  }
+  if (intent == "arm_preset") {
+    const std::string mode = lower(preset);
+    if (mode != "home" && mode != "stow") {
+      publish_status(id, "error", ",\"error\":\"preset은 home|stow\"");
+      return;
+    }
+    send_arm_preset(id, mode);
+    return;
+  }
+  if (intent == "stop") {
+    emergency_stop();
+    publish_status(id, "done", ",\"tool\":\"stop\"");
+    return;
+  }
+  if (intent == "vlm_query") {
+    std::string error;
+    const std::string payload = "{\"question\":" + quoted(question) + "}";
+    const std::string answer = call_optional("vlm/query", payload, error);
+    if (!error.empty()) {
+      publish_status(id, "error", ",\"error\":" + quoted("VLM node 없음: " + error));
+      return;
+    }
+    publish_status(id, "done", ",\"tool\":\"vlm_query\",\"answer\":" + quoted(answer));
+    return;
+  }
+  if (intent == "vla_pick") {
+    std::string error;
+    const std::string payload = "{\"target\":" + quoted(target) + "}";
+    const std::string result = call_optional("vla/command", payload, error);
+    if (!error.empty()) {
+      publish_status(id, "error", ",\"error\":" + quoted("VLA node 없음: " + error));
+      return;
+    }
+    publish_status(id, "done", ",\"tool\":\"vla_pick\",\"result\":" + quoted(result));
+    return;
+  }
+  publish_status(id, "done", ",\"tool\":\"unsupported\"");
+}
+
+void LlmInput::start_drive(std::uint64_t id, double meters) {
+  double x = 0.0;
+  double y = 0.0;
+  bool seen = false;
+  {
+    std::lock_guard<std::mutex> lock(odom_mutex_);
+    x = odom_x_;
+    y = odom_y_;
+    seen = odom_seen_;
+  }
+  if (!seen) {
+    publish_status(id, "error", ",\"error\":\"odom이 아직 없다\"");
+    return;
+  }
+  stop_drive();
+  drive_request_ = id;
+  drive_target_ = meters;
+  drive_start_x_ = x;
+  drive_start_y_ = y;
+  drive_started_ = now();
+  drive_last_distance_ = 0.0;
+  drive_progress_time_ = drive_started_;
+  drive_active_.store(true);
+  publish_status(id, "executing",
+                 ",\"tool\":\"drive\",\"meters\":" + number(meters));
+}
+
+void LlmInput::drive_tick() {
+  if (!drive_active_.load()) {
+    return;
+  }
+  if (now() - drive_started_ > drive_timeout_) {
+    stop_drive();
+    publish_status(drive_request_, "error", ",\"error\":\"drive timeout\"");
+    return;
+  }
+  double x = 0.0;
+  double y = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(odom_mutex_);
+    x = odom_x_;
+    y = odom_y_;
+  }
+  const double distance = std::hypot(x - drive_start_x_, y - drive_start_y_);
+  if (distance >= drive_target_) {
+    stop_drive();
+    publish_status(drive_request_, "done",
+                   ",\"tool\":\"drive\",\"distance\":" + number(distance));
+    return;
+  }
+  // 충돌 모니터/벽에 막히면 명령은 나가는데 odom이 안 늘어난다. 2초 정체면 멈춘다.
+  if (distance > drive_last_distance_ + 0.01) {
+    drive_last_distance_ = distance;
+    drive_progress_time_ = now();
+  } else if (now() - drive_progress_time_ > 2.0) {
+    stop_drive();
+    publish_status(drive_request_, "error",
+                   ",\"error\":\"drive stalled (collision?)\",\"distance\":" +
+                       number(distance));
+    return;
+  }
+  publish<krosc::msgs::Twist>("cmd_vel_nav",
+                              krosc::msgs::Twist{{drive_speed_, 0.0, 0.0}, {0.0, 0.0, 0.0}});
+}
+
+void LlmInput::stop_drive() {
+  if (drive_active_.exchange(false)) {
+    publish<krosc::msgs::Twist>("cmd_vel_nav",
+                                krosc::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}});
+  }
+}
+
+void LlmInput::send_arm_preset(std::uint64_t id, const std::string& preset) {
+  if (!move_) {
+    publish_status(id, "error", ",\"error\":\"MoveIt client 없음\"");
+    return;
+  }
+  krosc::msgs::moveit::MoveGroupGoal goal;
+  goal.preset = preset;
+  goal.plan_only = false;
+  goal.cartesian = true;
+  goal.grip = -1.0;
+  try {
+    const auto handle = move_->send_goal(
+        goal, [this, id](const krosc::msgs::moveit::MoveGroupFeedback& feedback) {
+          publish_status(id, "moveit",
+                         ",\"tool\":\"arm_preset\",\"progress\":" + number(feedback.progress) +
+                             ",\"state\":" + quoted(feedback.state));
+        });
+    {
+      std::lock_guard<std::mutex> lock(move_mutex_);
+      move_goal_id_ = handle->goal_id();
+    }
+    publish_status(id, "executing",
+                   ",\"tool\":\"arm_preset\",\"preset\":" + quoted(preset));
+    // MoveGroup 결과가 올 때까지 워커에서 기다린다. 도중에 정지 요청이 오면
+    // handle_command의 fast-path가 goal을 취소하고, 여기서는 결과만 정리한다.
+    const auto result = handle->result(60.0);
+    {
+      std::lock_guard<std::mutex> lock(move_mutex_);
+      if (move_goal_id_ == handle->goal_id()) {
+        move_goal_id_.clear();
+      }
+    }
+    if (result.status == krosc::GoalStatus::Succeeded) {
+      publish_status(id, "done",
+                     ",\"tool\":\"arm_preset\",\"preset\":" + quoted(preset));
+      return;
+    }
+    std::string detail = "MoveIt 실패";
+    if (result.result.has_value()) {
+      try {
+        const auto* move_result =
+            std::any_cast<krosc::msgs::moveit::MoveGroupResult>(&result.result);
+        if (move_result != nullptr && !move_result->error_msg.empty()) {
+          detail = move_result->error_msg;
+        }
+      } catch (const std::bad_any_cast&) {
+      }
+    }
+    publish_status(id, "error", ",\"error\":" + quoted(detail));
+  } catch (const std::exception& error) {
+    publish_status(id, "error", ",\"error\":" + quoted(error.what()));
+  }
+}
+
+std::string LlmInput::call_optional(const std::string& service,
+                                    const std::string& payload, std::string& error) {
+  try {
+    const auto response = context().services().call<krosc::msgs::String,
+                                                    krosc::msgs::String>(
+        service, krosc::msgs::String{payload});
+    return response.data;
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return {};
+  }
+}
+
+void LlmInput::publish_status(std::uint64_t id, const std::string& stage,
+                              const std::string& extra_json) {
+  std::string json = "{\"request_id\":" + std::to_string(id) + ",\"stage\":" +
+                     quoted(stage);
+  if (!extra_json.empty()) {
+    json += extra_json;
+  }
+  json += "}";
+  publish<krosc::msgs::String>("llm/status", krosc::msgs::String{std::move(json)});
+}
+
+}  // namespace krosc_ws

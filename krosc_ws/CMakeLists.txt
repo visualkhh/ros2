@@ -17,6 +17,9 @@ set(KROSC_REAL_SOURCES
   engine/main.cpp
   engine/engine.cpp
   engine/nodes/robot_status.cpp
+  engine/nodes/llm_input.cpp
+  engine/nodes/llm_client.cpp
+  engine/nodes/llm_json.cpp
   engine/controls/opencr/opencr_control.cpp
   engine/hardwares/lds03/lds03_device.cpp
   engine/sensors/lds03/lds03_sensor.cpp
@@ -167,6 +170,9 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     simulator/panels/camera_panel.cpp
     engine/engine.cpp
     engine/nodes/robot_status.cpp
+    engine/nodes/llm_input.cpp
+    engine/nodes/llm_client.cpp
+    engine/nodes/llm_json.cpp
     engine/controls/opencr/opencr_control.cpp
     engine/sensors/lds03/lds03_sensor.cpp
     engine/sensors/opencr/opencr_imu.cpp
@@ -216,6 +222,8 @@ if(KROSC_WS_BUILD_TESTS)
     tests/test_moveit_stack.cpp
     tests/test_models.cpp
     tests/test_rl_nav_plugin.cpp
+    tests/test_llm.cpp
+    engine/nodes/llm_json.cpp
     engine/ml/onnx_policy.cpp
     engine/nodes/rl_nav_controller.cpp
     engine/hardwares/lds03/lds03_device.cpp

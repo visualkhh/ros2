@@ -36,10 +36,11 @@ std::optional<std::array<double, 4>> preset_goal(const std::string& text) {
   }
   if (mode == "home") {
     // all-zero는 바닥을 향하고, STOW와 구분되는 안전한 기본 자세.
-    return std::array<double, 4>{0.5000, -1.8000, 1.4000, 0.8000};
+    // 공식 OpenMANIPULATOR-X 리밋(joint2 >= -1.7907) 안쪽 값이어야 한다.
+    return std::array<double, 4>{0.5000, -1.7500, 1.3500, 0.8000};
   }
   if (mode == "stow") {
-    return std::array<double, 4>{0.0, -1.9024, 1.3440, 0.9023};
+    return std::array<double, 4>{0.0, -1.7500, 1.3440, 0.9023};
   }
   return std::nullopt;
 }

@@ -33,6 +33,7 @@
 #include "controls/opencr/opencr_control.hpp"
 #include "hardwares/lds03/lds_device.hpp"
 #include "hardwares/opencr/opencr_device.hpp"
+#include "nodes/llm_input.hpp"
 #include "nodes/robot_status.hpp"
 #include "sensors/lds03/lds03_sensor.hpp"
 #include "sensors/opencr/opencr_imu.hpp"
@@ -101,6 +102,10 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
   if (options_.enable_status) {
     status_ = std::make_unique<RobotStatus>(context_, opencr_, lidar_);
   }
+  if (options_.enable_llm) {
+    llm_ = std::make_unique<LlmInput>(context_, options_.llm_ollama_url,
+                                      options_.llm_model, options_.llm_timeout);
+  }
 
   std::vector<std::string> controller_plugins{"joint_state_broadcaster", "diff_drive_controller"};
   if (options_.enable_arm) {
@@ -168,8 +173,8 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
             {"base_link", std::string("base_link")},
             {"tip_link", std::string("end_effector_link")},
             {"joint_names", std::vector<std::string>{"joint1", "joint2", "joint3", "joint4"}},
-            {"lower_limits", std::vector<double>{-3.141592653589793, -2.20, -2.00, -2.00}},
-            {"upper_limits", std::vector<double>{3.141592653589793, 2.20, 2.00, 2.20}},
+            {"lower_limits", std::vector<double>{-2.827433388230814, -1.790707812546182, -0.9424777960769379, -1.790707812546182}},
+            {"upper_limits", std::vector<double>{2.827433388230814, 1.5707963267948966, 1.382300767579509, 2.0420352248333655}},
             {"max_joint_speed", 0.35},
             {"max_joint_accel", 1.0},
             {"cartesian_speed", 0.08},
@@ -399,6 +404,9 @@ void Engine::disconnect_hardware() {
 void Engine::stop() {
   if (!started_) {
     return;
+  }
+  if (llm_) {
+    llm_->emergency_stop();
   }
   controls_->stop();
   sensors_->stop();
