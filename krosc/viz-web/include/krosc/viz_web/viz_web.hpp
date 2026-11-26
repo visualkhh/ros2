@@ -2,7 +2,9 @@
 
 #include <atomic>
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -58,7 +60,18 @@ class VizWeb {
   [[nodiscard]] WebRpc& rpc() { return *rpc_; }
 
  private:
+  struct TopicEntry {
+    ContextLink::TopicSpec spec;
+    bool subscribed = false;
+    std::string source = "core";
+  };
+
   void shutdown();
+  void register_topic_rpc();
+  bool register_topic(const ContextLink::TopicSpec& spec, const std::string& source,
+                      bool subscribe, std::string& error);
+  bool set_topic_subscription(const std::string& name, bool subscribe, std::string& error);
+  [[nodiscard]] Json topic_list_json() const;
 
   VizWebOptions options_;
   VizWebPluginRegistry registry_;
@@ -66,6 +79,8 @@ class VizWeb {
   std::unique_ptr<ContextLink> link_;
   std::unique_ptr<HttpServer> server_;
   std::unique_ptr<WebRpc> rpc_;
+  mutable std::mutex topics_mutex_;
+  std::map<std::string, TopicEntry> topics_;
   std::atomic<bool> stop_{false};
   std::atomic<bool> robot_connected_{false};
   bool initialized_ = false;

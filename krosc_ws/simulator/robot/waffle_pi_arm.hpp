@@ -70,7 +70,7 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   static constexpr double kScanRangeMin = 0.12;
   static constexpr double kScanRangeMax = 3.5;
   static constexpr double kImuPeriod = 0.01;
-  static constexpr double kCameraPeriod = 0.1;  // 10Hz (웹 표시용)
+  static constexpr double kCameraPeriod = 0.2;  // 5Hz (웹/Qt 표시용, 저해상도)
 
  private:
   struct Noise {

@@ -13,10 +13,14 @@ namespace krosc_ws {
 class RealSenseDevice final : public RealSenseCamera {
  public:
   struct Options {
+    // D435가 안정적으로 지원하는 스트림은 640x480이다.
+    // 발행 전에 color/depth를 decimation해서 Pi 대역폭과 JPEG 비용을 줄인다.
     int width = 640;
     int height = 480;
-    int fps = 30;
-    int jpeg_quality = 80;
+    int fps = 15;
+    int jpeg_quality = 70;
+    int color_decimation = 2;  // 640x480 -> 320x240 JPEG
+    int depth_decimation = 4;  // 640x480 -> 160x120 16UC1
     bool enable_color = true;
     bool enable_depth = true;
     // 비우면 첫 장치를 쓴다. 여러 대일 때만 지정한다.

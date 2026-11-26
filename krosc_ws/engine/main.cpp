@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -125,14 +126,19 @@ void usage() {
   std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--maps DIR]\n"
                "                  [--scan-topic NAME] [--scan-rate HZ] [--imu-topic NAME] [--imu-rate HZ]\n"
                "                  [--camera-serial SERIAL] [--camera-rate HZ] [--camera-depth-rate HZ]\n"
+               "                  [--camera-width PX] [--camera-height PX] [--camera-fps N]\n"
+               "                  [--camera-quality N] [--camera-color-decimation N] [--camera-depth-decimation N]\n"
                "                  [--executor-threads N]\n"
                "                  [--no-lidar] [--no-camera] [--slam]\n"
                "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
-               "  --camera-rate: color Image 발행 주기 (기본 10Hz)\n"
-               "  --camera-depth-rate: depth Image 발행 주기 (기본 5Hz)\n"
+               "  --camera-rate: color Image 발행 주기 (기본 5Hz)\n"
+               "  --camera-depth-rate: depth Image 발행 주기 (기본 2Hz)\n"
+               "  --camera-width/height: D435 stream 크기 (기본 640x480@15)\n"
+               "  --camera-color-decimation: color 축소 배율 (기본 2 -> 320x240 JPEG)\n"
+               "  --camera-depth-decimation: depth 축소 배율 (기본 4 -> 160x120)\n"
                "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR,\n"
                "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_CAMERA (1), KROSC_CAMERA_SERIAL,\n"
-               "     KROSC_CAMERA_RATE (10), KROSC_CAMERA_DEPTH_RATE (5), KROSC_EXECUTOR_THREADS (10)\n";
+               "     KROSC_CAMERA_RATE (5), KROSC_CAMERA_DEPTH_RATE (2), KROSC_EXECUTOR_THREADS (10)\n";
 }
 
 }  // namespace
@@ -159,14 +165,20 @@ int main(int argc, char** argv) {
   std::string camera_serial = env_or("KROSC_CAMERA_SERIAL", "");
   double scan_rate = 10.0;
   double imu_rate = 50.0;
-  double camera_rate = 10.0;
-  double camera_depth_rate = 5.0;
+  double camera_rate = 5.0;
+  double camera_depth_rate = 2.0;
+  int camera_width = 640;
+  int camera_height = 480;
+  int camera_fps = 15;
+  int camera_quality = 70;
+  int camera_color_decimation = 2;
+  int camera_depth_decimation = 4;
   try {
-    camera_rate = std::stod(env_or("KROSC_CAMERA_RATE", "10"));
-    camera_depth_rate = std::stod(env_or("KROSC_CAMERA_DEPTH_RATE", "5"));
+    camera_rate = std::stod(env_or("KROSC_CAMERA_RATE", "5"));
+    camera_depth_rate = std::stod(env_or("KROSC_CAMERA_DEPTH_RATE", "2"));
   } catch (...) {
-    camera_rate = 10.0;
-    camera_depth_rate = 5.0;
+    camera_rate = 5.0;
+    camera_depth_rate = 2.0;
   }
   std::size_t executor_threads = env_count("KROSC_EXECUTOR_THREADS", 10);
   for (int i = 1; i < argc; ++i) {
@@ -195,6 +207,18 @@ int main(int argc, char** argv) {
       camera_rate = std::stod(argv[++i]);
     } else if (argument == "--camera-depth-rate" && i + 1 < argc) {
       camera_depth_rate = std::stod(argv[++i]);
+    } else if (argument == "--camera-width" && i + 1 < argc) {
+      camera_width = std::stoi(argv[++i]);
+    } else if (argument == "--camera-height" && i + 1 < argc) {
+      camera_height = std::stoi(argv[++i]);
+    } else if (argument == "--camera-fps" && i + 1 < argc) {
+      camera_fps = std::stoi(argv[++i]);
+    } else if (argument == "--camera-quality" && i + 1 < argc) {
+      camera_quality = std::stoi(argv[++i]);
+    } else if (argument == "--camera-color-decimation" && i + 1 < argc) {
+      camera_color_decimation = std::stoi(argv[++i]);
+    } else if (argument == "--camera-depth-decimation" && i + 1 < argc) {
+      camera_depth_decimation = std::stoi(argv[++i]);
     } else if (argument == "--executor-threads" && i + 1 < argc) {
       if (!parse_count(argv[++i], executor_threads)) {
         std::cerr << "[krosc_ws] executor-threads는 0..64 범위여야 한다\n";
@@ -216,8 +240,11 @@ int main(int argc, char** argv) {
     }
   }
   if (!(scan_rate > 0.0) || !(imu_rate > 0.0) ||
-      (enable_camera && (!(camera_rate > 0.0) || !(camera_depth_rate > 0.0)))) {
-    std::cerr << "[krosc_ws] scan-rate/imu-rate/camera-rate는 0보다 커야 한다\n";
+      (enable_camera &&
+       (!(camera_rate > 0.0) || !(camera_depth_rate > 0.0) || camera_width <= 0 ||
+        camera_height <= 0 || camera_fps <= 0 || camera_color_decimation <= 0 ||
+        camera_depth_decimation <= 0))) {
+    std::cerr << "[krosc_ws] scan/imu/camera rate·해상도·decimation은 0보다 커야 한다\n";
     return 2;
   }
 
@@ -265,6 +292,12 @@ int main(int argc, char** argv) {
   if (enable_camera) {
     krosc_ws::RealSenseDevice::Options camera_options;
     camera_options.serial = camera_serial;
+    camera_options.width = camera_width;
+    camera_options.height = camera_height;
+    camera_options.fps = camera_fps;
+    camera_options.jpeg_quality = camera_quality;
+    camera_options.color_decimation = camera_color_decimation;
+    camera_options.depth_decimation = camera_depth_decimation;
     camera_owner = std::make_unique<krosc_ws::RealSenseDevice>(std::move(camera_options));
     camera = camera_owner.get();
   }
@@ -305,9 +338,13 @@ int main(int argc, char** argv) {
   std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
               scan_rate, imu_topic.c_str(), imu_rate);
   if (camera) {
-    std::printf("[krosc_ws] camera: color=%s %.1fHz, depth=%s %.1fHz\n",
+    std::printf("[krosc_ws] camera: color=%s %.1fHz %dx%d, depth=%s %.1fHz %dx%d\n",
                 engine_options.camera_color_topic.c_str(), camera_rate,
-                engine_options.camera_depth_topic.c_str(), camera_depth_rate);
+                camera_width / std::max(1, camera_color_decimation),
+                camera_height / std::max(1, camera_color_decimation),
+                engine_options.camera_depth_topic.c_str(), camera_depth_rate,
+                camera_width / std::max(1, camera_depth_decimation),
+                camera_height / std::max(1, camera_depth_decimation));
   } else {
     std::printf("[krosc_ws] camera: off\n");
   }

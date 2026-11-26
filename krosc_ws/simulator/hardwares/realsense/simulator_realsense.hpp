@@ -19,8 +19,8 @@ namespace krosc_ws::sim {
 class SimulatorRealSense final : public RealSenseCamera {
  public:
   explicit SimulatorRealSense(WafflePiArm& robot, bool noisy = true,
-                              std::uint32_t seed = 42, std::uint32_t width = 256,
-                              std::uint32_t height = 192);
+                              std::uint32_t seed = 42, std::uint32_t width = 160,
+                              std::uint32_t height = 120);
   ~SimulatorRealSense() override;
 
   SimulatorRealSense(const SimulatorRealSense&) = delete;

@@ -152,20 +152,62 @@ aside {
 .topics {
   padding: 4px 0;
   overflow: auto;
-  max-height: 45vh;
+  max-height: 60vh;
   font-size: 12px;
 }
 .topic {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 66px 40px;
-  gap: 4px;
   padding: 2px 10px;
+  border-radius: 4px;
   color: #8fa0b7;
   font-size: 11.5px;
 }
-.topic .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topic .hz { text-align: right; color: #6f8199; }
-.topic .kind { text-align: right; color: #58708d; }
+.topic:hover { background: #141c27; }
+.topic-main {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 36px;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  cursor: pointer;
+}
+.topic-main input { grid-row: 1 / span 2; margin: 0; }
+.topic .name {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #b9c6d8;
+}
+.topic .hz { grid-column: 3; grid-row: 1; text-align: right; color: #6f8199; }
+.topic .meta {
+  grid-column: 2 / span 2;
+  grid-row: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #58708d;
+  font-size: 10px;
+}
+.topic.off .name { color: #5f7188; }
+.topic-detail {
+  margin: 4px 0 5px 22px;
+  padding: 5px 8px;
+  border-left: 2px solid #31425a;
+  background: #0d131b;
+  border-radius: 4px;
+  color: #8fa0b7;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+.topic-detail .full {
+  color: #dbe4f0;
+  word-break: break-all;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.topic-detail .row { display: flex; justify-content: space-between; gap: 8px; }
+.topic-detail .row span:last-child { color: #c8d4e6; text-align: right; word-break: break-all; }
 
 #stage { position: relative; min-width: 0; background: #080b10; }
 #view-panel { position: absolute; inset: 0; }
@@ -235,6 +277,27 @@ aside {
   border-color: #2f8a59;
 }
 .moveit-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+.moveit-grip-value {
+  color: #ffb36b;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.moveit-grip-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--grip-gap, 2px);
+  height: 20px;
+  margin: 2px 0;
+}
+.moveit-grip-visual .jaw {
+  width: 10px;
+  height: 18px;
+  border-radius: 2px;
+  background: #ffb36b;
+  box-shadow: 0 0 4px rgba(255, 179, 107, 0.35);
+}
 .moveit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .moveit-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .moveit-field label { font-size: 11px; color: var(--muted); }

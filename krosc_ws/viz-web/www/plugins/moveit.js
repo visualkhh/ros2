@@ -1,6 +1,11 @@
 import { button, buttonRow, parseFields, row, setLevel } from './util.js';
 
 export function init(host) {
+  // MoveIt 뷰가 구독하는 토픽을 Subscriptions 패널에 MoveIt 소유로 표시한다.
+  // 이미 gateways가 구독 중이면 재구독하지 않는다.
+  host.registerTopic({ name: 'moveit_target_pose', kind: 12, source: 'MoveIt' }).catch(() => {});
+  host.registerTopic({ name: 'moveit_arm', kind: 9, source: 'MoveIt' }).catch(() => {});
+  host.registerTopic({ name: 'moveit_path', kind: 9, source: 'MoveIt' }).catch(() => {});
   const view = host.addView({ id: 'moveit', title: 'MoveIt' });
   const canvas = document.createElement('canvas');
   canvas.className = 'moveit-canvas';
@@ -162,7 +167,7 @@ export function init(host) {
       context.clearRect(0, 0, width, height);
       context.fillStyle = '#5f7188';
       context.font = '12px system-ui';
-      context.fillText('TCP 마커를 클릭해 드래그 · Shift+Z · Ctrl+Pitch · Alt+Grip · 빈 곳/우드래그 orbit',
+      context.fillText('TCP 드래그 · Shift=Z · Ctrl+가로=Pitch · Ctrl+세로=Grip · Alt=Grip · 빈 곳 orbit',
                        12, height - 12);
 
       context.strokeStyle = '#141c27';
@@ -353,6 +358,33 @@ export function init(host) {
           context.lineWidth = 1.6;
           context.beginPath(); context.moveTo(point.x - 6, point.y); context.lineTo(point.x + 6, point.y);
           context.moveTo(point.x, point.y - 6); context.lineTo(point.x, point.y + 6); context.stroke();
+
+          // 목표 그리퍼 크기: TCP 링 안의 작은 원이 grip(0~27mm)에 비례해 차오른다.
+          // 0mm=작은 점, 27mm=바깥 링을 거의 꽉 채움. 방향/자세와 무관하게 크기만 보여준다.
+          const gripMm = Math.max(0, Number(gripInput.value) || 0);
+          const gripRatio = Math.min(1, gripMm / 27);
+          const innerRadius = 0.004 + (0.042 - 0.004) * gripRatio;
+          const inner = [];
+          for (let i = 0; i <= 32; ++i) {
+            const angle = (i / 32) * Math.PI * 2;
+            inner.push(project(toWorld([innerRadius * Math.cos(angle), innerRadius * Math.sin(angle), 0]),
+                               width, height));
+          }
+          if (inner.every(Boolean)) {
+            context.beginPath();
+            context.moveTo(inner[0].x, inner[0].y);
+            for (const item of inner.slice(1)) context.lineTo(item.x, item.y);
+            context.closePath();
+            context.fillStyle = 'rgba(255, 179, 107, 0.32)';
+            context.fill();
+            context.strokeStyle = '#ffb36b';
+            context.lineWidth = 1.5;
+            context.stroke();
+          }
+          context.fillStyle = '#ffb36b';
+          context.font = '10px system-ui';
+          context.fillText(`grip ${gripMm.toFixed(1)} mm`, point.x + 14, point.y + 18);
+
           context.fillStyle = '#ffe178';
           context.font = '11px system-ui';
           context.fillText('TCP target', point.x + 14, point.y - 10);
@@ -458,13 +490,33 @@ export function init(host) {
   gripSlider.max = '27';
   gripSlider.step = '0.1';
   gripSlider.value = gripInput.value;
-  gripRow.append(gripLabel, gripSlider);
+  const gripValue = document.createElement('div');
+  gripValue.className = 'moveit-grip-value';
+  const gripVisual = document.createElement('div');
+  gripVisual.className = 'moveit-grip-visual';
+  const jawLeft = document.createElement('span');
+  jawLeft.className = 'jaw';
+  const jawRight = document.createElement('span');
+  jawRight.className = 'jaw';
+  gripVisual.append(jawLeft, jawRight);
+  gripRow.append(gripLabel, gripSlider, gripVisual, gripValue);
   body.append(gripRow);
+  const updateGripUi = () => {
+    const value = Number(gripInput.value);
+    const valid = Number.isFinite(value) ? value : 0;
+    gripValue.textContent = `${valid.toFixed(1)} mm`;
+    gripSlider.value = gripInput.value;
+    gripVisual.style.setProperty('--grip-gap', `${2 + Math.max(0, valid) * 0.8}px`);
+  };
   gripSlider.addEventListener('input', () => {
     gripInput.value = gripSlider.value;
+    updateGripUi();
     schedulePreview();
   });
-  gripInput.addEventListener('input', () => { gripSlider.value = gripInput.value; });
+  gripInput.addEventListener('input', () => {
+    updateGripUi();
+  });
+  updateGripUi();
 
   const modeRow = buttonRow(body);
   const modeHint = document.createElement('div');
@@ -481,10 +533,12 @@ export function init(host) {
     modeButtons.set(mode, modeButton);
   }
 
-  // MoveIt 뷰에서 TCP target을 직접 드래그한다 (X/Y, Shift=Z, Ctrl=Pitch, Alt=Grip).
+  // MoveIt 뷰에서 TCP target을 직접 드래그한다.
+  // Ctrl+가로=Pitch, Ctrl+세로=Grip, Shift=Z, Alt=Grip.
   let dragView = false;
   let dragMode = 'xy';
   let dragOverride = 'xy';  // 모바일용: XY/Z/Pitch/Grip 모드 버튼
+  let dragAxis = null;      // Ctrl 드래그에서 첫 이동 방향으로 축을 고정
   let dragLast = { x: 0, y: 0 };
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   canvas.style.touchAction = 'none';
@@ -499,7 +553,8 @@ export function init(host) {
     dragMode = event.button === 2 || !hit ? 'orbit'
       : event.altKey ? 'grip'
       : event.shiftKey ? 'z'
-      : event.ctrlKey || event.metaKey ? 'pitch' : dragOverride;
+      : event.ctrlKey || event.metaKey ? 'pitch_grip' : dragOverride;
+    dragAxis = null;
     dragLast = { x: event.clientX, y: event.clientY };
     draggingTarget = dragMode !== 'orbit';
     canvas.setPointerCapture(event.pointerId);
@@ -516,12 +571,24 @@ export function init(host) {
       camera.pitch = clamp(camera.pitch - dy * 0.008, 0.12, 1.25);
     } else if (dragMode === 'grip') {
       gripInput.value = clamp(Number(gripInput.value) - dy * 0.1, 0, 27).toFixed(1);
-      gripSlider.value = gripInput.value;
+      updateGripUi();
       schedulePreview();
     } else if (dragMode === 'z') {
       zInput.value = clamp(Number(zInput.value) - dy * step, 0.02, 0.7).toFixed(4);
     } else if (dragMode === 'pitch') {
       pitchInput.value = clamp(Number(pitchInput.value) + dx * 0.25, -90, 90).toFixed(2);
+    } else if (dragMode === 'pitch_grip') {
+      // Ctrl 드래그: 처음 움직인 축으로 고정한다. 가로=Pitch, 세로=Grip.
+      if (dragAxis === null && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+        dragAxis = Math.abs(dx) >= Math.abs(dy) ? 'pitch' : 'grip';
+      }
+      if (dragAxis === 'pitch') {
+        pitchInput.value = clamp(Number(pitchInput.value) + dx * 0.25, -90, 90).toFixed(2);
+      } else if (dragAxis === 'grip') {
+        gripInput.value = clamp(Number(gripInput.value) - dy * 0.1, 0, 27).toFixed(1);
+        updateGripUi();
+      }
+      schedulePreview();
     } else {
       // 화면에서 끈 방향 그대로 TCP가 따라오도록 현재 카메라 yaw/pitch 기준으로
       // 월드 XY를 계산한다. 카메라를 돌린 뒤에도 '보고 있는 화면' 기준으로 움직인다.
@@ -659,7 +726,11 @@ export function init(host) {
         yInput.value = String(parts[1]);
         zInput.value = String(parts[2]);
         if (Number.isFinite(Number(pitch))) pitchInput.value = String(pitch);
-        if (Number.isFinite(Number(grip))) gripInput.value = String(grip);
+        if (Number.isFinite(Number(grip))) {
+          gripInput.value = String(grip);
+          gripSlider.value = gripInput.value;
+          updateGripUi();
+        }
         updating = false;
         targetInitialized = true;
       }

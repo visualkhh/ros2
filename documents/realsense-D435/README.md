@@ -140,7 +140,7 @@ pkg-config --modversion realsense2
 의존성:
 
 ```bash
-sudo apt install -y git cmake build-essential pkg-config \
+sudo apt install -y git cmake build-essential pkgconf \
   libssl-dev libusb-1.0-0-dev libudev-dev
 # 그래픽 예제를 켤 때만: libgtk-3-dev libglfw3-dev
 ```
@@ -180,7 +180,8 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
 
-카메라를 다시 꽂는다.
+보통 `udevadm trigger`로 바로 적용되고, 안 되면 카메라를 다시 꽂는다.
+적용 후 USB 장치가 `crw-rw-rw- root plugdev`인지 확인한다.
 
 확인:
 
@@ -188,6 +189,7 @@ sudo udevadm trigger
 pkg-config --modversion realsense2
 ls /usr/local/lib/cmake/realsense2
 ls -l /usr/local/lib/librealsense2.so*
+ls -l /dev/bus/usb/002/002   # udev 적용 후 crw-rw-rw- root plugdev
 ```
 
 `2.58.4`가 나오면 된다. `rs-enumerate-devices`는 `-DBUILD_EXAMPLES=ON`일 때
@@ -262,7 +264,7 @@ Pi에서는 `krosc_real`만 빌드한다. Qt Viz/시뮬레이터/viz-web은 PC �
 ### 실행
 
 ```bash
-# 기본: 카메라 자동 사용 (color 10Hz, depth 5Hz)
+# 기본: 카메라 자동 사용 (color 320x240 5Hz, depth 160x120 2Hz)
 ./krosc_ws/run.sh
 
 # 카메라 끄기
@@ -288,10 +290,10 @@ Pi에서는 `krosc_real`만 빌드한다. Qt Viz/시뮬레이터/viz-web은 PC �
 
 | 토픽 | 실기 encoding | 시뮬레이터 encoding | 내용 |
 |---|---|---|---|
-| `camera/color/image_raw` | `jpeg` | `rgb8` | 실기 640×480 → JPEG, 시뮬 256×192 RGB |
-| `camera/depth/image_rect_raw` | `16UC1` | `16UC1` | little-endian, 단위 mm, `step = width*2` |
+| `camera/color/image_raw` | `jpeg` | `rgb8` | 실기 320×240 → JPEG, 시뮬 160×120 RGB |
+| `camera/depth/image_rect_raw` | `16UC1` | `16UC1` | 실기 160×120(4× decimation), little-endian mm, `step = width*2` |
 
-실기는 color 10Hz / depth 5Hz, 시뮬레이터는 color/depth 10Hz(렌더)/5Hz(발행)다.
+실기는 color 5Hz / depth 2Hz, 시뮬레이터도 color 5Hz(렌더)/depth 2Hz(발행)다.
 
 `krosc::msgs::Image` 필드:
 
@@ -312,15 +314,15 @@ PC에서:
 ```
 
 - 왼쪽: Color (실기 JPEG / 시뮬 RGB8)
-- 오른쪽: Depth (0.2 m 파랑 → 3.0 m 빨강)
+- 오른쪽: Depth (0.2 m 파랑 → 3.0 m 빨강, 기본 particles 2×2 샘플)
 - 상단: color/depth fps, 연결 상태
 - Diagnostics 패널에도 `RealSense D435 [ok]`와 serial/firmware/fps/age가 표시된다.
 
 영상은 `Image` 메시지로 PeerNetwork를 통해 **binary WebSocket frame(opcode 0x2)** 으로
 브라우저에 전달된다. JSON/base64로 바꾸지 않는다.
 
-raw depth(실기 640×480×2 ≈ 614 KB)를 5Hz로 보내므로 WiFi 상태가 나쁘면
-`--camera-depth-rate 2`로 낮춘다.
+raw depth(160×120×2 ≈ 38 KB)를 2Hz로 보내므로 대역폭이 작다.
+더 줄이려면 `--camera-depth-rate 1` 또는 `--camera-depth-decimation 4`를 쓴다.
 
 ### 시뮬레이터 (실기 없이)
 
@@ -333,7 +335,7 @@ PC에서 Qt 시뮬레이터를 띄우면 오른쪽에 **REALSENSE D435 (SIM)** �
 # 웹:   http://localhost:8080/ → Camera
 ```
 
-시뮬레이터 카메라는 `SimulatorRealSense`가 월드 벽/퍽을 2.5D 레이캐스트해서 만든다.
+시뮬레이터 카메라는 `SimulatorRealSense`가 월드 벽/퍽을 2.5D 레이캐스트해서 160×120으로 만든다.
 실기 `librealsense2` 없이 PC에서 전체 카메라 경로(Engine → Sensor → PeerNetwork → Web)를
 검증할 수 있다. Qt 패널은 시뮬레이션 스레드가 만든 최신 프레임을 복사해서 그린다.
 

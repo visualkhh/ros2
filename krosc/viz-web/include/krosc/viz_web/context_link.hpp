@@ -38,7 +38,10 @@ class ContextLink {
   void set_frame_handler(FrameHandler handler);
   void set_status_handler(StatusHandler handler);
   void start();
-  void subscribe(const TopicSpec& topic);
+  // 같은 이름이 이미 구독 중이면 false. 성공하면 true.
+  bool subscribe(const TopicSpec& topic);
+  bool unsubscribe(const std::string& name);
+  [[nodiscard]] bool subscribed(const std::string& name) const;
   void shutdown();
 
   [[nodiscard]] bool connected() const;

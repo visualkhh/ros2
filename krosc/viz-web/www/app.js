@@ -41,6 +41,14 @@ const state = {
   },
 };
 
+// 서버가 아는 토픽 카탈로그와 현재 구독 상태. 플러그인이 추가한 토픽도 여기에 합친다.
+const topicCatalog = new Map();
+const topicEntries = new Map();
+const expandedTopics = new Set();
+const taggedTopics = new Set();
+let topicsSignature = '';
+let currentPluginEntry = null;
+
 // ---- URL 상태 (SPA): 새로고침해도 보던 탭/표시 그대로 ----
 const urlParams = new URLSearchParams(location.search);
 {
@@ -779,7 +787,34 @@ function sendGoal(x, y, yaw = 0) {
     });
 }
 
-function onTopic(topicName, callback) {
+function onTopic(topicName, callback, options = {}) {
+  if (currentPluginEntry) {
+    const source = currentPluginEntry.title || currentPluginEntry.name || 'plugin';
+    const key = `${source}:${topicName}`;
+    if (!taggedTopics.has(key)) {
+      const known = topicCatalog.get(topicName);
+      if (known) {
+        taggedTopics.add(key);
+        rpc('topic/register', {
+          name: topicName,
+          kind: known.kind,
+          source,
+          subscribe: false,
+        }).then(() => refreshTopics()).catch(() => {});
+      } else if (Number.isInteger(options.kind)) {
+        taggedTopics.add(key);
+        rpc('topic/register', {
+          name: topicName,
+          kind: options.kind,
+          qos: options.qos || 'sensor',
+          source,
+          subscribe: true,
+        }).then(() => refreshTopics()).catch((error) => {
+          toast(`topic ${topicName}: ${error.message}`);
+        });
+      }
+    }
+  }
   if (!state.subscribers.has(topicName)) state.subscribers.set(topicName, new Set());
   state.subscribers.get(topicName).add(callback);
   const latest = state.latest.get(topicName);
@@ -877,8 +912,183 @@ function buildViewTools() {
   syncViewTools();
 }
 
+function topicMetaText(info) {
+  return `${KIND_NAMES[info.kind] ?? info.kind} · ${info.source || 'core'}`;
+}
+
+function updateTopicDetail(entry) {
+  const info = entry.info;
+  const stats = state.stats.get(info.name);
+  entry.detail.replaceChildren();
+  const full = document.createElement('div');
+  full.className = 'full';
+  full.textContent = info.name;
+  entry.detail.append(full);
+  const values = [
+    ['kind', `${KIND_NAMES[info.kind] ?? info.kind} (${info.kind})`],
+    ['source', info.source || 'core'],
+    ['qos', info.qos || 'default'],
+    ['subscribed', info.subscribed ? 'on' : 'off'],
+    ['rate', stats && stats.hz ? `${stats.hz.toFixed(1)} Hz` : '-'],
+    ['received', stats ? String(stats.count) : '0'],
+  ];
+  for (const [key, value] of values) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const left = document.createElement('span');
+    left.textContent = key;
+    const right = document.createElement('span');
+    right.textContent = value;
+    row.append(left, right);
+    entry.detail.append(row);
+  }
+}
+
+function updateTopicEntry(entry) {
+  const info = entry.info;
+  entry.row.classList.toggle('off', !info.subscribed);
+  entry.checkbox.checked = Boolean(info.subscribed);
+  entry.name.textContent = info.name;
+  entry.name.title = info.name;
+  entry.meta.textContent = topicMetaText(info);
+  entry.row.title = `${info.name}\n${topicMetaText(info)} · ${info.qos || 'default'}`;
+  const stats = state.stats.get(info.name);
+  entry.hz.textContent = stats && stats.hz ? stats.hz.toFixed(1) : '-';
+  if (!entry.detail.hidden &&
+      performance.now() - (entry.lastDetailUpdate || 0) > 500) {
+    entry.lastDetailUpdate = performance.now();
+    updateTopicDetail(entry);
+  }
+}
+
+function createTopicEntry(info) {
+  const row = document.createElement('div');
+  row.className = 'topic';
+  row.dataset.topic = info.name;
+  const main = document.createElement('div');
+  main.className = 'topic-main';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = Boolean(info.subscribed);
+  checkbox.title = '구독 on/off';
+  const name = document.createElement('span');
+  name.className = 'name';
+  const hz = document.createElement('span');
+  hz.className = 'hz';
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  main.append(checkbox, name, hz, meta);
+  const detail = document.createElement('div');
+  detail.className = 'topic-detail';
+  detail.hidden = !expandedTopics.has(info.name);
+  row.append(main, detail);
+  const entry = { info, row, checkbox, name, hz, meta, detail };
+  topicEntries.set(info.name, entry);
+
+  checkbox.addEventListener('change', async () => {
+    const target = checkbox.checked;
+    checkbox.disabled = true;
+    try {
+      const response = await rpc(target ? 'topic/subscribe' : 'topic/unsubscribe',
+                                 { name: info.name });
+      if (!response.ok) throw new Error(response.error || 'topic subscription failed');
+      info.subscribed = target;
+      const catalog = topicCatalog.get(info.name);
+      if (catalog) catalog.subscribed = target;
+      updateTopicEntry(entry);
+    } catch (error) {
+      checkbox.checked = !target;
+      toast(`topic ${info.name}: ${error.message}`);
+    } finally {
+      checkbox.disabled = false;
+      refreshTopics();
+    }
+  });
+
+  main.addEventListener('click', (event) => {
+    if (event.target === checkbox) return;
+    if (detail.hidden) {
+      expandedTopics.add(info.name);
+      detail.hidden = false;
+      updateTopicDetail(entry);
+    } else {
+      expandedTopics.delete(info.name);
+      detail.hidden = true;
+    }
+  });
+
+  updateTopicEntry(entry);
+  return entry;
+}
+
+function insertTopicEntry(entry) {
+  const container = $('topics');
+  const name = entry.info.name;
+  const siblings = [...container.querySelectorAll('.topic')];
+  const next = siblings.find((row) => String(row.dataset.topic).localeCompare(name) > 0);
+  if (next) container.insertBefore(entry.row, next);
+  else container.append(entry.row);
+}
+
+function renderTopics(topics) {
+  const ordered = [...topics].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const signature = ordered
+      .map((info) => `${info.name}:${info.kind}:${info.source}:${info.subscribed ? 1 : 0}:${info.qos || ''}`)
+      .join('|');
+  topicCatalog.clear();
+  for (const info of ordered) topicCatalog.set(info.name, info);
+  if (signature === topicsSignature) {
+    for (const info of ordered) {
+      const entry = topicEntries.get(info.name);
+      if (entry) {
+        entry.info = info;
+        updateTopicEntry(entry);
+      }
+    }
+    return;
+  }
+  topicsSignature = signature;
+  const container = $('topics');
+  container.replaceChildren();
+  topicEntries.clear();
+  for (const info of ordered) {
+    const entry = createTopicEntry(info);
+    container.append(entry.row);
+  }
+}
+
+async function refreshTopics() {
+  try {
+    const response = await rpc('topic/list');
+    renderTopics(Array.isArray(response.topics) ? response.topics : []);
+  } catch (error) {
+    // websocket 연결 전/게이트웨이 재시작 중에는 조용히 넘어간다.
+  }
+}
+
+async function registerTopic({ name, kind, qos = 'default', source, subscribe = true }) {
+  if (!name) throw new Error('topic 이름이 필요하다');
+  if (!Number.isInteger(kind)) throw new Error('topic kind가 필요하다');
+  const owner = source || currentPluginEntry?.title || currentPluginEntry?.name || 'plugin';
+  const response = await rpc('topic/register', { name, kind, qos, source: owner, subscribe });
+  if (!response.ok) throw new Error(response.error || 'topic register 실패');
+  await refreshTopics();
+  return response;
+}
+
+async function setTopicSubscribed(name, subscribed) {
+  const response = await rpc(subscribed ? 'topic/subscribe' : 'topic/unsubscribe', { name });
+  if (!response.ok) throw new Error(response.error || 'topic subscription 실패');
+  await refreshTopics();
+  return response;
+}
+
 const host = {
   onTopic,
+  registerTopic,
+  subscribeTopic(name) { return setTopicSubscribed(name, true); },
+  unsubscribeTopic(name) { return setTopicSubscribed(name, false); },
+  refreshTopics,
   latest: topic,
   rpc,
   onEvent,
@@ -1041,20 +1251,27 @@ for (const [key, label] of displays) {
   $('displays').append(wrapper);
 }
 
-const topicRows = new Map();
 function updateTopicRow(topicName, kind) {
-  let row = topicRows.get(topicName);
-  if (!row) {
-    row = document.createElement('div');
-    row.className = 'topic';
-    row.innerHTML = `<span class="name"></span><span class="kind"></span><span class="hz"></span>`;
-    $('topics').append(row);
-    row.querySelector('.name').textContent = topicName;
-    row.querySelector('.kind').textContent = KIND_NAMES[kind] ?? kind;
-    topicRows.set(topicName, row);
+  let entry = topicEntries.get(topicName);
+  if (!entry) {
+    const info = topicCatalog.get(topicName) || {
+      name: topicName,
+      kind,
+      source: 'live',
+      subscribed: true,
+      qos: 'default',
+    };
+    entry = createTopicEntry(info);
+    if (!topicCatalog.has(topicName)) topicCatalog.set(topicName, info);
+    insertTopicEntry(entry);
   }
   const stats = state.stats.get(topicName);
-  row.querySelector('.hz').textContent = stats.hz ? stats.hz.toFixed(1) : '-';
+  entry.hz.textContent = stats && stats.hz ? stats.hz.toFixed(1) : '-';
+  if (!entry.detail.hidden &&
+      performance.now() - (entry.lastDetailUpdate || 0) > 500) {
+    entry.lastDetailUpdate = performance.now();
+    updateTopicDetail(entry);
+  }
 }
 
 function handleFrame(buffer) {
@@ -1118,6 +1335,7 @@ function connect() {
     while (textOutbox.length > 0) {
       socket.send(textOutbox.shift());
     }
+    setTimeout(refreshTopics, 0);
   };
   socket.onclose = () => {
     state.wsOpen = false;
@@ -2516,6 +2734,7 @@ window.addEventListener('blur', () => {
 });
 
 async function loadPlugins() {
+  await refreshTopics();
   let manifest;
   try {
     manifest = await fetch('/plugins.json', { cache: 'no-store' }).then((response) => response.json());
@@ -2553,7 +2772,9 @@ async function loadPlugins() {
     panels.append(view);
 
     const previous = currentPluginView;
+    const previousPluginEntry = currentPluginEntry;
     currentPluginView = view;
+    currentPluginEntry = entry;
     try {
       const module = await import(entry.module);
       if (typeof module.init === 'function') await module.init(host, entry);
@@ -2562,6 +2783,7 @@ async function loadPlugins() {
       toast(`plugin ${entry.name}: ${error.message}`);
     } finally {
       currentPluginView = previous;
+      currentPluginEntry = previousPluginEntry;
     }
 
     if (view.childElementCount === 0) {
@@ -2586,5 +2808,7 @@ async function loadPlugins() {
   }
   urlStateReady = true;
   scheduleUrlState();
+  await refreshTopics();
+  setInterval(refreshTopics, 5000);
 }
 loadPlugins();

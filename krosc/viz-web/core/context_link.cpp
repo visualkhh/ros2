@@ -1,6 +1,7 @@
 #include "krosc/viz_web/context_link.hpp"
 
 #include <chrono>
+#include <map>
 #include <typeindex>
 #include <typeinfo>
 #include <utility>
@@ -12,30 +13,38 @@ struct ContextLink::Impl {
   ~Impl() { shutdown(); }
 
   template <class T>
-  void subscribe_topic(const std::string& name, net::Kind kind, QoS qos) {
-    auto subscription = context.topics().subscribe<T>(
-        name,
-        [this, name, kind](const T& message) {
-          if (stopping.load()) {
-            return;
-          }
-          FrameHandler handler;
-          {
-            std::lock_guard<std::mutex> lock(handler_mutex);
-            handler = frame_handler;
-          }
-          if (!handler) {
-            return;
-          }
-          net::Frame frame;
-          frame.type = net::kFrameTopic;
-          frame.topic = name;
-          frame.kind = kind;
-          frame.payload = net::encode_message(std::type_index(typeid(T)), &message);
-          handler(frame);
-        },
-        qos);
-    subscriptions.push_back(subscription.base());
+  bool subscribe_topic(const std::string& name, net::Kind kind, QoS qos) {
+    if (name.empty() || subscriptions.count(name) != 0) {
+      return false;
+    }
+    try {
+      auto subscription = context.topics().subscribe<T>(
+          name,
+          [this, name, kind](const T& message) {
+            if (stopping.load()) {
+              return;
+            }
+            FrameHandler handler;
+            {
+              std::lock_guard<std::mutex> lock(handler_mutex);
+              handler = frame_handler;
+            }
+            if (!handler) {
+              return;
+            }
+            net::Frame frame;
+            frame.type = net::kFrameTopic;
+            frame.topic = name;
+            frame.kind = kind;
+            frame.payload = net::encode_message(std::type_index(typeid(T)), &message);
+            handler(frame);
+          },
+          qos);
+      subscriptions.emplace(name, subscription.base());
+      return true;
+    } catch (...) {
+      return false;
+    }
   }
 
   void start() {
@@ -47,65 +56,67 @@ struct ContextLink::Impl {
     status_thread = std::thread([this] { status_loop(); });
   }
 
-  void subscribe(const TopicSpec& topic) {
+  bool subscribe(const TopicSpec& topic) {
     switch (topic.kind) {
       case net::Kind::Twist:
-        subscribe_topic<msgs::Twist>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Twist>(topic.name, topic.kind, topic.qos);
       case net::Kind::String:
-        subscribe_topic<msgs::String>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::String>(topic.name, topic.kind, topic.qos);
       case net::Kind::TF:
-        subscribe_topic<msgs::TFMessage>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::TFMessage>(topic.name, topic.kind, topic.qos);
       case net::Kind::Scan:
-        subscribe_topic<msgs::LaserScan>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::LaserScan>(topic.name, topic.kind, topic.qos);
       case net::Kind::Image:
-        subscribe_topic<msgs::Image>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Image>(topic.name, topic.kind, topic.qos);
       case net::Kind::Imu:
-        subscribe_topic<msgs::Imu>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Imu>(topic.name, topic.kind, topic.qos);
       case net::Kind::Odometry:
-        subscribe_topic<msgs::Odometry>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Odometry>(topic.name, topic.kind, topic.qos);
       case net::Kind::JointState:
-        subscribe_topic<msgs::JointState>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::JointState>(topic.name, topic.kind, topic.qos);
       case net::Kind::Grid:
-        subscribe_topic<msgs::OccupancyGrid>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::OccupancyGrid>(topic.name, topic.kind, topic.qos);
       case net::Kind::Path:
-        subscribe_topic<msgs::Path>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Path>(topic.name, topic.kind, topic.qos);
       case net::Kind::Diagnostics:
-        subscribe_topic<msgs::DiagnosticArray>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::DiagnosticArray>(topic.name, topic.kind, topic.qos);
       case net::Kind::Log:
-        subscribe_topic<msgs::Log>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Log>(topic.name, topic.kind, topic.qos);
       case net::Kind::Pose:
-        subscribe_topic<msgs::PoseStamped>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::PoseStamped>(topic.name, topic.kind, topic.qos);
       case net::Kind::PoseCov:
-        subscribe_topic<msgs::PoseWithCovarianceStamped>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::PoseWithCovarianceStamped>(topic.name, topic.kind, topic.qos);
       case net::Kind::Bool:
-        subscribe_topic<msgs::Bool>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Bool>(topic.name, topic.kind, topic.qos);
       case net::Kind::Empty:
-        subscribe_topic<msgs::Empty>(topic.name, topic.kind, topic.qos);
-        break;
+        return subscribe_topic<msgs::Empty>(topic.name, topic.kind, topic.qos);
       default:
-        break;
+        return false;
     }
+  }
+
+  bool unsubscribe(const std::string& name) {
+    auto found = subscriptions.find(name);
+    if (found == subscriptions.end()) {
+      return false;
+    }
+    found->second->cancel();
+    subscriptions.erase(found);
+    return true;
+  }
+
+  bool subscribed(const std::string& name) const {
+    return subscriptions.count(name) != 0;
   }
 
   void shutdown() {
     status_stop.store(true);
     if (status_thread.joinable()) {
       status_thread.join();
+    }
+    for (auto& [name, subscription] : subscriptions) {
+      (void)name;
+      subscription->cancel();
     }
     subscriptions.clear();
     started.store(false);
@@ -247,7 +258,7 @@ struct ContextLink::Impl {
   }
 
   Context& context;
-  std::vector<std::shared_ptr<detail::SubscriptionBase>> subscriptions;
+  std::map<std::string, std::shared_ptr<detail::SubscriptionBase>> subscriptions;
   std::mutex handler_mutex;
   FrameHandler frame_handler;
   StatusHandler status_handler;
@@ -272,7 +283,13 @@ void ContextLink::set_status_handler(StatusHandler handler) {
 
 void ContextLink::start() { impl_->start(); }
 
-void ContextLink::subscribe(const TopicSpec& topic) { impl_->subscribe(topic); }
+bool ContextLink::subscribe(const TopicSpec& topic) { return impl_ && impl_->subscribe(topic); }
+
+bool ContextLink::unsubscribe(const std::string& name) { return impl_ && impl_->unsubscribe(name); }
+
+bool ContextLink::subscribed(const std::string& name) const {
+  return impl_ && impl_->subscribed(name);
+}
 
 void ContextLink::shutdown() {
   if (impl_) {

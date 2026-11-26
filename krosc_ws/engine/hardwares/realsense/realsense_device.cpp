@@ -211,11 +211,16 @@ void RealSenseDevice::start() {
       }
     });
 
-    std::printf("[krosc_ws] RealSense: %s serial=%s fw=%s color=%dx%d@%d depth=%dx%d@%d\n",
-                impl_->product.empty() ? "D400" : impl_->product.c_str(),
-                impl_->serial.c_str(), impl_->firmware.c_str(),
-                impl_->options.width, impl_->options.height, impl_->options.fps,
-                impl_->options.width, impl_->options.height, impl_->options.fps);
+    std::printf(
+        "[krosc_ws] RealSense: %s serial=%s fw=%s stream color=%dx%d@%d depth=%dx%d@%d "
+        "-> publish color=%dx%d depth=%dx%d\n",
+        impl_->product.empty() ? "D400" : impl_->product.c_str(), impl_->serial.c_str(),
+        impl_->firmware.c_str(), impl_->options.width, impl_->options.height,
+        impl_->options.fps, impl_->options.width, impl_->options.height, impl_->options.fps,
+        impl_->options.width / std::max(1, impl_->options.color_decimation),
+        impl_->options.height / std::max(1, impl_->options.color_decimation),
+        impl_->options.width / std::max(1, impl_->options.depth_decimation),
+        impl_->options.height / std::max(1, impl_->options.depth_decimation));
     std::fflush(stdout);
   } catch (const rs2::error& error) {
     std::fprintf(stderr, "[krosc_ws] RealSense 시작 실패: %s\n", error.what());
@@ -268,31 +273,40 @@ std::optional<RealSenseImage> RealSenseDevice::take_color() {
   const int height = frame.get_height();
   const int stride = frame.get_stride_in_bytes();
   const auto format = frame.get_profile().as<rs2::video_stream_profile>().format();
-  const auto* bytes = static_cast<const std::uint8_t*>(frame.get_data());
-  std::vector<std::uint8_t> jpeg;
-  if (format == RS2_FORMAT_RGB8) {
-    jpeg = encode_jpeg(bytes, width, height, stride, impl_->options.jpeg_quality);
-  } else if (format == RS2_FORMAT_BGR8) {
-    std::vector<std::uint8_t> rgb(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3);
-    for (int y = 0; y < height; ++y) {
-      const auto* source = bytes + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
-      auto* target = rgb.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(width) * 3;
-      for (int x = 0; x < width; ++x) {
-        target[x * 3 + 0] = source[x * 3 + 2];
-        target[x * 3 + 1] = source[x * 3 + 1];
-        target[x * 3 + 2] = source[x * 3 + 0];
-      }
-    }
-    jpeg = encode_jpeg(rgb.data(), width, height, width * 3, impl_->options.jpeg_quality);
-  } else {
+  if (format != RS2_FORMAT_RGB8 && format != RS2_FORMAT_BGR8) {
     return std::nullopt;
   }
+  const auto* bytes = static_cast<const std::uint8_t*>(frame.get_data());
+  const int factor = std::max(1, impl_->options.color_decimation);
+  const int output_width = width / factor;
+  const int output_height = height / factor;
+  if (output_width <= 0 || output_height <= 0) {
+    return std::nullopt;
+  }
+  std::vector<std::uint8_t> rgb(static_cast<std::size_t>(output_width) *
+                                static_cast<std::size_t>(output_height) * 3);
+  const bool bgr = format == RS2_FORMAT_BGR8;
+  for (int y = 0; y < output_height; ++y) {
+    const auto* source =
+        bytes + static_cast<std::size_t>(y * factor) * static_cast<std::size_t>(stride);
+    auto* target =
+        rgb.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(output_width) * 3;
+    for (int x = 0; x < output_width; ++x) {
+      const std::size_t source_index = static_cast<std::size_t>(x * factor) * 3;
+      const std::size_t target_index = static_cast<std::size_t>(x) * 3;
+      target[target_index + 0] = source[source_index + (bgr ? 2 : 0)];
+      target[target_index + 1] = source[source_index + 1];
+      target[target_index + 2] = source[source_index + (bgr ? 0 : 2)];
+    }
+  }
+  auto jpeg = encode_jpeg(rgb.data(), output_width, output_height, output_width * 3,
+                          impl_->options.jpeg_quality);
   if (jpeg.empty()) {
     return std::nullopt;
   }
   RealSenseImage image;
-  image.width = static_cast<std::uint32_t>(width);
-  image.height = static_cast<std::uint32_t>(height);
+  image.width = static_cast<std::uint32_t>(output_width);
+  image.height = static_cast<std::uint32_t>(output_height);
   image.encoding = "jpeg";
   image.step = 0;
   image.data = std::move(jpeg);
@@ -324,17 +338,29 @@ std::optional<RealSenseImage> RealSenseDevice::take_depth() {
   const int height = frame.get_height();
   const int stride = frame.get_stride_in_bytes();
   const auto* bytes = static_cast<const std::uint8_t*>(frame.get_data());
-  const std::size_t row_bytes = static_cast<std::size_t>(width) * 2;
+  const int factor = std::max(1, impl_->options.depth_decimation);
+  const int output_width = width / factor;
+  const int output_height = height / factor;
+  if (output_width <= 0 || output_height <= 0) {
+    return std::nullopt;
+  }
+  const std::size_t output_row_bytes = static_cast<std::size_t>(output_width) * 2;
   RealSenseImage image;
-  image.width = static_cast<std::uint32_t>(width);
-  image.height = static_cast<std::uint32_t>(height);
+  image.width = static_cast<std::uint32_t>(output_width);
+  image.height = static_cast<std::uint32_t>(output_height);
   image.encoding = "16UC1";
-  image.step = static_cast<std::uint32_t>(row_bytes);
-  image.data.resize(row_bytes * static_cast<std::size_t>(height));
-  for (int y = 0; y < height; ++y) {
-    std::memcpy(image.data.data() + static_cast<std::size_t>(y) * row_bytes,
-                bytes + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride),
-                row_bytes);
+  image.step = static_cast<std::uint32_t>(output_row_bytes);
+  image.data.resize(output_row_bytes * static_cast<std::size_t>(output_height));
+  for (int y = 0; y < output_height; ++y) {
+    const auto* source_row =
+        bytes + static_cast<std::size_t>(y * factor) * static_cast<std::size_t>(stride);
+    auto* target_row =
+        image.data.data() + static_cast<std::size_t>(y) * output_row_bytes;
+    for (int x = 0; x < output_width; ++x) {
+      const std::size_t source = static_cast<std::size_t>(x * factor) * 2;
+      target_row[static_cast<std::size_t>(x) * 2 + 0] = source_row[source + 0];
+      target_row[static_cast<std::size_t>(x) * 2 + 1] = source_row[source + 1];
+    }
   }
   return image;
 }

@@ -72,8 +72,8 @@ struct EngineOptions {
   std::string camera_depth_topic = "camera/depth/image_rect_raw";
   std::string camera_color_frame = "camera_color_optical_frame";
   std::string camera_depth_frame = "camera_depth_optical_frame";
-  double camera_period = 0.1;
-  double camera_depth_period = 0.2;
+  double camera_period = 0.2;        // color 5Hz
+  double camera_depth_period = 0.5;  // depth 2Hz (160x120)
   double control_read_period = 0.02;
   double control_write_period = 0.02;
   double control_period = 0.01;

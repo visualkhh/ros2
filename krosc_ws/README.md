@@ -366,7 +366,7 @@ WafflePiArm(truth) → SimulatorOpenCr(encoder/IMU noise) ┐
 OpenCR/LDS/D435 장치처럼 감싼다.
 
 `SimulatorRealSense`는 `WafflePiArm::tick`의 카메라 콜백(시뮬레이션 스레드)에서
-256×192 RGB8 color와 16UC1 depth를 만든다. 실기 D435와 같은 `RealSenseSensor`를 거쳐
+160×120 RGB8 color와 160×120 16UC1 depth를 만든다. 실기 D435와 같은 `RealSenseSensor`를 거쳐
 `camera/color/image_raw` / `camera/depth/image_rect_raw`로 발행되므로,
 Qt `CameraPanel`과 웹 Viz **Camera** 탭이 같은 데이터를 본다.
 정적 map을 미리 발행하지 않는다. 지도는 `--slam` 매핑으로 만들거나 `artifacts/maps`의
@@ -385,9 +385,9 @@ KROSC_VIZ_HOST=127.0.0.1 KROSC_VIZ_PORT=9000 ./run-viz-web.sh
 Pi에 D435를 붙이면 `krosc_real`이 `librealsense2`를 찾았을 때 자동으로 카메라를 켠다.
 
 ```bash
-./run.sh                 # color 10Hz, depth 5Hz
+./run.sh                 # color 320x240 5Hz, depth 160x120 2Hz
 ./run.sh --no-camera     # 끄기
-./run.sh --camera-rate 15 --camera-depth-rate 5
+./run.sh --camera-rate 5 --camera-depth-rate 2
 ```
 
 - `hardwares/realsense/` — 물리 장치(pipeline, JPEG 인코딩, 최신 프레임)
@@ -400,6 +400,35 @@ Pi에 D435를 붙이면 `krosc_real`이 `librealsense2`를 찾았을 때 자동�
 ROS 패키지 경로를 CMake가 자동으로 뒤지지 않는다.
 
 자세한 확인/권한/트러블슈팅: [documents/realsense-D435](../documents/realsense-D435/README.md)
+
+## Viz-web 토픽 구독 / MoveIt 조작
+
+왼쪽 **Topics** 패널은 토픽과 구독을 한 목록으로 보여준다.
+
+- 체크박스: 구독 on/off (`topic/subscribe` / `topic/unsubscribe`)
+- 둘째 줄: `메시지 kind · 플러그인 source`
+- 행 클릭: 전체 토픽 이름, kind, qos, rate, received 상세
+- 게이트웨이는 같은 토픽이 이미 구독 중이면 `VizWeb::register_topic`과
+  `ContextLink::subscribe`에서 중복 검사해 재구독하지 않는다. 여러 브라우저가
+  같은 토픽을 요청해도 서버 구독은 하나다.
+
+플러그인 API:
+
+```js
+host.registerTopic({ name: 'my/topic', kind: 2, qos: 'sensor',
+                     source: 'MyPlugin', subscribe: true });
+host.subscribeTopic('my/topic');
+host.unsubscribeTopic('my/topic');
+// 새 토픽을 onTopic에서 바로 등록할 수도 있다.
+host.onTopic('my/topic', callback, { kind: 2, qos: 'sensor' });
+```
+
+MoveIt 뷰:
+
+- `Ctrl` + 가로 드래그 = Pitch, `Ctrl` + 세로 드래그 = Grip (첫 이동 방향으로 축 고정)
+- `Shift` + 드래그 = Z, `Alt` + 드래그 = Grip
+- TCP 링 안의 작은 원이 grip 0~27 mm에 비례해 커진다 (0 mm=작은 점, 27 mm=링을 거의 채움).
+- MoveIt 패널의 Grip 슬라이더/숫자와 mm 표시가 같은 값을 보여준다.
 
 ## MoveIt / control
 

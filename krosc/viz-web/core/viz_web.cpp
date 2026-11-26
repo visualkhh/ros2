@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <csignal>
+#include <set>
 
 #include <chrono>
 #include <cstdio>
@@ -47,12 +48,27 @@ std::vector<ContextLink::TopicSpec> default_forward_topics() {
   return topics;
 }
 
+QoS qos_from_name(const std::string& name) {
+  if (name == "sensor" || name == "sensor_data") return QOS_SENSOR_DATA;
+  if (name == "latched" || name == "transient_local") return QOS_LATCHED;
+  if (name == "command") return QOS_COMMAND;
+  return QOS_DEFAULT;
+}
+
+std::string qos_name(const QoS& qos) {
+  if (qos.durability == Durability::TransientLocal) return "latched";
+  if (qos.depth.has_value() && *qos.depth == 5) return "sensor";
+  if (qos.depth.has_value() && *qos.depth == 1) return "command";
+  return "default";
+}
+
 }  // namespace
 
 VizWeb::VizWeb(VizWebOptions options, VizWebPluginRegistry registry, Context& context)
     : options_(std::move(options)), registry_(std::move(registry)), context_(&context),
       rpc_(std::make_unique<WebRpc>(context)) {
   register_default_web_rpc(*rpc_, context);
+  register_topic_rpc();
 }
 
 VizWeb::~VizWeb() { shutdown(); }
@@ -113,10 +129,19 @@ bool VizWeb::initialize(std::string& error) {
         *found = extra;
       }
     }
+    std::set<std::string> extra_names;
+    for (const auto& extra : options_.forward_topics) {
+      extra_names.insert(extra.name);
+    }
     for (const auto& topic : topics) {
-      std::printf("[viz-web] forward %s (kind=%u)\n", topic.name.c_str(),
-                  static_cast<unsigned>(topic.kind));
-      link_->subscribe(topic);
+      const std::string source = extra_names.count(topic.name) != 0 ? "project" : "core";
+      std::printf("[viz-web] forward %s (kind=%u, source=%s)\n", topic.name.c_str(),
+                  static_cast<unsigned>(topic.kind), source.c_str());
+      std::string topic_error;
+      if (!register_topic(topic, source, true, topic_error)) {
+        std::fprintf(stderr, "[viz-web] subscribe %s 실패: %s\n", topic.name.c_str(),
+                     topic_error.c_str());
+      }
     }
     link_->start();
   } catch (const std::exception& exception) {
@@ -129,6 +154,147 @@ bool VizWeb::initialize(std::string& error) {
   initialized_ = true;
   error.clear();
   return true;
+}
+
+void VizWeb::register_topic_rpc() {
+  rpc_->add("topic/list", [this](const Json&, const WebRpc::Notify&) { return topic_list_json(); });
+
+  rpc_->add("topic/register", [this](const Json& params, const WebRpc::Notify&) {
+    ContextLink::TopicSpec spec;
+    spec.name = params["name"].as_string();
+    spec.kind = static_cast<net::Kind>(params["kind"].as_int(static_cast<int>(net::Kind::String)));
+    spec.qos = qos_from_name(params["qos"].as_string("default"));
+    const std::string source = params["source"].as_string("plugin");
+    const bool subscribe = params["subscribe"].as_bool(true);
+    std::string error;
+    const bool ok = register_topic(spec, source, subscribe, error);
+    Json result = Json::object();
+    result["ok"] = ok;
+    result["subscribed"] = ok && subscribe;
+    if (!error.empty()) {
+      result["error"] = error;
+    }
+    return result;
+  });
+
+  rpc_->add("topic/subscribe", [this](const Json& params, const WebRpc::Notify&) {
+    std::string error;
+    const bool ok = set_topic_subscription(params["name"].as_string(), true, error);
+    Json result = Json::object();
+    result["ok"] = ok;
+    if (!error.empty()) {
+      result["error"] = error;
+    }
+    return result;
+  });
+
+  rpc_->add("topic/unsubscribe", [this](const Json& params, const WebRpc::Notify&) {
+    std::string error;
+    const bool ok = set_topic_subscription(params["name"].as_string(), false, error);
+    Json result = Json::object();
+    result["ok"] = ok;
+    if (!error.empty()) {
+      result["error"] = error;
+    }
+    return result;
+  });
+}
+
+bool VizWeb::register_topic(const ContextLink::TopicSpec& spec, const std::string& source,
+                            bool subscribe, std::string& error) {
+  if (spec.name.empty()) {
+    error = "topic 이름이 비었다";
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(topics_mutex_);
+  if (!link_) {
+    error = "VizWeb가 초기화되지 않았다";
+    return false;
+  }
+  auto found = topics_.find(spec.name);
+  if (found == topics_.end()) {
+    TopicEntry entry;
+    entry.spec = spec;
+    entry.source = source.empty() ? "plugin" : source;
+    found = topics_.emplace(spec.name, std::move(entry)).first;
+  } else {
+    if (found->second.subscribed && found->second.spec.kind != spec.kind) {
+      error = "이미 다른 kind로 구독 중이다";
+      return false;
+    }
+    if (!found->second.subscribed) {
+      found->second.spec.kind = spec.kind;
+      found->second.spec.qos = spec.qos;
+    }
+    if (!source.empty()) {
+      found->second.source = source;
+    }
+  }
+  if (subscribe && !found->second.subscribed) {
+    try {
+      if (!link_->subscribe(found->second.spec)) {
+        error = "지원하지 않는 메시지 kind이거나 이미 구독 중이다";
+        return false;
+      }
+      found->second.subscribed = true;
+    } catch (const std::exception& exception) {
+      error = exception.what();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool VizWeb::set_topic_subscription(const std::string& name, bool subscribe,
+                                    std::string& error) {
+  std::lock_guard<std::mutex> lock(topics_mutex_);
+  if (!link_) {
+    error = "VizWeb가 초기화되지 않았다";
+    return false;
+  }
+  auto found = topics_.find(name);
+  if (found == topics_.end()) {
+    error = "등록되지 않은 토픽이다";
+    return false;
+  }
+  if (found->second.subscribed == subscribe) {
+    return true;
+  }
+  try {
+    if (subscribe) {
+      if (!link_->subscribe(found->second.spec)) {
+        error = "구독에 실패했다";
+        return false;
+      }
+    } else if (!link_->unsubscribe(name)) {
+      error = "구독 해제에 실패했다";
+      return false;
+    }
+  } catch (const std::exception& exception) {
+    error = exception.what();
+    return false;
+  }
+  found->second.subscribed = subscribe;
+  return true;
+}
+
+Json VizWeb::topic_list_json() const {
+  Json array = Json::array();
+  {
+    std::lock_guard<std::mutex> lock(topics_mutex_);
+    for (const auto& [name, entry] : topics_) {
+      Json item = Json::object();
+      item["name"] = name;
+      item["kind"] = static_cast<int>(entry.spec.kind);
+      item["source"] = entry.source;
+      item["subscribed"] = entry.subscribed;
+      item["qos"] = qos_name(entry.spec.qos);
+      array.push(std::move(item));
+    }
+  }
+  Json result = Json::object();
+  result["topics"] = std::move(array);
+  return result;
 }
 
 int VizWeb::run() {
@@ -164,6 +330,10 @@ void VizWeb::shutdown() {
   }
   server_.reset();
   rpc_->shutdown();
+  {
+    std::lock_guard<std::mutex> lock(topics_mutex_);
+    topics_.clear();
+  }
   link_.reset();
   initialized_ = false;
 }

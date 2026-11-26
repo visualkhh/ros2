@@ -101,9 +101,13 @@ void CameraPanel::refresh() {
     if (frame->encoding == "16UC1" && frame->width > 0 && frame->height > 0) {
       QImage image(static_cast<int>(frame->width), static_cast<int>(frame->height),
                    QImage::Format_RGB32);
+      image.fill(Qt::black);
       for (std::uint32_t y = 0; y < frame->height; ++y) {
         auto* line = reinterpret_cast<QRgb*>(image.scanLine(static_cast<int>(y)));
         for (std::uint32_t x = 0; x < frame->width; ++x) {
+          if ((x & 1u) != 0 || (y & 1u) != 0) {
+            continue;  // 2x2 샘플 = particle
+          }
           const std::size_t offset =
               static_cast<std::size_t>(y) * frame->step + static_cast<std::size_t>(x) * 2;
           const std::uint16_t millimeters =

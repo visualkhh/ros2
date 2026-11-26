@@ -71,10 +71,9 @@ const STYLE = `
   background: #000;
 }
 .camera-canvas {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
+  width: 100%;
   height: auto;
+  max-height: 100%;
   display: block;
 }
 .camera-empty {
@@ -137,6 +136,11 @@ for (let index = 0; index < 256; ++index) {
 
 export function init(host) {
   installStyle();
+  // 플러그인이 토픽을 등록하는 경로. 이미 게이트웨이가 구독 중이면 재구독하지 않는다.
+  host.registerTopic({ name: COLOR_TOPIC, kind: 17, qos: 'sensor', source: 'Camera' })
+      .catch(() => {});
+  host.registerTopic({ name: DEPTH_TOPIC, kind: 17, qos: 'sensor', source: 'Camera' })
+      .catch(() => {});
   const view = host.addView({ id: 'camera', title: 'Camera' });
   const root = element('div', 'camera-view');
   const toolbar = element('div', 'camera-toolbar');
@@ -144,7 +148,13 @@ export function init(host) {
   const colorStat = element('div', 'stat', 'color -');
   const depthStat = element('div', 'stat', 'depth -');
   const linkStat = element('div', 'stat', '대기');
-  toolbar.append(title, colorStat, depthStat, linkStat);
+  const particleLabel = document.createElement('label');
+  particleLabel.className = 'stat';
+  const particles = document.createElement('input');
+  particles.type = 'checkbox';
+  particles.checked = true;
+  particleLabel.append(particles, document.createTextNode(' particles'));
+  toolbar.append(title, colorStat, depthStat, linkStat, particleLabel);
   const grid = element('div', 'camera-grid');
   root.append(toolbar, grid);
   view.panel.append(root);
@@ -262,18 +272,21 @@ export function init(host) {
     const data = message.data;
     const count = width * height;
     for (let index = 0; index < count; ++index) {
+      const out = index * 4;
+      pixels[out + 3] = 255;
+      if (particles.checked) {
+        const x = index % width;
+        const y = (index / width) | 0;
+        if ((x & 1) !== 0 || (y & 1) !== 0) continue;  // 2x2 샘플 = particle
+      }
       const offset = index * 2;
       const mm = data[offset] | (data[offset + 1] << 8);
-      let colorIndex = 0;
-      if (mm > 0) {
-        const t = Math.max(0, Math.min(1, (mm / 1000 - 0.2) / 2.8));
-        colorIndex = Math.round(t * 255) * 3;
-      }
-      const out = index * 4;
+      if (mm === 0) continue;  // no return = black
+      const t = Math.max(0, Math.min(1, (mm / 1000 - 0.2) / 2.8));
+      const colorIndex = Math.round(t * 255) * 3;
       pixels[out] = DEPTH_LUT[colorIndex];
       pixels[out + 1] = DEPTH_LUT[colorIndex + 1];
       pixels[out + 2] = DEPTH_LUT[colorIndex + 2];
-      pixels[out + 3] = 255;
     }
     depth.context.putImageData(image, 0, 0);
     depth.empty.style.display = 'none';
