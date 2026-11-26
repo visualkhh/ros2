@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -81,7 +82,7 @@ class Robot {
 
   bool start();
   void stop();
-  void poll();
+  void log_status();
 
   [[nodiscard]] OpenCrDevice& opencr() { return opencr_; }
   [[nodiscard]] LdsDevice* lidar() { return lidar_; }
@@ -120,6 +121,7 @@ class Robot {
   std::unique_ptr<krosc::nodes::CollisionMonitor> collision_;
 
   bool started_ = false;
+  std::chrono::steady_clock::time_point last_status_{};
 };
 
 }  // namespace krosc_ws

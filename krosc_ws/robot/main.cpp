@@ -267,7 +267,7 @@ int main(int argc, char** argv) {
   constexpr auto kPeriod = std::chrono::milliseconds(10);
   auto next = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
-    robot.poll();
+    robot.log_status();
     next += kPeriod;
     std::this_thread::sleep_until(next);
     const auto now = std::chrono::steady_clock::now();

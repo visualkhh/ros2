@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
 
   const auto start_time = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
-    robot.poll();
+    robot.log_status();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     if (duration > 0.0 &&
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count() >=

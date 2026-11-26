@@ -342,13 +342,13 @@ void Robot::stop() {
   started_ = false;
 }
 
-void Robot::poll() {
-  static auto last_status = std::chrono::steady_clock::now();
+void Robot::log_status() {
   const auto now = std::chrono::steady_clock::now();
-  if (now - last_status < std::chrono::seconds(5)) {
+  if (last_status_.time_since_epoch().count() != 0 &&
+      now - last_status_ < std::chrono::seconds(5)) {
     return;
   }
-  last_status = now;
+  last_status_ = now;
   if (cartographer_) {
     std::printf("[krosc_ws] slam: mode=%s scans=%d rejected=%d localized=%s cells=%zu\n",
                 cartographer_->mode().c_str(), cartographer_->scans(), cartographer_->rejected(),
