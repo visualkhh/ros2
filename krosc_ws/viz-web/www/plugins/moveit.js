@@ -10,7 +10,16 @@ export function init(host) {
   const camera = { yaw: -0.6, pitch: 0.45, distance: 1.05, tx: 0.15, ty: 0.0, tz: 0.18 };
   let targetScreenPoint = null;
   let draggingTarget = false;
+  let targetHold = false;       // 드래그 후 서버 target 갱신 전까지 로컬 목표 유지
+  let targetHoldKey = '';
   let lastLocalEdit = 0;
+
+  const targetKey = (target) => {
+    if (!target || !target.pose || !target.pose.position || !target.pose.orientation) return '';
+    const p = target.pose.position;
+    const q = target.pose.orientation;
+    return [p.x, p.y, p.z, q.x, q.y, q.z, q.w].map((value) => Number(value).toFixed(5)).join(',');
+  };
 
   function project(point, width, height) {
     const dx = (Number(point.x) || 0) - camera.tx;
@@ -275,7 +284,12 @@ export function init(host) {
 
       const target = host.latest('moveit_target_pose');
       targetScreenPoint = null;
-      // 드래그 중에는 네트워크 왕복을 기다리지 않고 입력값으로 즉시 그린다 (Qt와 동일한 반응).
+      // 드래그 중에는 네트워크 왕복을 기다리지 않고 입력값으로 즉시 그린다.
+      // 드래그가 끝난 뒤에도 서버가 새 target을 발행할 때까지 로컬 값을 유지한다.
+      // (preview가 늦거나 IK 실패일 때 옛 위치로 순간적으로 튀는 것을 막는다.)
+      if (targetHold && targetKey(target) !== targetHoldKey) {
+        targetHold = false;
+      }
       // 현재 TCP는 하드코딩 체인이 아니라 URDF end_effector_link의 FK를 쓴다.
       // moveit_arm/preview와 같은 링크 기준이라 카메라 회전 중에도 마커가 붙어 있다.
       const linkFrames = host.urdfLinkFrames ? host.urdfLinkFrames() : [];
@@ -288,7 +302,7 @@ export function init(host) {
         pose = currentTcp;
         orientation = { x: 0, y: 0, z: 0, w: 1 };
       }
-      const local = draggingTarget || performance.now() - lastLocalEdit < 250;
+      const local = draggingTarget || targetHold || performance.now() - lastLocalEdit < 250;
       if (local) {
         pose = { x: Number(xInput.value), y: Number(yInput.value), z: Number(zInput.value) };
       }
@@ -533,6 +547,8 @@ export function init(host) {
   canvas.addEventListener('pointerup', (event) => {
     if (dragView && dragMode !== 'orbit') {
       lastLocalEdit = performance.now();
+      targetHold = true;
+      targetHoldKey = targetKey(host.latest('moveit_target_pose'));
       schedulePreview();
     }
     dragView = false;
@@ -565,6 +581,8 @@ export function init(host) {
 
   const actionRow = buttonRow(body);
   button(actionRow, 'Current', () => {
+    targetHold = false;
+    lastLocalEdit = 0;
     const values = parseFields(host.latest('moveit_state')?.data);
     const tcp = (values.get('tcp') || '0,0,0').split(',').map(Number);
     updating = true;
