@@ -407,7 +407,7 @@ ROS 패키지 경로를 CMake가 자동으로 뒤지지 않는다.
 
 - 체크박스: 구독 on/off (`topic/subscribe` / `topic/unsubscribe`)
 - 둘째 줄: `메시지 kind · 플러그인 source`
-- 행 클릭: 전체 토픽 이름, kind, qos, rate, received 상세
+- 행 클릭: 전체 토픽 이름, kind, source, qos, rate, received를 **레이어 팝업**으로 표시
 - 게이트웨이는 같은 토픽이 이미 구독 중이면 `VizWeb::register_topic`과
   `ContextLink::subscribe`에서 중복 검사해 재구독하지 않는다. 여러 브라우저가
   같은 토픽을 요청해도 서버 구독은 하나다.

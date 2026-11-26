@@ -44,7 +44,8 @@ const state = {
 // 서버가 아는 토픽 카탈로그와 현재 구독 상태. 플러그인이 추가한 토픽도 여기에 합친다.
 const topicCatalog = new Map();
 const topicEntries = new Map();
-const expandedTopics = new Set();
+let openTopicName = '';
+let modalLastUpdate = 0;
 const taggedTopics = new Set();
 let topicsSignature = '';
 let currentPluginEntry = null;
@@ -916,14 +917,33 @@ function topicMetaText(info) {
   return `${KIND_NAMES[info.kind] ?? info.kind} · ${info.source || 'core'}`;
 }
 
-function updateTopicDetail(entry) {
-  const info = entry.info;
-  const stats = state.stats.get(info.name);
-  entry.detail.replaceChildren();
+function openTopicModal(info) {
+  openTopicName = info.name;
+  const modal = $('topic-modal');
+  if (!modal) return;
+  modal.hidden = false;
+  renderTopicModal(info);
+}
+
+function closeTopicModal() {
+  openTopicName = '';
+  const modal = $('topic-modal');
+  if (modal) modal.hidden = true;
+}
+
+function renderTopicModal(info) {
+  const modal = $('topic-modal');
+  if (!modal || modal.hidden) return;
+  const title = $('topic-modal-title');
+  const body = $('topic-modal-body');
+  if (!title || !body) return;
+  title.textContent = info.name;
+  body.replaceChildren();
   const full = document.createElement('div');
-  full.className = 'full';
+  full.className = 'topic-modal-name';
   full.textContent = info.name;
-  entry.detail.append(full);
+  body.append(full);
+  const stats = state.stats.get(info.name);
   const values = [
     ['kind', `${KIND_NAMES[info.kind] ?? info.kind} (${info.kind})`],
     ['source', info.source || 'core'],
@@ -934,14 +954,41 @@ function updateTopicDetail(entry) {
   ];
   for (const [key, value] of values) {
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = 'topic-modal-row';
     const left = document.createElement('span');
     left.textContent = key;
     const right = document.createElement('span');
     right.textContent = value;
     row.append(left, right);
-    entry.detail.append(row);
+    body.append(row);
   }
+  const toggle = document.createElement('label');
+  toggle.className = 'topic-modal-toggle';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = Boolean(info.subscribed);
+  checkbox.addEventListener('change', async () => {
+    checkbox.disabled = true;
+    try {
+      await setTopicSubscribed(info.name, checkbox.checked);
+    } catch (error) {
+      checkbox.checked = !checkbox.checked;
+      toast(`topic ${info.name}: ${error.message}`);
+    } finally {
+      checkbox.disabled = false;
+      const latest = topicCatalog.get(info.name);
+      if (latest) renderTopicModal(latest);
+    }
+  });
+  toggle.append(checkbox, document.createTextNode(' subscribed'));
+  body.append(toggle);
+}
+
+function refreshOpenTopicModal() {
+  if (!openTopicName) return;
+  const info = topicCatalog.get(openTopicName);
+  if (info) renderTopicModal(info);
+  else closeTopicModal();
 }
 
 function updateTopicEntry(entry) {
@@ -954,11 +1001,6 @@ function updateTopicEntry(entry) {
   entry.row.title = `${info.name}\n${topicMetaText(info)} · ${info.qos || 'default'}`;
   const stats = state.stats.get(info.name);
   entry.hz.textContent = stats && stats.hz ? stats.hz.toFixed(1) : '-';
-  if (!entry.detail.hidden &&
-      performance.now() - (entry.lastDetailUpdate || 0) > 500) {
-    entry.lastDetailUpdate = performance.now();
-    updateTopicDetail(entry);
-  }
 }
 
 function createTopicEntry(info) {
@@ -978,11 +1020,8 @@ function createTopicEntry(info) {
   const meta = document.createElement('span');
   meta.className = 'meta';
   main.append(checkbox, name, hz, meta);
-  const detail = document.createElement('div');
-  detail.className = 'topic-detail';
-  detail.hidden = !expandedTopics.has(info.name);
-  row.append(main, detail);
-  const entry = { info, row, checkbox, name, hz, meta, detail };
+  row.append(main);
+  const entry = { info, row, checkbox, name, hz, meta };
   topicEntries.set(info.name, entry);
 
   checkbox.addEventListener('change', async () => {
@@ -1007,14 +1046,7 @@ function createTopicEntry(info) {
 
   main.addEventListener('click', (event) => {
     if (event.target === checkbox) return;
-    if (detail.hidden) {
-      expandedTopics.add(info.name);
-      detail.hidden = false;
-      updateTopicDetail(entry);
-    } else {
-      expandedTopics.delete(info.name);
-      detail.hidden = true;
-    }
+    openTopicModal(topicCatalog.get(info.name) || info);
   });
 
   updateTopicEntry(entry);
@@ -1045,6 +1077,7 @@ function renderTopics(topics) {
         updateTopicEntry(entry);
       }
     }
+    refreshOpenTopicModal();
     return;
   }
   topicsSignature = signature;
@@ -1055,6 +1088,7 @@ function renderTopics(topics) {
     const entry = createTopicEntry(info);
     container.append(entry.row);
   }
+  refreshOpenTopicModal();
 }
 
 async function refreshTopics() {
@@ -1267,10 +1301,10 @@ function updateTopicRow(topicName, kind) {
   }
   const stats = state.stats.get(topicName);
   entry.hz.textContent = stats && stats.hz ? stats.hz.toFixed(1) : '-';
-  if (!entry.detail.hidden &&
-      performance.now() - (entry.lastDetailUpdate || 0) > 500) {
-    entry.lastDetailUpdate = performance.now();
-    updateTopicDetail(entry);
+  if (openTopicName === topicName && performance.now() - modalLastUpdate > 500) {
+    modalLastUpdate = performance.now();
+    const info = topicCatalog.get(topicName);
+    if (info) renderTopicModal(info);
   }
 }
 
@@ -2810,5 +2844,21 @@ async function loadPlugins() {
   scheduleUrlState();
   await refreshTopics();
   setInterval(refreshTopics, 5000);
+}
+
+{
+  const modal = $('topic-modal');
+  const close = $('topic-modal-close');
+  if (modal) {
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) closeTopicModal();
+    });
+  }
+  if (close) {
+    close.addEventListener('click', closeTopicModal);
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && openTopicName) closeTopicModal();
+  });
 }
 loadPlugins();

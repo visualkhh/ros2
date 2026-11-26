@@ -190,24 +190,75 @@ aside {
   font-size: 10px;
 }
 .topic.off .name { color: #5f7188; }
-.topic-detail {
-  margin: 4px 0 5px 22px;
-  padding: 5px 8px;
-  border-left: 2px solid #31425a;
-  background: #0d131b;
-  border-radius: 4px;
-  color: #8fa0b7;
-  font-size: 10.5px;
-  line-height: 1.55;
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.62);
 }
-.topic-detail .full {
-  color: #dbe4f0;
+.modal[hidden] { display: none; }
+.modal-card {
+  width: min(560px, 94vw);
+  max-height: 82vh;
+  overflow: auto;
+  background: #11161f;
+  border: 1px solid #31425a;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #263041;
+}
+.modal-head .title {
+  color: #e8eef8;
+  font-weight: 600;
   word-break: break-all;
-  font-size: 11px;
-  margin-bottom: 2px;
 }
-.topic-detail .row { display: flex; justify-content: space-between; gap: 8px; }
-.topic-detail .row span:last-child { color: #c8d4e6; text-align: right; word-break: break-all; }
+.modal-close {
+  background: transparent;
+  border: 0;
+  color: #b8c4d6;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.modal-close:hover { color: #fff; }
+.modal-body { padding: 12px 14px; display: grid; gap: 6px; }
+.topic-modal-name {
+  color: #dbe4f0;
+  font-size: 12px;
+  word-break: break-all;
+  margin-bottom: 4px;
+}
+.topic-modal-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11.5px;
+  color: #8fa0b7;
+}
+.topic-modal-row span:last-child {
+  color: #c8d4e6;
+  text-align: right;
+  word-break: break-all;
+}
+.topic-modal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #b9c6d8;
+  font-size: 12px;
+}
 
 #stage { position: relative; min-width: 0; background: #080b10; }
 #view-panel { position: absolute; inset: 0; }
