@@ -114,6 +114,19 @@ struct LaserScan {
   std::vector<float> intensities;
 };
 
+// 카메라 프레임. encoding은 픽셀 포맷이다.
+//   "jpeg": data가 JPEG 파일 바이트 (step=0)
+//   "rgb8", "bgr8": 픽셀당 3바이트, step = width * 3
+//   "16UC1": depth, 픽셀당 2바이트 little-endian(밀리미터), step = width * 2
+struct Image {
+  Header header;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+  std::string encoding;
+  std::uint32_t step = 0;
+  std::vector<std::uint8_t> data;
+};
+
 struct JointState {
   Header header;
   std::vector<std::string> name;

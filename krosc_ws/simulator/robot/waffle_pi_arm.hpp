@@ -44,6 +44,9 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
 
   void set_scan_callback(std::function<void(const krosc::msgs::LaserScan&)> callback);
   void set_imu_callback(std::function<void(const krosc::msgs::Imu&)> callback);
+  // 시뮬레이터 카메라가 월드 레이캐스트를 같은 시뮬레이션 스레드에서 하도록
+  // pose가 갱신된 뒤 호출한다.
+  void set_camera_callback(std::function<void(double)> callback);
 
   // 수동 조작(패널)과 MoveIt/컨트롤러 명령의 우선순위를 전환한다.
   void set_manual_arm(bool manual);
@@ -67,6 +70,7 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   static constexpr double kScanRangeMin = 0.12;
   static constexpr double kScanRangeMax = 3.5;
   static constexpr double kImuPeriod = 0.01;
+  static constexpr double kCameraPeriod = 0.1;  // 10Hz (웹 표시용)
 
  private:
   struct Noise {
@@ -107,12 +111,14 @@ class WafflePiArm final : public krosc::simulator::SimulatorRobot {
   double right_velocity_ = 0.0;
   double imu_accum_ = 0.0;
   double scan_accum_ = 0.0;
+  double camera_accum_ = 0.0;
   double last_linear_velocity_ = 0.0;
   double last_angular_velocity_ = 0.0;
   double last_imu_linear_velocity_ = 0.0;
 
   std::function<void(const krosc::msgs::LaserScan&)> scan_callback_;
   std::function<void(const krosc::msgs::Imu&)> imu_callback_;
+  std::function<void(double)> camera_callback_;
   std::vector<float> truth_scan_ranges_;
   krosc::msgs::Pose2D truth_scan_pose_;
 

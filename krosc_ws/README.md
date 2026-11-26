@@ -323,8 +323,9 @@ RL이 켜져도 scan/odom/plan/TF가 없거나 추론이 실패하면 자동으�
 `model`, `policy`, `fallback`, `reason`, `infer_ms`, `scan_age`.
 Viz는 여러 노드의 diagnostics를 이름 기준으로 합쳐서 본다 (`viz/core/viz_model.cpp`).
 
-ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 우선 찾고,
-없으면 Homebrew prefix(`/opt/homebrew`)도 본다. 둘 다 없으면 RL은 fallback 전용으로 빌드된다.
+ONNX Runtime은 `ONNXRUNTIME_ROOT` 환경변수, `~/opt/onnxruntime-gpu/<version>`,
+시스템 include/lib 순으로 찾는다. ROS 경로는 쓰지 않는다.
+없으면 RL은 fallback 전용으로 빌드된다.
 `KROSC_WS_BUILD_RL_NAV=OFF`면 플러그인/노드를 아예 빌드하지 않고 main이 RPP를 쓴다.
 
 ## 시뮬레이터 (PC 전용)
@@ -342,7 +343,9 @@ Pi에서는 타깃을 만들지 않는다.
 ```
 
 Qt 창에서 `W/A/S/D` 텔레옵, `L` 라이다 표시 토글, 드래그 orbit, 휠 zoom을 쓸 수 있다.
-오른쪽에는 `MANIPULATOR` 패널이 붙어 joint1~4/gripper를 수동 조작하고 HOME/STOW를 실행한다.
+오른쪽에는 **REALSENSE D435 (SIM)** 카메라 패널(color/depth)과 `MANIPULATOR` 패널이 붙는다.
+카메라는 월드 벽/퍽을 2.5D 레이캐스트해서 만들고, joint1~4/gripper는 수동 조작하거나
+HOME/STOW를 실행할 수 있다.
 
 기본은 노이즈 모드다. **물리 차체 슬립**은 `WafflePiArm`이 만들고,
 **엔코더 양자화/IMU 바이어스/라이다 거리 잡음·드롭아웃**은 하드웨어 경계인
@@ -351,12 +354,21 @@ Qt 창에서 `W/A/S/D` 텔레옵, `L` 라이다 표시 토글, 드래그 orbit, 
 
 ```text
 WafflePiArm(truth) → SimulatorOpenCr(encoder/IMU noise) ┐
-                   → SimulatorLds(range/dropout noise) ┴→ Robot engine
+                   → SimulatorLds(range/dropout noise)  ┤→ Engine
+                   → SimulatorRealSense(world raycast)  ┘
 ```
 
-실기/시뮬레이터는 `engine/robot.cpp`의 공통 `Robot` 클래스에
-`OpenCrDevice`/`LdsDevice`만 다르게 주입한다. 시뮬레이터는
-`simulator/hardwares/opencr/simulator_opencr.cpp`와 `simulator/hardwares/lds03/simulator_lds.cpp`가 월드 로봇(`WafflePiArm`)을 OpenCR/LDS 장치처럼 감싼다.
+실기/시뮬레이터는 `engine/engine.cpp`의 공통 `Engine` 클래스에
+`OpenCrDevice`/`LdsDevice`/`RealSenseCamera`를 다르게 주입한다. 시뮬레이터는
+`simulator/hardwares/opencr/simulator_opencr.cpp`,
+`simulator/hardwares/lds03/simulator_lds.cpp`,
+`simulator/hardwares/realsense/simulator_realsense.cpp`가 월드 로봇(`WafflePiArm`)을
+OpenCR/LDS/D435 장치처럼 감싼다.
+
+`SimulatorRealSense`는 `WafflePiArm::tick`의 카메라 콜백(시뮬레이션 스레드)에서
+256×192 RGB8 color와 16UC1 depth를 만든다. 실기 D435와 같은 `RealSenseSensor`를 거쳐
+`camera/color/image_raw` / `camera/depth/image_rect_raw`로 발행되므로,
+Qt `CameraPanel`과 웹 Viz **Camera** 탭이 같은 데이터를 본다.
 정적 map을 미리 발행하지 않는다. 지도는 `--slam` 매핑으로 만들거나 `artifacts/maps`의
 저장 맵을 로드해서 `map_server`/Cartographer가 만들고, URDF는 시뮬레이터용
 `simulator/robot/urdf` 복제본을 쓴다.
@@ -365,8 +377,29 @@ WafflePiArm(truth) → SimulatorOpenCr(encoder/IMU noise) ┐
 
 ```bash
 KROSC_VIZ_HOST=127.0.0.1 KROSC_VIZ_PORT=9000 ./run-viz-web.sh
-# http://localhost:8080/
+# http://localhost:8080/  → Camera 탭
 ```
+
+## RealSense D435 (선택)
+
+Pi에 D435를 붙이면 `krosc_real`이 `librealsense2`를 찾았을 때 자동으로 카메라를 켠다.
+
+```bash
+./run.sh                 # color 10Hz, depth 5Hz
+./run.sh --no-camera     # 끄기
+./run.sh --camera-rate 15 --camera-depth-rate 5
+```
+
+- `hardwares/realsense/` — 물리 장치(pipeline, JPEG 인코딩, 최신 프레임)
+- `sensors/realsense/` — `Image` 토픽 발행 + diagnostics
+- 토픽: `camera/color/image_raw` (JPEG), `camera/depth/image_rect_raw` (16UC1 mm)
+- 웹 Viz **Camera** 탭에서 color/depth를 본다.
+
+`krosc_ws`는 ROS를 쓰지 않는다. `librealsense2`는 standalone으로 설치하거나
+`KROSC_WS_REALSENSE_ROOT`, `CMAKE_PREFIX_PATH`, `PKG_CONFIG_PATH`로 위치를 지정한다.
+ROS 패키지 경로를 CMake가 자동으로 뒤지지 않는다.
+
+자세한 확인/권한/트러블슈팅: [documents/realsense-D435](../documents/realsense-D435/README.md)
 
 ## MoveIt / control
 
@@ -394,10 +427,11 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 
 물리/논리 레이어는 이렇게 나뉜다:
 
-- `hardwares/`: 물리 장치만 (`opencr`, `lds03`)
+- `hardwares/`: 물리 장치만 (`opencr`, `lds03`, `realsense`)
 - `controls/opencr/`: state/command interface와 명령 매핑 (`Control`)
 - `sensors/opencr/`: IMU 읽기 → `imu` 발행
 - `sensors/lds03/`: 스캔 읽기 → `scan` 발행
+- `sensors/realsense/`: color/depth 읽기 → `Image` 발행 + diagnostics
 - `hardwares/`는 `Hardware`(물리 lifecycle), `controls/`는 `Control`(state/command),
   `sensors/`는 `Sensor`(read/publish)를 상속한다
 - `SensorManager`: `add(sensor, name, period)`로 등록하고 각자 주기로 read/publish
@@ -435,8 +469,8 @@ Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 �
 ```
 krosc_ws/
 ├── engine/                      # 로봇(Pi) 앱 엔진
-│   ├── main.cpp                 # 노드 조립, TCP 서버, 진단 루프
-│   ├── robot.cpp/.hpp            # 공통 로봇 스택 (하드웨어 주입)
+│   ├── main.cpp                 # Hardware 생성/주입, TCP 서버, 진단 루프
+│   ├── engine.cpp/.hpp           # 공통 엔진 (Control/Sensor/nav2/MoveIt 조립)
 │   ├── nodes/robot_status.cpp/.hpp # arm_status/diagnostics, 팔 서비스
 │   ├── nodes/rl_nav_controller.cpp/.hpp # NavControllerPlugin (RL + fallback)
 │   ├── ml/onnx_policy.cpp/.hpp  # ONNX Runtime (CUDA/CoreML → CPU)
@@ -446,16 +480,20 @@ krosc_ws/
 │   │   ├── opencr/
 │   │   │   ├── opencr_serial.cpp/.hpp   # hardware::Hardware + 시리얼 읽기/캐시
 │   │   │   └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서
-│   │   └── lds03/
-│   │       └── lds03_device.cpp/.hpp    # hardware::Hardware + 패킷 파서
+│   │   ├── lds03/
+│   │   │   └── lds03_device.cpp/.hpp    # hardware::Hardware + 패킷 파서
+│   │   └── realsense/
+│   │       └── realsense_device.cpp/.hpp # D435 pipeline, color JPEG/depth raw
 │   ├── controls/                # 논리 제어
 │   │   └── opencr/
 │   │       └── opencr_control.cpp/.hpp  # Control (바퀴+팔)
 │   ├── sensors/                 # 논리 센서
 │   │   ├── opencr/
 │   │   │   └── opencr_imu.cpp/.hpp      # IMU -> imu 토픽
-│   │   └── lds03/
-│   │       └── lds03_sensor.cpp/.hpp    # scan -> scan 토픽
+│   │   ├── lds03/
+│   │   │   └── lds03_sensor.cpp/.hpp    # scan -> scan 토픽
+│   │   └── realsense/
+│   │       └── realsense_sensor.cpp/.hpp # color/depth Image + diagnostics
 │   └── description/urdf/turtlebot3_real.urdf
 ├── simulator/                   # PC 전용 krosc_ws 시뮬레이터 (Pi 미빌드)
 │   ├── hardwares/opencr/        # SimulatorOpenCr 스텁
@@ -469,7 +507,7 @@ krosc_ws/
 ├── viz-web/                     # PC 웹 Viz 앱 + 프로젝트 JS 플러그인
 │   ├── main.cpp
 │   ├── CMakeLists.txt
-│   └── www/plugins/             # moveit.js, rl_nav.js
+│   └── www/plugins/             # moveit.js, rl_nav.js, camera.js
 ├── artifacts/models/rl_nav_controller/<name>/  # policy.onnx + policy.onnx.data
 ├── firmware/opencr/             # 이 프로젝트 전용 OpenCR 펌웨어 사본
 │   ├── turtlebot_opencr/turtlebot_opencr.ino

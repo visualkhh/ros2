@@ -59,14 +59,19 @@ configure_krosc() {
 
 configure_ws() {
   local -a ort_args=()
+  local -a rs_args=()
   local ort_root="${KROSC_WS_ONNXRUNTIME_ROOT:-${ONNXRUNTIME_ROOT:-$HOME/opt/onnxruntime-gpu/1.26.0}}"
   if [ -d "$ort_root" ]; then
     export ONNXRUNTIME_ROOT="$ort_root"
     ort_args+=(-DKROSC_WS_ONNXRUNTIME_ROOT="$ort_root"
                -UONNXRUNTIME_INCLUDE_DIR -UONNXRUNTIME_LIBRARY)
   fi
+  if [ -n "${KROSC_WS_REALSENSE_ROOT:-}" ]; then
+    rs_args+=(-DKROSC_WS_REALSENSE_ROOT="$KROSC_WS_REALSENSE_ROOT")
+  fi
   cmake -S "$here" -B "$here/build" \
-        -DCMAKE_BUILD_TYPE=RelWithDebInfo -DKROSC_WS_BUILD_TESTS=ON "${ort_args[@]}"
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo -DKROSC_WS_BUILD_TESTS=ON \
+        "${ort_args[@]}" "${rs_args[@]}"
 }
 
 build_robot() {

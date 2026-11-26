@@ -114,6 +114,8 @@ bool VizWeb::initialize(std::string& error) {
       }
     }
     for (const auto& topic : topics) {
+      std::printf("[viz-web] forward %s (kind=%u)\n", topic.name.c_str(),
+                  static_cast<unsigned>(topic.kind));
       link_->subscribe(topic);
     }
     link_->start();

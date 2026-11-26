@@ -61,6 +61,9 @@ struct ContextLink::Impl {
       case net::Kind::Scan:
         subscribe_topic<msgs::LaserScan>(topic.name, topic.kind, topic.qos);
         break;
+      case net::Kind::Image:
+        subscribe_topic<msgs::Image>(topic.name, topic.kind, topic.qos);
+        break;
       case net::Kind::Imu:
         subscribe_topic<msgs::Imu>(topic.name, topic.kind, topic.qos);
         break;
@@ -188,6 +191,10 @@ struct ContextLink::Impl {
       case net::Kind::Scan:
         context.topics().publish<msgs::LaserScan>(
             frame.topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
+        break;
+      case net::Kind::Image:
+        context.topics().publish<msgs::Image>(
+            frame.topic, std::static_pointer_cast<const msgs::Image>(message), qos);
         break;
       case net::Kind::Imu:
         context.topics().publish<msgs::Imu>(

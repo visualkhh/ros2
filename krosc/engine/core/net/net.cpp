@@ -119,6 +119,16 @@ void encode(Writer& w, const msgs::LaserScan& message) {
   }
 }
 
+void encode(Writer& w, const msgs::Image& message) {
+  encode(w, message.header);
+  w.u32(message.width);
+  w.u32(message.height);
+  w.str(message.encoding);
+  w.u32(message.step);
+  w.u32(static_cast<std::uint32_t>(message.data.size()));
+  w.bytes(message.data);
+}
+
 void encode(Writer& w, const msgs::Imu& message) {
   encode(w, message.header);
   encode(w, message.orientation);
@@ -307,6 +317,26 @@ std::optional<msgs::LaserScan> decode_scan(Reader& r) {
     intensity = r.f32();
   }
   return r.ok() ? std::optional<msgs::LaserScan>(std::move(message)) : std::nullopt;
+}
+
+std::optional<msgs::Image> decode_image(Reader& r) {
+  msgs::Image message;
+  message.header = decode_header(r);
+  message.width = r.u32();
+  message.height = r.u32();
+  message.encoding = r.str();
+  message.step = r.u32();
+  const std::uint32_t count = r.u32();
+  if (!r.ok() || count > static_cast<std::uint32_t>(kMaxFrame) ||
+      r.remaining() < count) {
+    return std::nullopt;
+  }
+  message.data.resize(count);
+  if (count > 0) {
+    std::memcpy(message.data.data(), r.rest(), count);
+    r.skip(count);
+  }
+  return r.ok() ? std::optional<msgs::Image>(std::move(message)) : std::nullopt;
 }
 
 std::optional<msgs::Imu> decode_imu(Reader& r) {
@@ -551,6 +581,10 @@ bool publish_frame(Context& context, const Frame& frame, bool remap_cmd_vel) {
     case Kind::Scan:
       context.topics().publish<msgs::LaserScan>(
           topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
+      break;
+    case Kind::Image:
+      context.topics().publish<msgs::Image>(
+          topic, std::static_pointer_cast<const msgs::Image>(message), qos);
       break;
     case Kind::Imu:
       context.topics().publish<msgs::Imu>(
@@ -1122,6 +1156,13 @@ struct Client::Impl {
         }
         break;
       }
+      case Kind::Image: {
+        Reader reader(payload);
+        if (auto message = decode_image(reader)) {
+          context.topics().publish(topic, std::move(*message), qos_for_topic(topic));
+        }
+        break;
+      }
       case Kind::Imu: {
         Reader reader(payload);
         if (auto message = decode_imu(reader)) {
@@ -1360,6 +1401,7 @@ std::optional<Kind> message_kind(std::type_index type) {
   if (type == typeid(msgs::String)) return Kind::String;
   if (type == typeid(msgs::TFMessage)) return Kind::TF;
   if (type == typeid(msgs::LaserScan)) return Kind::Scan;
+  if (type == typeid(msgs::Image)) return Kind::Image;
   if (type == typeid(msgs::Imu)) return Kind::Imu;
   if (type == typeid(msgs::Odometry)) return Kind::Odometry;
   if (type == typeid(msgs::JointState)) return Kind::JointState;
@@ -1384,6 +1426,8 @@ std::vector<std::uint8_t> encode_message(std::type_index type, const void* messa
     encode(writer, *static_cast<const msgs::TFMessage*>(message));
   } else if (type == typeid(msgs::LaserScan)) {
     encode(writer, *static_cast<const msgs::LaserScan*>(message));
+  } else if (type == typeid(msgs::Image)) {
+    encode(writer, *static_cast<const msgs::Image*>(message));
   } else if (type == typeid(msgs::Imu)) {
     encode(writer, *static_cast<const msgs::Imu*>(message));
   } else if (type == typeid(msgs::Odometry)) {
@@ -1426,6 +1470,9 @@ std::shared_ptr<const void> decode_message(Kind kind, const std::uint8_t* data, 
       break;
     case Kind::Scan:
       if (auto message = decode_scan(reader)) return std::make_shared<const msgs::LaserScan>(std::move(*message));
+      break;
+    case Kind::Image:
+      if (auto message = decode_image(reader)) return std::make_shared<const msgs::Image>(std::move(*message));
       break;
     case Kind::Imu:
       if (auto message = decode_imu(reader)) return std::make_shared<const msgs::Imu>(std::move(*message));

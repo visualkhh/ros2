@@ -12,6 +12,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -40,6 +41,11 @@ namespace {
 constexpr std::uint8_t kPeerTopicLatched = 3;  // kFrameTopic(1)의 latched 변형
 constexpr std::uint8_t kPeerControl = 4;
 constexpr std::size_t kMaxQueue = 512;
+
+bool peer_debug() {
+  static const bool enabled = std::getenv("KROSC_PEER_DEBUG") != nullptr;
+  return enabled;
+}
 
 // peer에서 받은 프레임을 로컬에 publish할 때, 그 publish에서 파생된 응답(상태/목록)이
 // peer로 다시 나가지 못하게 막던 문제를 고친다. 이제 "원래 보낸 peer"에게만 되돌려 보내지 않는다.
@@ -609,6 +615,10 @@ struct PeerNetwork::Impl {
       }
       subscriptions = topics;
     }
+    if (peer_debug()) {
+      std::fprintf(stderr, "[peer] subscribe %zu topics: %s\n", topics.size(),
+                   join_lines(topics).c_str());
+    }
     std::vector<std::shared_ptr<Peer>> snapshot;
     {
       std::lock_guard<std::mutex> lock(peers_mutex);
@@ -870,6 +880,10 @@ struct PeerNetwork::Impl {
         targets.push_back(peer);
       }
     }
+    if (peer_debug() && topic.rfind("camera/", 0) == 0) {
+      std::fprintf(stderr, "[peer] publish %s targets=%zu peers=%zu\n", topic.c_str(),
+                   targets.size(), snapshot.size());
+    }
     if (targets.empty() && !is_latched) {
       return;
     }
@@ -996,6 +1010,9 @@ struct PeerNetwork::Impl {
           }
           peer.subscriptions = std::move(requested);
         }
+        if (peer_debug()) {
+          std::fprintf(stderr, "[peer] got __subscribe: %s\n", text.c_str());
+        }
         std::lock_guard<std::mutex> lock(latched_mutex);
         for (const auto& topic : added) {
           const auto found = latched.find(topic);
@@ -1044,6 +1061,10 @@ struct PeerNetwork::Impl {
       case Kind::Scan:
         context.topics().publish<msgs::LaserScan>(
             topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
+        break;
+      case Kind::Image:
+        context.topics().publish<msgs::Image>(
+            topic, std::static_pointer_cast<const msgs::Image>(message), qos);
         break;
       case Kind::Imu:
         context.topics().publish<msgs::Imu>(

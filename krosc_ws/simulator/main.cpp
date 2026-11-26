@@ -22,10 +22,12 @@
 #include "krosc/time/time.hpp"
 
 #include "panels/arm_panel.hpp"
-#include "robot.hpp"
+#include "panels/camera_panel.hpp"
+#include "engine.hpp"
 #include "robot/waffle_pi_arm.hpp"
 #include "hardwares/lds03/simulator_lds.hpp"
 #include "hardwares/opencr/simulator_opencr.hpp"
+#include "hardwares/realsense/simulator_realsense.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
 #define KROSC_WS_URDF_PATH "simulator/robot/urdf/turtlebot3_real.urdf"
@@ -109,8 +111,9 @@ int main(int argc, char** argv) {
 
   krosc_ws::sim::SimulatorOpenCr opencr(*robot_model, noisy, seed);
   krosc_ws::sim::SimulatorLds lds(*robot_model, noisy, seed);
+  krosc_ws::sim::SimulatorRealSense camera(*robot_model, noisy, seed);
 
-  krosc_ws::RobotOptions options;
+  krosc_ws::EngineOptions options;
   options.urdf_path = KROSC_WS_URDF_PATH;
   options.maps_dir = KROSC_WS_MAPS_DIR;
   options.enable_moveit = true;
@@ -121,6 +124,7 @@ int main(int argc, char** argv) {
   options.enable_arm = true;
   options.enable_status = true;
   options.enable_robot_state_publisher = true;
+  options.enable_camera = true;
   options.wheel_radius = krosc_ws::sim::WafflePiArm::kWheelRadius;
   options.wheel_separation = krosc_ws::sim::WafflePiArm::kWheelSeparation;
   options.scan_topic = "scan";
@@ -133,24 +137,25 @@ int main(int argc, char** argv) {
   options.control_write_period = 0.02;
   options.control_period = 0.01;
 
-  krosc_ws::Robot robot(context, opencr, &lds, options);
+  krosc_ws::Engine engine(context, opencr, &lds, options, &camera);
   auto* arm_panel = new krosc_ws::sim::ArmPanel(*robot_model);
+  auto* camera_panel = new krosc_ws::sim::CameraPanel(camera);
   krosc::simulator::SimulatorWindow window(world->walls(), simulator.snapshots(), ui_node,
-                                     "cmd_vel_teleop", {arm_panel});
+                                     "cmd_vel_teleop", {camera_panel, arm_panel});
   window.show();
   window.raise();
   window.activateWindow();
   window.view().setFocus();
   simulator.start();
-  if (!robot.start()) {
+  if (!engine.start()) {
     std::cerr << "[krosc_ws_sim] 로봇 시작 실패\n";
     simulator.stop();
     return 1;
   }
 
-  std::printf("[krosc_ws_sim] noise: body[%s] opencr[%s] lds[%s]\n",
+  std::printf("[krosc_ws_sim] noise: body[%s] opencr[%s] lds[%s] camera[%s]\n",
               robot_model->noise_summary().c_str(), opencr.noise_summary().c_str(),
-              lds.noise_summary().c_str());
+              lds.noise_summary().c_str(), camera.noise_summary().c_str());
   std::printf("[krosc_ws_sim] world: pucks=%d seed=%u port=%d\n", pucks, seed, port);
   std::printf("[krosc_ws_sim] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);
@@ -159,7 +164,7 @@ int main(int argc, char** argv) {
   auto last_sim_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
     application.processEvents();
-    robot.log_status();
+    engine.log_status();
     const auto now = std::chrono::steady_clock::now();
     if (now - last_sim_status >= std::chrono::seconds(2)) {
       last_sim_status = now;
@@ -181,7 +186,7 @@ int main(int argc, char** argv) {
 
   std::printf("[krosc_ws_sim] 정지 중...\n");
   std::fflush(stdout);
-  robot.stop();
+  engine.stop();
   simulator.stop();
   window.close();
   context.shutdown();

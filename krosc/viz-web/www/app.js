@@ -5,7 +5,7 @@ const textEncoder = new TextEncoder();
 const KIND_NAMES = {
   1: 'Twist', 2: 'String', 3: 'TF', 4: 'Scan', 5: 'Imu', 6: 'Odom',
   7: 'JointState', 8: 'Grid', 9: 'Path', 10: 'Diagnostics', 11: 'Log',
-  12: 'Pose', 13: 'PoseCov', 14: 'Empty', 15: 'Bool',
+  12: 'Pose', 13: 'PoseCov', 14: 'Empty', 15: 'Bool', 17: 'Image',
 };
 
 const state = {
@@ -181,6 +181,17 @@ function decodeFrame(buffer) {
       const intensities = reader.u32();
       reader.bytes(intensities * 4);
       value = { header, angle_min, angle_max, angle_increment, range_min, range_max, ranges };
+      break;
+    }
+    case 17: {
+      const header = readHeader(reader);
+      const width = reader.u32();
+      const height = reader.u32();
+      const encoding = reader.str();
+      const step = reader.u32();
+      const length = reader.u32();
+      const data = reader.bytes(length);
+      value = { header, width, height, encoding, step, data };
       break;
     }
     case 5: {
@@ -812,7 +823,9 @@ function activateView(id) {
     ? 'left drag orbit · right/shift drag pan · wheel zoom · WASD teleop'
     : id === 'moveit'
       ? 'TCP 마커 드래그 X/Y · Shift+Z · Ctrl+Pitch · Plan/Execute는 control-panel'
-      : 'drag pan · wheel zoom · click 2D goal · WASD teleop';
+      : id === 'camera'
+        ? 'RealSense D435 · color(JPEG) / depth(16UC1) · 상단 fps 확인'
+        : 'drag pan · wheel zoom · click 2D goal · WASD teleop';
   const tools = $('view-tools');
   if (tools) {
     tools.style.display = id === '3d' || id === 'moveit' ? 'flex' : 'none';

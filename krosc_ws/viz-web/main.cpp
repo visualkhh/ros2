@@ -188,6 +188,7 @@ int main(int argc, char** argv) {
   registry.add("moveit", "MoveIt", "/plugins/moveit.js");
   registry.add("rl_nav", "RL Nav", "/plugins/rl_nav.js");
   registry.add("manipulator", "Manipulator", "/plugins/manipulator.js");
+  registry.add("camera", "Camera", "/plugins/camera.js");
 
   // 프로젝트 플러그인이 쓰는 토픽. 코어 웹 게이트웨이는 기본 토픽만 안다.
   options.forward_topics = {
@@ -200,6 +201,8 @@ int main(int argc, char** argv) {
       {"moveit_path", krosc::net::Kind::Path, krosc::QOS_DEFAULT},
       {"rl_nav_status", krosc::net::Kind::String, krosc::QOS_LATCHED},
       {"rl_nav_model_list", krosc::net::Kind::String, krosc::QOS_LATCHED},
+      {"camera/color/image_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
+      {"camera/depth/image_rect_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
   };
 
   krosc::net::PeerNetworkOptions network;

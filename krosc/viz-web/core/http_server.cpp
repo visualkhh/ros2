@@ -79,7 +79,8 @@ bool latest_only(const std::string& topic) {
          topic == "odometry/filtered" || topic == "scan" || topic == "imu" ||
          topic == "diagnostics" || topic == "local_plan" || topic == "moveit_state" ||
          topic == "moveit_status" || topic == "arm_status" || topic == "slam_status" ||
-         topic == "goal_status" || topic == "collision_status" || topic == "rl_nav_status";
+         topic == "goal_status" || topic == "collision_status" || topic == "rl_nav_status" ||
+         topic == "camera/color/image_raw" || topic == "camera/depth/image_rect_raw";
 }
 
 // 브라우저로 내보내는 최대 주기(ms). 0 = 제한 없음. 렌더가 60fps면 그 이상은 의미가 없다.

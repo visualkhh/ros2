@@ -41,12 +41,14 @@ namespace krosc_ws {
 
 class OpenCrDevice;
 class LdsDevice;
+class RealSenseCamera;
 class OpenCrControl;
 class OpenCrImu;
 class Lds03Sensor;
+class RealSenseSensor;
 class RobotStatus;
 
-struct RobotOptions {
+struct EngineOptions {
   std::string urdf_path;
   std::string maps_dir;
   bool slam = false;
@@ -56,6 +58,7 @@ struct RobotOptions {
   bool enable_arm = true;
   bool enable_status = true;
   bool enable_robot_state_publisher = true;
+  bool enable_camera = true;
   double wheel_radius = 0.033;
   double wheel_separation = 0.287;
 
@@ -65,20 +68,28 @@ struct RobotOptions {
   std::string imu_topic = "imu";
   std::string imu_frame = "imu_link";
   double imu_period = 0.02;
+  std::string camera_color_topic = "camera/color/image_raw";
+  std::string camera_depth_topic = "camera/depth/image_rect_raw";
+  std::string camera_color_frame = "camera_color_optical_frame";
+  std::string camera_depth_frame = "camera_depth_optical_frame";
+  double camera_period = 0.1;
+  double camera_depth_period = 0.2;
   double control_read_period = 0.02;
   double control_write_period = 0.02;
   double control_period = 0.01;
 };
 
-// 실기/시뮬레이터 공통 로봇 스택.
-// 외부에서 OpenCrDevice와 LdsDevice만 주입하면 Control/Sensor/nav2/MoveIt을 조립한다.
-class Robot {
+// 실기/시뮬레이터 공통 엔진.
+// 외부에서 Hardware(OpenCR/LDS/RealSense)를 주입하면
+// Control/Sensor/nav2/MoveIt/로봇 상태를 조립한다.
+class Engine {
  public:
-  Robot(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar, RobotOptions options);
-  ~Robot();
+  Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
+         EngineOptions options, RealSenseCamera* camera = nullptr);
+  ~Engine();
 
-  Robot(const Robot&) = delete;
-  Robot& operator=(const Robot&) = delete;
+  Engine(const Engine&) = delete;
+  Engine& operator=(const Engine&) = delete;
 
   bool start();
   void stop();
@@ -91,12 +102,14 @@ class Robot {
   krosc::Context& context_;
   OpenCrDevice& opencr_;
   LdsDevice* lidar_;
-  RobotOptions options_;
+  RealSenseCamera* camera_;
+  EngineOptions options_;
   std::string urdf_;
 
   std::unique_ptr<OpenCrControl> control_;
   std::unique_ptr<OpenCrImu> imu_;
   std::unique_ptr<Lds03Sensor> lds_sensor_;
+  std::unique_ptr<RealSenseSensor> camera_sensor_;
   std::unique_ptr<RobotStatus> status_;
   std::unique_ptr<krosc::sensor::SensorManager> sensors_;
   std::unique_ptr<krosc::control::ControlManager> controls_;

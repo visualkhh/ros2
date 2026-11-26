@@ -43,9 +43,12 @@
 #include "krosc/control/controller_manager.hpp"
 #include "krosc/time/time.hpp"
 
-#include "robot.hpp"
+#include "engine.hpp"
 #include "hardwares/lds03/lds03_device.hpp"
 #include "hardwares/opencr/opencr_serial.hpp"
+#ifdef KROSC_WS_HAS_REALSENSE
+#include "hardwares/realsense/realsense_device.hpp"
+#endif
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
 #include "nodes/rl_nav_controller.hpp"
@@ -121,11 +124,15 @@ std::vector<std::string> local_addresses() {
 void usage() {
   std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--maps DIR]\n"
                "                  [--scan-topic NAME] [--scan-rate HZ] [--imu-topic NAME] [--imu-rate HZ]\n"
+               "                  [--camera-serial SERIAL] [--camera-rate HZ] [--camera-depth-rate HZ]\n"
                "                  [--executor-threads N]\n"
-               "                  [--no-lidar] [--slam]\n"
+               "                  [--no-lidar] [--no-camera] [--slam]\n"
                "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
+               "  --camera-rate: color Image 발행 주기 (기본 10Hz)\n"
+               "  --camera-depth-rate: depth Image 발행 주기 (기본 5Hz)\n"
                "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR,\n"
-               "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_EXECUTOR_THREADS (10)\n";
+               "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_CAMERA (1), KROSC_CAMERA_SERIAL,\n"
+               "     KROSC_CAMERA_RATE (10), KROSC_CAMERA_DEPTH_RATE (5), KROSC_EXECUTOR_THREADS (10)\n";
 }
 
 }  // namespace
@@ -145,11 +152,22 @@ int main(int argc, char** argv) {
     }
   }
   bool enable_lidar = true;
+  bool enable_camera = env_or("KROSC_CAMERA", "1") != "0";
   bool slam = false;
   std::string scan_topic = env_or("KROSC_SCAN_TOPIC", "scan");
   std::string imu_topic = env_or("KROSC_IMU_TOPIC", "imu");
+  std::string camera_serial = env_or("KROSC_CAMERA_SERIAL", "");
   double scan_rate = 10.0;
   double imu_rate = 50.0;
+  double camera_rate = 10.0;
+  double camera_depth_rate = 5.0;
+  try {
+    camera_rate = std::stod(env_or("KROSC_CAMERA_RATE", "10"));
+    camera_depth_rate = std::stod(env_or("KROSC_CAMERA_DEPTH_RATE", "5"));
+  } catch (...) {
+    camera_rate = 10.0;
+    camera_depth_rate = 5.0;
+  }
   std::size_t executor_threads = env_count("KROSC_EXECUTOR_THREADS", 10);
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
@@ -171,6 +189,12 @@ int main(int argc, char** argv) {
       imu_topic = argv[++i];
     } else if (argument == "--imu-rate" && i + 1 < argc) {
       imu_rate = std::stod(argv[++i]);
+    } else if (argument == "--camera-serial" && i + 1 < argc) {
+      camera_serial = argv[++i];
+    } else if (argument == "--camera-rate" && i + 1 < argc) {
+      camera_rate = std::stod(argv[++i]);
+    } else if (argument == "--camera-depth-rate" && i + 1 < argc) {
+      camera_depth_rate = std::stod(argv[++i]);
     } else if (argument == "--executor-threads" && i + 1 < argc) {
       if (!parse_count(argv[++i], executor_threads)) {
         std::cerr << "[krosc_ws] executor-threads는 0..64 범위여야 한다\n";
@@ -178,6 +202,8 @@ int main(int argc, char** argv) {
       }
     } else if (argument == "--no-lidar") {
       enable_lidar = false;
+    } else if (argument == "--no-camera") {
+      enable_camera = false;
     } else if (argument == "--slam") {
       slam = true;
     } else if (argument == "-h" || argument == "--help") {
@@ -189,8 +215,9 @@ int main(int argc, char** argv) {
       return 2;
     }
   }
-  if (!(scan_rate > 0.0) || !(imu_rate > 0.0)) {
-    std::cerr << "[krosc_ws] scan-rate/imu-rate는 0보다 커야 한다\n";
+  if (!(scan_rate > 0.0) || !(imu_rate > 0.0) ||
+      (enable_camera && (!(camera_rate > 0.0) || !(camera_depth_rate > 0.0)))) {
+    std::cerr << "[krosc_ws] scan-rate/imu-rate/camera-rate는 0보다 커야 한다\n";
     return 2;
   }
 
@@ -232,33 +259,58 @@ int main(int argc, char** argv) {
     lidar = std::make_unique<krosc_ws::Lds03Device>(std::move(lidar_port), kLidarMountX, true,
                                                     true);
   }
+  krosc_ws::RealSenseCamera* camera = nullptr;
+#ifdef KROSC_WS_HAS_REALSENSE
+  std::unique_ptr<krosc_ws::RealSenseDevice> camera_owner;
+  if (enable_camera) {
+    krosc_ws::RealSenseDevice::Options camera_options;
+    camera_options.serial = camera_serial;
+    camera_owner = std::make_unique<krosc_ws::RealSenseDevice>(std::move(camera_options));
+    camera = camera_owner.get();
+  }
+#else
+  if (enable_camera) {
+    std::fprintf(stderr, "[krosc_ws] RealSense 없이 빌드됨 — camera를 끈다 (librealsense2 필요)\n");
+    enable_camera = false;
+  }
+#endif
 
-  krosc_ws::RobotOptions robot_options;
-  robot_options.urdf_path = urdf_path;
-  robot_options.maps_dir = maps_dir;
-  robot_options.slam = slam;
-  robot_options.enable_moveit = true;
-  robot_options.enable_map = true;
-  robot_options.enable_rl = true;
-  robot_options.enable_arm = true;
-  robot_options.enable_status = true;
-  robot_options.scan_topic = scan_topic;
-  robot_options.scan_frame = "base_scan";
-  robot_options.scan_period = 1.0 / scan_rate;
-  robot_options.imu_topic = imu_topic;
-  robot_options.imu_frame = "imu_link";
-  robot_options.imu_period = 1.0 / imu_rate;
-  robot_options.control_read_period = 0.02;
-  robot_options.control_write_period = 0.02;
-  robot_options.control_period = 0.01;
+  krosc_ws::EngineOptions engine_options;
+  engine_options.urdf_path = urdf_path;
+  engine_options.maps_dir = maps_dir;
+  engine_options.slam = slam;
+  engine_options.enable_moveit = true;
+  engine_options.enable_map = true;
+  engine_options.enable_rl = true;
+  engine_options.enable_arm = true;
+  engine_options.enable_status = true;
+  engine_options.scan_topic = scan_topic;
+  engine_options.scan_frame = "base_scan";
+  engine_options.scan_period = 1.0 / scan_rate;
+  engine_options.imu_topic = imu_topic;
+  engine_options.imu_frame = "imu_link";
+  engine_options.imu_period = 1.0 / imu_rate;
+  engine_options.enable_camera = enable_camera;
+  engine_options.camera_period = 1.0 / camera_rate;
+  engine_options.camera_depth_period = 1.0 / camera_depth_rate;
+  engine_options.control_read_period = 0.02;
+  engine_options.control_write_period = 0.02;
+  engine_options.control_period = 0.01;
 
-  krosc_ws::Robot robot(context, opencr, lidar.get(), robot_options);
-  if (!robot.start()) {
-    std::cerr << "[krosc_ws] 로봇 시작 실패\n";
+  krosc_ws::Engine engine(context, opencr, lidar.get(), engine_options, camera);
+  if (!engine.start()) {
+    std::cerr << "[krosc_ws] 엔진 시작 실패\n";
     return 1;
   }
   std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
               scan_rate, imu_topic.c_str(), imu_rate);
+  if (camera) {
+    std::printf("[krosc_ws] camera: color=%s %.1fHz, depth=%s %.1fHz\n",
+                engine_options.camera_color_topic.c_str(), camera_rate,
+                engine_options.camera_depth_topic.c_str(), camera_depth_rate);
+  } else {
+    std::printf("[krosc_ws] camera: off\n");
+  }
   std::printf("[krosc_ws] executor threads: %zu\n", executor_threads);
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
   std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
@@ -267,7 +319,7 @@ int main(int argc, char** argv) {
   constexpr auto kPeriod = std::chrono::milliseconds(10);
   auto next = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
-    robot.log_status();
+    engine.log_status();
     next += kPeriod;
     std::this_thread::sleep_until(next);
     const auto now = std::chrono::steady_clock::now();
@@ -278,7 +330,7 @@ int main(int argc, char** argv) {
 
   std::printf("[krosc_ws] 정지 중...\n");
   std::fflush(stdout);
-  robot.stop();
+  engine.stop();
   context.shutdown();
   std::printf("[krosc_ws] 종료\n");
   return 0;

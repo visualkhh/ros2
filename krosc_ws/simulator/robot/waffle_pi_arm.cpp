@@ -106,6 +106,14 @@ void WafflePiArm::tick(double time, double dt) {
   const double angular = kWheelRadius * (contact_right - contact_left) / kWheelSeparation;
   apply_motion(dt, linear, angular);
 
+  camera_accum_ += dt;
+  if (camera_accum_ + 1e-12 >= kCameraPeriod) {
+    camera_accum_ = 0.0;
+    if (camera_callback_) {
+      camera_callback_(time);
+    }
+  }
+
   imu_accum_ += dt;
   if (imu_accum_ + 1e-12 >= kImuPeriod) {
     const double imu_dt = imu_accum_;
@@ -200,6 +208,10 @@ void WafflePiArm::set_scan_callback(
 void WafflePiArm::set_imu_callback(
     std::function<void(const krosc::msgs::Imu&)> callback) {
   imu_callback_ = std::move(callback);
+}
+
+void WafflePiArm::set_camera_callback(std::function<void(double)> callback) {
+  camera_callback_ = std::move(callback);
 }
 
 void WafflePiArm::sample_scan(double time) {

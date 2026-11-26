@@ -15,16 +15,53 @@ add_subdirectory(../krosc/engine engine_build)
 
 set(KROSC_REAL_SOURCES
   engine/main.cpp
-  engine/robot.cpp
+  engine/engine.cpp
   engine/nodes/robot_status.cpp
   engine/controls/opencr/opencr_control.cpp
   engine/hardwares/lds03/lds03_device.cpp
   engine/sensors/lds03/lds03_sensor.cpp
   engine/sensors/opencr/opencr_imu.cpp
+  engine/sensors/realsense/realsense_sensor.cpp
   engine/hardwares/opencr/opencr_protocol.cpp
   engine/hardwares/opencr/opencr_serial.cpp
   engine/hardwares/serial.cpp
 )
+
+# RealSense D435: librealsense2 + libjpeg가 있을 때만 Hardware/Sensor를 포함한다.
+# 없으면 krosc_real은 카메라 없이 빌드되고 --no-camera와 같은 상태가 된다.
+# ROS 경로를 하드코딩하지 않는다. standalone prefix는 KROSC_WS_REALSENSE_ROOT,
+# CMAKE_PREFIX_PATH, PKG_CONFIG_PATH 중 하나로 지정한다.
+option(KROSC_WS_BUILD_REALSENSE "Build RealSense D435 hardware/sensor" ON)
+set(KROSC_WS_REALSENSE_ROOT "" CACHE PATH
+    "librealsense2 install prefix (optional; CMake/pkg-config가 찾지 못할 때)")
+set(KROSC_WS_REALSENSE_FOUND OFF)
+if(KROSC_WS_BUILD_REALSENSE)
+  if(KROSC_WS_REALSENSE_ROOT)
+    list(PREPEND CMAKE_PREFIX_PATH "${KROSC_WS_REALSENSE_ROOT}")
+    set(ENV{PKG_CONFIG_PATH}
+        "${KROSC_WS_REALSENSE_ROOT}/lib/pkgconfig:${KROSC_WS_REALSENSE_ROOT}/lib/aarch64-linux-gnu/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+  endif()
+  find_package(realsense2 QUIET)
+  if(NOT realsense2_FOUND)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+      pkg_check_modules(KROSC_RS2 QUIET IMPORTED_TARGET realsense2)
+    endif()
+  endif()
+  if(realsense2_FOUND OR KROSC_RS2_FOUND)
+    find_package(JPEG QUIET)
+    if(JPEG_FOUND)
+      list(APPEND KROSC_REAL_SOURCES
+        engine/hardwares/realsense/realsense_device.cpp)
+      set(KROSC_WS_REALSENSE_FOUND ON)
+      message(STATUS "krosc_ws: RealSense D435 활성 (librealsense2 + libjpeg)")
+    else()
+      message(STATUS "krosc_ws: libjpeg 없음 — RealSense 비활성")
+    endif()
+  else()
+    message(STATUS "krosc_ws: librealsense2 없음 — RealSense 비활성")
+  endif()
+endif()
 
 # RL nav: ONNX Runtime을 찾으면 GPU(CUDA/CoreML) → CPU 순으로 쓴다.
 # 못 찾아도 RL 컨트롤러 플러그인은 빌드한다. 정책 없이 fallback 컨트롤러로 주행하고
@@ -35,7 +72,7 @@ if(DEFINED ENV{ONNXRUNTIME_ROOT} AND EXISTS "$ENV{ONNXRUNTIME_ROOT}")
 elseif(EXISTS "$ENV{HOME}/opt/onnxruntime-gpu/1.26.0")
   set(_krosc_ws_ort_default "$ENV{HOME}/opt/onnxruntime-gpu/1.26.0")
 else()
-  set(_krosc_ws_ort_default "/opt/ros/lyrical/opt/onnxruntime_vendor")
+  set(_krosc_ws_ort_default "")
 endif()
 set(KROSC_WS_ONNXRUNTIME_ROOT "${_krosc_ws_ort_default}" CACHE PATH
     "ONNX Runtime vendor root (include/, lib/)")
@@ -63,6 +100,34 @@ target_include_directories(krosc_real PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/engine
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(krosc_real PRIVATE krosc::core)
+if(KROSC_WS_REALSENSE_FOUND)
+  set(_krosc_rs2_target "")
+  if(TARGET realsense2::realsense2)
+    set(_krosc_rs2_target realsense2::realsense2)
+  elseif(TARGET PkgConfig::KROSC_RS2)
+    set(_krosc_rs2_target PkgConfig::KROSC_RS2)
+  endif()
+  target_link_libraries(krosc_real PRIVATE ${_krosc_rs2_target} JPEG::JPEG)
+  target_compile_definitions(krosc_real PRIVATE KROSC_WS_HAS_REALSENSE=1)
+
+  set(_krosc_rs2_rpath_dirs "")
+  if(TARGET realsense2::realsense2)
+    get_target_property(_krosc_rs2_library realsense2::realsense2 IMPORTED_LOCATION)
+    if(NOT _krosc_rs2_library)
+      get_target_property(_krosc_rs2_library realsense2::realsense2 IMPORTED_LOCATION_NONE)
+    endif()
+    if(_krosc_rs2_library)
+      get_filename_component(_krosc_rs2_library_dir "${_krosc_rs2_library}" DIRECTORY)
+      list(APPEND _krosc_rs2_rpath_dirs "${_krosc_rs2_library_dir}")
+    endif()
+  elseif(KROSC_RS2_LIBRARY_DIRS)
+    list(APPEND _krosc_rs2_rpath_dirs ${KROSC_RS2_LIBRARY_DIRS})
+  endif()
+  foreach(_krosc_rs2_dir IN LISTS _krosc_rs2_rpath_dirs)
+    set_property(TARGET krosc_real APPEND PROPERTY BUILD_RPATH "${_krosc_rs2_dir}")
+    set_property(TARGET krosc_real APPEND PROPERTY INSTALL_RPATH "${_krosc_rs2_dir}")
+  endforeach()
+endif()
 target_compile_definitions(krosc_real PRIVATE
   KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/urdf/turtlebot3_real.urdf"
   KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"
@@ -99,11 +164,14 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
     simulator/robot/waffle_pi_arm.cpp
     simulator/robot/urdf_robot_visualizer.cpp
     simulator/panels/arm_panel.cpp
-    engine/robot.cpp
+    simulator/panels/camera_panel.cpp
+    engine/engine.cpp
     engine/nodes/robot_status.cpp
     engine/controls/opencr/opencr_control.cpp
     engine/sensors/lds03/lds03_sensor.cpp
     engine/sensors/opencr/opencr_imu.cpp
+    engine/sensors/realsense/realsense_sensor.cpp
+    simulator/hardwares/realsense/simulator_realsense.cpp
   )
   target_include_directories(krosc_ws_simulator PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/engine
@@ -165,8 +233,10 @@ if(KROSC_WS_BUILD_TESTS)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
     target_sources(krosc_ws_tests PRIVATE
       tests/test_sim_robot.cpp
+      tests/test_sim_realsense.cpp
       simulator/robot/waffle_pi_arm.cpp
-      simulator/robot/urdf_robot_visualizer.cpp)
+      simulator/robot/urdf_robot_visualizer.cpp
+      simulator/hardwares/realsense/simulator_realsense.cpp)
     target_include_directories(krosc_ws_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/simulator)
     target_link_libraries(krosc_ws_tests PRIVATE krosc::simulator_assets)
   endif()

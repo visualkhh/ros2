@@ -1,11 +1,14 @@
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "hardwares/lds03/lds03_device.hpp"
 #include "hardwares/opencr/opencr_protocol.hpp"
+#include "krosc/msgs.hpp"
+#include "krosc/net/net.hpp"
 
 #include "test_framework.hpp"
 
@@ -102,6 +105,37 @@ KROSC_TEST(lds03_parser_completes_scan_on_ring_start) {
     CHECK_NEAR(3.0, (*next)[180], 1e-3);
   }
   CHECK_EQ(0u, parser.bad_packets());
+}
+
+KROSC_TEST(image_message_roundtrip) {
+  krosc::msgs::Image image;
+  image.header = krosc::msgs::Header{12.5, "camera_color_optical_frame"};
+  image.width = 4;
+  image.height = 2;
+  image.encoding = "jpeg";
+  image.step = 0;
+  image.data = {0xFF, 0xD8, 0x01, 0x02, 0x03, 0xFF, 0xD9};
+
+  const auto kind = krosc::net::message_kind(typeid(krosc::msgs::Image));
+  CHECK(kind.has_value());
+  CHECK_EQ(static_cast<int>(krosc::net::Kind::Image), static_cast<int>(*kind));
+
+  const auto payload = krosc::net::encode_message(typeid(krosc::msgs::Image), &image);
+  CHECK(!payload.empty());
+  const auto decoded =
+      krosc::net::decode_message(krosc::net::Kind::Image, payload.data(), payload.size());
+  CHECK(decoded != nullptr);
+  if (decoded) {
+    const auto& result = *static_cast<const krosc::msgs::Image*>(decoded.get());
+    CHECK_EQ(image.width, result.width);
+    CHECK_EQ(image.height, result.height);
+    CHECK_EQ(image.encoding, result.encoding);
+    CHECK_EQ(image.step, result.step);
+    CHECK_EQ(image.data.size(), result.data.size());
+    CHECK_EQ(0, std::memcmp(image.data.data(), result.data.data(), image.data.size()));
+    CHECK_NEAR(image.header.stamp, result.header.stamp, 1e-12);
+    CHECK_EQ(image.header.frame_id, result.header.frame_id);
+  }
 }
 
 KROSC_TEST(lds03_reverse_maps_angles) {

@@ -1,4 +1,4 @@
-#include "robot.hpp"
+#include "engine.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -36,6 +36,9 @@
 #include "nodes/robot_status.hpp"
 #include "sensors/lds03/lds03_sensor.hpp"
 #include "sensors/opencr/opencr_imu.hpp"
+#include "sensors/realsense/realsense_sensor.hpp"
+
+#include "hardwares/realsense/realsense_camera.hpp"
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
 #include "nodes/rl_nav_controller.hpp"
@@ -67,17 +70,20 @@ std::vector<bool> ekf_config(std::initializer_list<int> enabled) {
 
 }  // namespace
 
-Robot::Robot(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
-             RobotOptions options)
-    : context_(context), opencr_(opencr), lidar_(lidar), options_(std::move(options)),
-      urdf_(read_text(options_.urdf_path)) {
+Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
+               EngineOptions options, RealSenseCamera* camera)
+    : context_(context), opencr_(opencr), lidar_(lidar), camera_(camera),
+      options_(std::move(options)), urdf_(read_text(options_.urdf_path)) {
   if (urdf_.empty()) {
-    throw std::runtime_error("Robot: URDF를 읽지 못했다: " + options_.urdf_path);
+    throw std::runtime_error("Engine: URDF를 읽지 못했다: " + options_.urdf_path);
   }
 
   opencr_.start();
   if (lidar_ != nullptr) {
     lidar_->start();
+  }
+  if (camera_ != nullptr && options_.enable_camera) {
+    camera_->start();
   }
 
   control_ = std::make_unique<OpenCrControl>(opencr_, options_.wheel_radius, options_.wheel_separation);
@@ -85,6 +91,12 @@ Robot::Robot(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
   if (lidar_ != nullptr) {
     lds_sensor_ = std::make_unique<Lds03Sensor>(context_, *lidar_, options_.scan_topic,
                                                 options_.scan_frame);
+  }
+  if (camera_ != nullptr && options_.enable_camera) {
+    camera_sensor_ = std::make_unique<RealSenseSensor>(
+        context_, *camera_, options_.camera_color_topic, options_.camera_depth_topic,
+        options_.camera_color_frame, options_.camera_depth_frame, "diagnostics",
+        options_.camera_depth_period);
   }
   if (options_.enable_status) {
     status_ = std::make_unique<RobotStatus>(context_, opencr_, lidar_);
@@ -302,25 +314,34 @@ Robot::Robot(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
           {"ignore_collision_during_teleop", true}});
 
   sensors_ = std::make_unique<krosc::sensor::SensorManager>();
-  sensors_->add(*imu_, "opencr_imu", options_.imu_period);
+  (void)sensors_->add(*imu_, "opencr_imu", options_.imu_period);
   if (lds_sensor_) {
-    sensors_->add(*lds_sensor_, "lds03_scan", options_.scan_period);
+    (void)sensors_->add(*lds_sensor_, "lds03_scan", options_.scan_period);
+  }
+  if (camera_sensor_) {
+    (void)sensors_->add(*camera_sensor_, "realsense", options_.camera_period);
   }
   controls_ = std::make_unique<krosc::control::ControlManager>();
-  controls_->add(*control_, "opencr_control", options_.control_read_period,
-                 options_.control_write_period);
+  (void)controls_->add(*control_, "opencr_control", options_.control_read_period,
+                       options_.control_write_period);
   controls_->set_control_hook(
       [this](double time, double period) { controller_manager_->update(time, period); },
       options_.control_period);
 }
 
-Robot::~Robot() { stop(); }
+Engine::~Engine() {
+  stop();
+  // start()가 실패해 started_가 false여도 카메라 스트림은 정리한다.
+  if (camera_ != nullptr) {
+    camera_->stop();
+  }
+}
 
-bool Robot::start() {
+bool Engine::start() {
   if (started_) {
     return false;
   }
-  sensors_->start();
+  (void)sensors_->start();
   if (!controls_->start()) {
     sensors_->stop();
     return false;
@@ -329,7 +350,7 @@ bool Robot::start() {
   return true;
 }
 
-void Robot::stop() {
+void Engine::stop() {
   if (!started_) {
     return;
   }
@@ -338,11 +359,14 @@ void Robot::stop() {
   if (lidar_ != nullptr) {
     lidar_->stop();
   }
+  if (camera_ != nullptr) {
+    camera_->stop();
+  }
   opencr_.stop();
   started_ = false;
 }
 
-void Robot::log_status() {
+void Engine::log_status() {
   const auto now = std::chrono::steady_clock::now();
   if (last_status_.time_since_epoch().count() != 0 &&
       now - last_status_ < std::chrono::seconds(5)) {

@@ -44,6 +44,7 @@ j8                                                                              
 | 항목 | 값 | 문서 |
 |---|---|---|
 | udev | `/dev/opencr` → ttyACM0 · `/dev/tb3_lidar` → ttyUSB0 (`99-opencr.rules` · `99-tb3-lidar.rules`) | [udev](udev-setup.md) |
+| 카메라 | Intel **RealSense D435** · USB 3.2 5Gbps · serial `261822074109` · `/dev/video0..5` (`uvcvideo`) | [realsense-D435](../realsense-D435/README.md) |
 | 펌웨어 툴 | arduino-cli 1.5.1 · OpenCR 코어 1.5.3 (min/max 패치) · gcc-arm-none-eabi 14.2 · `opencr_ld_shell_arm` | [OpenCR](../opencr/opencr-setup-ubuntu26.04.md) |
 | OpenCR 펌웨어 | `tb3_wheels` 업로드됨 (**ID 2 = 왼쪽 · ID 1 = 오른쪽**) — `S` 20 Hz · 텔레오퍼 주행 확인 | [firmware](../../firmware/opencr/README.md) |
 | 바퀴 방향 | `robot.yaml` `left_dir: -1` · `right_dir: -1` (두 모터 모두 +속도 = 뒤로) | [OpenCR 4장](../opencr/opencr-setup-ubuntu26.04.md) |
