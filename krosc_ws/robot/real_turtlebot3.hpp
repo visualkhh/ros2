@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
@@ -25,6 +26,7 @@ struct SensorOptions {
   std::string imu_topic = "imu";
   std::string imu_frame = "imu_link";
   double imu_period = 0.02;
+  std::size_t workers = 10;  // SensorManager on_update 워커 수
 };
 
 // 이 프로젝트의 실기 TurtleBot3 Waffle Pi 개조형.

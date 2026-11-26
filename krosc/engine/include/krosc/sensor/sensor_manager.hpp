@@ -21,8 +21,8 @@ namespace krosc::sensor {
 // 시간은 steady_clock 기준이며, 메시지 stamp는 각 센서가 Context 시각으로 찍는다.
 class SensorManager {
  public:
-  // workers: on_update()를 실행할 워커 수. 0이면 inline(테스트/수동 poll용).
-  explicit SensorManager(std::size_t workers = 2);
+  // workers: on_update()를 실행할 워커 수(기본 10). 0이면 inline(테스트/수동 poll용).
+  explicit SensorManager(std::size_t workers = 10);
   ~SensorManager();
 
   SensorManager(const SensorManager&) = delete;

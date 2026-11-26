@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -68,6 +69,25 @@ std::string env_or(const char* name, const std::string& fallback) {
   return value == nullptr ? fallback : std::string(value);
 }
 
+bool parse_count(const std::string& text, std::size_t& out) {
+  try {
+    const long value = std::stol(text);
+    if (value < 0 || value > 64) {
+      return false;
+    }
+    out = static_cast<std::size_t>(value);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+std::size_t env_count(const char* name, std::size_t fallback) {
+  const std::string text = env_or(name, "");
+  std::size_t value = 0;
+  return parse_count(text, value) ? value : fallback;
+}
+
 std::string read_text(const std::string& path) {
   std::ifstream stream(path);
   if (!stream) {
@@ -115,10 +135,12 @@ std::vector<std::string> local_addresses() {
 void usage() {
   std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--maps DIR]\n"
                "                  [--scan-topic NAME] [--scan-rate HZ] [--imu-topic NAME] [--imu-rate HZ]\n"
+               "                  [--executor-threads N] [--sensor-workers N]\n"
                "                  [--no-lidar] [--slam]\n"
                "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
                "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR,\n"
-               "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu)\n";
+               "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_EXECUTOR_THREADS (10),\n"
+               "     KROSC_SENSOR_WORKERS (10)\n";
 }
 
 }  // namespace
@@ -143,6 +165,8 @@ int main(int argc, char** argv) {
   std::string imu_topic = env_or("KROSC_IMU_TOPIC", "imu");
   double scan_rate = 10.0;
   double imu_rate = 50.0;
+  std::size_t executor_threads = env_count("KROSC_EXECUTOR_THREADS", 10);
+  std::size_t sensor_workers = env_count("KROSC_SENSOR_WORKERS", 10);
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--opencr" && i + 1 < argc) {
@@ -163,6 +187,16 @@ int main(int argc, char** argv) {
       imu_topic = argv[++i];
     } else if (argument == "--imu-rate" && i + 1 < argc) {
       imu_rate = std::stod(argv[++i]);
+    } else if (argument == "--executor-threads" && i + 1 < argc) {
+      if (!parse_count(argv[++i], executor_threads)) {
+        std::cerr << "[krosc_ws] executor-threads는 0..64 범위여야 한다\n";
+        return 2;
+      }
+    } else if (argument == "--sensor-workers" && i + 1 < argc) {
+      if (!parse_count(argv[++i], sensor_workers)) {
+        std::cerr << "[krosc_ws] sensor-workers는 0..64 범위여야 한다\n";
+        return 2;
+      }
     } else if (argument == "--no-lidar") {
       enable_lidar = false;
     } else if (argument == "--slam") {
@@ -192,6 +226,7 @@ int main(int argc, char** argv) {
 
   krosc::Context::Options options;
   options.name = "krosc_ws";
+  options.executor_threads = executor_threads;
   options.time_source = std::make_shared<krosc::SystemTimeSource>();
   if (server_port > 0) {
     options.network.name = "krosc_ws";
@@ -224,9 +259,11 @@ int main(int argc, char** argv) {
   sensor_options.imu_topic = imu_topic;
   sensor_options.imu_frame = "imu_link";
   sensor_options.imu_period = 1.0 / imu_rate;
+  sensor_options.workers = sensor_workers;
   krosc_ws::RealTurtleBot3 robot(context, opencr_port, lidar_port, enable_lidar, sensor_options);
-  std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
-              scan_rate, imu_topic.c_str(), imu_rate);
+  std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz, workers=%zu\n", scan_topic.c_str(),
+              scan_rate, imu_topic.c_str(), imu_rate, sensor_workers);
+  std::printf("[krosc_ws] executor threads: %zu\n", executor_threads);
   krosc_ws::TurtleBot3Driver driver(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});

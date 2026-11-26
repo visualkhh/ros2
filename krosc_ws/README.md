@@ -350,11 +350,14 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 - `Sensor`: `on_init → on_activate → on_update → on_deactivate → on_finish`
   (on_error로 init/activate/update/deactivate 실패를 구현체가 직접 처리)
 - `SensorManager`: `add(name, period, sensor)`로 등록한다. 스케줄러 스레드가 due인 센서를
-  Executor 워커 풀로 post하고(기본 2), 이전 `on_update()`가 안 끝났으면 그 주기를 건너뛴다
+  Executor 워커 풀로 post하고(기본 10, `--sensor-workers`), 이전 `on_update()`가 안 끝났으면 그 주기를 건너뛴다
 - 발행 토픽/프레임은 구현체 생성자가 소유한다 (`Lds03`, `OpenCrImu`)
 - LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)를 각자 발행한다
-- 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`
-  (환경 변수 `KROSC_SCAN_TOPIC`, `KROSC_IMU_TOPIC`)
+- 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`,
+  `--executor-threads`, `--sensor-workers`
+  (환경 변수 `KROSC_SCAN_TOPIC`, `KROSC_IMU_TOPIC`, `KROSC_EXECUTOR_THREADS`,
+  `KROSC_SENSOR_WORKERS`)
+- 로봇 main은 `Context::executor_threads`를 기본 10으로 켠다 (라이브러리 기본은 0=inline)
 - `RealTurtleBot3::tick()`은 OpenCR 시리얼만 돌리고, 센서 루프는 SensorManager가 담당한다
 
 - 그룹: `base_link` → `end_effector_link`, 관절 `joint1`~`joint4`

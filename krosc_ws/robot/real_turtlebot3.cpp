@@ -10,7 +10,8 @@ namespace krosc_ws {
 RealTurtleBot3::RealTurtleBot3(krosc::Context& context, std::string opencr_port,
                                std::string lidar_port, bool enable_lidar, SensorOptions options)
     : context_(context),
-      opencr_(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0, kMaxWheel) {
+      opencr_(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0, kMaxWheel),
+      sensors_(options.workers) {
   // 이 로봇은 두 모터 모두 +속도 = 뒤로 (ROS robot.yaml left_dir/right_dir = -1).
   auto imu = std::make_unique<OpenCrImu>(context_, opencr_, options.imu_topic, options.imu_frame);
   if (!sensors_.add("imu", options.imu_period, std::move(imu))) {
