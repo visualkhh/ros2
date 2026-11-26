@@ -326,6 +326,25 @@ msgs::Bool MapCatalog::on_set_slam_mode(const msgs::String& request) {
     return msgs::Bool{false};
   }
   const bool applied = set_slam_mode(mode);
+  if (applied && mode == "mapping") {
+    // 새 SLAM은 빈 지도에서 시작한다. 예전에 load한 지도가 map_server에 남아 있으면
+    // costmap/웹 UI가 옛 지도를 계속 보여주므로 함께 내린다.
+    bool had_loaded = false;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      had_loaded = !loaded_name_.empty();
+      loaded_name_.clear();
+    }
+    if (had_loaded) {
+      try {
+        (void)call_service<msgs::Empty, msgs::Empty>(map_server_.value() + "/unload_map",
+                                                     msgs::Empty{});
+      } catch (const std::exception& error) {
+        logger().warn("mapping 전환: map_server unload 실패: %s", error.what());
+      }
+      publish_map_name();
+    }
+  }
   publish_status(applied ? "slam mode: " + mode : "slam mode 실패: " + mode);
   return msgs::Bool{applied};
 }

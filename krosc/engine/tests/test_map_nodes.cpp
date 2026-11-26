@@ -160,6 +160,51 @@ KROSC_TEST(map_saver_saves_latched_map) {
   fs::remove_all(directory);
 }
 
+KROSC_TEST(map_catalog_mapping_clears_loaded_map) {
+  const fs::path directory = temp_dir("catalog_mapping");
+  const krosc::msgs::OccupancyGrid grid = make_grid(20, 10);
+  krosc::nodes::save_map(grid, (directory / "src" / "map").string());
+
+  krosc::Context context;
+  krosc::Node cartographer(context, "cartographer_node");
+  (void)cartographer.declare_parameter<std::string>("mode", std::string("idle"));
+  krosc::nodes::MapServer server(context, "map_server",
+                                 {{"maps_directory", directory.string()},
+                                  {"topic_name", std::string("map")},
+                                  {"frame_id", std::string("map")}});
+  krosc::nodes::MapCatalog catalog(context, "map_catalog",
+                                   {{"maps_directory", directory.string()},
+                                    {"map_frame", std::string("map")},
+                                    {"map_server", std::string("map_server")},
+                                    {"map_saver", std::string("map_saver")},
+                                    {"list_period", 10.0}});
+  krosc::Node monitor(context, "monitor");
+  krosc::msgs::OccupancyGrid latest;
+  krosc::msgs::String latest_name;
+  monitor.subscribe<krosc::msgs::OccupancyGrid>(
+      "map", [&](const krosc::msgs::OccupancyGrid& message) { latest = message; },
+      krosc::QOS_LATCHED);
+  monitor.subscribe<krosc::msgs::String>(
+      "map_name", [&](const krosc::msgs::String& message) { latest_name = message; },
+      krosc::QOS_LATCHED);
+
+  const auto loaded = monitor.call_service<krosc::msgs::nav2::LoadMapRequest,
+                                           krosc::msgs::nav2::LoadMapResponse>(
+      "map_catalog/load_map", krosc::msgs::nav2::LoadMapRequest{"src"});
+  CHECK_EQ(krosc::msgs::nav2::LoadMapResponse::RESULT_SUCCESS, loaded.result);
+  CHECK_EQ(20u, latest.info.width);
+  CHECK_EQ(std::string("src"), latest_name.data);
+
+  // localization에서 mapping으로 새로 시작하면 옛 지도/이름이 남으면 안 된다.
+  const auto switched = monitor.call_service<krosc::msgs::String, krosc::msgs::Bool>(
+      "map_catalog/set_slam_mode", krosc::msgs::String{"mapping"});
+  CHECK(switched.data);
+  CHECK(catalog.loaded_name().empty());
+  CHECK(latest_name.data.empty());
+  CHECK_EQ(0u, latest.info.width);
+  fs::remove_all(directory);
+}
+
 KROSC_TEST(map_catalog_switches_cartographer_mode_parameter) {
   const fs::path directory = temp_dir("mode");
   krosc::Context context;
