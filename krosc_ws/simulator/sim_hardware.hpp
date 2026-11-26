@@ -47,7 +47,8 @@ class SimOpenCr final : public OpenCrDevice {
   mutable std::mutex imu_mutex_;
   std::optional<krosc::msgs::Imu> imu_;
   mutable std::mutex arm_mutex_;
-  std::array<double, 5> arm_position_{};
+  // 시뮬레이터 시작 자세는 MoveIt HOME과 같은 안전 자세로 둔다.
+  std::array<double, 5> arm_position_{0.5, -1.8, 1.4, 0.8, 0.0};
 };
 
 // 시뮬레이터 스캔을 LDS-03 실기 장치처럼 보이게 하는 어댑터.

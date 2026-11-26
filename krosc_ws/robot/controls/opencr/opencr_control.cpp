@@ -27,7 +27,10 @@ OpenCrControl::OpenCrControl(OpenCrDevice& opencr, double wheel_radius, double w
   states_["wheel_right_joint/velocity"] =
       std::make_shared<krosc::control::StateInterface>("wheel_right_joint/velocity");
   for (const auto& name : arm_joints()) {
-    commands_[name] = std::make_shared<krosc::control::CommandInterface>(name + "/position");
+    // 컨트롤러가 실제 목표를 쓰기 전에는 팔에 0을 보내지 않는다.
+    // 실기 부팅 직후 팔이 임의로 0 자세로 튀는 것을 막고, 시뮬은 초기 자세를 유지한다.
+    commands_[name] = std::make_shared<krosc::control::CommandInterface>(
+        name + "/position", std::numeric_limits<double>::quiet_NaN());
   }
   commands_["wheel_left_joint/velocity"] =
       std::make_shared<krosc::control::CommandInterface>("wheel_left_joint/velocity");

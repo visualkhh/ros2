@@ -39,7 +39,7 @@ class SimView final : public QWidget {
 
  public:
   SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, krosc::Node& node,
-          QWidget* parent = nullptr);
+          std::string teleop_topic = "cmd_vel", QWidget* parent = nullptr);
 
   void reset_camera();
   void set_camera_distance(double distance);
@@ -92,6 +92,7 @@ class SimView final : public QWidget {
   TurtleBot3& robot_;
   SnapshotStore& store_;
   krosc::Node& node_;
+  std::string teleop_topic_;
   Camera camera_;
   QMatrix4x4 matrix_;
   int view_width_ = 1;
@@ -116,7 +117,7 @@ class SimWindow final : public QMainWindow {
 
  public:
   SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, krosc::Node& node,
-            QWidget* parent = nullptr);
+            std::string teleop_topic = "cmd_vel", QWidget* parent = nullptr);
   ~SimWindow() override;
 
   [[nodiscard]] SimView& view() { return *view_; }

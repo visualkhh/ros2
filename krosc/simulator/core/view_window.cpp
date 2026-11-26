@@ -34,8 +34,9 @@ QColor with_alpha(QColor color, int alpha) {
 }  // namespace
 
 SimView::SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store,
-                 krosc::Node& node, QWidget* parent)
-    : QWidget(parent), walls_(std::move(walls)), robot_(robot), store_(store), node_(node) {
+                 krosc::Node& node, std::string teleop_topic, QWidget* parent)
+    : QWidget(parent), walls_(std::move(walls)), robot_(robot), store_(store), node_(node),
+      teleop_topic_(std::move(teleop_topic)) {
   setFocusPolicy(Qt::StrongFocus);
   setMouseTracking(true);
   setMinimumSize(520, 420);
@@ -462,7 +463,7 @@ void SimView::publish_teleop() {
   const double angular = 1.5 * teleop_scale_ * left;
   const bool active = linear != 0.0 || angular != 0.0;
   if (active || last_linear_ != 0.0 || last_angular_ != 0.0) {
-    node_.publish("cmd_vel", msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}},
+    node_.publish(teleop_topic_, msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}},
                   QOS_COMMAND);
   }
   last_linear_ = linear;
@@ -470,11 +471,11 @@ void SimView::publish_teleop() {
 }
 
 SimWindow::SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store,
-                     krosc::Node& node, QWidget* parent)
+                     krosc::Node& node, std::string teleop_topic, QWidget* parent)
     : QMainWindow(parent) {
   setWindowTitle("krosc sim (truth)");
   resize(760, 860);
-  view_ = new SimView(std::move(walls), robot, store, node, this);
+  view_ = new SimView(std::move(walls), robot, store, node, std::move(teleop_topic), this);
   setCentralWidget(view_);
   statusBar()->showMessage(view_->help_text());
   timer_ = new QTimer(this);

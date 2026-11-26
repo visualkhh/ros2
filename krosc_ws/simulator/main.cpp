@@ -12,7 +12,9 @@
 #include <thread>
 
 #include "krosc/context.hpp"
+#include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
+#include "krosc/qos.hpp"
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/snapshot.hpp"
 #include "krosc/simulator/view_window.hpp"
@@ -21,11 +23,8 @@
 #include "robot.hpp"
 #include "sim_hardware.hpp"
 
-#ifndef KROSC_WS_SIM_URDF
-#define KROSC_WS_SIM_URDF "turtlebot3_waffle_pi.urdf"
-#endif
-#ifndef KROSC_WS_SIM_REAL_URDF
-#define KROSC_WS_SIM_REAL_URDF "robot/description/urdf/turtlebot3_real.urdf"
+#ifndef KROSC_WS_URDF_PATH
+#define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"
 #endif
 #ifndef KROSC_WS_MAPS_DIR
 #define KROSC_WS_MAPS_DIR "artifacts/maps"
@@ -100,30 +99,29 @@ int main(int argc, char** argv) {
   sim_options.pucks = pucks;
   sim_options.seed = seed;
   sim_options.step_hz = 100.0;
-  sim_options.urdf_path = KROSC_WS_SIM_URDF;
+  sim_options.urdf_path = KROSC_WS_URDF_PATH;
   sim_options.bridge = false;
   sim_options.odometry = false;
   sim_options.ekf = false;
   sim_options.publish_map = !slam;
-  sim_options.publish_robot_state = !arm;
+  // robot_state_publisher는 Robot이 실기와 같은 URDF로 한 번만 발행한다.
+  sim_options.publish_robot_state = false;
   krosc::simulator::Simulator simulator(context, sim_options);
 
   krosc_ws::sim::SimOpenCr opencr(simulator.robot());
   krosc_ws::sim::SimLds lds(simulator.robot());
 
   krosc_ws::RobotOptions options;
-  options.urdf_path = KROSC_WS_SIM_URDF;
+  options.urdf_path = KROSC_WS_URDF_PATH;
   options.maps_dir = KROSC_WS_MAPS_DIR;
   options.enable_moveit = arm;
-  options.enable_map = slam;
+  // 맵 목록/로드/저장은 SLAM 여부와 무관하게 항상 쓸 수 있어야 한다.
+  options.enable_map = true;
   options.slam = slam;
   options.enable_rl = false;
   options.enable_arm = arm;
   options.enable_status = true;
-  options.enable_robot_state_publisher = arm;
-  if (arm) {
-    options.urdf_path = KROSC_WS_SIM_REAL_URDF;
-  }
+  options.enable_robot_state_publisher = true;
   options.wheel_radius = krosc::simulator::TurtleBot3::kWheelRadius;
   options.wheel_separation = krosc::simulator::TurtleBot3::kWheelSeparation;
   options.scan_topic = "scan";
@@ -138,7 +136,7 @@ int main(int argc, char** argv) {
 
   krosc_ws::Robot robot(context, opencr, &lds, options);
   krosc::simulator::SimWindow window(simulator.maze_world().walls(), simulator.robot(),
-                                     simulator.snapshots(), ui_node);
+                                     simulator.snapshots(), ui_node, "cmd_vel_teleop");
   window.show();
   window.raise();
   window.activateWindow();
@@ -148,6 +146,11 @@ int main(int argc, char** argv) {
     std::cerr << "[krosc_ws_sim] 로봇 시작 실패\n";
     simulator.stop();
     return 1;
+  }
+  if (!slam) {
+    // Cartographer는 idle 상태를 발행하지만, 시뮬레이터는 MazeWorld 정적 지도와
+    // map→odom을 이미 갖고 있으므로 Viz에는 localization으로 알린다.
+    ui_node.publish("slam_status", krosc::msgs::String{"localization"}, krosc::QOS_LATCHED);
   }
 
   std::printf("[krosc_ws_sim] world: pucks=%d seed=%u port=%d\n", pucks, seed, port);
