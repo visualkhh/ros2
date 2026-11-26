@@ -276,15 +276,17 @@ export function init(host) {
       const target = host.latest('moveit_target_pose');
       targetScreenPoint = null;
       // 드래그 중에는 네트워크 왕복을 기다리지 않고 입력값으로 즉시 그린다 (Qt와 동일한 반응).
+      // 현재 TCP는 하드코딩 체인이 아니라 URDF end_effector_link의 FK를 쓴다.
+      // moveit_arm/preview와 같은 링크 기준이라 카메라 회전 중에도 마커가 붙어 있다.
+      const linkFrames = host.urdfLinkFrames ? host.urdfLinkFrames() : [];
+      const endFrame = linkFrames.find((frame) => frame.name === 'end_effector_link');
+      const currentTcp = endFrame ? endFrame.point : null;
       let pose = target ? target.pose.position : null;
       let orientation = target ? target.pose.orientation : null;
-      if (!pose && host.armPoints) {
+      if (!pose && currentTcp) {
         // 아직 moveit_target_pose가 없으면 실제 TCP 위치에 마커를 그린다 (드래그 시작 가능)
-        const arm = host.armPoints();
-        if (arm.length > 0) {
-          pose = arm[arm.length - 1];
-          orientation = { x: 0, y: 0, z: 0, w: 1 };
-        }
+        pose = currentTcp;
+        orientation = { x: 0, y: 0, z: 0, w: 1 };
       }
       const local = draggingTarget || performance.now() - lastLocalEdit < 250;
       if (local) {
@@ -343,9 +345,8 @@ export function init(host) {
         }
       }
 
-      const arm = host.armPoints ? host.armPoints() : [];
-      if (arm.length > 0) {
-        const tcp = project(arm[arm.length - 1], width, height);
+      if (currentTcp) {
+        const tcp = project(currentTcp, width, height);
         if (tcp) {
           context.fillStyle = '#ffb36b';
           context.beginPath(); context.arc(tcp.x, tcp.y, 6, 0, Math.PI * 2); context.fill();
@@ -522,7 +523,11 @@ export function init(host) {
     }
     // 드래그 중에는 네트워크로 보내지 않는다. 마커는 로컬 입력값으로 즉시 움직이고
     // (draw()가 draggingTarget일 때 입력값을 그린다), 손을 뗄 때 한 번만 보낸다.
-    lastLocalEdit = performance.now();
+    // orbit 중에는 local edit로 취급하면 안 된다. 그러면 회전 중 TCP target이
+    // 입력 필드 값으로 250ms 동안 튀었다가 제자리로 돌아온다.
+    if (dragMode !== 'orbit') {
+      lastLocalEdit = performance.now();
+    }
     event.preventDefault();
   });
   canvas.addEventListener('pointerup', (event) => {
