@@ -1,3 +1,6 @@
+#include <QApplication>
+#include <QTimer>
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -9,7 +12,9 @@
 #include <thread>
 
 #include "krosc/context.hpp"
+#include "krosc/node.hpp"
 #include "krosc/simulator/simulator.hpp"
+#include "krosc/simulator/view_window.hpp"
 #include "krosc/time/time.hpp"
 
 #include "robot.hpp"
@@ -27,6 +32,8 @@ void request_stop(int) { g_stop.store(true); }
 }  // namespace
 
 int main(int argc, char** argv) {
+  QApplication application(argc, argv);
+
   int port = 9000;
   double duration = 0.0;
   int pucks = 10;
@@ -73,6 +80,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   krosc::Context& context = *context_holder;
+  krosc::Node ui_node(context, "sim_ui");
 
   krosc::simulator::SimulatorOptions sim_options;
   sim_options.noisy = noisy;
@@ -109,6 +117,11 @@ int main(int argc, char** argv) {
   options.control_period = 0.01;
 
   krosc_ws::Robot robot(context, opencr, &lds, options);
+  krosc::simulator::SimWindow window(simulator.maze_world().walls(), simulator.robot(),
+                                     simulator.snapshots(), ui_node);
+  window.show();
+  window.raise();
+  window.activateWindow();
   simulator.start();
   if (!robot.start()) {
     std::cerr << "[krosc_ws_sim] 로봇 시작 실패\n";
@@ -122,8 +135,9 @@ int main(int argc, char** argv) {
 
   const auto start_time = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
+    application.processEvents();
     robot.log_status();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     if (duration > 0.0 &&
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count() >=
             duration) {
@@ -135,6 +149,7 @@ int main(int argc, char** argv) {
   std::fflush(stdout);
   robot.stop();
   simulator.stop();
+  window.close();
   context.shutdown();
   std::printf("[krosc_ws_sim] 종료\n");
   return 0;

@@ -328,13 +328,16 @@ ONNX Runtime은 `/opt/ros/lyrical/opt/onnxruntime_vendor`를 우선 찾고,
 ## 시뮬레이터 (PC 전용)
 
 `run-robot-simulator.sh`는 `krosc/simulator`의 월드/로봇 위에서 **krosc_ws의 ControlManager,
-SensorManager, ControllerManager, nav2**를 그대로 돌린다. Pi에서는 타깃을 만들지 않는다.
+SensorManager, ControllerManager, nav2**를 그대로 돌리고 **Qt 진실 뷰 창**을 띄운다.
+Pi에서는 타깃을 만들지 않는다.
 
 ```bash
-./run-robot-simulator.sh               # PeerNetwork 9000
+./run-robot-simulator.sh               # Qt 창 + PeerNetwork 9000
 ./run-robot-simulator.sh --pucks 10 --no-noise
 ./run-robot-simulator.sh --port 0 --duration 5  # 네트워크 없이 5초
 ```
+
+Qt 창에서 `W/A/S/D` 텔레옵, 드래그 orbit, 휠 zoom을 쓸 수 있다.
 
 실기/시뮬레이터는 `robot/robot.cpp`의 공통 `Robot` 클래스에
 `OpenCrDevice`/`LdsDevice`만 다르게 주입한다. 시뮬레이터는

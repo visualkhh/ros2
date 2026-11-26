@@ -95,7 +95,11 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
     ${CMAKE_CURRENT_SOURCE_DIR}/robot
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/simulator)
-  target_link_libraries(krosc_ws_simulator PRIVATE krosc::core krosc::simulator)
+  if(NOT TARGET krosc::simulator_qt)
+    message(FATAL_ERROR "krosc_ws_simulator: Qt6 simulator window가 필요하다")
+  endif()
+  target_link_libraries(krosc_ws_simulator PRIVATE
+    krosc::core krosc::simulator krosc::simulator_qt)
   target_compile_definitions(krosc_ws_simulator PRIVATE
     KROSC_WS_SIM_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../krosc/simulator/description/turtlebot3_waffle_pi.urdf")
   target_compile_options(krosc_ws_simulator PRIVATE -Wall -Wextra -Wpedantic)
