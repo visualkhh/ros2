@@ -13,7 +13,10 @@ SimOpenCr::SimOpenCr(krosc::simulator::TurtleBot3& robot) : robot_(robot) {
 }
 
 void SimOpenCr::write(const krosc::msgs::Twist& command) { robot_.set_command(command); }
-void SimOpenCr::write_arm(const std::array<double, 5>&) {}
+void SimOpenCr::write_arm(const std::array<double, 5>& position) {
+  std::lock_guard<std::mutex> lock(arm_mutex_);
+  arm_position_ = position;
+}
 void SimOpenCr::set_arm_torque(bool) {}
 void SimOpenCr::buzzer(int, int) {}
 void SimOpenCr::reboot_arm(const std::array<bool, 5>&) {}
@@ -23,6 +26,14 @@ std::optional<krosc::msgs::Imu> SimOpenCr::consume_imu() {
   auto imu = std::move(imu_);
   imu_.reset();
   return imu;
+}
+
+ArmStatus SimOpenCr::arm_status() const {
+  std::lock_guard<std::mutex> lock(arm_mutex_);
+  ArmStatus status;
+  status.position = arm_position_;
+  status.present = true;
+  return status;
 }
 
 double SimOpenCr::left_position() const { return robot_.left_position(); }

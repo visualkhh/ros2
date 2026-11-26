@@ -24,6 +24,12 @@
 #ifndef KROSC_WS_SIM_URDF
 #define KROSC_WS_SIM_URDF "turtlebot3_waffle_pi.urdf"
 #endif
+#ifndef KROSC_WS_SIM_REAL_URDF
+#define KROSC_WS_SIM_REAL_URDF "robot/description/urdf/turtlebot3_real.urdf"
+#endif
+#ifndef KROSC_WS_MAPS_DIR
+#define KROSC_WS_MAPS_DIR "artifacts/maps"
+#endif
 
 namespace {
 
@@ -40,6 +46,8 @@ int main(int argc, char** argv) {
   int pucks = 10;
   std::uint32_t seed = 42;
   bool noisy = true;
+  bool slam = false;
+  bool arm = false;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -53,9 +61,13 @@ int main(int argc, char** argv) {
       seed = static_cast<std::uint32_t>(std::stoul(argv[++i]));
     } else if (arg == "--no-noise") {
       noisy = false;
+    } else if (arg == "--slam") {
+      slam = true;
+    } else if (arg == "--arm") {
+      arm = true;
     } else if (arg == "-h" || arg == "--help") {
       std::cout << "usage: krosc_ws_simulator [--port 9000] [--duration SEC] [--pucks N]\n"
-                   "                          [--seed N] [--no-noise]\n";
+                   "                          [--seed N] [--no-noise] [--slam] [--arm]\n";
       return 0;
     }
   }
@@ -92,6 +104,8 @@ int main(int argc, char** argv) {
   sim_options.bridge = false;
   sim_options.odometry = false;
   sim_options.ekf = false;
+  sim_options.publish_map = !slam;
+  sim_options.publish_robot_state = !arm;
   krosc::simulator::Simulator simulator(context, sim_options);
 
   krosc_ws::sim::SimOpenCr opencr(simulator.robot());
@@ -99,12 +113,17 @@ int main(int argc, char** argv) {
 
   krosc_ws::RobotOptions options;
   options.urdf_path = KROSC_WS_SIM_URDF;
-  options.enable_moveit = false;
-  options.enable_map = false;
+  options.maps_dir = KROSC_WS_MAPS_DIR;
+  options.enable_moveit = arm;
+  options.enable_map = slam;
+  options.slam = slam;
   options.enable_rl = false;
-  options.enable_arm = false;
+  options.enable_arm = arm;
   options.enable_status = true;
-  options.enable_robot_state_publisher = false;
+  options.enable_robot_state_publisher = arm;
+  if (arm) {
+    options.urdf_path = KROSC_WS_SIM_REAL_URDF;
+  }
   options.wheel_radius = krosc::simulator::TurtleBot3::kWheelRadius;
   options.wheel_separation = krosc::simulator::TurtleBot3::kWheelSeparation;
   options.scan_topic = "scan";

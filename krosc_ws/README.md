@@ -335,6 +335,8 @@ Pi에서는 타깃을 만들지 않는다.
 ```bash
 ./run-simulator.sh               # Qt 창 + PeerNetwork 9000
 ./run-simulator.sh --pucks 10 --no-noise
+./run-simulator.sh --slam         # Cartographer mapping 모드
+./run-simulator.sh --arm          # OpenMANIPULATOR/MoveIt 포함
 ./run-simulator.sh --port 0 --duration 5  # 네트워크 없이 5초
 ```
 

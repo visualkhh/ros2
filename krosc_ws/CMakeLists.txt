@@ -101,7 +101,9 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
   target_link_libraries(krosc_ws_simulator PRIVATE
     krosc::core krosc::simulator krosc::simulator_qt)
   target_compile_definitions(krosc_ws_simulator PRIVATE
-    KROSC_WS_SIM_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../krosc/simulator/description/turtlebot3_waffle_pi.urdf")
+    KROSC_WS_SIM_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../krosc/simulator/description/turtlebot3_waffle_pi.urdf"
+    KROSC_WS_SIM_REAL_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
+    KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps")
   target_compile_options(krosc_ws_simulator PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 

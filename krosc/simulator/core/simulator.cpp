@@ -59,10 +59,14 @@ struct Simulator::Impl {
     if (options.bridge) {
       bridge = std::make_unique<RobotBridge>(context_value, *robot);
     }
-    map_publisher = std::make_unique<MapPublisher>(context_value, world->walls());
-    robot_state = std::make_unique<krosc::nodes::RobotStatePublisher>(
-        context_value, "robot_state_publisher",
-        std::map<std::string, krosc::ParamValue>{{"robot_description", urdf}});
+    if (options.publish_map) {
+      map_publisher = std::make_unique<MapPublisher>(context_value, world->walls());
+    }
+    if (options.publish_robot_state) {
+      robot_state = std::make_unique<krosc::nodes::RobotStatePublisher>(
+          context_value, "robot_state_publisher",
+          std::map<std::string, krosc::ParamValue>{{"robot_description", urdf}});
+    }
     if (options.odometry) {
       odometry = std::make_unique<krosc::nodes::DiffDriveOdometry>(
           context_value, "diff_drive_odometry",

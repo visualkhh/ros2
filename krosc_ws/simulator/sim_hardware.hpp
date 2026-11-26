@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <mutex>
 #include <optional>
@@ -28,7 +29,7 @@ class SimOpenCr final : public OpenCrDevice {
   void tick() override {}
 
   [[nodiscard]] std::optional<krosc::msgs::Imu> consume_imu() override;
-  [[nodiscard]] ArmStatus arm_status() const override { return {}; }
+  [[nodiscard]] ArmStatus arm_status() const override;
   [[nodiscard]] double left_position() const override;
   [[nodiscard]] double right_position() const override;
   [[nodiscard]] double left_velocity() const override;
@@ -45,6 +46,8 @@ class SimOpenCr final : public OpenCrDevice {
   std::string port_ = "sim";
   mutable std::mutex imu_mutex_;
   std::optional<krosc::msgs::Imu> imu_;
+  mutable std::mutex arm_mutex_;
+  std::array<double, 5> arm_position_{};
 };
 
 // 시뮬레이터 스캔을 LDS-03 실기 장치처럼 보이게 하는 어댑터.

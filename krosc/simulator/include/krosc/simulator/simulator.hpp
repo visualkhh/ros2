@@ -29,6 +29,8 @@ struct SimulatorOptions {
   bool bridge = true;    // scan/imu/joint_states/cmd_vel 토픽 브리지
   bool odometry = true;  // DiffDriveOdometry 노드
   bool ekf = true;       // EKF 노드
+  bool publish_map = true;  // MazeWorld 정적 map/static TF
+  bool publish_robot_state = true;  // URDF robot_state_publisher
 };
 
 class Simulator {
