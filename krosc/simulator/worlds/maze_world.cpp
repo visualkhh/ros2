@@ -1,4 +1,4 @@
-#include "krosc/simulator/maze_world.hpp"
+#include "krosc/simulator/worlds/maze_world.hpp"
 
 #include <cmath>
 #include <memory>
@@ -39,15 +39,6 @@ constexpr std::array<std::array<double, 3>, 10> kPuckColors{{
 }};
 
 }  // namespace
-
-Puck::Puck(PuckShape puck_shape, std::array<double, 3> puck_color)
-    : shape(puck_shape), color(puck_color) {
-  radius = 0.06;
-  height = 0.04;
-  mass = 0.16;
-  friction = 0.3;
-  movable = true;
-}
 
 MazeWorld::MazeWorld(int puck_count, std::optional<std::uint32_t> seed) {
   for (const auto& line : kWalls) {

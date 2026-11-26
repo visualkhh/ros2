@@ -8,20 +8,10 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
+#include "krosc/simulator/objects/puck.hpp"
 #include "krosc/simulator/world.hpp"
 
 namespace krosc::simulator {
-
-enum class PuckShape : std::uint8_t { Circle = 32, Triangle = 3, Square = 4, Hexagon = 6 };
-
-class Puck final : public WorldObject {
- public:
-  Puck(PuckShape shape, std::array<double, 3> color);
-  [[nodiscard]] std::string kind() const override { return "puck"; }
-
-  PuckShape shape;
-  std::array<double, 3> color;
-};
 
 // isaac rl_maze 트랙: 바깥 4.48 x 6.37 m 방 + 안쪽 벽. 시작할 때 퍽을 흩뿌린다.
 class MazeWorld final : public World {

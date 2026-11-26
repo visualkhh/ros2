@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -36,6 +37,9 @@ class WorldObject {
   bool is_static = false;  // 월드 지형: 움직이지 않는다
   bool movable = false;    // 월드 물리가 움직인다 (로봇은 false: 스스로 움직인다)
   std::pair<double, double> velocity{0.0, 0.0};
+  // 화면 표시 힌트. sides가 0이면 스냅샷에 넣지 않는다.
+  int sides = 32;
+  std::array<double, 3> color{0.75, 0.78, 0.84};
   World* world = nullptr;
 
   virtual void tick(double time, double dt) {

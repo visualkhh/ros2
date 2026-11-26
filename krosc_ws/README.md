@@ -340,13 +340,13 @@ Pi에서는 타깃을 만들지 않는다.
 ./run-simulator.sh --port 0 --duration 5  # 네트워크 없이 5초
 ```
 
-Qt 창에서 `W/A/S/D` 텔레옵, 드래그 orbit, 휠 zoom을 쓸 수 있다.
+Qt 창에서 `W/A/S/D` 텔레옵, `L` 라이다 표시 토글, 드래그 orbit, 휠 zoom을 쓸 수 있다.
 
 실기/시뮬레이터는 `robot/robot.cpp`의 공통 `Robot` 클래스에
 `OpenCrDevice`/`LdsDevice`만 다르게 주입한다. 시뮬레이터는
 `simulator/sim_hardware.cpp`가 월드 로봇을 OpenCR/LDS 장치처럼 감싼다.
-맵은 `MazeWorld` 벽에서 생성되고, `map -> odom` 정적 TF와 `robot_state_publisher`는
-`krosc/simulator`가 제공한다.
+`simulator/map_publisher.cpp`가 `MazeWorld` 벽에서 정적 map과 `map -> odom`을 만들고,
+`robot_state_publisher`와 URDF는 실기와 같은 `Robot`이 `robot/description`으로 발행한다.
 
 웹 Viz로 보려면:
 
@@ -445,6 +445,8 @@ krosc_ws/
 │   │       └── lds03_sensor.cpp/.hpp    # scan -> scan 토픽
 │   └── description/urdf/turtlebot3_real.urdf
 ├── simulator/                   # PC 전용 krosc_ws 시뮬레이터 (Pi 미빌드)
+│   ├── sim_hardware.*           # SimOpenCr/SimLds 하드웨어 스텁
+│   └── map_publisher.*          # 정적 MazeWorld map/map→odom (앱 로컬)
 ├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp
 │   ├── CMakeLists.txt

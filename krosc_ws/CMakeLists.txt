@@ -85,6 +85,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
   add_executable(krosc_ws_simulator
     simulator/main.cpp
     simulator/sim_hardware.cpp
+    simulator/map_publisher.cpp
     robot/robot.cpp
     robot/nodes/robot_status.cpp
     robot/controls/opencr/opencr_control.cpp
@@ -99,7 +100,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
     message(FATAL_ERROR "krosc_ws_simulator: Qt6 simulator window가 필요하다")
   endif()
   target_link_libraries(krosc_ws_simulator PRIVATE
-    krosc::core krosc::simulator krosc::simulator_qt)
+    krosc::core krosc::simulator_assets krosc::simulator krosc::simulator_qt)
   target_compile_definitions(krosc_ws_simulator PRIVATE
     KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
     KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps")

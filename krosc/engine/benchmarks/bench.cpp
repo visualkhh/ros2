@@ -8,7 +8,7 @@
 
 #include "krosc/context.hpp"
 #include "krosc/node.hpp"
-#include "krosc/simulator/maze_world.hpp"
+#include "krosc/simulator/worlds/maze_world.hpp"
 #include "krosc/tf/tf.hpp"
 
 namespace {

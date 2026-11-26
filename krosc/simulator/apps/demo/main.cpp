@@ -3,19 +3,58 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "krosc/krosc.hpp"
+#include "krosc/msgs.hpp"
+#include "krosc/nodes/diff_drive_odometry.hpp"
+#include "krosc/nodes/ekf.hpp"
+#include "krosc/nodes/robot_state_publisher.hpp"
+#include "krosc/qos.hpp"
+#include "krosc/simulator/objects/turtlebot3.hpp"
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/view_window.hpp"
+#include "krosc/simulator/worlds/maze_world.hpp"
 #include "krosc/time/time.hpp"
 #include "krosc/viz/viz_window.hpp"
+
+// 데모 앱 로컬 ROS 접착제 (코어/에셋 라이브러리에 넣지 않는다).
+#include "map_publisher.hpp"
+#include "robot_bridge.hpp"
 
 #ifndef KROSC_SIMULATOR_URDF
 #define KROSC_SIMULATOR_URDF "description/turtlebot3_waffle_pi.urdf"
 #endif
+
+namespace {
+
+std::string read_text(const std::string& path) {
+  std::ifstream stream(path);
+  if (!stream) {
+    return {};
+  }
+  std::ostringstream buffer;
+  buffer << stream.rdbuf();
+  return buffer.str();
+}
+
+std::vector<bool> ekf_config(std::initializer_list<int> enabled) {
+  std::vector<bool> config(15, false);
+  for (const int index : enabled) {
+    if (index >= 0 && index < 15) {
+      config[static_cast<std::size_t>(index)] = true;
+    }
+  }
+  return config;
+}
+
+}  // namespace
 
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
@@ -74,12 +113,38 @@ int main(int argc, char** argv) {
     std::printf("[krosc] peer listen: 0.0.0.0:%d\n", static_cast<int>(peer->port()));
   }
 
-  krosc::simulator::Simulator simulator(
-      app.context(),
-      krosc::simulator::SimulatorOptions{noisy, pucks, seed, 100.0, KROSC_SIMULATOR_URDF});
+  auto world = std::make_unique<krosc::simulator::MazeWorld>(pucks, seed);
+  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(noisy, seed);
+  auto* robot = static_cast<krosc::simulator::TurtleBot3*>(
+      world->add(std::move(robot_holder)));
 
-  krosc::simulator::SimWindow sim_window(simulator.world().walls(), simulator.robot(),
-                                         simulator.snapshots(), simulator.bridge_node());
+  const std::string urdf = read_text(KROSC_SIMULATOR_URDF);
+  if (urdf.empty()) {
+    std::cerr << "URDF를 읽지 못했다: " << KROSC_SIMULATOR_URDF << "\n";
+    return 1;
+  }
+  krosc::simulator::MapPublisher map_publisher(app.context(), world->walls());
+  krosc::simulator::RobotBridge bridge(app.context(), *robot);
+  krosc::nodes::RobotStatePublisher robot_state(
+      app.context(), "robot_state_publisher",
+      std::map<std::string, krosc::ParamValue>{{"robot_description", urdf}});
+  krosc::nodes::DiffDriveOdometry odometry(
+      app.context(), "diff_drive_odometry",
+      std::map<std::string, krosc::ParamValue>{
+          {"publish_tf", false},
+          {"wheel_radius", krosc::simulator::TurtleBot3::kWheelRadius},
+          {"wheel_separation", krosc::simulator::TurtleBot3::kWheelSeparation}});
+  krosc::nodes::Ekf ekf(
+      app.context(), "ekf_filter_node",
+      std::map<std::string, krosc::ParamValue>{
+          {"odom0", std::string("odom")},
+          {"odom0_config", ekf_config({6, 11})},
+          {"imu0", std::string("imu")},
+          {"imu0_config", ekf_config({11})},
+          {"publish_tf", true}});
+
+  krosc::simulator::Simulator simulator(app.context(), *world, *robot);
+  krosc::simulator::SimWindow sim_window(world->walls(), simulator.snapshots(), bridge);
   krosc::viz::VizWindow window(app.context());
   window.set_fixed_frame("map");
   if (zoom > 0.0) {
@@ -92,14 +157,19 @@ int main(int argc, char** argv) {
   window.move(780, 20);
   sim_window.show();
   window.show();
-  simulator.bridge_node().logger().info(
-      "Simulator: noisy=%s, pucks=%zu, nodes=%zu", noisy ? "true" : "false",
-      simulator.maze_world().pucks().size(), app.context().node_names().size());
+  bridge.logger().info("Simulator: noisy=%s, pucks=%zu, nodes=%zu",
+                       noisy ? "true" : "false", world->pucks().size(),
+                       app.context().node_names().size());
 
+  const auto send_twist = [&bridge](double linear, double angular) {
+    bridge.publish("cmd_vel",
+                   krosc::msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}},
+                   krosc::QOS_COMMAND);
+  };
   if (screenshot.empty() && duration <= 0.0) {
-    simulator.set_stop_command();
+    send_twist(0.0, 0.0);
   } else {
-    simulator.set_demo_command();
+    send_twist(0.16, 0.28);
   }
   simulator.start();
 

@@ -33,9 +33,9 @@ QColor with_alpha(QColor color, int alpha) {
 }
 }  // namespace
 
-SimView::SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store,
-                 krosc::Node& node, std::string teleop_topic, QWidget* parent)
-    : QWidget(parent), walls_(std::move(walls)), robot_(robot), store_(store), node_(node),
+SimView::SimView(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
+                 std::string teleop_topic, QWidget* parent)
+    : QWidget(parent), walls_(std::move(walls)), store_(store), node_(node),
       teleop_topic_(std::move(teleop_topic)) {
   setFocusPolicy(Qt::StrongFocus);
   setMouseTracking(true);
@@ -68,7 +68,8 @@ void SimView::set_follow(bool follow) {
 }
 
 QString SimView::help_text() const {
-  return QStringLiteral("truth view · W/A/S/D drive · Q/Z speed · F follow · C overview · drag orbit · wheel zoom");
+  return QStringLiteral(
+      "truth view · W/A/S/D drive · Q/Z speed · F follow · L lidar · C overview · drag orbit · wheel zoom");
 }
 
 void SimView::update_camera() {
@@ -220,12 +221,13 @@ void SimView::draw_walls(QPainter& painter) const {
   }
 }
 
-void SimView::draw_pucks(QPainter& painter, const SimSnapshot& snapshot) const {
-  for (const auto& puck : snapshot.pucks) {
-    const msgs::Transform transform{{puck.pose.x, puck.pose.y, puck.height / 2.0}, tfmath::from_yaw(puck.pose.theta)};
-    const QColor color(static_cast<int>(puck.color[0] * 255.0), static_cast<int>(puck.color[1] * 255.0),
-                       static_cast<int>(puck.color[2] * 255.0), 230);
-    draw_cylinder(painter, transform, puck.radius, puck.height, puck.shape, color, color.lighter(130));
+void SimView::draw_objects(QPainter& painter, const SimSnapshot& snapshot) const {
+  for (const auto& object : snapshot.objects) {
+    const msgs::Transform transform{{object.pose.x, object.pose.y, object.height / 2.0},
+                                    tfmath::from_yaw(object.pose.theta)};
+    const QColor color(static_cast<int>(object.color[0] * 255.0), static_cast<int>(object.color[1] * 255.0),
+                       static_cast<int>(object.color[2] * 255.0), 230);
+    draw_cylinder(painter, transform, object.radius, object.height, object.sides, color, color.lighter(130));
   }
 }
 
@@ -266,7 +268,7 @@ void SimView::draw_robot(QPainter& painter, const SimSnapshot& snapshot) const {
 }
 
 void SimView::draw_scan(QPainter& painter, const SimSnapshot& snapshot) const {
-  if (snapshot.scan_ranges.empty()) {
+  if (!show_scan_ || snapshot.scan_ranges.empty()) {
     return;
   }
   QPolygonF points;
@@ -307,11 +309,14 @@ void SimView::draw_hud(QPainter& painter, const SimSnapshot& snapshot) const {
                .arg(snapshot.command.angular.z, 0, 'f', 2)
                .arg(snapshot.left_wheel * 180.0 / kPi, 0, 'f', 0)
                .arg(snapshot.right_wheel * 180.0 / kPi, 0, 'f', 0);
-  lines << QString("pucks: %1   nearest: %2 m   fps: %3")
-               .arg(snapshot.pucks.size())
+  lines << QString("objects: %1   nearest: %2 m   fps: %3")
+               .arg(snapshot.objects.size())
                .arg(std::isfinite(nearest) ? QString::number(nearest, 'f', 2) : QString("-"))
                .arg(fps_, 0, 'f', 1);
-  lines << QString("follow: %1   teleop x%2").arg(follow_ ? "on" : "off").arg(teleop_scale_, 0, 'f', 2);
+  lines << QString("follow: %1   lidar: %2   teleop x%3")
+               .arg(follow_ ? "on" : "off")
+               .arg(show_scan_ ? "on" : "off")
+               .arg(teleop_scale_, 0, 'f', 2);
 
   QFont font("Menlo");
   font.setStyleHint(QFont::Monospace);
@@ -339,7 +344,7 @@ void SimView::paintEvent(QPaintEvent* event) {
   draw_walls(painter);
   const auto snapshot = store_.latest();
   if (snapshot) {
-    draw_pucks(painter, *snapshot);
+    draw_objects(painter, *snapshot);
     draw_scan(painter, *snapshot);
     draw_robot(painter, *snapshot);
     draw_hud(painter, *snapshot);
@@ -427,6 +432,10 @@ void SimView::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_F:
       set_follow(!follow_);
       return;
+    case Qt::Key_L:
+      show_scan_ = !show_scan_;
+      update();
+      return;
     case Qt::Key_C:
     case Qt::Key_R:
       reset_camera();
@@ -470,12 +479,12 @@ void SimView::publish_teleop() {
   last_angular_ = angular;
 }
 
-SimWindow::SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store,
-                     krosc::Node& node, std::string teleop_topic, QWidget* parent)
+SimWindow::SimWindow(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
+                     std::string teleop_topic, QWidget* parent)
     : QMainWindow(parent) {
   setWindowTitle("krosc sim (truth)");
   resize(760, 860);
-  view_ = new SimView(std::move(walls), robot, store, node, std::move(teleop_topic), this);
+  view_ = new SimView(std::move(walls), store, node, std::move(teleop_topic), this);
   setCentralWidget(view_);
   statusBar()->showMessage(view_->help_text());
   timer_ = new QTimer(this);

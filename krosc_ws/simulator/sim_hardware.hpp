@@ -8,7 +8,7 @@
 
 #include "hardwares/lds03/lds_device.hpp"
 #include "hardwares/opencr/opencr_device.hpp"
-#include "krosc/simulator/turtlebot3.hpp"
+#include "krosc/simulator/objects/turtlebot3.hpp"
 
 namespace krosc_ws::sim {
 

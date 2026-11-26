@@ -1,4 +1,4 @@
-#include "krosc/simulator/turtlebot3.hpp"
+#include "krosc/simulator/objects/turtlebot3.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -51,6 +51,18 @@ void TurtleBot3::set_command(const msgs::Twist& command) {
 msgs::Twist TurtleBot3::command() const {
   std::lock_guard<std::mutex> lock(command_mutex_);
   return command_;
+}
+
+RobotState TurtleBot3::state() const {
+  RobotState result;
+  result.command = command();
+  result.joints = joint_positions();
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    result.scan_ranges = truth_scan_ranges_;
+    result.scan_pose = truth_scan_pose_;
+  }
+  return result;
 }
 
 void TurtleBot3::tick(double time, double dt) {
@@ -160,6 +172,17 @@ void TurtleBot3::sample_scan(double time) {
     world->ray_distances(sensor_x, sensor_y, angles, kLidarMountHeight, hits);
   } else {
     hits.assign(static_cast<std::size_t>(kScanBeams), std::numeric_limits<float>::infinity());
+  }
+  std::vector<float> truth = hits;
+  for (auto& range : truth) {
+    if (!(static_cast<double>(range) >= kScanRangeMin && static_cast<double>(range) <= kScanRangeMax)) {
+      range = std::numeric_limits<float>::infinity();
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    truth_scan_ranges_ = std::move(truth);
+    truth_scan_pose_ = {sensor_x, sensor_y, pose.theta};
   }
   for (auto& range : hits) {
     const double distance = static_cast<double>(range);

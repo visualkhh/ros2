@@ -12,9 +12,9 @@
 #include "krosc/nodes/diff_drive_odometry.hpp"
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/simulator/simulator.hpp"
-#include "krosc/simulator/maze_world.hpp"
+#include "krosc/simulator/worlds/maze_world.hpp"
 #include "krosc/simulator/runner.hpp"
-#include "krosc/simulator/turtlebot3.hpp"
+#include "krosc/simulator/objects/turtlebot3.hpp"
 #include "krosc/tf/tf_ros.hpp"
 #include "krosc/time/time.hpp"
 
@@ -174,16 +174,22 @@ KROSC_TEST(simulation_runner_steps_world) {
   CHECK(steps >= 5);
 }
 
-KROSC_TEST(simulator_demo_command_uses_cmd_vel) {
+KROSC_TEST(simulator_uses_injected_world_and_robot) {
   krosc::Context context;
-  krosc::simulator::Simulator simulator(
-      context, krosc::simulator::SimulatorOptions{
-                   false, 0, 42, 100.0, KROSC_SIMULATOR_URDF});
-  simulator.set_demo_command();
-  CHECK_NEAR(0.16, simulator.robot().command().linear.x, 1e-9);
-  CHECK_NEAR(0.28, simulator.robot().command().angular.z, 1e-9);
-  simulator.set_stop_command();
-  CHECK_NEAR(0.0, simulator.robot().command().linear.x, 1e-9);
-  CHECK_NEAR(0.0, simulator.robot().command().angular.z, 1e-9);
+  krosc::simulator::MazeWorld world(0, 42);
+  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(false, 42);
+  auto* robot = static_cast<krosc::simulator::TurtleBot3*>(world.add(std::move(robot_holder)));
+  krosc::simulator::Simulator simulator(context, world, *robot,
+                                        krosc::simulator::SimulatorOptions{100.0});
+  robot->set_command(krosc::msgs::Twist{{0.16, 0.0, 0.0}, {0.0, 0.0, 0.28}});
+  CHECK_NEAR(0.16, simulator.robot().state().command.linear.x, 1e-9);
+  CHECK_NEAR(0.28, simulator.robot().state().command.angular.z, 1e-9);
+  simulator.runner().step_once();
+  const auto snapshot = simulator.snapshots().latest();
+  CHECK(snapshot != nullptr);
+  if (snapshot) {
+    CHECK_NEAR(world.time(), snapshot->time, 1e-12);
+    CHECK_NEAR(robot->pose.x, snapshot->robot_pose.x, 1e-12);
+  }
   context.shutdown();
 }

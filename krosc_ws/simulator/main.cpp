@@ -15,6 +15,9 @@
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/qos.hpp"
+#include "map_publisher.hpp"
+#include "krosc/simulator/worlds/maze_world.hpp"
+#include "krosc/simulator/objects/turtlebot3.hpp"
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/snapshot.hpp"
 #include "krosc/simulator/view_window.hpp"
@@ -94,22 +97,20 @@ int main(int argc, char** argv) {
   krosc::Context& context = *context_holder;
   krosc::Node ui_node(context, "sim_ui");
 
-  krosc::simulator::SimulatorOptions sim_options;
-  sim_options.noisy = noisy;
-  sim_options.pucks = pucks;
-  sim_options.seed = seed;
-  sim_options.step_hz = 100.0;
-  sim_options.urdf_path = KROSC_WS_URDF_PATH;
-  sim_options.bridge = false;
-  sim_options.odometry = false;
-  sim_options.ekf = false;
-  sim_options.publish_map = !slam;
-  // robot_state_publisher는 Robot이 실기와 같은 URDF로 한 번만 발행한다.
-  sim_options.publish_robot_state = false;
-  krosc::simulator::Simulator simulator(context, sim_options);
+  auto world = std::make_unique<krosc::simulator::MazeWorld>(pucks, seed);
+  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(noisy, seed);
+  auto* robot_model = static_cast<krosc::simulator::TurtleBot3*>(
+      world->add(std::move(robot_holder)));
 
-  krosc_ws::sim::SimOpenCr opencr(simulator.robot());
-  krosc_ws::sim::SimLds lds(simulator.robot());
+  // 정적 MazeWorld 지도 모드에서만 map→odom을 미리 발행한다.
+  std::unique_ptr<krosc::simulator::MapPublisher> map_publisher;
+  if (!slam) {
+    map_publisher = std::make_unique<krosc::simulator::MapPublisher>(context, world->walls());
+  }
+  krosc::simulator::Simulator simulator(context, *world, *robot_model);
+
+  krosc_ws::sim::SimOpenCr opencr(*robot_model);
+  krosc_ws::sim::SimLds lds(*robot_model);
 
   krosc_ws::RobotOptions options;
   options.urdf_path = KROSC_WS_URDF_PATH;
@@ -135,8 +136,8 @@ int main(int argc, char** argv) {
   options.control_period = 0.01;
 
   krosc_ws::Robot robot(context, opencr, &lds, options);
-  krosc::simulator::SimWindow window(simulator.maze_world().walls(), simulator.robot(),
-                                     simulator.snapshots(), ui_node, "cmd_vel_teleop");
+  krosc::simulator::SimWindow window(world->walls(), simulator.snapshots(), ui_node,
+                                     "cmd_vel_teleop");
   window.show();
   window.raise();
   window.activateWindow();

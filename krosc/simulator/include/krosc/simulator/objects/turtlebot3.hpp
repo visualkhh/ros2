@@ -9,8 +9,10 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <vector>
 
 #include "krosc/msgs.hpp"
+#include "krosc/simulator/robot.hpp"
 #include "krosc/simulator/world.hpp"
 
 namespace krosc::simulator {
@@ -33,10 +35,11 @@ struct Noise {
 
 // ROBOTIS TurtleBot3 waffle pi의 시뮬레이션 모델: 차동 구동, LDS-01 라이다, MPU-9250 IMU.
 // krosc 토픽과 무관하고 월드의 시계(tick)만 받는다. 다리(RobotBridge)가 이 값을 토픽으로 옮긴다.
-class TurtleBot3 final : public WorldObject {
+class TurtleBot3 final : public SimRobot {
  public:
   explicit TurtleBot3(bool noisy = false, std::optional<std::uint32_t> seed = std::nullopt);
 
+  [[nodiscard]] RobotState state() const override;
   void set_command(const msgs::Twist& command);
   [[nodiscard]] msgs::Twist command() const;
   void tick(double time, double dt) override;
@@ -102,6 +105,8 @@ class TurtleBot3 final : public WorldObject {
 
   std::function<void(const msgs::LaserScan&)> scan_callback_;
   std::function<void(const msgs::Imu&)> imu_callback_;
+  std::vector<float> truth_scan_ranges_;
+  msgs::Pose2D truth_scan_pose_;
 };
 
 }  // namespace krosc::simulator

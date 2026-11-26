@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "krosc/simulator/snapshot.hpp"
-#include "krosc/simulator/turtlebot3.hpp"
 #include "krosc/simulator/world.hpp"
 
 class QKeyEvent;
@@ -38,7 +37,7 @@ class SimView final : public QWidget {
   Q_OBJECT
 
  public:
-  SimView(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, krosc::Node& node,
+  SimView(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
           std::string teleop_topic = "cmd_vel", QWidget* parent = nullptr);
 
   void reset_camera();
@@ -82,14 +81,13 @@ class SimView final : public QWidget {
                      const QColor& fill, const QColor& outline) const;
   void draw_grid(QPainter& painter) const;
   void draw_walls(QPainter& painter) const;
-  void draw_pucks(QPainter& painter, const SimSnapshot& snapshot) const;
+  void draw_objects(QPainter& painter, const SimSnapshot& snapshot) const;
   void draw_robot(QPainter& painter, const SimSnapshot& snapshot) const;
   void draw_scan(QPainter& painter, const SimSnapshot& snapshot) const;
   void draw_hud(QPainter& painter, const SimSnapshot& snapshot) const;
   void publish_teleop();
 
   std::vector<Wall> walls_;
-  TurtleBot3& robot_;
   SnapshotStore& store_;
   krosc::Node& node_;
   std::string teleop_topic_;
@@ -101,6 +99,7 @@ class SimView final : public QWidget {
   bool orbiting_ = false;
   bool panning_ = false;
   bool follow_ = true;
+  bool show_scan_ = true;
   QVector3D follow_target_{0.0F, 0.0F, 0.1F};
   QSet<int> keys_;
   double teleop_scale_ = 1.0;
@@ -116,7 +115,7 @@ class SimWindow final : public QMainWindow {
   Q_OBJECT
 
  public:
-  SimWindow(std::vector<Wall> walls, TurtleBot3& robot, SnapshotStore& store, krosc::Node& node,
+  SimWindow(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
             std::string teleop_topic = "cmd_vel", QWidget* parent = nullptr);
   ~SimWindow() override;
 

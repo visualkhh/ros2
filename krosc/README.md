@@ -115,15 +115,17 @@ cmake --build build -j
 
 ```
 MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed 고정)
+        │  Simulator(context, world, robot) — 코어는 월드/로봇을 소유하지 않는다
         │ tick 100Hz
-        ├─ RobotBridge: scan/imu/joint_states 발행, cmd_vel 수신
-        ├─ DiffDriveOdometry: joint_states -> odom (TF는 끔)
-        ├─ Ekf: odom(vx, vyaw) + imu(vyaw) -> odometry/filtered + odom -> base_footprint TF
-        ├─ RobotStatePublisher: URDF -> robot_description/tf_static/관절 tf
-        ├─ MapPublisher: MazeWorld 벽 -> map(latch), map -> odom 정적 TF
-        ├─ SnapshotRecorder: 진실 상태(로봇/퍽/라이다)를 불변 스냅샷으로 -> SimWindow
-        ├─ SimWindow: 월드/로봇/퍽/진실 라이다를 3D 투영으로 그린다 (QPainter)
-        └─ VizWindow: tf/tf_static, robot_description, map, scan, odom, filtered, 로그를 구독해 그린다
+        ├─ SnapshotRecorder: SimRobot::state() + World 오브젝트 -> 불변 스냅샷
+        ├─ SimWindow: 월드/로봇/오브젝트/진실 라이다를 3D 투영 (L 키로 라이다 토글)
+        └─ 데모 앱(apps/demo)이 자기 ROS 접착제를 소유:
+           ├─ RobotBridge: scan/imu/joint_states 발행, cmd_vel 수신
+           ├─ DiffDriveOdometry: joint_states -> odom (TF는 끔)
+           ├─ Ekf: odom(vx, vyaw) + imu(vyaw) -> odometry/filtered + odom -> base_footprint TF
+           ├─ RobotStatePublisher: URDF -> robot_description/tf_static/관절 tf
+           ├─ MapPublisher: MazeWorld 벽 -> map(latch), map -> odom 정적 TF
+           └─ VizWindow: tf/tf_static, robot_description, map, scan, odom, filtered, 로그를 구독해 그린다
 ```
 
 두 화면의 차이가 핵심이다: `SimWindow`는 **진실**(시뮬레이션 내부), `VizWindow`는 **로봇이 토픽으로 내보낸 추정**을 보여 준다.
@@ -133,6 +135,7 @@ MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed
 | `W/A/S/D` 또는 방향키 | 조종 (sim 창은 로봇 직접, viz 창은 `cmd_vel` 발행) |
 | `Q` / `Z` | 조종 속도 ×1.25 / ÷1.25 |
 | `F` | 로봇 추적 on/off |
+| `L` | 라이다 표시 on/off |
 | `C` / `R` | 카메라 초기화 |
 | 왼쪽 드래그 | 궤도 회전 |
 | 오른쪽 드래그 | 평행 이동 |
@@ -157,9 +160,12 @@ krosc/
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp, net_bench.cpp
 ├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
-│   ├── main.cpp                   # krosc_simulator 실행기 (Krosc + Simulator + 창)
-│   ├── include/krosc/simulator/    # Simulator, world, maze_world, turtlebot3, runner, snapshot, view_window
-│   ├── core/                      # Simulator/월드/ 브리지/러너 소스
+│   ├── README.md                  # 월드/로봇 주입 구조
+│   ├── apps/demo/                 # krosc_simulator 실행기 + 데모 전용 ROS 브리지/맵 퍼블리셔
+│   ├── include/krosc/simulator/   # Simulator, World, SimRobot, runner, snapshot, view_window
+│   ├── core/                      # Simulator/스냅샷/러너/Qt truth view
+│   ├── worlds/                    # MazeWorld, RoomWorld
+│   ├── objects/                   # Puck, Box/CylinderObstacle, TurtleBot3
 │   └── tests/                     # simulator 4 tests
 ├── viz/                           # krosc_viz (Qt6 Widgets)
 │   ├── CMakeLists.txt
