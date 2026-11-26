@@ -3,12 +3,12 @@
 # 실행 스크립트(run.sh/run-slam.sh/run-sim.sh/run-tests.sh/run-viz.sh/run-viz-web.sh)는
 # 항상 이 스크립트를 먼저 호출해서 최신 바이너리를 보장한다.
 #
-#   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot+viz-web, PC: robot+sim+viz+viz-web)
+#   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot, PC: robot+sim+viz+viz-web)
 #   ./build.sh robot           # krosc_real
 #   ./build.sh sim             # krosc_simulator (PC 전용)
 #   ./build.sh tests           # krosc_core_tests + krosc_simulator_tests + krosc_ws_tests
 #   ./build.sh viz             # krosc_ws_viz_app (PC 전용, Qt6)
-#   ./build.sh viz-web         # krosc_ws_viz_web (Pi/PC)
+#   ./build.sh viz-web         # krosc_ws_viz_web (PC 전용, 로봇 9000에 접속)
 #
 # 환경변수:
 #   KROSC_JOBS=2   빌드 병렬 수 (기본: Pi/ARM=2, 그 외 nproc)
@@ -42,7 +42,7 @@ require_qt() {
 
 require_pc() {
   if is_arm; then
-    echo "[build] $1 는 PC에서만 빌드한다. Pi에서는 robot/viz-web만 쓴다." >&2
+    echo "[build] $1 는 PC에서만 빌드한다. Pi는 로봇(krosc_real)만 빌드한다." >&2
     exit 1
   fi
 }
@@ -99,23 +99,18 @@ build_viz() {
 }
 
 build_viz_web() {
+  require_pc viz-web
   echo "[build] krosc: krosc_ws_viz_web"
-  if is_arm; then
-    configure_krosc -DKROSC_BUILD_VIZ_WEB=ON -DKROSC_BUILD_VIZ=OFF \
-                    -DKROSC_BUILD_EXAMPLES=OFF \
-                    -DKROSC_VIZ_WEB_PROJECT_DIR="$here/viz-web"
-  else
-    configure_krosc -DKROSC_BUILD_VIZ_WEB=ON -DKROSC_BUILD_EXAMPLES=OFF \
-                    -DKROSC_VIZ_WEB_PROJECT_DIR="$here/viz-web"
-  fi
+  configure_krosc -DKROSC_BUILD_VIZ_WEB=ON -DKROSC_BUILD_EXAMPLES=OFF \
+                  -DKROSC_VIZ_WEB_PROJECT_DIR="$here/viz-web"
   cmake --build "$root/krosc/build" -j"$jobs" --target krosc_ws_viz_web
 }
 
 case "$target" in
   all)
     if is_arm; then
+      # Pi는 하드웨어만 돌린다. 웹/Qt Viz는 PC에서 빌드해 9000으로 붙는다.
       build_robot
-      build_viz_web
     else
       build_robot
       build_sim

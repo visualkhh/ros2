@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# krosc_ws 프로젝트 웹 Viz를 최신 빌드한 뒤 Pi(기본 pak.local:9000)에 붙인다.
+# krosc_ws 프로젝트 웹 Viz 게이트웨이를 PC에서 빌드/실행해 Pi(기본 pak.local:9000)에 붙인다.
 #   ./run-viz-web.sh
 #   KROSC_VIZ_HOST=10.2.150.138 KROSC_VIZ_WEB_PORT=8080 ./run-viz-web.sh
 set -euo pipefail
