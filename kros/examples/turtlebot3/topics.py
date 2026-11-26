@@ -1,3 +1,0 @@
-CMD_VEL_TOPIC_NAME = "cmd_vel"
-SCAN_TOPIC_NAME = "scan"
-IMU_TOPIC_NAME = "imu"

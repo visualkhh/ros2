@@ -41,7 +41,7 @@ ls -l /dev/opencr /dev/tb3_lidar
 ```bash
 cd ~/ros2/krosc_ws
 
-./build.sh          # krosc(core/sim/viz) + krosc_ws를 한 번에 빌드
+./build.sh          # Pi: krosc_real만 / PC: krosc_real + sim + viz + viz-web
 ./run.sh            # 실기: 빌드 후 idle/텔레옵 실행 (TCP 9000)
 ./run-slam.sh       # 실기: 빌드 후 SLAM(mapping) 실행
 ./run-tests.sh      # krosc + krosc_ws 테스트 빌드/실행
@@ -50,7 +50,12 @@ cd ~/ros2/krosc_ws
 ./run-viz.sh        # 빌드 후 pak.local:9000 C++ Viz (fixed frame map)
 KROSC_VIZ_HOST=10.2.150.135 ./run-viz.sh
 ./run-sim.sh        # 시뮬레이터(진실) + Viz 데모
+./run-viz-web.sh    # 웹 Viz 게이트웨이 (로봇 9000에 접속)
 ```
+
+**Pi는 `krosc_real`만 빌드한다.** 웹 Viz 게이트웨이(`krosc_ws_viz_web`)는 PC에서 실행해
+로봇의 PeerNetwork(9000)에 붙는다. `viz`, `sim`, `viz-web`은 PC 전용이며 ARM에서 호출하면
+`build.sh`가 에러를 낸다.
 
 `run-viz.sh`는 프로젝트 전용 `krosc_ws_viz_app`을 빌드/실행한다.
 `KROSC_VIZ_HOST`, `KROSC_VIZ_PORT`, `KROSC_VIZ_FIXED_FRAME`, `KROSC_VIZ_TAB`,
@@ -75,7 +80,7 @@ Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 
 ### 지도 폴더
 
-기본 지도 폴더는 **`~/ros2/kos_ws/artifacts/maps`** (Python `kos_ws`와 공유)다.
+기본 지도 폴더는 **`~/ros2/krosc_ws/artifacts/maps`**다.
 지도 하나 = 폴더 하나(`<이름>/map.yaml` + `map.pgm`)이고, ROS 2처럼
 `map_server`(load_map/unload_map)와 `map_saver`(save_map)가 실제 파일 I/O를 맡는다.
 `map_catalog`는 상태 토픽(`map_list`, `map_name`, `map_status`)과
@@ -86,8 +91,6 @@ Viz 단축키(한글 두벌식 레이아웃에서도 동작):
 ./run.sh --maps /home/pak/ros2/krosc_ws/artifacts/maps
 KROSC_MAPS_DIR=/home/pak/ros2/krosc_ws/artifacts/maps ./run-slam.sh
 ```
-
-맵을 `krosc_ws` 소유로 두려면 위 경로에 폴더를 만들고 기존 지도를 복사하거나 심볼릭 링크하면 된다.
 
 ## 실행 (라즈베리파이)
 
@@ -398,7 +401,7 @@ krosc_ws/
 └── tests/                       # 프로토콜/파서 + PTY 시리얼 왕복
 ```
 
-실기 값은 Python `kos_ws`와 같다:
+실기 값:
 
 - 바퀴 반지름 0.033 m, 바퀴 간격 0.287 m, 최대 7.8 rad/s
 - 두 모터 모두 `+속도 = 뒤` → 앱 안에서 `left_dir = right_dir = -1`로 뒤집는다

@@ -4,8 +4,7 @@ Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyrical 로봇의 bringup · 운영 도�
 
 | 폴더 | 내용 | 시작 문서 |
 |---|---|---|
-| [kros/](kros/) | 순수 파이썬 ROS 클론 (학습용) | [kros/README.md](kros/README.md) |
-| [krosc/](krosc/) | kros의 C++20 버전 — `core` + `sim` + `viz` (Qt6), TCP 원격 viz, Docker/noVNC | [krosc/README.md](krosc/README.md) |
+| [krosc/](krosc/) | C++20 ROS 클론 — `core` + `sim` + `viz` (Qt6), TCP 원격 viz, Docker/noVNC | [krosc/README.md](krosc/README.md) |
 | [krosc_ws/](krosc_ws/) | 실기 TurtleBot3 Pi 워크스페이스 — OpenCR/LDS-03 C++ 드라이버 + EKF + 원격 viz | [krosc_ws/README.md](krosc_ws/README.md) |
 | [docker/](docker/) | krosc용 Ubuntu 26.04 + GCC + CMake + Qt6 + noVNC 컨테이너 | [docker/README.md](docker/README.md) |
 | [documents/](documents/) | 문서 목차 (Pi 세팅 · ROS 설치 · OpenCR · Isaac · 시행착오) | [documents/README.md](documents/README.md) |
