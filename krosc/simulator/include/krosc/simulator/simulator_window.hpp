@@ -87,6 +87,7 @@ class SimulatorView final : public QWidget {
   void queue_cylinder(const msgs::Transform& transform, double radius, double length, int segments,
                       const QColor& fill, const QColor& outline);
   void flush_faces(QPainter& painter);
+  void draw_floor(QPainter& painter) const;
   void draw_grid(QPainter& painter) const;
   void draw_walls();
   void draw_objects(const SimulatorSnapshot& snapshot);

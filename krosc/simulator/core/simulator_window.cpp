@@ -33,6 +33,50 @@ QColor with_alpha(QColor color, int alpha) {
   color.setAlpha(alpha);
   return color;
 }
+
+// 카메라 뒤/근접 평면을 지나는 면을 통째로 버리지 않고 clip-space에서 자른다.
+// QPainter는 깊이 버퍼가 없어서 면 하나가 사라지면 벽/퍽이 겹쳐 보인다.
+std::vector<QVector4D> clip_w_positive(const std::vector<QVector4D>& input) {
+  std::vector<QVector4D> output;
+  output.reserve(input.size() + 1);
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    const QVector4D& current = input[i];
+    const QVector4D& previous = input[(i + input.size() - 1) % input.size()];
+    const float current_distance = current.w() - 1e-6F;
+    const float previous_distance = previous.w() - 1e-6F;
+    const bool current_inside = current_distance >= 0.0F;
+    const bool previous_inside = previous_distance >= 0.0F;
+    if (current_inside != previous_inside) {
+      const float t = previous_distance / (previous_distance - current_distance);
+      output.push_back(previous + (current - previous) * t);
+    }
+    if (current_inside) {
+      output.push_back(current);
+    }
+  }
+  return output;
+}
+
+std::vector<QVector4D> clip_near_plane(const std::vector<QVector4D>& input) {
+  std::vector<QVector4D> output;
+  output.reserve(input.size() + 1);
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    const QVector4D& current = input[i];
+    const QVector4D& previous = input[(i + input.size() - 1) % input.size()];
+    const float current_distance = current.z() + current.w();
+    const float previous_distance = previous.z() + previous.w();
+    const bool current_inside = current_distance >= 0.0F;
+    const bool previous_inside = previous_distance >= 0.0F;
+    if (current_inside != previous_inside) {
+      const float t = previous_distance / (previous_distance - current_distance);
+      output.push_back(previous + (current - previous) * t);
+    }
+    if (current_inside) {
+      output.push_back(current);
+    }
+  }
+  return output;
+}
 }  // namespace
 
 SimulatorView::SimulatorView(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
@@ -145,17 +189,29 @@ void SimulatorView::flush_faces(QPainter& painter) {
   std::sort(faces_.begin(), faces_.end(),
             [](const Face& a, const Face& b) { return a.depth > b.depth; });
   for (const auto& face : faces_) {
-    QPolygonF polygon;
-    bool visible = true;
+    std::vector<QVector4D> clip;
+    clip.reserve(face.points.size());
     for (const auto& point : face.points) {
-      const Projected projected = project(point);
-      if (!projected.visible) {
-        visible = false;
-        break;
-      }
-      polygon << projected.point;
+      clip.push_back(matrix_ * QVector4D(point, 1.0F));
     }
-    if (!visible) {
+    clip = clip_w_positive(clip);
+    if (clip.size() < 3) {
+      continue;
+    }
+    clip = clip_near_plane(clip);
+    if (clip.size() < 3) {
+      continue;
+    }
+    QPolygonF polygon;
+    for (const auto& point : clip) {
+      if (point.w() <= 1e-6F) {
+        continue;
+      }
+      const QVector3D ndc = point.toVector3D() / point.w();
+      polygon << QPointF((ndc.x() + 1.0F) * 0.5F * static_cast<float>(view_width_),
+                         (1.0F - ndc.y()) * 0.5F * static_cast<float>(view_height_));
+    }
+    if (polygon.size() < 3) {
       continue;
     }
     painter.setBrush(face.fill);
@@ -220,6 +276,41 @@ void SimulatorView::queue_cylinder(const msgs::Transform& transform, double radi
   }
   queue_face(top, with_alpha(fill, std::min(255, fill.alpha() + 20)), outline);
   queue_face(bottom, fill, outline);
+}
+
+void SimulatorView::draw_floor(QPainter& painter) const {
+  constexpr float kHalf = 12.0F;
+  const std::array<QVector3D, 4> corners{
+      QVector3D(-kHalf, -kHalf, 0.0F), QVector3D(kHalf, -kHalf, 0.0F),
+      QVector3D(kHalf, kHalf, 0.0F), QVector3D(-kHalf, kHalf, 0.0F)};
+  std::vector<QVector4D> clip;
+  clip.reserve(corners.size());
+  for (const auto& corner : corners) {
+    clip.push_back(matrix_ * QVector4D(corner, 1.0F));
+  }
+  clip = clip_w_positive(clip);
+  if (clip.size() < 3) {
+    return;
+  }
+  clip = clip_near_plane(clip);
+  if (clip.size() < 3) {
+    return;
+  }
+  QPolygonF polygon;
+  for (const auto& point : clip) {
+    if (point.w() <= 1e-6F) {
+      continue;
+    }
+    const QVector3D ndc = point.toVector3D() / point.w();
+    polygon << QPointF((ndc.x() + 1.0F) * 0.5F * static_cast<float>(view_width_),
+                       (1.0F - ndc.y()) * 0.5F * static_cast<float>(view_height_));
+  }
+  if (polygon.size() < 3) {
+    return;
+  }
+  painter.setPen(Qt::NoPen);
+  painter.setBrush(QColor(17, 21, 28));
+  painter.drawPolygon(polygon);
 }
 
 void SimulatorView::draw_grid(QPainter& painter) const {
@@ -359,6 +450,7 @@ void SimulatorView::paintEvent(QPaintEvent* event) {
   update_camera();
   compute_matrix();
 
+  draw_floor(painter);
   draw_grid(painter);
   faces_.clear();
   draw_walls();
@@ -410,7 +502,10 @@ void SimulatorView::mouseMoveEvent(QMouseEvent* event) {
     const double scale = camera_.distance * 0.0016;
     const QVector3D right(static_cast<float>(-std::sin(camera_.yaw)), static_cast<float>(std::cos(camera_.yaw)), 0.0F);
     const QVector3D forward(static_cast<float>(-std::cos(camera_.yaw)), static_cast<float>(-std::sin(camera_.yaw)), 0.0F);
-    camera_.target -= right * static_cast<float>(delta.x() * scale) + forward * static_cast<float>(delta.y() * scale);
+    // 화면을 잡고 끄는 방향과 같은 쪽으로 월드가 움직이도록 한다.
+    // 좌우는 기존 부호가 맞고, 상하는 반전돼 있어 y 성분만 뒤집는다.
+    camera_.target -= right * static_cast<float>(delta.x() * scale);
+    camera_.target += forward * static_cast<float>(delta.y() * scale);
     if (follow_) {
       follow_target_ = camera_.target;
     }
