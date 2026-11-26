@@ -86,7 +86,6 @@ class Lds03 : public krosc::sensor::Sensor {
   static constexpr std::array<double, 4> kBodyBox{-0.21, 0.075, -0.17, 0.17};
 
   std::string port_;
-  krosc::Context& context_;
   const double mount_x_;
   std::string frame_id_;
   std::string topic_ = "scan";

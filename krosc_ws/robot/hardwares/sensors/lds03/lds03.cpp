@@ -174,7 +174,8 @@ std::optional<std::vector<float>> LdsParser::take_scan() {
 
 Lds03::Lds03(krosc::Context& context, std::string port, double mount_x, std::string frame_id,
              bool reverse, bool body_filter, int baud)
-    : port_(std::move(port)), context_(context), mount_x_(mount_x), frame_id_(std::move(frame_id)),
+    : krosc::sensor::Sensor(context), port_(std::move(port)), mount_x_(mount_x),
+      frame_id_(std::move(frame_id)),
       body_filter_(body_filter),
       baud_(baud),
       parser_(LdsParser::kBeams, reverse) {
@@ -211,10 +212,10 @@ bool Lds03::on_deactivate() {
 bool Lds03::on_update(double time, double period) {
   (void)time;
   (void)period;
-  if (auto scan = take_scan(context_.now())) {
+  if (auto scan = take_scan(now())) {
     if (!topic_.empty()) {
-      context_.topics().publish<krosc::msgs::LaserScan>(topic_, std::move(*scan),
-                                                        krosc::QOS_SENSOR_DATA);
+      context().topics().publish<krosc::msgs::LaserScan>(topic_, std::move(*scan),
+                                                         krosc::QOS_SENSOR_DATA);
     }
   }
   return connected_.load() && scan_age() <= 1.0;

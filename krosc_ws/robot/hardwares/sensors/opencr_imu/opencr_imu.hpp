@@ -19,7 +19,6 @@ class OpenCrImu final : public krosc::sensor::Sensor {
   bool on_update(double time, double period) override;
 
  private:
-  krosc::Context& context_;
   OpenCrSerial& opencr_;
   std::string topic_ = "imu";
   std::string frame_id_ = "imu_link";

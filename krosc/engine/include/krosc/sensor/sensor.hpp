@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+#include "krosc/context.hpp"
+
 namespace krosc::sensor {
 
 // 센서 플러그인 정보. control의 HardwareInfo와 같은 역할이지만,
@@ -30,7 +32,12 @@ struct SensorError {
 // 설정된 토픽으로 직접 발행한다.
 class Sensor {
  public:
+  // 모든 센서는 Context를 가진다. 발행/시각/stamp는 이 Context를 쓴다.
+  explicit Sensor(krosc::Context& context) : context_(context) {}
   virtual ~Sensor() = default;
+
+  [[nodiscard]] krosc::Context& context() const { return context_; }
+  [[nodiscard]] double now() const { return context_.now(); }
 
   virtual bool on_init(const SensorInfo& info) {
     info_ = info;
@@ -49,6 +56,7 @@ class Sensor {
   [[nodiscard]] const SensorInfo& info() const { return info_; }
 
  private:
+  krosc::Context& context_;
   SensorInfo info_;
 };
 

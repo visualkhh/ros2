@@ -4,6 +4,7 @@
 #include <thread>
 #include <vector>
 
+#include "krosc/context.hpp"
 #include "krosc/sensor/sensor.hpp"
 #include "krosc/sensor/sensor_manager.hpp"
 
@@ -26,6 +27,8 @@ SensorInfo make_info(const std::string& name, double period) {
 
 class FakeSensor final : public Sensor {
  public:
+  explicit FakeSensor(krosc::Context& context) : Sensor(context) {}
+
   bool fail_init = false;
   bool fail_activate = false;
   bool fail_read = false;
@@ -60,11 +63,12 @@ class FakeSensor final : public Sensor {
 }  // namespace
 
 KROSC_TEST(sensor_manager_add_rules) {
+  krosc::Context context;
   SensorManager manager;
-  CHECK(manager.add(make_info("lidar", 0.1), std::make_unique<FakeSensor>()));
-  CHECK(!manager.add(make_info("lidar", 0.1), std::make_unique<FakeSensor>()));
-  CHECK(!manager.add(make_info("", 0.1), std::make_unique<FakeSensor>()));
-  CHECK(!manager.add(make_info("zero", 0.0), std::make_unique<FakeSensor>()));
+  CHECK(manager.add(make_info("lidar", 0.1), std::make_unique<FakeSensor>(context)));
+  CHECK(!manager.add(make_info("lidar", 0.1), std::make_unique<FakeSensor>(context)));
+  CHECK(!manager.add(make_info("", 0.1), std::make_unique<FakeSensor>(context)));
+  CHECK(!manager.add(make_info("zero", 0.0), std::make_unique<FakeSensor>(context)));
   CHECK(!manager.add(make_info("null", 0.1), nullptr));
   CHECK_EQ(1u, manager.size());
   CHECK(manager.find("lidar") != nullptr);
@@ -73,9 +77,10 @@ KROSC_TEST(sensor_manager_add_rules) {
 }
 
 KROSC_TEST(sensor_manager_lifecycle_and_read) {
+  krosc::Context context;
   SensorManager manager;
-  auto first = std::make_unique<FakeSensor>();
-  auto second = std::make_unique<FakeSensor>();
+  auto first = std::make_unique<FakeSensor>(context);
+  auto second = std::make_unique<FakeSensor>(context);
   FakeSensor* first_ptr = first.get();
   FakeSensor* second_ptr = second.get();
   CHECK(manager.add(make_info("b", 0.1), std::move(second)));
@@ -124,8 +129,9 @@ KROSC_TEST(sensor_manager_lifecycle_and_read) {
 }
 
 KROSC_TEST(sensor_manager_reports_read_errors) {
+  krosc::Context context;
   SensorManager manager;
-  auto fake = std::make_unique<FakeSensor>();
+  auto fake = std::make_unique<FakeSensor>(context);
   FakeSensor* fake_ptr = fake.get();
   CHECK(manager.add(make_info("imu", 0.1), std::move(fake)));
   CHECK(manager.start(false));
@@ -149,9 +155,10 @@ KROSC_TEST(sensor_manager_reports_read_errors) {
 }
 
 KROSC_TEST(sensor_manager_schedules_by_period) {
+  krosc::Context context;
   SensorManager manager;
-  auto fast = std::make_unique<FakeSensor>();
-  auto slow = std::make_unique<FakeSensor>();
+  auto fast = std::make_unique<FakeSensor>(context);
+  auto slow = std::make_unique<FakeSensor>(context);
   FakeSensor* fast_ptr = fast.get();
   FakeSensor* slow_ptr = slow.get();
   CHECK(manager.add(make_info("fast", 0.1), std::move(fast)));
@@ -180,9 +187,10 @@ KROSC_TEST(sensor_manager_schedules_by_period) {
 }
 
 KROSC_TEST(sensor_manager_rolls_back_on_failure) {
+  krosc::Context context;
   SensorManager manager;
-  auto first = std::make_unique<FakeSensor>();
-  auto second = std::make_unique<FakeSensor>();
+  auto first = std::make_unique<FakeSensor>(context);
+  auto second = std::make_unique<FakeSensor>(context);
   FakeSensor* first_ptr = first.get();
   FakeSensor* second_ptr = second.get();
   second_ptr->fail_activate = true;
@@ -202,8 +210,9 @@ KROSC_TEST(sensor_manager_rolls_back_on_failure) {
 }
 
 KROSC_TEST(sensor_manager_thread_loop) {
+  krosc::Context context;
   SensorManager manager;
-  auto fake = std::make_unique<FakeSensor>();
+  auto fake = std::make_unique<FakeSensor>(context);
   FakeSensor* fake_ptr = fake.get();
   CHECK(manager.add(make_info("imu", 0.02), std::move(fake)));
   CHECK(manager.start());

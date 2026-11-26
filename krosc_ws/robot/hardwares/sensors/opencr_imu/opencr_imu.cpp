@@ -8,7 +8,7 @@
 namespace krosc_ws {
 
 OpenCrImu::OpenCrImu(krosc::Context& context, OpenCrSerial& opencr)
-    : context_(context), opencr_(opencr) {}
+    : krosc::sensor::Sensor(context), opencr_(opencr) {}
 
 bool OpenCrImu::on_init(const krosc::sensor::SensorInfo& info) {
   if (!krosc::sensor::Sensor::on_init(info)) {
@@ -27,10 +27,11 @@ bool OpenCrImu::on_update(double time, double period) {
   (void)time;
   (void)period;
   if (auto imu = opencr_.consume_imu()) {
-    imu->header.stamp = context_.now();
+    imu->header.stamp = now();
     imu->header.frame_id = frame_id_;
     if (!topic_.empty()) {
-      context_.topics().publish<krosc::msgs::Imu>(topic_, std::move(*imu), krosc::QOS_SENSOR_DATA);
+      context().topics().publish<krosc::msgs::Imu>(topic_, std::move(*imu),
+                                                   krosc::QOS_SENSOR_DATA);
     }
   }
   return opencr_.connected();
