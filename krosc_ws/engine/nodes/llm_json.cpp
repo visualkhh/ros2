@@ -248,6 +248,9 @@ std::optional<Plan> parse_plan(std::string_view content) {
   if (const auto melody = string_field(text, "melody")) {
     plan.melody = *melody;
   }
+  if (const auto style = string_field(text, "style")) {
+    plan.style = *style;
+  }
   return plan;
 }
 

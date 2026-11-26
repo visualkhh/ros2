@@ -3,18 +3,22 @@
 #include <algorithm>
 #include <any>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
 #include <string>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include "krosc/control/controller_manager.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/tf/math.hpp"
 
 #include "llm_json.hpp"
+#include "command_rules.hpp"
 
 namespace krosc_ws {
 
@@ -23,12 +27,13 @@ namespace {
 constexpr const char* kSchema = R"({
   "type": "object",
   "properties": {
-    "intent": {"type": "string", "enum": ["drive", "arm_preset", "stop", "buzzer", "pick", "place", "hide", "approach", "vlm_query", "vla_pick", "unsupported"]},
+    "intent": {"type": "string", "enum": ["drive", "arm_preset", "stop", "buzzer", "pick", "place", "hide", "approach", "dance", "vlm_query", "vla_pick", "unsupported"]},
     "meters": {"type": "number", "description": "forward/backward distance in meters; 0 otherwise"},
     "degrees": {"type": "number", "description": "turn angle in degrees for left/right; 0 otherwise"},
     "direction": {"type": "string", "enum": ["forward", "backward", "left", "right"]},
     "preset": {"type": "string", "enum": ["home", "stow"]},
     "melody": {"type": "string", "enum": ["mario_death", "success", "alarm", "beep"]},
+    "style": {"type": "string", "enum": ["dance", "spin", "wiggle", "bow", "celebrate", "show", "wave"]},
     "question": {"type": "string"},
     "target": {"type": "string"}
   },
@@ -48,6 +53,8 @@ Convert the user's Korean or English request into exactly one intent.
   Use body ONLY for "내 몸/몸 위" (on me). "내려놔/바닥/다시 내려놔" must be floor.
 - hide: move to a place that is not visible from here (behind a wall/cover). No arguments.
 - approach: drive forward close to the visible wall or object ahead using the lidar. No arguments.
+- dance: entertainment motion. style = dance (default), spin (turn in place), wiggle (shake side to side), bow (greet), celebrate (success melody + dance), show (roam + arm wave + melody), wave (arm wave in place).
+  Examples: "춤춰" -> dance style dance; "빙글빙글 돌아" -> spin; "흔들어" -> wiggle; "인사해" -> bow; "축하해" -> celebrate; "노래부르면서 춤춰" -> show; "손 흔들어" -> wave.
 - vlm_query: ask the camera/scene a question. Put the question in question.
 - vla_pick: use the learned VLA policy, only when the user explicitly asks for it (red/blue cube).
 - unsupported: multiple actions, missing distance/preset, or anything else.
@@ -178,6 +185,7 @@ LlmInput::~LlmInput() {
 }
 
 void LlmInput::emergency_stop() {
+  dance_cancel_.store(true);
   stop_drive();
   for (const char* service : {"vla/stop", "pick/stop", "nav/stop"}) {
     try {
@@ -237,19 +245,26 @@ void LlmInput::worker_loop() {
 
 void LlmInput::process(const Request& request) {
   publish_status(request.id, "thinking");
-  const OllamaReply reply = client_->chat(kSystemPrompt, request.text, kSchema);
-  if (!reply.ok) {
-    publish_status(request.id, "error", ",\"error\":" + quoted(reply.error));
-    return;
+  llm::Plan plan;
+  std::string source = "rule";
+  if (const auto rule = llm::parse_command(request.text)) {
+    plan = *rule;
+  } else {
+    source = "llm";
+    const OllamaReply reply = client_->chat(kSystemPrompt, request.text, kSchema);
+    if (!reply.ok) {
+      publish_status(request.id, "error", ",\"error\":" + quoted(reply.error));
+      return;
+    }
+    const auto parsed = llm::parse_plan(reply.content);
+    if (!parsed) {
+      publish_status(request.id, "error",
+                     ",\"error\":" + quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
+      return;
+    }
+    plan = *parsed;
+    apply_direction_hint(request.text, plan);
   }
-  const auto parsed = llm::parse_plan(reply.content);
-  if (!parsed) {
-    publish_status(request.id, "error",
-                   ",\"error\":" + quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
-    return;
-  }
-  llm::Plan plan = *parsed;
-  apply_direction_hint(request.text, plan);
   std::string plan_json = "{\"intent\":" + quoted(plan.intent);
   if (plan.meters != 0.0) {
     plan_json += ",\"meters\":" + number(plan.meters);
@@ -272,16 +287,21 @@ void LlmInput::process(const Request& request) {
   if (!plan.target.empty()) {
     plan_json += ",\"target\":" + quoted(plan.target);
   }
+  if (!plan.style.empty()) {
+    plan_json += ",\"style\":" + quoted(plan.style);
+  }
   plan_json += "}";
-  publish_status(request.id, "plan", ",\"plan\":" + plan_json);
+  publish_status(request.id, "plan",
+                 ",\"source\":" + quoted(source) + ",\"plan\":" + plan_json);
   dispatch(request.id, plan.intent, plan.meters, plan.degrees, plan.direction,
-           plan.preset, plan.melody, plan.question, plan.target);
+           plan.preset, plan.melody, plan.question, plan.target, plan.style);
 }
 
 void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double meters,
                         double degrees, const std::string& direction,
                         const std::string& preset, const std::string& melody,
-                        const std::string& question, const std::string& target) {
+                        const std::string& question, const std::string& target,
+                        const std::string& style) {
   if (intent == "drive") {
     const std::string heading = lower(direction.empty() ? "forward" : direction);
     if (heading == "left" || heading == "right") {
@@ -311,6 +331,10 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
   if (intent == "stop") {
     emergency_stop();
     publish_status(id, "done", ",\"tool\":\"stop\"");
+    return;
+  }
+  if (intent == "dance") {
+    dance(id, lower(style.empty() ? "dance" : style));
     return;
   }
   if (intent == "buzzer") {
@@ -386,6 +410,112 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
     return;
   }
   publish_status(id, "done", ",\"tool\":\"unsupported\"");
+}
+
+void LlmInput::dance(std::uint64_t id, const std::string& style) {
+  dance_cancel_.store(false);
+  stop_drive();
+  const bool use_arm = style == "show" || style == "wave";
+  const auto switch_arm = [&](bool manual) {
+    krosc::control::SwitchControllerRequest request;
+    request.start_controllers =
+        manual ? std::vector<std::string>{"arm_command_controller"}
+               : std::vector<std::string>{"joint_trajectory_controller"};
+    request.stop_controllers =
+        manual ? std::vector<std::string>{"joint_trajectory_controller"}
+               : std::vector<std::string>{"arm_command_controller"};
+    request.strictness = 0;
+    try {
+      (void)context().services().call<krosc::control::SwitchControllerRequest,
+                                      krosc::control::SwitchControllerResponse>(
+          "controller_manager/switch_controller", request);
+    } catch (const std::exception&) {
+    }
+  };
+  if (use_arm) {
+    switch_arm(true);
+  }
+  if (style == "celebrate") {
+    std::string error;
+    (void)play_melody("success", error);
+  } else if (style == "show") {
+    std::string error;
+    (void)play_melody("party", error);
+  }
+  const auto started = std::chrono::steady_clock::now();
+  double duration = 4.0;
+  if (style == "spin" || style == "wiggle" || style == "celebrate") {
+    duration = 3.0;
+  } else if (style == "bow") {
+    duration = 2.0;
+  } else if (style == "show") {
+    duration = 8.0;
+  } else if (style == "wave") {
+    duration = 3.0;
+  }
+  publish_status(id, "dancing",
+                 ",\"tool\":\"dance\",\"style\":" + quoted(style));
+  int step = 0;
+  while (!dance_cancel_.load()) {
+    const double elapsed =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    if (elapsed >= duration) {
+      break;
+    }
+    double linear = 0.0;
+    double angular = 0.0;
+    if (style == "spin") {
+      angular = 0.9;
+    } else if (style == "wiggle") {
+      angular = (step % 8 < 4) ? 0.8 : -0.8;
+    } else if (style == "bow") {
+      linear = (step % 8 < 4) ? 0.07 : -0.07;
+    } else if (style == "show") {
+      // 돌아다니면서 추기: 앞뒤 + 좌우 회전을 천천히 섞는다.
+      linear = 0.08 * std::sin(elapsed * 0.8);
+      angular = 0.6 * std::sin(elapsed * 1.3);
+    } else if (style == "wave") {
+      // 제자리에서 팔만 흔든다.
+      linear = 0.0;
+      angular = 0.0;
+    } else {
+      linear = 0.07 * std::sin(elapsed * 3.0);
+      angular = 0.7 * std::sin(elapsed * 6.0);
+    }
+    publish<krosc::msgs::Twist>(
+        "cmd_vel_nav",
+        krosc::msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}});
+    if (use_arm && step % 2 == 0) {
+      // 5관절을 5Hz로 흔든다. show는 크게, wave는 손목 위주로.
+      const double phase = elapsed * (style == "show" ? 4.0 : 6.0);
+      const double amplitude = style == "show" ? 1.0 : 0.7;
+      krosc::msgs::JointState command;
+      command.header.stamp = now();
+      command.name = {"joint1", "joint2", "joint3", "joint4",
+                      "gripper_left_joint"};
+      command.position = {
+          std::clamp(0.6 * amplitude * std::sin(phase), -1.2, 1.2),
+          std::clamp(-0.25 + 0.25 * std::sin(phase + 1.0), -1.0, 1.0),
+          std::clamp(0.45 + 0.20 * std::sin(phase + 2.0), -0.5, 1.2),
+          std::clamp(0.50 + 0.30 * std::sin(phase + 3.0), -0.8, 1.5),
+          0.015};
+      publish<krosc::msgs::JointState>("arm_joint_command", std::move(command));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ++step;
+  }
+  publish<krosc::msgs::Twist>(
+      "cmd_vel_nav", krosc::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}});
+  if (use_arm) {
+    switch_arm(false);
+  }
+  if (dance_cancel_.load()) {
+    publish_status(id, "error", ",\"error\":\"dance cancelled\"");
+    return;
+  }
+  publish_status(id, "done",
+                 ",\"tool\":\"dance\",\"style\":" + quoted(style) +
+                     ",\"seconds\":" + number(duration));
 }
 
 void LlmInput::start_drive(std::uint64_t id, double meters, double sign) {

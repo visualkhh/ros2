@@ -50,7 +50,8 @@ class LlmInput final : public krosc::Node {
   void dispatch(std::uint64_t id, const std::string& intent, double meters,
                 double degrees, const std::string& direction,
                 const std::string& preset, const std::string& melody,
-                const std::string& question, const std::string& target);
+                const std::string& question, const std::string& target,
+                const std::string& style);
   std::string play_melody(const std::string& name, std::string& error);
   void start_drive(std::uint64_t id, double meters, double sign);
   void start_turn(std::uint64_t id, const std::string& direction, double degrees);
@@ -59,6 +60,7 @@ class LlmInput final : public krosc::Node {
   void drive_tick_turn();
   void stop_drive();
   void send_arm_preset(std::uint64_t id, const std::string& preset);
+  void dance(std::uint64_t id, const std::string& style);
   std::string call_optional(const std::string& service, const std::string& payload,
                             std::string& error);
 
@@ -79,6 +81,7 @@ class LlmInput final : public krosc::Node {
   bool odom_seen_ = false;
 
   std::atomic<bool> drive_active_{false};
+  std::atomic<bool> dance_cancel_{false};
   std::uint64_t drive_request_ = 0;
   int drive_mode_ = 0;  // 0=linear, 1=turn
   double drive_sign_ = 1.0;

@@ -20,6 +20,7 @@ set(KROSC_REAL_SOURCES
   engine/nodes/llm_input.cpp
   engine/nodes/llm_client.cpp
   engine/nodes/llm_json.cpp
+  engine/nodes/command_rules.cpp
   engine/nodes/http_client.cpp
   engine/nodes/vla_node.cpp
   engine/nodes/vlm_node.cpp
@@ -191,6 +192,7 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     engine/nodes/llm_input.cpp
     engine/nodes/llm_client.cpp
     engine/nodes/llm_json.cpp
+    engine/nodes/command_rules.cpp
     engine/nodes/http_client.cpp
     engine/nodes/vla_node.cpp
     engine/nodes/vlm_node.cpp
@@ -253,7 +255,9 @@ if(KROSC_WS_BUILD_TESTS)
     tests/test_models.cpp
     tests/test_rl_nav_plugin.cpp
     tests/test_llm.cpp
+    tests/test_commands.cpp
     engine/nodes/llm_json.cpp
+    engine/nodes/command_rules.cpp
     engine/ml/onnx_policy.cpp
     engine/nodes/rl_nav_controller.cpp
     engine/hardwares/lds03/lds03_device.cpp

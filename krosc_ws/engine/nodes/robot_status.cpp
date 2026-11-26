@@ -74,7 +74,7 @@ RobotStatus::RobotStatus(krosc::Context& context, OpenCrDevice& opencr, LdsDevic
       "buzzer/melody", [this](const krosc::msgs::String& request) {
         if (!play_melody(request.data)) {
           return krosc::msgs::TriggerResponse{
-              false, "melody: mario_death|success|alarm|beep"};
+              false, "melody: mario_death|success|party|alarm|beep"};
         }
         return krosc::msgs::TriggerResponse{true, "melody " + request.data};
       });
@@ -133,6 +133,14 @@ bool RobotStatus::play_melody(const std::string& name) {
     };
   } else if (name == "success") {
     notes = {{523, 100}, {659, 100}, {784, 100}, {1047, 200}};
+  } else if (name == "party") {
+    // 쇼/파티용 8초 멜로디. 도-미-솔-도 상승을 두 번, 마지막에 롱톤.
+    notes = {
+        {523, 120}, {659, 120}, {784, 120}, {1047, 180}, {0, 60},
+        {784, 120}, {1047, 120}, {1319, 180}, {0, 60},
+        {1047, 120}, {1319, 120}, {1568, 240}, {0, 80},
+        {1319, 120}, {1568, 120}, {2093, 300},
+    };
   } else if (name == "alarm") {
     notes = {{880, 180}, {0, 80}, {880, 180}, {0, 80}, {880, 180}};
   } else if (name == "beep") {

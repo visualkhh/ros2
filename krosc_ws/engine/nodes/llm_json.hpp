@@ -17,6 +17,7 @@ struct Plan {
   std::string question;
   std::string target;
   std::string melody;
+  std::string style;
 };
 
 // JSON 문자열 값으로 넣을 수 있게 이스케이프한다. UTF-8은 그대로 통과시킨다.

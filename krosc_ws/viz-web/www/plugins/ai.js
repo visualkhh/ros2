@@ -87,6 +87,22 @@ export function init(host) {
     input.value = '앞에 보이는 벽까지 가까이 붙어';
     send();
   });
+  button(fun, 'Dance', () => {
+    input.value = '춤춰';
+    send();
+  }, 'primary');
+  button(fun, 'Spin', () => {
+    input.value = '빙글빙글 돌아';
+    send();
+  });
+  button(fun, 'Show', () => {
+    input.value = '노래부르면서 춤춰';
+    send();
+  }, 'primary');
+  button(fun, 'Wave', () => {
+    input.value = '손 흔들어';
+    send();
+  });
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -106,9 +122,10 @@ export function init(host) {
   body.append(history);
 
   const stages = {
-    thinking: 'Ollama에 의도 파악 요청 중…',
+    thinking: '의도 파악 중…',
     plan: '의도 파악 완료',
     executing: '실행 중',
+    dancing: '춤 추는 중',
     moveit: 'MoveIt 실행 중',
     done: '완료',
     error: '오류',
@@ -128,9 +145,13 @@ export function init(host) {
                  : event.stage === 'thinking' || event.stage === 'executing' ? 'warn' : '');
     if (event.plan) {
       const parts = [event.plan.intent];
+      if (event.plan.direction) parts.push(event.plan.direction);
       if (event.plan.meters !== undefined) parts.push(`${event.plan.meters} m`);
+      if (event.plan.degrees !== undefined) parts.push(`${event.plan.degrees}°`);
       if (event.plan.preset) parts.push(event.plan.preset);
       if (event.plan.target) parts.push(event.plan.target);
+      if (event.plan.melody) parts.push(event.plan.melody);
+      if (event.plan.style) parts.push(event.plan.style);
       if (event.plan.question) parts.push(`"${event.plan.question}"`);
       setLevel(plan, parts.join(' · '));
     }
