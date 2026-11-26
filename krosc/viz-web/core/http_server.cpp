@@ -73,7 +73,9 @@ std::optional<std::string> frame_topic(const std::vector<std::uint8_t>& body) {
 // 표시용 고주기 토픽: 브라우저 큐에 같은 토픽이 이미 있으면 최신 프레임으로 교체한다.
 // (이벤트/명령 토픽은 절대 합치지 않는다.)
 bool latest_only(const std::string& topic) {
-  return topic == "tf" || topic == "tf_static" || topic == "joint_states" || topic == "odom" ||
+  // tf_static은 브로드캐스터마다 별도 프레임으로 오므로 합치면 안 된다
+  // (map→odom과 URDF 고정 관절이 서로 다른 메시지다).
+  return topic == "tf" || topic == "joint_states" || topic == "odom" ||
          topic == "odometry/filtered" || topic == "scan" || topic == "imu" ||
          topic == "diagnostics" || topic == "local_plan" || topic == "moveit_state" ||
          topic == "moveit_status" || topic == "arm_status" || topic == "slam_status" ||
@@ -401,8 +403,10 @@ void HttpServer::handle_client(int fd) {
     auto client = std::make_shared<Client>(fd);
     {
       std::lock_guard<std::mutex> lock(cache_mutex_);
-      for (const auto& [topic_name, frame] : cache_) {
-        client->enqueue(0x2, frame, topic_name);
+      for (const auto& [topic_name, frames] : cache_) {
+        for (const auto& frame : frames) {
+          client->enqueue(0x2, frame, topic_name);
+        }
       }
     }
     {
@@ -521,7 +525,17 @@ void HttpServer::broadcast_binary(std::vector<std::uint8_t> body) {
   auto frame = std::make_shared<const std::vector<std::uint8_t>>(std::move(body));
   if (keep) {
     std::lock_guard<std::mutex> lock(cache_mutex_);
-    cache_[*topic_name] = frame;
+    auto& frames = cache_[*topic_name];
+    if (*topic_name == "tf_static") {
+      // 정적 TF는 발행자별로 나뉘어 오므로 모두 보관한다. 늦게 붙은 브라우저가
+      // map→odom만 또는 URDF 고정 관절만 받아 스캔/맵이 사라지는 문제를 막는다.
+      if (frames.size() >= 64) {
+        frames.erase(frames.begin());
+      }
+      frames.push_back(frame);
+    } else {
+      frames.assign(1, frame);
+    }
   }
   if (clients.empty()) {
     return;

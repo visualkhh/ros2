@@ -221,7 +221,10 @@ struct PeerNetwork::Impl {
   std::mutex subscriptions_mutex;
   std::vector<std::string> subscriptions;
   std::mutex latched_mutex;
-  std::map<std::string, std::pair<Kind, std::vector<std::uint8_t>>> latched;
+  // tf_static은 발행자마다 별도 메시지라 하나만 저장하면 map→odom 또는 URDF 고정
+  // 관절 중 하나가 사라진다. 다른 래치 토픽은 최신 하나만 유지한다.
+  using LatchedEntry = std::pair<Kind, std::vector<std::uint8_t>>;
+  std::map<std::string, std::vector<LatchedEntry>> latched;
   std::set<std::string> remote_topics;
   std::mutex active_mutex;
   std::condition_variable active_cv;
@@ -880,7 +883,15 @@ struct PeerNetwork::Impl {
     frame.payload = encode_message(type, message.get());
     if (is_latched) {
       std::lock_guard<std::mutex> lock(latched_mutex);
-      latched[topic] = {*kind, frame.payload};
+      auto& entries = latched[topic];
+      if (topic == "tf_static") {
+        if (entries.size() >= 64) {
+          entries.erase(entries.begin());
+        }
+        entries.push_back({*kind, frame.payload});
+      } else {
+        entries.assign(1, {*kind, frame.payload});
+      }
     }
     if (targets.empty()) {
       return;
@@ -990,12 +1001,14 @@ struct PeerNetwork::Impl {
           if (found == latched.end()) {
             continue;
           }
-          Frame reply;
-          reply.type = kPeerTopicLatched;
-          reply.topic = topic;
-          reply.kind = found->second.first;
-          reply.payload = found->second.second;
-          peer.send(reply);
+          for (const auto& entry : found->second) {
+            Frame reply;
+            reply.type = kPeerTopicLatched;
+            reply.topic = topic;
+            reply.kind = entry.first;
+            reply.payload = entry.second;
+            peer.send(reply);
+          }
         }
       }
       return;
