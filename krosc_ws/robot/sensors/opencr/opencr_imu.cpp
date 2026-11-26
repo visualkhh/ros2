@@ -2,12 +2,12 @@
 
 #include <utility>
 
-#include "hardwares/opencr/opencr_serial.hpp"
+#include "hardwares/opencr/opencr_device.hpp"
 #include "krosc/qos.hpp"
 
 namespace krosc_ws {
 
-OpenCrImu::OpenCrImu(krosc::Context& context, OpenCrSerial& opencr, std::string topic,
+OpenCrImu::OpenCrImu(krosc::Context& context, OpenCrDevice& opencr, std::string topic,
                      std::string frame_id)
     : krosc::sensor::Sensor(context), opencr_(opencr), topic_(std::move(topic)),
       frame_id_(std::move(frame_id)) {}

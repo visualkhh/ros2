@@ -4,30 +4,15 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <map>
-#include <memory>
 #include <string>
 #include <thread>
-#include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/control/control_manager.hpp"
-#include "krosc/control/controller_manager.hpp"
-#include "krosc/nodes/ekf.hpp"
-#include "krosc/nodes/nav2/behavior_server.hpp"
-#include "krosc/nodes/nav2/bt_navigator.hpp"
-#include "krosc/nodes/nav2/controller_server.hpp"
-#include "krosc/nodes/nav2/costmap/costmap_2d_ros.hpp"
-#include "krosc/nodes/nav2/planner_server.hpp"
-#include "krosc/nodes/velocity_smoother.hpp"
-#include "krosc/nodes/collision_monitor.hpp"
-#include "krosc/nodes/twist_mux.hpp"
-#include "krosc/sensor/sensor_manager.hpp"
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/time/time.hpp"
 
-#include "sim_control.hpp"
-#include "sim_sensors.hpp"
+#include "robot.hpp"
+#include "sim_hardware.hpp"
 
 #ifndef KROSC_WS_SIM_URDF
 #define KROSC_WS_SIM_URDF "turtlebot3_waffle_pi.urdf"
@@ -37,16 +22,6 @@ namespace {
 
 std::atomic<bool> g_stop{false};
 void request_stop(int) { g_stop.store(true); }
-
-std::vector<bool> ekf_config(std::initializer_list<int> enabled) {
-  std::vector<bool> config(15, false);
-  for (const int index : enabled) {
-    if (index >= 0 && index < 15) {
-      config[static_cast<std::size_t>(index)] = true;
-    }
-  }
-  return config;
-}
 
 }  // namespace
 
@@ -101,123 +76,34 @@ int main(int argc, char** argv) {
   sim_options.odometry = false;
   sim_options.ekf = false;
   krosc::simulator::Simulator simulator(context, sim_options);
-  auto& robot = simulator.robot();
 
-  krosc_ws::sim::SimControl control(robot, krosc::simulator::TurtleBot3::kWheelRadius,
-                                    krosc::simulator::TurtleBot3::kWheelSeparation);
-  krosc_ws::sim::SimImuSensor imu(context, robot, "imu", "imu_link");
-  krosc_ws::sim::SimScanSensor scan(context, robot, "scan", "base_scan");
+  krosc_ws::sim::SimOpenCr opencr(simulator.robot());
+  krosc_ws::sim::SimLds lds(simulator.robot());
 
-  krosc::control::ControllerManager controller_manager(
-      context, "controller_manager",
-      {{"update_rate", 100.0},
-       {"controller_plugins", std::vector<std::string>{"joint_state_broadcaster",
-                                                       "diff_drive_controller"}},
-       {"joint_state_broadcaster.type",
-        std::string("joint_state_broadcaster/JointStateBroadcaster")},
-       {"diff_drive_controller.type", std::string("diff_drive_controller/DiffDriveController")},
-       {"diff_drive_controller.wheel_separation",
-        krosc::simulator::TurtleBot3::kWheelSeparation},
-       {"diff_drive_controller.wheel_radius", krosc::simulator::TurtleBot3::kWheelRadius},
-       {"diff_drive_controller.left_wheel", std::string("wheel_left_joint")},
-       {"diff_drive_controller.right_wheel", std::string("wheel_right_joint")},
-       {"diff_drive_controller.cmd_vel_topic", std::string("cmd_vel")},
-       {"diff_drive_controller.odom_topic", std::string("odom")},
-       {"diff_drive_controller.odom_frame", std::string("odom")},
-       {"diff_drive_controller.base_frame", std::string("base_footprint")},
-       {"diff_drive_controller.publish_tf", false},
-       {"diff_drive_controller.command_timeout", 0.5},
-       {"diff_drive_controller.odom_publish_rate", 50.0}},
-      control);
+  krosc_ws::RobotOptions options;
+  options.urdf_path = KROSC_WS_SIM_URDF;
+  options.enable_moveit = false;
+  options.enable_map = false;
+  options.enable_rl = false;
+  options.enable_arm = false;
+  options.enable_status = true;
+  options.enable_robot_state_publisher = false;
+  options.wheel_radius = krosc::simulator::TurtleBot3::kWheelRadius;
+  options.wheel_separation = krosc::simulator::TurtleBot3::kWheelSeparation;
+  options.scan_topic = "scan";
+  options.scan_frame = "base_scan";
+  options.scan_period = 0.1;
+  options.imu_topic = "imu";
+  options.imu_frame = "imu_link";
+  options.imu_period = 0.02;
+  options.control_read_period = 0.02;
+  options.control_write_period = 0.02;
+  options.control_period = 0.01;
 
-  krosc::nodes::Ekf ekf(context, "ekf_filter_node",
-                        {{"odom0", std::string("odom")},
-                         {"odom0_config", ekf_config({6, 11})},
-                         {"imu0", std::string("imu")},
-                         {"imu0_config", ekf_config({11})},
-                         {"frequency", 50.0},
-                         {"publish_tf", true}});
-
-  krosc::nodes::nav2::Costmap2DROS global(
-      context, "global_costmap",
-      {{"global_frame", "map"},
-       {"robot_base_frame", "base_footprint"},
-       {"plugins", std::vector<std::string>{"static_layer", "inflation_layer"}},
-       {"resolution", 0.05},
-       {"robot_radius", 0.22},
-       {"inflation_radius", 0.35},
-       {"cost_scaling_factor", 3.0}});
-  krosc::nodes::nav2::Costmap2DROS local(
-      context, "local_costmap",
-      {{"global_frame", "odom"},
-       {"robot_base_frame", "base_footprint"},
-       {"plugins", std::vector<std::string>{"obstacle_layer", "inflation_layer"}},
-       {"rolling_window", true},
-       {"width", 3.0},
-       {"height", 3.0},
-       {"resolution", 0.05},
-       {"obstacle_max_range", 2.5},
-       {"raytrace_max_range", 3.0},
-       {"robot_radius", 0.22},
-       {"inflation_radius", 0.25},
-       {"cost_scaling_factor", 3.0}});
-  krosc::nodes::nav2::PlannerServer planner(
-      context, global, "planner_server",
-      {{"planner_plugins", std::vector<std::string>{"GridBased"}},
-       {"GridBased.plugin", std::string("nav2_navfn_planner::NavfnPlanner")}});
-  krosc::nodes::nav2::ControllerServer controller(
-      context, local, "controller_server",
-      {{"controller_plugins", std::vector<std::string>{"FollowPath"}},
-       {"FollowPath.plugin",
-        std::string("nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController")},
-       {"cmd_vel_topic", std::string("cmd_vel_nav")},
-       {"controller_frequency", 50.0},
-       {"general_goal_checker.xy_goal_tolerance", 0.20},
-       {"general_goal_checker.yaw_goal_tolerance", 0.35}});
-  krosc::nodes::nav2::BehaviorServer behavior(context);
-  krosc::nodes::nav2::BtNavigator bt_navigator(
-      context, "bt_navigator",
-      {{"replanning_period", 1.0}, {"number_of_recoveries", 3}});
-  krosc::nodes::TwistMux mux(
-      context, "twist_mux",
-      {{"cmd_vel_out", std::string("cmd_vel_mux")},
-       {"topics", std::vector<std::string>{"navigation", "teleop"}},
-       {"navigation.topic", std::string("cmd_vel_nav")},
-       {"navigation.priority", std::int64_t{10}},
-       {"navigation.timeout", 0.3},
-       {"teleop.topic", std::string("cmd_vel_teleop")},
-       {"teleop.priority", std::int64_t{100}},
-       {"teleop.timeout", 0.5}});
-  krosc::nodes::VelocitySmoother smoother(
-      context, "velocity_smoother",
-      {{"cmd_vel_in_topic", std::string("cmd_vel_mux")},
-       {"cmd_vel_out_topic", std::string("cmd_vel_smoothed")},
-       {"max_linear_accel", 0.5},
-       {"max_angular_accel", 2.0},
-       {"max_linear_speed", 0.26},
-       {"max_angular_speed", 1.82},
-       {"frequency", 100.0},
-       {"input_timeout", 0.5}});
-  krosc::nodes::CollisionMonitor collision(
-      context, "collision_monitor",
-      {{"cmd_vel_in_topic", std::string("cmd_vel_smoothed")},
-       {"cmd_vel_out_topic", std::string("cmd_vel")},
-       {"PolygonSlow.slowdown_ratio", 0.6},
-       {"ignore_collision_during_teleop", true}});
-
-  krosc::sensor::SensorManager sensors;
-  sensors.add(imu, "sim_imu", 0.02);
-  sensors.add(scan, "sim_scan", 0.05);
-  krosc::control::ControlManager controls;
-  controls.add(control, "sim_control", 0.02, 0.02);
-  controls.set_control_hook(
-      [&](double time, double period) { controller_manager.update(time, period); }, 0.01);
-
+  krosc_ws::Robot robot(context, opencr, &lds, options);
   simulator.start();
-  sensors.start();
-  if (!controls.start()) {
-    std::cerr << "[krosc_ws_sim] control manager 시작 실패\n";
-    sensors.stop();
+  if (!robot.start()) {
+    std::cerr << "[krosc_ws_sim] 로봇 시작 실패\n";
     simulator.stop();
     return 1;
   }
@@ -228,6 +114,7 @@ int main(int argc, char** argv) {
 
   const auto start_time = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
+    robot.poll();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     if (duration > 0.0 &&
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count() >=
@@ -238,8 +125,7 @@ int main(int argc, char** argv) {
 
   std::printf("[krosc_ws_sim] 정지 중...\n");
   std::fflush(stdout);
-  controls.stop();
-  sensors.stop();
+  robot.stop();
   simulator.stop();
   context.shutdown();
   std::printf("[krosc_ws_sim] 종료\n");

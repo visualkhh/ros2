@@ -43,14 +43,9 @@
 #include "krosc/control/controller_manager.hpp"
 #include "krosc/time/time.hpp"
 
-#include "controls/opencr/opencr_control.hpp"
+#include "robot.hpp"
 #include "hardwares/lds03/lds03_device.hpp"
 #include "hardwares/opencr/opencr_serial.hpp"
-#include "krosc/control/control_manager.hpp"
-#include "krosc/sensor/sensor_manager.hpp"
-#include "nodes/robot_status.hpp"
-#include "sensors/lds03/lds03_sensor.hpp"
-#include "sensors/opencr/opencr_imu.hpp"
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
 #include "nodes/rl_nav_controller.hpp"
@@ -72,17 +67,6 @@ constexpr double kWheelSeparation = 0.287;   // m (실측)
 constexpr double kMaxWheel = 7.8;            // rad/s
 constexpr double kLidarMountX = 0.060;       // m, base_link 기준
 
-struct HardwareOptions {
-  std::string scan_topic = "scan";
-  std::string scan_frame = "base_scan";
-  double scan_period = 0.1;
-  std::string imu_topic = "imu";
-  std::string imu_frame = "imu_link";
-  double imu_period = 0.02;
-  double control_read_period = 0.02;
-  double control_write_period = 0.02;
-  double control_period = 0.01;
-};
 
 void request_stop(int) { g_stop.store(true); }
 
@@ -108,26 +92,6 @@ std::size_t env_count(const char* name, std::size_t fallback) {
   const std::string text = env_or(name, "");
   std::size_t value = 0;
   return parse_count(text, value) ? value : fallback;
-}
-
-std::string read_text(const std::string& path) {
-  std::ifstream stream(path);
-  if (!stream) {
-    return {};
-  }
-  std::ostringstream buffer;
-  buffer << stream.rdbuf();
-  return buffer.str();
-}
-
-std::vector<bool> ekf_config(std::initializer_list<int> enabled) {
-  std::vector<bool> config(15, false);
-  for (int index : enabled) {
-    if (index >= 0 && index < 15) {
-      config[static_cast<std::size_t>(index)] = true;
-    }
-  }
-  return config;
 }
 
 std::vector<std::string> local_addresses() {
@@ -230,12 +194,6 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  const std::string urdf = read_text(urdf_path);
-  if (urdf.empty()) {
-    std::cerr << "[krosc_ws] URDF를 읽지 못했다: " << urdf_path << "\n";
-    return 1;
-  }
-
   std::signal(SIGINT, request_stop);
   std::signal(SIGTERM, request_stop);
 
@@ -267,273 +225,60 @@ int main(int argc, char** argv) {
     std::fflush(stdout);
   }
 
-  HardwareOptions hardware_options;
-  hardware_options.scan_topic = scan_topic;
-  hardware_options.scan_frame = "base_scan";
-  hardware_options.scan_period = 1.0 / scan_rate;
-  hardware_options.imu_topic = imu_topic;
-  hardware_options.imu_frame = "imu_link";
-  hardware_options.imu_period = 1.0 / imu_rate;
-
-  krosc_ws::OpenCrSerial opencr(kWheelRadius, kWheelSeparation,
-                                std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0,
-                                kMaxWheel);
+  krosc_ws::OpenCrSerial opencr(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200,
+                                0.02, 0.5, -1.0, -1.0, kMaxWheel);
   std::unique_ptr<krosc_ws::Lds03Device> lidar;
   if (enable_lidar) {
-    lidar = std::make_unique<krosc_ws::Lds03Device>(std::move(lidar_port), kLidarMountX,
-                                                    true, true);
+    lidar = std::make_unique<krosc_ws::Lds03Device>(std::move(lidar_port), kLidarMountX, true,
+                                                    true);
   }
 
-  krosc_ws::OpenCrControl control(opencr, kWheelRadius, kWheelSeparation);
-  krosc_ws::OpenCrImu imu(context, opencr, hardware_options.imu_topic,
-                          hardware_options.imu_frame);
-  std::unique_ptr<krosc_ws::Lds03Sensor> scan;
-  if (lidar) {
-    scan = std::make_unique<krosc_ws::Lds03Sensor>(context, *lidar,
-                                                   hardware_options.scan_topic,
-                                                   hardware_options.scan_frame);
-  }
+  krosc_ws::RobotOptions robot_options;
+  robot_options.urdf_path = urdf_path;
+  robot_options.maps_dir = maps_dir;
+  robot_options.slam = slam;
+  robot_options.enable_moveit = true;
+  robot_options.enable_map = true;
+  robot_options.enable_rl = true;
+  robot_options.enable_arm = true;
+  robot_options.enable_status = true;
+  robot_options.scan_topic = scan_topic;
+  robot_options.scan_frame = "base_scan";
+  robot_options.scan_period = 1.0 / scan_rate;
+  robot_options.imu_topic = imu_topic;
+  robot_options.imu_frame = "imu_link";
+  robot_options.imu_period = 1.0 / imu_rate;
+  robot_options.control_read_period = 0.02;
+  robot_options.control_write_period = 0.02;
+  robot_options.control_period = 0.01;
 
-  krosc::sensor::SensorManager sensor_manager;
-  sensor_manager.add(imu, "opencr_imu", hardware_options.imu_period);
-  if (scan) {
-    sensor_manager.add(*scan, "lds03_scan", hardware_options.scan_period);
+  krosc_ws::Robot robot(context, opencr, lidar.get(), robot_options);
+  if (!robot.start()) {
+    std::cerr << "[krosc_ws] 로봇 시작 실패\n";
+    return 1;
   }
-  krosc::control::ControlManager control_manager;
-  control_manager.add(control, "opencr_control", hardware_options.control_read_period,
-                      hardware_options.control_write_period);
-  opencr.start();
-  if (lidar) {
-    lidar->start();
-  }
-  krosc_ws::RobotStatus driver(context, opencr, lidar.get());
   std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
               scan_rate, imu_topic.c_str(), imu_rate);
   std::printf("[krosc_ws] executor threads: %zu\n", executor_threads);
-  krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
-                                                {{"robot_description", urdf}});
-  // control: OpenCR control 논리 레이어가 state/command interface를 제공하고,
-  // HardwareManager가 read→controller update→write 순서로 돌린다.
-  krosc::control::ControllerManager controller_manager(
-      context, "controller_manager",
-      {{"update_rate", 100.0},
-       {"controller_plugins",
-        std::vector<std::string>{"joint_state_broadcaster", "joint_trajectory_controller",
-                                 "diff_drive_controller", "arm_command_controller"}},
-       {"joint_state_broadcaster.type",
-        std::string("joint_state_broadcaster/JointStateBroadcaster")},
-       {"joint_trajectory_controller.type",
-        std::string("joint_trajectory_controller/JointTrajectoryController")},
-       {"joint_trajectory_controller.joints",
-        std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
-       {"joint_trajectory_controller.goal_time_tolerance", 0.5},
-       {"diff_drive_controller.type", std::string("diff_drive_controller/DiffDriveController")},
-       {"diff_drive_controller.wheel_separation", 0.287},
-       {"diff_drive_controller.wheel_radius", 0.033},
-       {"diff_drive_controller.left_wheel", std::string("wheel_left_joint")},
-       {"diff_drive_controller.right_wheel", std::string("wheel_right_joint")},
-       {"diff_drive_controller.cmd_vel_topic", std::string("cmd_vel")},
-       {"diff_drive_controller.odom_topic", std::string("odom")},
-       {"diff_drive_controller.odom_frame", std::string("odom")},
-       {"diff_drive_controller.base_frame", std::string("base_footprint")},
-       {"diff_drive_controller.publish_tf", false},
-       {"diff_drive_controller.command_timeout", 0.5},
-       {"diff_drive_controller.odom_publish_rate", 50.0},
-       {"arm_command_controller.type",
-        std::string("forward_command_controller/ForwardCommandController")},
-       {"arm_command_controller.joints",
-        std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
-       {"arm_command_controller.command_topic", std::string("arm_joint_command")},
-       {"arm_command_controller.auto_activate", false}},
-      control);
-  // MoveIt move_group: kinematics/planner/controller_manager 플러그인을 골라 조립한다.
-  // Viz 명령은 move_action 액션 + move_group/scrub 서비스로 들어온다.
-  krosc::moveit::MoveGroup move_group(
-      context, "move_group",
-      {{"base_link", std::string("base_link")},
-       {"tip_link", std::string("end_effector_link")},
-       {"joint_names", std::vector<std::string>{"joint1", "joint2", "joint3", "joint4"}},
-       {"lower_limits", std::vector<double>{-3.141592653589793, -2.20, -2.00, -2.00}},
-       {"upper_limits", std::vector<double>{3.141592653589793, 2.20, 2.00, 2.20}},
-       {"max_joint_speed", 0.35},
-       {"max_joint_accel", 1.0},
-       {"cartesian_speed", 0.08},
-       {"cartesian_accel", 0.25},
-       {"sample_time", 0.05},
-       {"kinematics.plugin", std::string("krosc_moveit/ArmChainKinematics")},
-       {"planner.plugin", std::string("krosc_moveit/CartesianPlanner")},
-       {"controller_manager.plugin", std::string("krosc_moveit/SimpleControllerManager")},
-       {"controller_manager.action",
-        std::string("joint_trajectory_controller/follow_joint_trajectory")}});
-  // IMU yaw rate는 정지 중에도 bias/진동이 커서 EKF에서 제외한다. 휠 오도메트리의
-  // yaw 자세(5)를 절대 기준으로 쓰고, vx/vyaw(6/11)만 융합한다.
-  krosc::nodes::Ekf ekf(context, "ekf_filter_node",
-                        {{"odom0", std::string("odom")},
-                         {"odom0_config", ekf_config({5, 6, 11})},
-                         {"frequency", 50.0},
-                         {"publish_tf", true}});
-  constexpr double kDegreesToRadians = std::numbers::pi / 180.0;
-  krosc::nodes::Cartographer cartographer(
-      context, "cartographer_node",
-      {{"mode", std::string(slam ? "mapping" : "idle")},
-       {"match_every", std::int64_t{1}},
-       {"num_matching_points", std::int64_t{20}},
-       // 직진 0.26 m/s에서 매칭 간격(2스캔=0.2s) 동안 약 5cm 이동한다.
-       // 기존 ±5cm/±3° 창은 이동량을 못 따라가 매칭이 자주 기각됐다(localization 드리프트).
-       {"linear_search_window", 0.25},
-       {"angular_search_window", 15.0 * kDegreesToRadians},
-       {"map_publish_period_sec", 2.0},
-       {"tf_publish_period_sec", 0.02},
-       {"tf_smoothing", 0.35}});
-  krosc::nodes::MapServer map_server(
-      context, "map_server",
-      {{"maps_directory", maps_dir}, {"topic_name", std::string("map")}, {"frame_id", std::string("map")}});
-  krosc::nodes::MapSaver map_saver(context, "map_saver", {{"maps_directory", maps_dir}});
-  krosc::nodes::MapCatalog maps(context, "map_catalog",
-                                {{"maps_directory", maps_dir},
-                                 {"map_frame", std::string("map")},
-                                 {"map_server", std::string("map_server")},
-                                 {"map_saver", std::string("map_saver")},
-                                 {"list_period", 1.0}});
-  // nav2처럼 내비게이션을 노드로 나눈다: costmap_2d -> planner_server -> controller_server -> bt_navigator.
-  // Viz/웹은 nav2 표준 액션(navigate_to_pose, compute_path_to_pose, navigate_through_poses,
-  // compute_path_through_poses)으로 명령한다. 상태 토픽(plan, goal_status, cmd_vel_nav)만 유지한다.
-  krosc::nodes::nav2::Costmap2DROS global_costmap(
-      context, "global_costmap",
-      {{"global_frame", std::string("map")},
-       {"robot_base_frame", std::string("base_footprint")},
-       {"map_topic", std::string("map")},
-       {"plugins", std::vector<std::string>{"static_layer", "inflation_layer"}},
-       {"track_unknown_space", true},
-       {"robot_radius", 0.22},
-       {"inflation_radius", 0.55},
-       {"cost_scaling_factor", 3.0}});
-  krosc::nodes::nav2::Costmap2DROS local_costmap(
-      context, "local_costmap",
-      {{"global_frame", std::string("odom")},
-       {"robot_base_frame", std::string("base_footprint")},
-       {"plugins", std::vector<std::string>{"obstacle_layer", "inflation_layer"}},
-       {"rolling_window", true},
-       {"width", 4.0},
-       {"height", 4.0},
-       {"resolution", 0.05},
-       {"update_frequency", 10.0},
-       {"observation_sources", std::vector<std::string>{"scan"}},
-       {"scan.topic", std::string("scan")},
-       {"obstacle_max_range", 2.5},
-       {"raytrace_max_range", 3.0},
-       {"robot_radius", 0.22},
-       {"inflation_radius", 0.55},
-       {"cost_scaling_factor", 3.0}});
-  krosc::nodes::nav2::PlannerServer planner_server(
-      context, global_costmap, "planner_server",
-      {{"planner_plugins", std::vector<std::string>{"GridBased"}},
-       {"GridBased.plugin", std::string("nav2_navfn_planner::NavfnPlanner")},
-       {"GridBased.tolerance", 0.5},
-       {"GridBased.use_astar", true},
-       {"GridBased.allow_unknown", false}});
-  krosc::nodes::nav2::ControllerRegistry controller_registry =
-      krosc::nodes::nav2::builtin_controllers();
-#ifdef KROSC_WS_ENABLE_RL_NAV
-  controller_registry.add("rl_nav_controller::RlNavController",
-                          [] { return std::make_unique<krosc_ws::RlNavController>(); });
-#endif
-  const std::string follow_plugin =
-#ifdef KROSC_WS_ENABLE_RL_NAV
-      "rl_nav_controller::RlNavController";
-#else
-      "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController";
-#endif
-  krosc::nodes::nav2::ControllerServer controller_server(
-      context, local_costmap, "controller_server",
-      {{"controller_plugins", std::vector<std::string>{"FollowPath"}},
-       {"FollowPath.plugin", follow_plugin},
-       {"FollowPath.desired_linear_vel", 0.20},
-       {"FollowPath.lookahead_dist", 0.35},
-       {"FollowPath.use_collision_detection", true},
-       {"FollowPath.rotate_to_heading_min_angle", 0.35},
-       {"cmd_vel_topic", std::string("cmd_vel_nav")},
-       {"controller_frequency", 50.0},
-       {"general_goal_checker.xy_goal_tolerance", 0.20},
-       {"general_goal_checker.yaw_goal_tolerance", 0.35},
-       {"max_linear_accel", 0.0},
-       {"max_angular_accel", 0.0}},
-      controller_registry);
-  krosc::nodes::nav2::BehaviorServer behavior_server(
-      context, "behavior_server", {{"cmd_vel_topic", std::string("cmd_vel_nav")}});
-  krosc::nodes::nav2::BtNavigator bt_navigator(
-      context, "bt_navigator",
-      {{"replanning_period", 1.0},
-       {"number_of_recoveries", std::int64_t{3}},
-       {"recovery_backup", true}});
-  krosc::nodes::TwistMux mux(
-      context, "twist_mux",
-      {{"cmd_vel_out", std::string("cmd_vel_mux")},
-       {"topics", std::vector<std::string>{"navigation", "teleop"}},
-       {"navigation.topic", std::string("cmd_vel_nav")},
-       {"navigation.priority", std::int64_t{10}},
-       {"navigation.timeout", 0.3},
-       {"teleop.topic", std::string("cmd_vel_teleop")},
-       {"teleop.priority", std::int64_t{100}},
-       {"teleop.timeout", 0.5}});
-  krosc::nodes::VelocitySmoother smoother(
-      context, "velocity_smoother",
-      {{"cmd_vel_in_topic", std::string("cmd_vel_mux")},
-       {"cmd_vel_out_topic", std::string("cmd_vel_smoothed")},
-       {"max_linear_accel", 0.5},
-       {"max_angular_accel", 2.0},
-       {"max_linear_speed", 0.26},
-       {"max_angular_speed", 1.82},
-       {"frequency", 100.0},
-       {"input_timeout", 0.5}});
-  krosc::nodes::CollisionMonitor collision_monitor(
-      context, "collision_monitor",
-      {{"cmd_vel_in_topic", std::string("cmd_vel_smoothed")},
-       {"cmd_vel_out_topic", std::string("cmd_vel")},
-       {"PolygonSlow.slowdown_ratio", 0.6},
-       {"ignore_collision_during_teleop", true}});
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
   std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
-
-  control_manager.set_control_hook(
-      [&](double time, double period) { controller_manager.update(time, period); },
-      hardware_options.control_period);
-  sensor_manager.start();
-  if (!control_manager.start()) {
-    std::cerr << "[krosc_ws] control manager 시작 실패\n";
-    sensor_manager.stop();
-    return 1;
-  }
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);
   constexpr auto kPeriod = std::chrono::milliseconds(10);
   auto next = std::chrono::steady_clock::now();
-  auto last_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
-    driver.poll();
+    robot.poll();
     next += kPeriod;
     std::this_thread::sleep_until(next);
     const auto now = std::chrono::steady_clock::now();
     if (now - next > std::chrono::milliseconds(250)) {
       next = now;
     }
-    if (now - last_status >= std::chrono::seconds(5)) {
-      last_status = now;
-      std::printf("[krosc_ws] slam: mode=%s scans=%d rejected=%d localized=%s cells=%zu\n",
-                  cartographer.mode().c_str(), cartographer.scans(), cartographer.rejected(),
-                  cartographer.localized() ? "yes" : "no", cartographer.map_cells());
-      std::fflush(stdout);
-    }
   }
 
   std::printf("[krosc_ws] 정지 중...\n");
   std::fflush(stdout);
-  control_manager.stop();
-  sensor_manager.stop();
-  if (lidar) {
-    lidar->stop();
-  }
-  opencr.stop();
+  robot.stop();
   context.shutdown();
   std::printf("[krosc_ws] 종료\n");
   return 0;

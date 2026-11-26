@@ -336,8 +336,9 @@ SensorManager, ControllerManager, nav2**를 그대로 돌린다. Pi에서는 타
 ./run-sim-ws.sh --port 0 --duration 5   # 네트워크 없이 5초
 ```
 
-실기 하드웨어 대신 `simulator/sim_control.cpp`(Control)와
-`simulator/sim_sensors.cpp`(Imu/Scan Sensor)가 월드 로봇을 사용한다.
+실기/시뮬레이터는 `robot/robot.cpp`의 공통 `Robot` 클래스에
+`OpenCrDevice`/`LdsDevice`만 다르게 주입한다. 시뮬레이터는
+`simulator/sim_hardware.cpp`가 월드 로봇을 OpenCR/LDS 장치처럼 감싼다.
 맵은 `MazeWorld` 벽에서 생성되고, `map -> odom` 정적 TF와 `robot_state_publisher`는
 `krosc/simulator`가 제공한다.
 
@@ -416,6 +417,7 @@ Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 �
 krosc_ws/
 ├── robot/                       # 로봇(Pi) 앱
 │   ├── main.cpp                 # 노드 조립, TCP 서버, 진단 루프
+│   ├── robot.cpp/.hpp            # 공통 로봇 스택 (하드웨어 주입)
 │   ├── nodes/robot_status.cpp/.hpp # arm_status/diagnostics, 팔 서비스
 │   ├── nodes/rl_nav_controller.cpp/.hpp # NavControllerPlugin (RL + fallback)
 │   ├── ml/onnx_policy.cpp/.hpp  # ONNX Runtime (CUDA/CoreML → CPU)

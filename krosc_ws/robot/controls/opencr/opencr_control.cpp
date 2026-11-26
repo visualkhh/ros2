@@ -15,7 +15,7 @@ const std::vector<std::string>& arm_joints() {
 }
 }  // namespace
 
-OpenCrControl::OpenCrControl(OpenCrSerial& opencr, double wheel_radius, double wheel_separation)
+OpenCrControl::OpenCrControl(OpenCrDevice& opencr, double wheel_radius, double wheel_separation)
     : opencr_(opencr), wheel_radius_(wheel_radius), wheel_separation_(wheel_separation) {
   for (const auto& name :
        {"wheel_left_joint", "wheel_right_joint", "joint1", "joint2", "joint3", "joint4",

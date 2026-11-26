@@ -11,32 +11,19 @@
 #include <thread>
 #include <utility>
 
-#include "krosc/hardware/hardware.hpp"
 #include "krosc/msgs.hpp"
+
+#include "opencr_device.hpp"
 
 #include "opencr_protocol.hpp"
 
 namespace krosc_ws {
 
-// OpenCR M/F 줄의 팔 상태. position[0..3] = joint1..4, position[4] = gripper [m].
-struct ArmStatus {
-  std::array<double, 5> position{std::numeric_limits<double>::quiet_NaN(),
-                                 std::numeric_limits<double>::quiet_NaN(),
-                                 std::numeric_limits<double>::quiet_NaN(),
-                                 std::numeric_limits<double>::quiet_NaN(),
-                                 std::numeric_limits<double>::quiet_NaN()};
-  std::array<double, 5> velocity{};
-  std::array<double, 5> current{};
-  std::array<double, 5> temperature{};
-  std::array<int, 5> error{-1, -1, -1, -1, -1};
-  bool present = false;
-};
-
 // ROBOTIS OpenCR 1.0 + turtlebot_opencr 펌웨어를 USB 시리얼로 쓰는 드라이버.
 // - write(Twist): 역기구학으로 바퀴 목표 속도를 계산해 두고, tick()이 50Hz로 C 줄을 보낸다.
 // - 읽기 스레드: S(위치/속도/배터리), I(IMU), E(바퀴 에러)를 파싱한다.
 // - 0.5초 동안 write가 없으면 마지막 명령을 버리고 0을 보낸다 (펌웨어 watchdog와 별개로 앱에서도).
-class OpenCrSerial : public krosc::hardware::Hardware {
+class OpenCrSerial final : public OpenCrDevice {
  public:
   OpenCrSerial(double wheel_radius, double wheel_separation, std::string port, int baud = 115200,
                double command_period = 0.02, double command_timeout = 0.5, double left_dir = 1.0,
@@ -49,29 +36,29 @@ class OpenCrSerial : public krosc::hardware::Hardware {
   void start() override;
   void stop() override;
 
-  void write(const krosc::msgs::Twist& command);
-  void write_arm(const std::array<double, 5>& position);  // NaN = 그 관절 유지
-  void set_arm_torque(bool enabled);
-  void buzzer(int frequency_hz, int duration_ms);  // B,<Hz>,<ms>
+  void write(const krosc::msgs::Twist& command) override;
+  void write_arm(const std::array<double, 5>& position) override;  // NaN = 그 관절 유지
+  void set_arm_torque(bool enabled) override;
+  void buzzer(int frequency_hz, int duration_ms) override;  // B,<Hz>,<ms>
   // AR: 고른 DYNAMIXEL을 reboot해 Hardware Error를 지운다. true=joint1..4/gripper.
-  void reboot_arm(const std::array<bool, 5>& joints);
+  void reboot_arm(const std::array<bool, 5>& joints) override;
   void reboot_arm_all();
-  void tick();
+  void tick() override;
 
   [[nodiscard]] bool connected() const override { return connected_.load(); }
-  [[nodiscard]] std::optional<krosc::msgs::Imu> consume_imu();
-  [[nodiscard]] ArmStatus arm_status() const;
+  [[nodiscard]] std::optional<krosc::msgs::Imu> consume_imu() override;
+  [[nodiscard]] ArmStatus arm_status() const override;
 
-  [[nodiscard]] double left_position() const;
-  [[nodiscard]] double right_position() const;
-  [[nodiscard]] double left_velocity() const;
-  [[nodiscard]] double right_velocity() const;
-  [[nodiscard]] std::optional<BoardStatus> status() const;
-  [[nodiscard]] double status_age() const;
-  [[nodiscard]] std::uint64_t error_count() const { return error_count_.load(); }
-  [[nodiscard]] std::uint64_t bad_lines() const { return bad_lines_.load(); }
-  [[nodiscard]] std::string last_error() const;
-  [[nodiscard]] const std::string& port() const { return port_; }
+  [[nodiscard]] double left_position() const override;
+  [[nodiscard]] double right_position() const override;
+  [[nodiscard]] double left_velocity() const override;
+  [[nodiscard]] double right_velocity() const override;
+  [[nodiscard]] std::optional<BoardStatus> status() const override;
+  [[nodiscard]] double status_age() const override;
+  [[nodiscard]] std::uint64_t error_count() const override { return error_count_.load(); }
+  [[nodiscard]] std::uint64_t bad_lines() const override { return bad_lines_.load(); }
+  [[nodiscard]] std::string last_error() const override;
+  [[nodiscard]] const std::string& port() const override { return port_; }
 
  private:
   void reader_loop();

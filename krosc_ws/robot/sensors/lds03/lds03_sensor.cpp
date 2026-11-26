@@ -2,12 +2,12 @@
 
 #include <utility>
 
-#include "hardwares/lds03/lds03_device.hpp"
+#include "hardwares/lds03/lds_device.hpp"
 #include "krosc/qos.hpp"
 
 namespace krosc_ws {
 
-Lds03Sensor::Lds03Sensor(krosc::Context& context, Lds03Device& device, std::string topic,
+Lds03Sensor::Lds03Sensor(krosc::Context& context, LdsDevice& device, std::string topic,
                          std::string frame_id)
     : krosc::sensor::Sensor(context), device_(device), topic_(std::move(topic)),
       frame_id_(std::move(frame_id)) {}

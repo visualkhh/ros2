@@ -11,8 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "krosc/hardware/hardware.hpp"
 #include "krosc/msgs.hpp"
+
+#include "lds_device.hpp"
 
 namespace krosc_ws {
 
@@ -52,7 +53,7 @@ class LdsParser {
 // 실제 LDS-03 시리얼 장치: 230400, 10Hz. USB2LDS는 DTR을 내려야 데이터를 보낸다.
 // 로봇 몸통이 찍힌 점은 base_link 기준 상자 안이면 지운다.
 // 토픽/프레임은 sensor 논리 레이어(Lds03Sensor)가 정한다.
-class Lds03Device final : public krosc::hardware::Hardware {
+class Lds03Device final : public LdsDevice {
  public:
   explicit Lds03Device(std::string port, double mount_x = 0.060, bool reverse = true,
                        bool body_filter = true, int baud = 230400);
@@ -66,11 +67,11 @@ class Lds03Device final : public krosc::hardware::Hardware {
   [[nodiscard]] bool connected() const override { return connected_.load(); }
 
   // header.stamp만 채운다. frame_id/topic은 Sensor 레이어가 정한다.
-  [[nodiscard]] std::optional<krosc::msgs::LaserScan> take_scan(double stamp);
-  [[nodiscard]] std::uint64_t scans() const { return scans_.load(); }
-  [[nodiscard]] std::uint64_t bad_packets() const { return parser_.bad_packets(); }
-  [[nodiscard]] double scan_age() const;
-  [[nodiscard]] const std::string& port() const { return port_; }
+  [[nodiscard]] std::optional<krosc::msgs::LaserScan> take_scan(double stamp) override;
+  [[nodiscard]] std::uint64_t scans() const override { return scans_.load(); }
+  [[nodiscard]] std::uint64_t bad_packets() const override { return parser_.bad_packets(); }
+  [[nodiscard]] double scan_age() const override;
+  [[nodiscard]] const std::string& port() const override { return port_; }
 
  private:
   void reader_loop();

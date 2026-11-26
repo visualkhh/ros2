@@ -15,6 +15,7 @@ add_subdirectory(../krosc/engine engine_build)
 
 set(KROSC_REAL_SOURCES
   robot/main.cpp
+  robot/robot.cpp
   robot/nodes/robot_status.cpp
   robot/controls/opencr/opencr_control.cpp
   robot/hardwares/lds03/lds03_device.cpp
@@ -83,8 +84,12 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
 
   add_executable(krosc_ws_simulator
     simulator/main.cpp
-    simulator/sim_control.cpp
-    simulator/sim_sensors.cpp
+    simulator/sim_hardware.cpp
+    robot/robot.cpp
+    robot/nodes/robot_status.cpp
+    robot/controls/opencr/opencr_control.cpp
+    robot/sensors/lds03/lds03_sensor.cpp
+    robot/sensors/opencr/opencr_imu.cpp
   )
   target_include_directories(krosc_ws_simulator PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/robot

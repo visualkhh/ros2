@@ -10,21 +10,9 @@
 
 #include "krosc/msgs.hpp"
 
-namespace krosc_ws {
+#include "opencr_device.hpp"
 
-// OpenCR 펌웨어(krosc_ws/firmware/opencr/turtlebot_opencr)의 S 줄.
-struct BoardStatus {
-  double left_position = std::numeric_limits<double>::quiet_NaN();
-  double left_velocity = std::numeric_limits<double>::quiet_NaN();
-  double right_position = std::numeric_limits<double>::quiet_NaN();
-  double right_velocity = std::numeric_limits<double>::quiet_NaN();
-  double uptime_ms = std::numeric_limits<double>::quiet_NaN();
-  double left_current = std::numeric_limits<double>::quiet_NaN();
-  double right_current = std::numeric_limits<double>::quiet_NaN();
-  double left_temperature = std::numeric_limits<double>::quiet_NaN();
-  double right_temperature = std::numeric_limits<double>::quiet_NaN();
-  double battery_voltage = std::numeric_limits<double>::quiet_NaN();
-};
+namespace krosc_ws {
 
 // "S,1,2,3" -> ("S", [1,2,3]). 숫자가 아닌 값이 있으면 nullopt (nan/inf는 숫자).
 std::optional<std::pair<std::string, std::vector<double>>> split_line(const std::string& line);

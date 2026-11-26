@@ -1,0 +1,125 @@
+#pragma once
+
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "krosc/context.hpp"
+
+namespace krosc::control {
+class ControlManager;
+class ControllerManager;
+}
+namespace krosc::sensor {
+class SensorManager;
+}
+namespace krosc::nodes {
+class Cartographer;
+class Ekf;
+class MapCatalog;
+class MapSaver;
+class MapServer;
+class RobotStatePublisher;
+class TwistMux;
+class VelocitySmoother;
+class CollisionMonitor;
+}
+namespace krosc::moveit {
+class MoveGroup;
+}
+namespace krosc::nodes::nav2 {
+class BehaviorServer;
+class BtNavigator;
+class ControllerServer;
+class Costmap2DROS;
+class PlannerServer;
+}
+
+namespace krosc_ws {
+
+class OpenCrDevice;
+class LdsDevice;
+class OpenCrControl;
+class OpenCrImu;
+class Lds03Sensor;
+class RobotStatus;
+
+struct RobotOptions {
+  std::string urdf_path;
+  std::string maps_dir;
+  bool slam = false;
+  bool enable_moveit = true;
+  bool enable_map = true;
+  bool enable_rl = true;
+  bool enable_arm = true;
+  bool enable_status = true;
+  bool enable_robot_state_publisher = true;
+  double wheel_radius = 0.033;
+  double wheel_separation = 0.287;
+
+  std::string scan_topic = "scan";
+  std::string scan_frame = "base_scan";
+  double scan_period = 0.1;
+  std::string imu_topic = "imu";
+  std::string imu_frame = "imu_link";
+  double imu_period = 0.02;
+  double control_read_period = 0.02;
+  double control_write_period = 0.02;
+  double control_period = 0.01;
+};
+
+// 실기/시뮬레이터 공통 로봇 스택.
+// 외부에서 OpenCrDevice와 LdsDevice만 주입하면 Control/Sensor/nav2/MoveIt을 조립한다.
+class Robot {
+ public:
+  Robot(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar, RobotOptions options);
+  ~Robot();
+
+  Robot(const Robot&) = delete;
+  Robot& operator=(const Robot&) = delete;
+
+  bool start();
+  void stop();
+  void poll();
+
+  [[nodiscard]] OpenCrDevice& opencr() { return opencr_; }
+  [[nodiscard]] LdsDevice* lidar() { return lidar_; }
+
+ private:
+  krosc::Context& context_;
+  OpenCrDevice& opencr_;
+  LdsDevice* lidar_;
+  RobotOptions options_;
+  std::string urdf_;
+
+  std::unique_ptr<OpenCrControl> control_;
+  std::unique_ptr<OpenCrImu> imu_;
+  std::unique_ptr<Lds03Sensor> lds_sensor_;
+  std::unique_ptr<RobotStatus> status_;
+  std::unique_ptr<krosc::sensor::SensorManager> sensors_;
+  std::unique_ptr<krosc::control::ControlManager> controls_;
+  std::unique_ptr<krosc::control::ControllerManager> controller_manager_;
+  std::unique_ptr<krosc::nodes::Ekf> ekf_;
+  std::unique_ptr<krosc::moveit::MoveGroup> move_group_;
+
+  std::unique_ptr<krosc::nodes::Cartographer> cartographer_;
+  std::unique_ptr<krosc::nodes::MapServer> map_server_;
+  std::unique_ptr<krosc::nodes::MapSaver> map_saver_;
+  std::unique_ptr<krosc::nodes::MapCatalog> map_catalog_;
+  std::unique_ptr<krosc::nodes::RobotStatePublisher> robot_state_;
+
+  std::unique_ptr<krosc::nodes::nav2::Costmap2DROS> global_costmap_;
+  std::unique_ptr<krosc::nodes::nav2::Costmap2DROS> local_costmap_;
+  std::unique_ptr<krosc::nodes::nav2::PlannerServer> planner_;
+  std::unique_ptr<krosc::nodes::nav2::ControllerServer> controller_;
+  std::unique_ptr<krosc::nodes::nav2::BehaviorServer> behavior_;
+  std::unique_ptr<krosc::nodes::nav2::BtNavigator> bt_navigator_;
+  std::unique_ptr<krosc::nodes::TwistMux> mux_;
+  std::unique_ptr<krosc::nodes::VelocitySmoother> smoother_;
+  std::unique_ptr<krosc::nodes::CollisionMonitor> collision_;
+
+  bool started_ = false;
+};
+
+}  // namespace krosc_ws

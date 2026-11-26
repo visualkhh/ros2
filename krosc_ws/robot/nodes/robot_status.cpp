@@ -7,8 +7,8 @@
 #include <utility>
 #include <vector>
 
-#include "hardwares/lds03/lds03_device.hpp"
-#include "hardwares/opencr/opencr_serial.hpp"
+#include "hardwares/lds03/lds_device.hpp"
+#include "hardwares/opencr/opencr_device.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 
@@ -31,7 +31,7 @@ void add_value(krosc::msgs::DiagnosticStatus& status, const std::string& key, co
 
 }  // namespace
 
-RobotStatus::RobotStatus(krosc::Context& context, OpenCrSerial& opencr, Lds03Device* lidar)
+RobotStatus::RobotStatus(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar)
     : Node(context, "robot_status"), opencr_(opencr), lidar_(lidar),
       diagnostics_period_(declare_parameter<double>("diagnostics_period", 1.0,
                                                     [](double value) { return value > 0.0; })),

@@ -7,7 +7,7 @@
 
 #include "krosc/control/control.hpp"
 
-#include "hardwares/opencr/opencr_serial.hpp"
+#include "hardwares/opencr/opencr_device.hpp"
 
 namespace krosc_ws {
 
@@ -16,7 +16,7 @@ namespace krosc_ws {
 //   HardwareManager가 read/write 주기를 정하고, write 끝에서 OpenCrSerial::tick()으로 실제 전송한다.
 class OpenCrControl final : public krosc::control::Control {
  public:
-  OpenCrControl(OpenCrSerial& opencr, double wheel_radius, double wheel_separation);
+  OpenCrControl(OpenCrDevice& opencr, double wheel_radius, double wheel_separation);
 
   bool read(double time, double period) override;
   bool write(double time, double period) override;
@@ -26,7 +26,7 @@ class OpenCrControl final : public krosc::control::Control {
   std::vector<std::shared_ptr<krosc::control::CommandInterface>> export_command_interfaces() override;
 
  private:
-  OpenCrSerial& opencr_;
+  OpenCrDevice& opencr_;
   const double wheel_radius_;
   const double wheel_separation_;
   std::map<std::string, std::shared_ptr<krosc::control::StateInterface>> states_;
