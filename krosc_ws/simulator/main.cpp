@@ -3,6 +3,7 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -64,7 +65,14 @@ int main(int argc, char** argv) {
     context_options.network.port = static_cast<std::uint16_t>(port);
     context_options.network.receive_remap["cmd_vel"] = "cmd_vel_teleop";
   }
-  krosc::Context context(context_options);
+  std::unique_ptr<krosc::Context> context_holder;
+  try {
+    context_holder = std::make_unique<krosc::Context>(context_options);
+  } catch (const std::exception& error) {
+    std::cerr << "[krosc_ws_sim] 시작 실패: " << error.what() << "\n";
+    return 1;
+  }
+  krosc::Context& context = *context_holder;
 
   krosc::simulator::SimulatorOptions sim_options;
   sim_options.noisy = noisy;
