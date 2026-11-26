@@ -43,9 +43,13 @@
 #include "krosc/control/controller_manager.hpp"
 #include "krosc/time/time.hpp"
 
-#include "real_turtlebot3.hpp"
-#include "turtlebot3_driver.hpp"
 #include "controls/opencr/opencr_control.hpp"
+#include "hardwares/lds03/lds03_device.hpp"
+#include "hardwares/opencr/opencr_serial.hpp"
+#include "krosc/hardware/hardware_manager.hpp"
+#include "nodes/robot_status.hpp"
+#include "sensors/lds03/lds03_sensor.hpp"
+#include "sensors/opencr/opencr_imu.hpp"
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
 #include "nodes/rl_nav_controller.hpp"
@@ -61,6 +65,23 @@
 namespace {
 
 std::atomic<bool> g_stop{false};
+
+constexpr double kWheelRadius = 0.033;       // m
+constexpr double kWheelSeparation = 0.287;   // m (실측)
+constexpr double kMaxWheel = 7.8;            // rad/s
+constexpr double kLidarMountX = 0.060;       // m, base_link 기준
+
+struct HardwareOptions {
+  std::string scan_topic = "scan";
+  std::string scan_frame = "base_scan";
+  double scan_period = 0.1;
+  std::string imu_topic = "imu";
+  std::string imu_frame = "imu_link";
+  double imu_period = 0.02;
+  double control_read_period = 0.02;
+  double control_write_period = 0.02;
+  double control_period = 0.01;
+};
 
 void request_stop(int) { g_stop.store(true); }
 
@@ -245,18 +266,52 @@ int main(int argc, char** argv) {
     std::fflush(stdout);
   }
 
-  krosc_ws::HardwareOptions hardware_options;
+  HardwareOptions hardware_options;
   hardware_options.scan_topic = scan_topic;
   hardware_options.scan_frame = "base_scan";
   hardware_options.scan_period = 1.0 / scan_rate;
   hardware_options.imu_topic = imu_topic;
   hardware_options.imu_frame = "imu_link";
   hardware_options.imu_period = 1.0 / imu_rate;
-  krosc_ws::RealTurtleBot3 robot(context, opencr_port, lidar_port, enable_lidar, hardware_options);
+
+  const auto hw_config = [](std::string name, double read_period, double write_period) {
+    krosc::hardware::HardwareConfig config;
+    config.name = std::move(name);
+    config.read_period = read_period;
+    config.write_period = write_period;
+    return config;
+  };
+
+  krosc_ws::OpenCrSerial opencr(kWheelRadius, kWheelSeparation,
+                                std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0,
+                                kMaxWheel);
+  std::unique_ptr<krosc_ws::Lds03Device> lidar;
+  if (enable_lidar) {
+    lidar = std::make_unique<krosc_ws::Lds03Device>(std::move(lidar_port), kLidarMountX,
+                                                    true, true);
+  }
+
+  krosc::hardware::HardwareManager hardware;
+  auto control = std::make_unique<krosc_ws::OpenCrControl>(opencr, kWheelRadius,
+                                                           kWheelSeparation);
+  auto* control_ptr = control.get();
+  hardware.add(std::move(control),
+               hw_config("opencr_control", hardware_options.control_read_period,
+                         hardware_options.control_write_period));
+  hardware.add(std::make_unique<krosc_ws::OpenCrImu>(context, opencr, hardware_options.imu_topic,
+                                                     hardware_options.imu_frame),
+               hw_config("opencr_imu", hardware_options.imu_period, 0.0));
+  if (lidar) {
+    hardware.add(std::make_unique<krosc_ws::Lds03Sensor>(context, *lidar,
+                                                         hardware_options.scan_topic,
+                                                         hardware_options.scan_frame),
+                 hw_config("lds03_scan", hardware_options.scan_period, 0.0));
+  }
+  opencr.start();
+  krosc_ws::RobotStatus driver(context, opencr, lidar.get());
   std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
               scan_rate, imu_topic.c_str(), imu_rate);
   std::printf("[krosc_ws] executor threads: %zu\n", executor_threads);
-  krosc_ws::TurtleBot3Driver driver(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});
   // control: OpenCR control 논리 레이어가 state/command interface를 제공하고,
@@ -292,7 +347,7 @@ int main(int argc, char** argv) {
         std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
        {"arm_command_controller.command_topic", std::string("arm_joint_command")},
        {"arm_command_controller.auto_activate", false}},
-      *robot.control());
+      *control_ptr);
   // MoveIt move_group: kinematics/planner/controller_manager 플러그인을 골라 조립한다.
   // Viz 명령은 move_action 액션 + move_group/scrub 서비스로 들어온다.
   krosc::moveit::MoveGroup move_group(
@@ -442,7 +497,10 @@ int main(int argc, char** argv) {
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
   std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
 
-  if (!robot.start([&](double time, double period) { controller_manager.update(time, period); })) {
+  hardware.set_control_hook(
+      [&](double time, double period) { controller_manager.update(time, period); },
+      hardware_options.control_period);
+  if (!hardware.start()) {
     std::cerr << "[krosc_ws] 하드웨어 시작 실패\n";
     return 1;
   }
@@ -470,7 +528,7 @@ int main(int argc, char** argv) {
 
   std::printf("[krosc_ws] 정지 중...\n");
   std::fflush(stdout);
-  robot.stop();
+  hardware.stop();
   context.shutdown();
   std::printf("[krosc_ws] 종료\n");
   return 0;

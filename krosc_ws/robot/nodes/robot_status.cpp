@@ -1,4 +1,4 @@
-#include "turtlebot3_driver.hpp"
+#include "robot_status.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "hardwares/lds03/lds03_device.hpp"
+#include "hardwares/opencr/opencr_serial.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 
@@ -29,9 +31,8 @@ void add_value(krosc::msgs::DiagnosticStatus& status, const std::string& key, co
 
 }  // namespace
 
-TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robot)
-    : Node(context, "TurtleBot3Driver"),
-      robot_(robot),
+RobotStatus::RobotStatus(krosc::Context& context, OpenCrSerial& opencr, Lds03Device* lidar)
+    : Node(context, "robot_status"), opencr_(opencr), lidar_(lidar),
       diagnostics_period_(declare_parameter<double>("diagnostics_period", 1.0,
                                                     [](double value) { return value > 0.0; })),
       data_timeout_(declare_parameter<double>("data_timeout", 2.0,
@@ -41,20 +42,20 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
   last_arm_status_ = now();
   // 부팅 직후 토크가 꺼져 있으면 팔이 중력으로 떨어진다. 기본은 현재 자세를 잡게 한다.
   if (arm_torque_on_start_.value()) {
-    robot_.opencr().set_arm_torque(true);
+    opencr_.set_arm_torque(true);
   }
   create_service<krosc::msgs::SetBoolRequest, krosc::msgs::SetBoolResponse>(
       "arm/set_torque", [this](const krosc::msgs::SetBoolRequest& request) {
-        robot_.opencr().set_arm_torque(request.data);
+        opencr_.set_arm_torque(request.data);
         return krosc::msgs::SetBoolResponse{true, request.data ? "torque on" : "torque off"};
       });
   create_service<krosc::msgs::TriggerRequest, krosc::msgs::TriggerResponse>(
       "arm/stop", [this](const krosc::msgs::TriggerRequest&) {
-        const ArmStatus arm = robot_.opencr().arm_status();
+        const ArmStatus arm = opencr_.arm_status();
         if (!arm.present) {
           return krosc::msgs::TriggerResponse{false, "arm status 없음"};
         }
-        robot_.opencr().write_arm(arm.position);
+        opencr_.write_arm(arm.position);
         return krosc::msgs::TriggerResponse{true, "현재 자세 유지"};
       });
   create_service<krosc::msgs::BuzzerRequest, krosc::msgs::BuzzerResponse>(
@@ -62,7 +63,7 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
         if (request.frequency <= 0 || request.duration <= 0) {
           return krosc::msgs::BuzzerResponse{false, "frequency/duration은 0보다 커야 한다"};
         }
-        robot_.opencr().buzzer(request.frequency, request.duration);
+        opencr_.buzzer(request.frequency, request.duration);
         return krosc::msgs::BuzzerResponse{true, "buzzer"};
       });
   create_service<krosc::msgs::ArmResetRequest, krosc::msgs::ArmResetResponse>(
@@ -96,17 +97,17 @@ TurtleBot3Driver::TurtleBot3Driver(krosc::Context& context, RealTurtleBot3& robo
             }
           }
         }
-        robot_.opencr().reboot_arm(mask);
+        opencr_.reboot_arm(mask);
         logger().info("팔 리셋(AR): j1=%d j2=%d j3=%d j4=%d grip=%d", mask[0], mask[1], mask[2],
                       mask[3], mask[4]);
         return krosc::msgs::ArmResetResponse{true, "arm reset"};
       });
-  logger().info("로봇 %s: OpenCR=%s, LDS-03=%s", robot_.name().c_str(),
-                robot_.opencr().port().c_str(), robot_.has_lidar() ? robot_.lidar()->port().c_str() : "없음");
+  logger().info("로봇 %s: OpenCR=%s, LDS-03=%s", "turtlebot3_waffle_pi",
+                opencr_.port().c_str(), (lidar_ != nullptr) ? lidar_->port().c_str() : "없음");
   logger().info("OpenCR IMU는 켠 뒤 2초 동안 가만히 둬야 자이로 편향을 잡는다");
 }
 
-void TurtleBot3Driver::poll() {
+void RobotStatus::poll() {
   const double current = now();
   if (current - last_diagnostics_ >= diagnostics_period_.value()) {
     publish_diagnostics();
@@ -118,8 +119,8 @@ void TurtleBot3Driver::poll() {
   }
 }
 
-void TurtleBot3Driver::publish_arm_status() {
-  const ArmStatus arm = robot_.opencr().arm_status();
+void RobotStatus::publish_arm_status() {
+  const ArmStatus arm = opencr_.arm_status();
   std::string text = "present=";
   text += arm.present ? "1" : "0";
   text += ";err=";
@@ -173,16 +174,16 @@ void TurtleBot3Driver::publish_arm_status() {
   publish("arm_status", krosc::msgs::String{text}, krosc::QOS_DEFAULT);
 }
 
-void TurtleBot3Driver::publish_diagnostics() {
+void RobotStatus::publish_diagnostics() {
   krosc::msgs::DiagnosticArray array;
   array.header.stamp = now();
 
-  const auto& opencr = robot_.opencr();
+  const auto& opencr = opencr_;
   const double status_age = opencr.status_age();
   const auto board = opencr.status();
   krosc::msgs::DiagnosticStatus drive;
   drive.name = "OpenCR";
-  drive.hardware_id = robot_.name();
+  drive.hardware_id = "turtlebot3_waffle_pi";
   if (!opencr.connected()) {
     drive.level = 2;
     drive.message = "OpenCR가 연결되지 않았다";
@@ -211,12 +212,12 @@ void TurtleBot3Driver::publish_diagnostics() {
 
   krosc::msgs::DiagnosticStatus lidar_status;
   lidar_status.name = "LDS-03";
-  lidar_status.hardware_id = robot_.name();
-  if (!robot_.has_lidar()) {
+  lidar_status.hardware_id = "turtlebot3_waffle_pi";
+  if (lidar_ == nullptr) {
     lidar_status.level = 1;
     lidar_status.message = "라이다가 없다";
   } else {
-    const auto& lidar = *robot_.lidar();
+    const auto& lidar = *lidar_;
     const double scan_age = lidar.scan_age();
     if (!lidar.connected()) {
       lidar_status.level = 2;

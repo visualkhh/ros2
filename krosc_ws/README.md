@@ -7,9 +7,10 @@
 [라즈베리파이] krosc_real
   OpenCRSerial (115200, C/S/I/E/A) ─┐
   LDS-03     (230400, 10Hz) ────────┤
-                                    ├─ TurtleBot3Driver ─ scan/imu/arm_status/diagnostics
+                                    ├─ HardwareManager ─ read: scan/imu, write: wheel/arm
+                                    ├─ RobotStatus ─ arm_status/diagnostics/팔 서비스
                                     ├─ controller_manager (control)
-                                    │    ├─ OpenCrSystem (hardware plugin)
+                                    │    ├─ OpenCrControl (control layer)
                                     │    ├─ joint_state_broadcaster ─ joint_states
                                     │    ├─ diff_drive_controller ─ odom
                                     │    └─ joint_trajectory_controller ─ 팔
@@ -353,7 +354,7 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 - `sensors/lds03/`: 스캔 읽기 → `scan` 발행
 - `HardwareManager`: `HardwareConfig{name, read_period, write_period}`로 등록하고
   `read → control hook → write` 순서로 실행한다. 주기는 Hardware 안이 아니라 등록 구조체에 있다
-- control hook은 `controller_manager.update()`다. `RealTurtleBot3`가 소유/조립한다
+- control hook은 `controller_manager.update()`다. `main`이 HardwareManager/장치/유닛을 조립하고 소유한다
 - LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`,
   `--executor-threads` (환경 변수 `KROSC_SCAN_TOPIC`, `KROSC_IMU_TOPIC`, `KROSC_EXECUTOR_THREADS`)
@@ -385,8 +386,7 @@ Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 �
 krosc_ws/
 ├── robot/                       # 로봇(Pi) 앱
 │   ├── main.cpp                 # 노드 조립, TCP 서버, 진단 루프
-│   ├── turtlebot3_driver.cpp/.hpp # arm_status/diagnostics, 팔 서비스
-│   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
+│   ├── nodes/robot_status.cpp/.hpp # arm_status/diagnostics, 팔 서비스
 │   ├── nodes/rl_nav_controller.cpp/.hpp # NavControllerPlugin (RL + fallback)
 │   ├── ml/onnx_policy.cpp/.hpp  # ONNX Runtime (CUDA/CoreML → CPU)
 │   ├── ml/model_catalog.hpp     # artifacts/models/rl_nav_controller 스캔

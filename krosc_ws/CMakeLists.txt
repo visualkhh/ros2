@@ -15,8 +15,7 @@ add_subdirectory(../krosc/engine engine_build)
 
 set(KROSC_REAL_SOURCES
   robot/main.cpp
-  robot/turtlebot3_driver.cpp
-  robot/real_turtlebot3.cpp
+  robot/nodes/robot_status.cpp
   robot/controls/opencr/opencr_control.cpp
   robot/hardwares/lds03/lds03_device.cpp
   robot/sensors/lds03/lds03_sensor.cpp
