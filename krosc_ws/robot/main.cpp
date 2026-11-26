@@ -43,9 +43,9 @@
 #include "krosc/control/controller_manager.hpp"
 #include "krosc/time/time.hpp"
 
-#include "hardwares/opencr/control/opencr_system.hpp"
 #include "real_turtlebot3.hpp"
 #include "turtlebot3_driver.hpp"
+#include "controls/opencr/opencr_control.hpp"
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
 #include "nodes/rl_nav_controller.hpp"
@@ -135,12 +135,11 @@ std::vector<std::string> local_addresses() {
 void usage() {
   std::cout << "usage: krosc_real [--opencr PORT] [--lidar PORT] [--port PORT] [--urdf PATH] [--maps DIR]\n"
                "                  [--scan-topic NAME] [--scan-rate HZ] [--imu-topic NAME] [--imu-rate HZ]\n"
-               "                  [--executor-threads N] [--sensor-workers N]\n"
+               "                  [--executor-threads N]\n"
                "                  [--no-lidar] [--slam]\n"
                "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
                "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR,\n"
-               "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_EXECUTOR_THREADS (10),\n"
-               "     KROSC_SENSOR_WORKERS (10)\n";
+               "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_EXECUTOR_THREADS (10)\n";
 }
 
 }  // namespace
@@ -166,7 +165,6 @@ int main(int argc, char** argv) {
   double scan_rate = 10.0;
   double imu_rate = 50.0;
   std::size_t executor_threads = env_count("KROSC_EXECUTOR_THREADS", 10);
-  std::size_t sensor_workers = env_count("KROSC_SENSOR_WORKERS", 10);
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--opencr" && i + 1 < argc) {
@@ -190,11 +188,6 @@ int main(int argc, char** argv) {
     } else if (argument == "--executor-threads" && i + 1 < argc) {
       if (!parse_count(argv[++i], executor_threads)) {
         std::cerr << "[krosc_ws] executor-threads는 0..64 범위여야 한다\n";
-        return 2;
-      }
-    } else if (argument == "--sensor-workers" && i + 1 < argc) {
-      if (!parse_count(argv[++i], sensor_workers)) {
-        std::cerr << "[krosc_ws] sensor-workers는 0..64 범위여야 한다\n";
         return 2;
       }
     } else if (argument == "--no-lidar") {
@@ -252,31 +245,25 @@ int main(int argc, char** argv) {
     std::fflush(stdout);
   }
 
-  krosc_ws::SensorOptions sensor_options;
-  sensor_options.scan_topic = scan_topic;
-  sensor_options.scan_frame = "base_scan";
-  sensor_options.scan_period = 1.0 / scan_rate;
-  sensor_options.imu_topic = imu_topic;
-  sensor_options.imu_frame = "imu_link";
-  sensor_options.imu_period = 1.0 / imu_rate;
-  sensor_options.workers = sensor_workers;
-  krosc_ws::RealTurtleBot3 robot(context, opencr_port, lidar_port, enable_lidar, sensor_options);
-  std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz, workers=%zu\n", scan_topic.c_str(),
-              scan_rate, imu_topic.c_str(), imu_rate, sensor_workers);
+  krosc_ws::HardwareOptions hardware_options;
+  hardware_options.scan_topic = scan_topic;
+  hardware_options.scan_frame = "base_scan";
+  hardware_options.scan_period = 1.0 / scan_rate;
+  hardware_options.imu_topic = imu_topic;
+  hardware_options.imu_frame = "imu_link";
+  hardware_options.imu_period = 1.0 / imu_rate;
+  krosc_ws::RealTurtleBot3 robot(context, opencr_port, lidar_port, enable_lidar, hardware_options);
+  std::printf("[krosc_ws] sensors: scan=%s %.1fHz, imu=%s %.1fHz\n", scan_topic.c_str(),
+              scan_rate, imu_topic.c_str(), imu_rate);
   std::printf("[krosc_ws] executor threads: %zu\n", executor_threads);
   krosc_ws::TurtleBot3Driver driver(context, robot);
   krosc::nodes::RobotStatePublisher robot_state(context, "robot_state_publisher",
                                                 {{"robot_description", urdf}});
-  // control: OpenCR을 ControlInterface 플러그인으로 올리고, controller_manager가 JSB/JTC를 돌린다.
-  // joint_states는 이제 joint_state_broadcaster가 내고, MoveIt은 JTC의 FollowJointTrajectory 액션으로 움직인다.
-  krosc::control::ControlRegistry hardware_registry;
-  hardware_registry.add("krosc_ws/OpenCrSystem",
-                        [&robot] { return std::make_unique<krosc_ws::OpenCrSystem>(robot); });
+  // control: OpenCR control 논리 레이어가 state/command interface를 제공하고,
+  // HardwareManager가 read→controller update→write 순서로 돌린다.
   krosc::control::ControllerManager controller_manager(
       context, "controller_manager",
       {{"update_rate", 100.0},
-       {"hardware.plugin", std::string("krosc_ws/OpenCrSystem")},
-       {"hardware.name", std::string("turtlebot3_real")},
        {"controller_plugins",
         std::vector<std::string>{"joint_state_broadcaster", "joint_trajectory_controller",
                                  "diff_drive_controller", "arm_command_controller"}},
@@ -305,7 +292,7 @@ int main(int argc, char** argv) {
         std::vector<std::string>{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"}},
        {"arm_command_controller.command_topic", std::string("arm_joint_command")},
        {"arm_command_controller.auto_activate", false}},
-      hardware_registry);
+      *robot.control());
   // MoveIt move_group: kinematics/planner/controller_manager 플러그인을 골라 조립한다.
   // Viz 명령은 move_action 액션 + move_group/scrub 서비스로 들어온다.
   krosc::moveit::MoveGroup move_group(
@@ -455,13 +442,16 @@ int main(int argc, char** argv) {
   std::printf("[krosc_ws] SLAM: %s\n", slam ? "mapping" : "idle");
   std::printf("[krosc_ws] maps: %s\n", maps_dir.c_str());
 
+  if (!robot.start([&](double time, double period) { controller_manager.update(time, period); })) {
+    std::cerr << "[krosc_ws] 하드웨어 시작 실패\n";
+    return 1;
+  }
   std::printf("[krosc_ws] 실행. Ctrl+C로 정지한다.\n");
   std::fflush(stdout);
   constexpr auto kPeriod = std::chrono::milliseconds(10);
   auto next = std::chrono::steady_clock::now();
   auto last_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
-    robot.tick();
     driver.poll();
     next += kPeriod;
     std::this_thread::sleep_until(next);

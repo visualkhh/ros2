@@ -11,9 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "krosc/hardware/hardware.hpp"
 #include "krosc/msgs.hpp"
-#include "krosc/context.hpp"
-#include "krosc/sensor/sensor.hpp"
 
 namespace krosc_ws {
 
@@ -50,33 +49,30 @@ class LdsParser {
   std::atomic<std::uint64_t> bad_packets_{0};
 };
 
-// 실제 LDS-03 시리얼: 230400, 10Hz 스캔. USB2LDS는 DTR을 내려야 데이터를 보낸다.
-// 로봇 몸통(1층 판/바퀴/지지대)이 찍힌 점은 base_link 기준 상자 안이면 지운다.
-// SensorManager가 설정한 주기마다 on_update()가 호출되고, 생성자에서 정한 토픽으로 LaserScan을 발행한다.
-class Lds03 : public krosc::sensor::Sensor {
+// 실제 LDS-03 시리얼 장치: 230400, 10Hz. USB2LDS는 DTR을 내려야 데이터를 보낸다.
+// 로봇 몸통이 찍힌 점은 base_link 기준 상자 안이면 지운다.
+// 토픽/프레임은 sensor 논리 레이어(Lds03Sensor)가 정한다.
+class Lds03Device final : public krosc::hardware::Hardware {
  public:
-  explicit Lds03(krosc::Context& context, std::string port, std::string topic = "scan",
-                 std::string frame_id = "base_scan", double mount_x = 0.060, bool reverse = true,
-                 bool body_filter = true, int baud = 230400);
-  ~Lds03();
+  explicit Lds03Device(std::string port, double mount_x = 0.060, bool reverse = true,
+                       bool body_filter = true, int baud = 230400);
+  ~Lds03Device() override;
 
-  Lds03(const Lds03&) = delete;
-  Lds03& operator=(const Lds03&) = delete;
+  Lds03Device(const Lds03Device&) = delete;
+  Lds03Device& operator=(const Lds03Device&) = delete;
 
-  bool on_activate() override;
-  bool on_deactivate() override;
-  bool on_update(double time, double period) override;
+  void start() override;
+  void stop() override;
+  [[nodiscard]] bool connected() const override { return connected_.load(); }
 
+  // header.stamp만 채운다. frame_id/topic은 Sensor 레이어가 정한다.
   [[nodiscard]] std::optional<krosc::msgs::LaserScan> take_scan(double stamp);
-  [[nodiscard]] bool connected() const { return connected_.load(); }
   [[nodiscard]] std::uint64_t scans() const { return scans_.load(); }
   [[nodiscard]] std::uint64_t bad_packets() const { return parser_.bad_packets(); }
   [[nodiscard]] double scan_age() const;
   [[nodiscard]] const std::string& port() const { return port_; }
 
  private:
-  void start();
-  void stop();
   void reader_loop();
   void close_fd();
   bool send_line(const std::uint8_t* data, std::size_t size);
@@ -85,8 +81,6 @@ class Lds03 : public krosc::sensor::Sensor {
 
   std::string port_;
   const double mount_x_;
-  std::string frame_id_;
-  std::string topic_ = "scan";
   const bool body_filter_;
   const int baud_;
   LdsParser parser_;

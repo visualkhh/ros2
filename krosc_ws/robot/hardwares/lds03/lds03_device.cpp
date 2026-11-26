@@ -1,4 +1,4 @@
-#include "lds03.hpp"
+#include "lds03_device.hpp"
 
 #include <poll.h>
 #include <unistd.h>
@@ -15,7 +15,6 @@
 #include <utility>
 
 #include "hardwares/serial.hpp"
-#include "krosc/qos.hpp"
 
 namespace krosc_ws {
 
@@ -172,42 +171,18 @@ std::optional<std::vector<float>> LdsParser::take_scan() {
   return scan;
 }
 
-Lds03::Lds03(krosc::Context& context, std::string port, std::string topic, std::string frame_id,
-             double mount_x, bool reverse, bool body_filter, int baud)
-    : krosc::sensor::Sensor(context), port_(std::move(port)), mount_x_(mount_x),
-      frame_id_(std::move(frame_id)), topic_(std::move(topic)), body_filter_(body_filter),
-      baud_(baud),
+Lds03Device::Lds03Device(std::string port, double mount_x, bool reverse, bool body_filter,
+                         int baud)
+    : port_(std::move(port)), mount_x_(mount_x), body_filter_(body_filter), baud_(baud),
       parser_(LdsParser::kBeams, reverse) {
   if (port_.empty()) {
     port_ = port_exists("/dev/tb3_lidar") ? "/dev/tb3_lidar" : "/dev/ttyUSB0";
   }
 }
 
-Lds03::~Lds03() { stop(); }
+Lds03Device::~Lds03Device() { stop(); }
 
-bool Lds03::on_activate() {
-  start();
-  return true;
-}
-
-bool Lds03::on_deactivate() {
-  stop();
-  return true;
-}
-
-bool Lds03::on_update(double time, double period) {
-  (void)time;
-  (void)period;
-  if (auto scan = take_scan(now())) {
-    if (!topic_.empty()) {
-      context().topics().publish<krosc::msgs::LaserScan>(topic_, std::move(*scan),
-                                                         krosc::QOS_SENSOR_DATA);
-    }
-  }
-  return connected_.load() && scan_age() <= 1.0;
-}
-
-void Lds03::start() {
+void Lds03Device::start() {
   if (reader_thread_.joinable()) {
     return;
   }
@@ -215,7 +190,7 @@ void Lds03::start() {
   reader_thread_ = std::thread([this] { reader_loop(); });
 }
 
-void Lds03::stop() {
+void Lds03Device::stop() {
   if (stop_.exchange(true)) {
     return;
   }
@@ -231,7 +206,7 @@ void Lds03::stop() {
   }
 }
 
-void Lds03::close_fd() {
+void Lds03Device::close_fd() {
   std::lock_guard<std::mutex> lock(fd_mutex_);
   if (fd_ >= 0) {
     close_serial(fd_);
@@ -240,7 +215,7 @@ void Lds03::close_fd() {
   connected_.store(false);
 }
 
-bool Lds03::send_line(const std::uint8_t* data, std::size_t size) {
+bool Lds03Device::send_line(const std::uint8_t* data, std::size_t size) {
   std::lock_guard<std::mutex> lock(fd_mutex_);
   if (fd_ < 0) {
     return false;
@@ -248,7 +223,7 @@ bool Lds03::send_line(const std::uint8_t* data, std::size_t size) {
   return write_bytes(fd_, data, size);
 }
 
-void Lds03::reader_loop() {
+void Lds03Device::reader_loop() {
   std::uint8_t buffer[4096];
   while (!stop_.load()) {
     int fd = -1;
@@ -320,7 +295,7 @@ void Lds03::reader_loop() {
   close_fd();
 }
 
-std::optional<krosc::msgs::LaserScan> Lds03::take_scan(double stamp) {
+std::optional<krosc::msgs::LaserScan> Lds03Device::take_scan(double stamp) {
   auto bins = parser_.take_scan();
   if (!bins) {
     return std::nullopt;
@@ -342,7 +317,6 @@ std::optional<krosc::msgs::LaserScan> Lds03::take_scan(double stamp) {
   }
   krosc::msgs::LaserScan scan;
   scan.header.stamp = stamp;
-  scan.header.frame_id = frame_id_;
   scan.angle_min = 0.0;
   scan.angle_max = 2.0 * kPi - increment;
   scan.angle_increment = increment;
@@ -358,7 +332,7 @@ std::optional<krosc::msgs::LaserScan> Lds03::take_scan(double stamp) {
   return scan;
 }
 
-double Lds03::scan_age() const {
+double Lds03Device::scan_age() const {
   std::lock_guard<std::mutex> lock(scan_time_mutex_);
   if (!has_scan_time_) {
     return std::numeric_limits<double>::infinity();

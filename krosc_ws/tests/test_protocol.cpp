@@ -4,7 +4,7 @@
 #include <utility>
 #include <vector>
 
-#include "hardwares/lds03/sensor/lds03.hpp"
+#include "hardwares/lds03/lds03_device.hpp"
 #include "hardwares/opencr/opencr_protocol.hpp"
 
 #include "test_framework.hpp"

@@ -3,62 +3,80 @@
 #include <stdexcept>
 #include <utility>
 
-#include "hardwares/opencr/sensor/opencr_imu.hpp"
+#include "controls/opencr/opencr_control.hpp"
+#include "sensors/lds03/lds03_sensor.hpp"
+#include "sensors/opencr/opencr_imu.hpp"
 
 namespace krosc_ws {
 
+namespace {
+
+krosc::hardware::HardwareConfig hw_config(std::string name, double read_period,
+                                          double write_period) {
+  krosc::hardware::HardwareConfig config;
+  config.name = std::move(name);
+  config.read_period = read_period;
+  config.write_period = write_period;
+  return config;
+}
+
+}  // namespace
+
 RealTurtleBot3::RealTurtleBot3(krosc::Context& context, std::string opencr_port,
-                               std::string lidar_port, bool enable_lidar, SensorOptions options)
+                               std::string lidar_port, bool enable_lidar, HardwareOptions options)
     : context_(context),
-      opencr_(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0, kMaxWheel),
-      sensors_(options.workers) {
-  // 이 로봇은 두 모터 모두 +속도 = 뒤로 (ROS robot.yaml left_dir/right_dir = -1).
+      opencr_(kWheelRadius, kWheelSeparation, std::move(opencr_port), 115200, 0.02, 0.5, -1.0, -1.0,
+              kMaxWheel) {
+  // 이 로봇은 두 모터 모두 +속도 = 뒤로 (robot.yaml left_dir/right_dir = -1).
+  auto control = std::make_unique<OpenCrControl>(opencr_, kWheelRadius, kWheelSeparation);
+  control_ = control.get();
+  if (!hardware_.add(std::move(control),
+                     hw_config("opencr_control", options.control_read_period,
+                               options.control_write_period))) {
+    throw std::runtime_error("RealTurtleBot3: OpenCR control 등록 실패");
+  }
+
   auto imu = std::make_unique<OpenCrImu>(context_, opencr_, options.imu_topic, options.imu_frame);
-  if (!sensors_.add("imu", options.imu_period, std::move(imu))) {
-    throw std::runtime_error("RealTurtleBot3: IMU 센서를 등록하지 못했다 (imu 주기 확인)");
+  if (!hardware_.add(std::move(imu), hw_config("opencr_imu", options.imu_period, 0.0))) {
+    throw std::runtime_error("RealTurtleBot3: IMU 등록 실패 (imu 주기 확인)");
   }
 
   if (enable_lidar) {
-    auto lidar = std::make_unique<Lds03>(context_, std::move(lidar_port), options.scan_topic,
-                                         options.scan_frame, kLidarMountX, true, true);
-    lidar_ = lidar.get();
-    if (!sensors_.add("lidar", options.scan_period, std::move(lidar))) {
-      throw std::runtime_error("RealTurtleBot3: 라이다 센서를 등록하지 못했다 (scan 주기 확인)");
+    lidar_ = std::make_unique<Lds03Device>(std::move(lidar_port), kLidarMountX, true, true);
+    auto scan = std::make_unique<Lds03Sensor>(context_, *lidar_, options.scan_topic,
+                                              options.scan_frame);
+    if (!hardware_.add(std::move(scan), hw_config("lds03_scan", options.scan_period, 0.0))) {
+      throw std::runtime_error("RealTurtleBot3: LDS-03 등록 실패 (scan 주기 확인)");
     }
   }
+  options_ = options;
+  // TurtleBot3Driver가 부팅 직후 팔 토크/명령을 보낼 수 있도록 시리얼은 먼저 연다.
+  // HardwareManager.start()의 OpenCrControl::start()는 idempotent하다.
   opencr_.start();
-  if (!sensors_.start()) {
-    stop();
-    throw std::runtime_error("RealTurtleBot3: 센서 초기화 실패");
-  }
 }
 
 RealTurtleBot3::~RealTurtleBot3() { stop(); }
 
-void RealTurtleBot3::tick() { opencr_.tick(); }
-
-void RealTurtleBot3::stop() {
-  // 프로세스 종료 경로다. Context가 살아 있을 때 센서 on_finish()까지 부른다.
-  sensors_.finish();
-  opencr_.stop();
+bool RealTurtleBot3::start(std::function<void(double time, double period)> control_tick) {
+  if (started_) {
+    return false;
+  }
+  if (control_tick) {
+    hardware_.set_control_hook(std::move(control_tick), options_.control_period);
+  }
+  if (!hardware_.start()) {
+    return false;
+  }
+  started_ = true;
+  return true;
 }
 
-std::map<std::string, double> RealTurtleBot3::joint_positions() const {
-  std::map<std::string, double> joints{{"wheel_left_joint", opencr_.left_position()},
-                                       {"wheel_right_joint", opencr_.right_position()}};
-  const ArmStatus arm = opencr_.arm_status();
-  if (arm.present) {
-    for (std::size_t i = 0; i < 4; ++i) {
-      if (std::isfinite(arm.position[i])) {
-        joints["joint" + std::to_string(i + 1)] = arm.position[i];
-      }
-    }
-    if (std::isfinite(arm.position[4])) {
-      joints["gripper_left_joint"] = arm.position[4];
-      joints["gripper_right_joint"] = arm.position[4];
-    }
+void RealTurtleBot3::stop() {
+  if (!started_) {
+    return;
   }
-  return joints;
+  hardware_.stop();
+  started_ = false;
 }
 
 }  // namespace krosc_ws

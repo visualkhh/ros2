@@ -26,7 +26,6 @@ add_library(krosc_core STATIC
   core/tf/tf_ros.cpp
   core/urdf.cpp
   core/manipulation/arm_chain.cpp
-  core/sensor/sensor_manager.cpp
   core/hardware/hardware_manager.cpp
   core/nodes/cartographer.cpp
   core/nodes/collision_monitor.cpp
@@ -100,7 +99,6 @@ if(KROSC_BUILD_TESTS)
     tests/test_net.cpp
     tests/test_nav2.cpp
     tests/test_control.cpp
-    tests/test_sensor.cpp
     tests/test_hardware_manager.cpp
     tests/test_concurrency.cpp
   )

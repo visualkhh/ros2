@@ -345,20 +345,19 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
   `switch_controller` 서비스
 - command interface는 한 컨트롤러만 잡을 수 있다 (ROS 2와 같은 규칙)
 
-센서는 `sensor` 레이어를 따른다:
+물리/논리 레이어는 이렇게 나뉜다:
 
-- `Sensor`: `on_init → on_activate → on_update → on_deactivate → on_finish`
-  (on_error로 init/activate/update/deactivate 실패를 구현체가 직접 처리)
-- `SensorManager`: `add(name, period, sensor)`로 등록한다. 스케줄러 스레드가 due인 센서를
-  Executor 워커 풀로 post하고(기본 10, `--sensor-workers`), 이전 `on_update()`가 안 끝났으면 그 주기를 건너뛴다
-- 발행 토픽/프레임은 구현체 생성자가 소유한다 (`Lds03`, `OpenCrImu`)
-- LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)를 각자 발행한다
+- `hardwares/`: 물리 장치만 (`opencr`, `lds03`)
+- `controls/opencr/`: state/command interface와 명령 매핑 (`ControlInterface`)
+- `sensors/opencr/`: IMU 읽기 → `imu` 발행
+- `sensors/lds03/`: 스캔 읽기 → `scan` 발행
+- `HardwareManager`: `HardwareConfig{name, read_period, write_period}`로 등록하고
+  `read → control hook → write` 순서로 실행한다. 주기는 Hardware 안이 아니라 등록 구조체에 있다
+- control hook은 `controller_manager.update()`다. `RealTurtleBot3`가 소유/조립한다
+- LDS-03은 `scan`/`base_scan`(기본 10Hz), OpenCR IMU는 `imu`/`imu_link`(기본 50Hz)
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`,
-  `--executor-threads`, `--sensor-workers`
-  (환경 변수 `KROSC_SCAN_TOPIC`, `KROSC_IMU_TOPIC`, `KROSC_EXECUTOR_THREADS`,
-  `KROSC_SENSOR_WORKERS`)
+  `--executor-threads` (환경 변수 `KROSC_SCAN_TOPIC`, `KROSC_IMU_TOPIC`, `KROSC_EXECUTOR_THREADS`)
 - 로봇 main은 `Context::executor_threads`를 기본 10으로 켠다 (라이브러리 기본은 0=inline)
-- `RealTurtleBot3::tick()`은 OpenCR 시리얼만 돌리고, 센서 루프는 SensorManager가 담당한다
 
 - 그룹: `base_link` → `end_effector_link`, 관절 `joint1`~`joint4`
 - 목표: TCP `x,y,z` + 접근 `pitch` (4축이라 full 6D는 불가)
@@ -373,10 +372,11 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, MoveIt 플러그인/노드는
 `krosc/engine/include/krosc/nodes/moveit/`와 `krosc/engine/core/nodes/moveit/move_group.cpp`에 있다.
 control 레이어는 `krosc/engine/include/krosc/control/`, 실기 하드웨어 플러그인은
-`krosc_ws/robot/hardwares/opencr/control/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
-LDS-03은 `krosc::sensor::Sensor`(on_init → on_activate → on_update → on_deactivate → on_finish)를 따르며
-`krosc_ws/robot/hardwares/lds03/sensor/lds03.cpp`에 있다. 센서 레이어는
-`krosc/engine/include/krosc/sensor/`에 있고 `SensorManager`가 주기 실행과 수명주기를 묶는다.
+`krosc_ws/robot/controls/opencr/opencr_control.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
+LDS-03은 물리 장치 `hardwares/lds03/lds03_device.cpp`와
+scan을 발행하는 sensor 논리 레이어 `sensors/lds03/lds03_sensor.cpp`로 나뉜다.
+OpenCR은 물리 `hardwares/opencr/opencr_serial.cpp`, 제어 `controls/opencr/opencr_control.cpp`,
+IMU `sensors/opencr/opencr_imu.cpp`로 나뉘고 `HardwareManager`가 read/write 주기로 실행한다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
 ## 구성
@@ -384,24 +384,27 @@ Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 �
 ```
 krosc_ws/
 ├── robot/                       # 로봇(Pi) 앱
-│   ├── main.cpp                 # 100Hz 실시간 루프, 노드 조립, TCP 서버
-│   ├── turtlebot3_driver.cpp/.hpp # scan/imu/arm_status/diagnostics, 팔 서비스
+│   ├── main.cpp                 # 노드 조립, TCP 서버, 진단 루프
+│   ├── turtlebot3_driver.cpp/.hpp # arm_status/diagnostics, 팔 서비스
 │   ├── real_turtlebot3.cpp/.hpp # 이 로봇의 치수/장착 위치/시리얼 조립
 │   ├── nodes/rl_nav_controller.cpp/.hpp # NavControllerPlugin (RL + fallback)
 │   ├── ml/onnx_policy.cpp/.hpp  # ONNX Runtime (CUDA/CoreML → CPU)
 │   ├── ml/model_catalog.hpp     # artifacts/models/rl_nav_controller 스캔
-│   ├── hardwares/
+│   ├── hardwares/               # 물리 장치만
 │   │   ├── serial.cpp/.hpp          # POSIX termios (공용)
 │   │   ├── opencr/
 │   │   │   ├── opencr_serial.cpp/.hpp   # hardware::Hardware + 시리얼 읽기/캐시
-│   │   │   ├── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서
-│   │   │   ├── control/
-│   │   │   │   └── opencr_system.cpp/.hpp # control ControlInterface (바퀴+팔)
-│   │   │   └── sensor/
-│   │   │       └── opencr_imu.cpp/.hpp # OpenCR IMU -> imu 토픽
+│   │   │   └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서
 │   │   └── lds03/
-│   │       └── sensor/
-│   │           └── lds03.cpp/.hpp   # sensor::Sensor(read-only) + scan 발행
+│   │       └── lds03_device.cpp/.hpp    # hardware::Hardware + 패킷 파서
+│   ├── controls/                # 논리 제어
+│   │   └── opencr/
+│   │       └── opencr_control.cpp/.hpp  # ControlInterface (바퀴+팔)
+│   ├── sensors/                 # 논리 센서
+│   │   ├── opencr/
+│   │   │   └── opencr_imu.cpp/.hpp      # IMU -> imu 토픽
+│   │   └── lds03/
+│   │       └── lds03_sensor.cpp/.hpp    # scan -> scan 토픽
 │   └── description/urdf/turtlebot3_real.urdf
 ├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp

@@ -148,12 +148,11 @@ krosc/
 │   ├── CMakeLists.txt
 │   ├── include/krosc/             # node/context/topic/tf/time/parameter/service/action/msgs/net(rpc)
 │   │   ├── nodes/                 # DiffDriveOdometry, Ekf, robot_state_publisher, TfEcho, TwistMux, MapServer/MapSaver, nav2
-│   │   ├── control/               # controller_manager, JSB/JTC/forward/diff_drive
-│   │   ├── sensor/                # Sensor/SensorManager (read-only 센서 수명주기)
-│   │   ├── hardware/              # Hardware (물리 장치 start/stop/connected)
+│   │   ├── control/               # ControllerManager, JSB/JTC/forward/diff_drive
+│   │   ├── hardware/              # Hardware/HardwareManager (장치 read/write 주기)
 │   │   └── moveit/                # kinematics/planner/controller_manager 플러그인 + move_group
 │   ├── core/                      # 라이브러리 소스
-│   ├── tests/                     # core 66 tests (nav2/control/hardware/sensor/MoveIt/net/RPC 포함)
+│   ├── tests/                     # core 60 tests (nav2/control/hardware/MoveIt/net/RPC 포함)
 │   └── benchmarks/                # bench.cpp, nav2_bench.cpp, net_bench.cpp
 ├── simulator/                     # krosc_simulator (+ krosc_simulator_qt)
 │   ├── CMakeLists.txt
@@ -312,7 +311,7 @@ nav2 알고리즘 비교는 `krosc_nav2_bench`(C++)로 돌린다.
 
 ```bash
 ctest --test-dir build --output-on-failure
-# core 66 + sim 4 = 70 tests, 2 executables
+# core 60 + sim 4 = 64 tests, 2 executables
 ```
 
 동시성 스트레스(선택):
@@ -325,7 +324,7 @@ KROSC_STRESS=1 KROSC_TEST_FILTER=concurrency ./build/engine/krosc_core_tests
 - core: 토픽/타입 잠금/latch/depth, 실행기, 타이머(시뮬/실시간), 파라미터, TF(보간/순환/timeout), URDF, 서비스, 액션, RSP, odometry, twist_mux, map_server/map_saver
 - nav2: costmap 레이어/inflation, Navfn·Theta*·Smac2D·SmacHybrid, RPP·DWB·MPPI·RotationShim, planner/controller/behavior server, bt_navigator (계획·주행·취소)
 - control: controller_manager(수명주기/서비스/command interface 점유), joint_state_broadcaster, joint_trajectory_controller, forward_command_controller, diff_drive_controller
-- sensor: Sensor lifecycle(init/activate/update/deactivate/finish/error), SensorManager(주기 스케줄러 + Executor 워커 풀 기본 10, 실패 롤백/집계)
+- hardware: Hardware lifecycle, HardwareManager가 등록 구조체의 read/write 주기로 실행, read→control→write 순서와 실패 집계
 - MoveIt: kinematics/planner/controller_manager 플러그인, move_group(move_action + move_group/scrub + 상태 토픽), 실제 OpenMANIPULATOR URDF IK/궤적 end-to-end
 - RPC: 서비스/액션/파라미터 포워딩(discovery, timeout, latched), 웹 JSON RPC
 - sim: 레이/직진, scan/imu/odom/filtered 발행 + EKF, SimulationRunner
