@@ -14,16 +14,16 @@ set(KROSC_BUILD_EXAMPLES OFF)
 add_subdirectory(../krosc/engine engine_build)
 
 set(KROSC_REAL_SOURCES
-  robot/main.cpp
-  robot/robot.cpp
-  robot/nodes/robot_status.cpp
-  robot/controls/opencr/opencr_control.cpp
-  robot/hardwares/lds03/lds03_device.cpp
-  robot/sensors/lds03/lds03_sensor.cpp
-  robot/sensors/opencr/opencr_imu.cpp
-  robot/hardwares/opencr/opencr_protocol.cpp
-  robot/hardwares/opencr/opencr_serial.cpp
-  robot/hardwares/serial.cpp
+  engine/main.cpp
+  engine/robot.cpp
+  engine/nodes/robot_status.cpp
+  engine/controls/opencr/opencr_control.cpp
+  engine/hardwares/lds03/lds03_device.cpp
+  engine/sensors/lds03/lds03_sensor.cpp
+  engine/sensors/opencr/opencr_imu.cpp
+  engine/hardwares/opencr/opencr_protocol.cpp
+  engine/hardwares/opencr/opencr_serial.cpp
+  engine/hardwares/serial.cpp
 )
 
 # RL nav: ONNX Runtime을 찾으면 GPU(CUDA/CoreML) → CPU 순으로 쓴다.
@@ -35,8 +35,8 @@ set(KROSC_WS_ONNXRUNTIME_ROOT "/opt/ros/lyrical/opt/onnxruntime_vendor" CACHE PA
 set(KROSC_WS_RL_NAV_FOUND OFF)
 if(KROSC_WS_BUILD_RL_NAV)
   list(APPEND KROSC_REAL_SOURCES
-    robot/ml/onnx_policy.cpp
-    robot/nodes/rl_nav_controller.cpp)
+    engine/ml/onnx_policy.cpp
+    engine/nodes/rl_nav_controller.cpp)
   find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
     HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT ENV HOMEBREW_PREFIX
     PATH_SUFFIXES include include/onnxruntime)
@@ -53,11 +53,11 @@ endif()
 add_executable(krosc_real ${KROSC_REAL_SOURCES})
 
 target_include_directories(krosc_real PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/robot
+  ${CMAKE_CURRENT_SOURCE_DIR}/engine
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(krosc_real PRIVATE krosc::core)
 target_compile_definitions(krosc_real PRIVATE
-  KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
+  KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/urdf/turtlebot3_real.urdf"
   KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"
   KROSC_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models"
 )
@@ -84,16 +84,19 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
 
   add_executable(krosc_ws_simulator
     simulator/main.cpp
-    simulator/sim_hardware.cpp
-    simulator/map_publisher.cpp
-    robot/robot.cpp
-    robot/nodes/robot_status.cpp
-    robot/controls/opencr/opencr_control.cpp
-    robot/sensors/lds03/lds03_sensor.cpp
-    robot/sensors/opencr/opencr_imu.cpp
+    simulator/hardwares/opencr/simulator_opencr.cpp
+    simulator/hardwares/lds03/simulator_lds.cpp
+    simulator/robot/waffle_pi_arm.cpp
+    simulator/robot/urdf_robot_visualizer.cpp
+    simulator/panels/arm_panel.cpp
+    engine/robot.cpp
+    engine/nodes/robot_status.cpp
+    engine/controls/opencr/opencr_control.cpp
+    engine/sensors/lds03/lds03_sensor.cpp
+    engine/sensors/opencr/opencr_imu.cpp
   )
   target_include_directories(krosc_ws_simulator PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/robot
+    ${CMAKE_CURRENT_SOURCE_DIR}/engine
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/simulator)
   if(NOT TARGET krosc::simulator_qt)
@@ -102,7 +105,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
   target_link_libraries(krosc_ws_simulator PRIVATE
     krosc::core krosc::simulator_assets krosc::simulator krosc::simulator_qt)
   target_compile_definitions(krosc_ws_simulator PRIVATE
-    KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
+    KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/simulator/robot/urdf/turtlebot3_real.urdf"
     KROSC_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps")
   target_compile_options(krosc_ws_simulator PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -116,22 +119,30 @@ if(KROSC_WS_BUILD_TESTS)
     tests/test_moveit_stack.cpp
     tests/test_models.cpp
     tests/test_rl_nav_plugin.cpp
-    robot/ml/onnx_policy.cpp
-    robot/nodes/rl_nav_controller.cpp
-    robot/hardwares/lds03/lds03_device.cpp
-    robot/hardwares/opencr/opencr_protocol.cpp
-    robot/hardwares/opencr/opencr_serial.cpp
-    robot/hardwares/serial.cpp
+    engine/ml/onnx_policy.cpp
+    engine/nodes/rl_nav_controller.cpp
+    engine/hardwares/lds03/lds03_device.cpp
+    engine/hardwares/opencr/opencr_protocol.cpp
+    engine/hardwares/opencr/opencr_serial.cpp
+    engine/hardwares/serial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests/test_main.cpp
   )
   target_include_directories(krosc_ws_tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/robot
+    ${CMAKE_CURRENT_SOURCE_DIR}/engine
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests
   )
   target_link_libraries(krosc_ws_tests PRIVATE krosc::core)
+  if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
+    target_sources(krosc_ws_tests PRIVATE
+      tests/test_sim_robot.cpp
+      simulator/robot/waffle_pi_arm.cpp
+      simulator/robot/urdf_robot_visualizer.cpp)
+    target_include_directories(krosc_ws_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/simulator)
+    target_link_libraries(krosc_ws_tests PRIVATE krosc::simulator_assets)
+  endif()
   target_compile_definitions(krosc_ws_tests PRIVATE
-    KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/robot/description/urdf/turtlebot3_real.urdf"
+    KROSC_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/urdf/turtlebot3_real.urdf"
     KROSC_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models")
   if(KROSC_WS_RL_NAV_FOUND)
     target_include_directories(krosc_ws_tests PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})

@@ -3,7 +3,7 @@
 #include <string>
 
 #include "krosc/node.hpp"
-#include "krosc/simulator/objects/turtlebot3.hpp"
+#include "krosc/simulator/robots/turtlebot/turtlebot.hpp"
 #include "krosc/time/timer.hpp"
 
 namespace krosc::simulator {

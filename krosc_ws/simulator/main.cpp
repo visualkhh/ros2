@@ -15,19 +15,21 @@
 #include "krosc/msgs.hpp"
 #include "krosc/node.hpp"
 #include "krosc/qos.hpp"
-#include "map_publisher.hpp"
 #include "krosc/simulator/worlds/maze_world.hpp"
-#include "krosc/simulator/objects/turtlebot3.hpp"
+#include "krosc/simulator/robots/turtlebot/turtlebot.hpp"
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/snapshot.hpp"
-#include "krosc/simulator/view_window.hpp"
+#include "krosc/simulator/simulator_window.hpp"
 #include "krosc/time/time.hpp"
 
+#include "panels/arm_panel.hpp"
 #include "robot.hpp"
-#include "sim_hardware.hpp"
+#include "robot/waffle_pi_arm.hpp"
+#include "hardwares/lds03/simulator_lds.hpp"
+#include "hardwares/opencr/simulator_opencr.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
-#define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"
+#define KROSC_WS_URDF_PATH "simulator/robot/urdf/turtlebot3_real.urdf"
 #endif
 #ifndef KROSC_WS_MAPS_DIR
 #define KROSC_WS_MAPS_DIR "artifacts/maps"
@@ -98,19 +100,15 @@ int main(int argc, char** argv) {
   krosc::Node ui_node(context, "sim_ui");
 
   auto world = std::make_unique<krosc::simulator::MazeWorld>(pucks, seed);
-  auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(noisy, seed);
-  auto* robot_model = static_cast<krosc::simulator::TurtleBot3*>(
+  auto robot_holder = std::make_unique<krosc_ws::sim::WafflePiArm>(noisy, seed, KROSC_WS_URDF_PATH);
+  auto* robot_model = static_cast<krosc_ws::sim::WafflePiArm*>(
       world->add(std::move(robot_holder)));
+  robot_model->set_manual_arm(!arm);
 
-  // 정적 MazeWorld 지도 모드에서만 map→odom을 미리 발행한다.
-  std::unique_ptr<krosc::simulator::MapPublisher> map_publisher;
-  if (!slam) {
-    map_publisher = std::make_unique<krosc::simulator::MapPublisher>(context, world->walls());
-  }
   krosc::simulator::Simulator simulator(context, *world, *robot_model);
 
-  krosc_ws::sim::SimOpenCr opencr(*robot_model);
-  krosc_ws::sim::SimLds lds(*robot_model);
+  krosc_ws::sim::SimulatorOpenCr opencr(*robot_model);
+  krosc_ws::sim::SimulatorLds lds(*robot_model);
 
   krosc_ws::RobotOptions options;
   options.urdf_path = KROSC_WS_URDF_PATH;
@@ -136,8 +134,9 @@ int main(int argc, char** argv) {
   options.control_period = 0.01;
 
   krosc_ws::Robot robot(context, opencr, &lds, options);
-  krosc::simulator::SimWindow window(world->walls(), simulator.snapshots(), ui_node,
-                                     "cmd_vel_teleop");
+  auto* arm_panel = new krosc_ws::sim::ArmPanel(*robot_model);
+  krosc::simulator::SimulatorWindow window(world->walls(), simulator.snapshots(), ui_node,
+                                     "cmd_vel_teleop", {arm_panel});
   window.show();
   window.raise();
   window.activateWindow();
@@ -147,11 +146,6 @@ int main(int argc, char** argv) {
     std::cerr << "[krosc_ws_sim] 로봇 시작 실패\n";
     simulator.stop();
     return 1;
-  }
-  if (!slam) {
-    // Cartographer는 idle 상태를 발행하지만, 시뮬레이터는 MazeWorld 정적 지도와
-    // map→odom을 이미 갖고 있으므로 Viz에는 localization으로 알린다.
-    ui_node.publish("slam_status", krosc::msgs::String{"localization"}, krosc::QOS_LATCHED);
   }
 
   std::printf("[krosc_ws_sim] world: pucks=%d seed=%u port=%d\n", pucks, seed, port);

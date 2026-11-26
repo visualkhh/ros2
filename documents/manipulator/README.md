@@ -10,7 +10,7 @@
   `joint_state_broadcaster`가 `joint_states`를 발행한다. 팔 명령은 `joint_trajectory_controller`가
   `FollowJointTrajectory` 액션으로 받아 `OpenCrSystem` command interface → `A`로 보낸다.
   수동 `arm_joint_command`는 `forward_command_controller`가 활성일 때 같은 경로를 쓴다.
-  URDF는 `robot/description/urdf/turtlebot3_real.urdf`.
+  URDF는 `krosc_ws/engine/description/urdf/turtlebot3_real.urdf`.
 
 ## 할 일
 

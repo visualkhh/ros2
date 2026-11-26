@@ -6,7 +6,7 @@
 | 패키지 | 내용 |
 |---|---|
 | `core/` | ROS 프레임워크: Node, 토픽+QoS, TF, 타이머, 파라미터, 서비스, 메시지, URDF, 기본 노드, **PeerNetwork 토픽 mesh(9000)** |
-| `sim/` | **진실 시뮬레이션**: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, Snapshot, **Qt SimWindow** |
+| `sim/` | **진실 시뮬레이션**: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, Snapshot, **Qt SimulatorWindow** |
 | `viz/` | **토픽 뷰어**: rviz 스타일 Qt 화면 (TF, map, costmap, scan, odom/filtered, 경로, 로그, 패널, teleop, **URDF visual STL 메시**) + **원격 `--server` 모드** |
 | `viz-web/` | **브라우저 Viz**: 로봇과 `PeerNetwork`로 토픽을 주고받고 HTTP+WebSocket으로 브라우저에 넘기는 경량 웹 게이트웨이. `www/plugins/*.js`로 패널을 붙인다 |
 | `simulator/` | **시뮬레이터 앱/코어**(스캔 10Hz): MazeWorld + TurtleBot3 + ROS 브리지 + EKF를 Context에 조립하고, `Simulator`가 Runner/스냅샷을 소유한다 (`--server`로 원격 Viz) |
@@ -14,7 +14,7 @@
 
 ![krosc sim(truth) + viz, noVNC로 본 리눅스 데스크톱](docs/vnc.png)
 
-*왼쪽 `SimWindow`(진실), 오른쪽 `VizWindow`(토픽). 이 화면은 Docker의 Ubuntu 26.04 안에서 두 Qt 창을 띄우고,
+*왼쪽 `SimulatorWindow`(진실), 오른쪽 `VizWindow`(토픽). 이 화면은 Docker의 Ubuntu 26.04 안에서 두 Qt 창을 띄우고,
 맥 브라우저(noVNC)로 그대로 본 것이다.*
 
 원격 모드 검증 (같은 TCP 경로, 로컬 서버 + 원격 viz): `docs/remote-viz.png`  
@@ -109,7 +109,7 @@ cmake --build build -j
 ./build/simulator/krosc_simulator
 ```
 
-`SimWindow`(진실)와 `VizWindow`(토픽) 두 창이 같이 뜬다. Docker 없이 바로 조종할 때 이 방법을 쓴다.
+`SimulatorWindow`(진실)와 `VizWindow`(토픽) 두 창이 같이 뜬다. Docker 없이 바로 조종할 때 이 방법을 쓴다.
 
 ## 데모
 
@@ -117,8 +117,8 @@ cmake --build build -j
 MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed 고정)
         │  Simulator(context, world, robot) — 코어는 월드/로봇을 소유하지 않는다
         │ tick 100Hz
-        ├─ SnapshotRecorder: SimRobot::state() + World 오브젝트 -> 불변 스냅샷
-        ├─ SimWindow: 월드/로봇/오브젝트/진실 라이다를 3D 투영 (L 키로 라이다 토글)
+        ├─ SnapshotRecorder: SimulatorRobot::state() + World 오브젝트 -> 불변 스냅샷
+        ├─ SimulatorWindow: 월드/로봇/오브젝트/진실 라이다를 3D 투영 (L 키로 라이다 토글)
         └─ 데모 앱(apps/demo)이 자기 ROS 접착제를 소유:
            ├─ RobotBridge: scan/imu/joint_states 발행, cmd_vel 수신
            ├─ DiffDriveOdometry: joint_states -> odom (TF는 끔)
@@ -128,7 +128,7 @@ MazeWorld(진실) ─ TurtleBot3(바퀴 슬립/IMU 잡음/라이다 잡음, seed
            └─ VizWindow: tf/tf_static, robot_description, map, scan, odom, filtered, 로그를 구독해 그린다
 ```
 
-두 화면의 차이가 핵심이다: `SimWindow`는 **진실**(시뮬레이션 내부), `VizWindow`는 **로봇이 토픽으로 내보낸 추정**을 보여 준다.
+두 화면의 차이가 핵심이다: `SimulatorWindow`는 **진실**(시뮬레이션 내부), `VizWindow`는 **로봇이 토픽으로 내보낸 추정**을 보여 준다.
 
 | 입력 | 동작 |
 |---|---|
@@ -162,10 +162,11 @@ krosc/
 │   ├── CMakeLists.txt
 │   ├── README.md                  # 월드/로봇 주입 구조
 │   ├── apps/demo/                 # krosc_simulator 실행기 + 데모 전용 ROS 브리지/맵 퍼블리셔
-│   ├── include/krosc/simulator/   # Simulator, World, SimRobot, runner, snapshot, view_window
+│   ├── include/krosc/simulator/   # Simulator, World, SimulatorRobot, runner, snapshot, simulator_window
 │   ├── core/                      # Simulator/스냅샷/러너/Qt truth view
 │   ├── worlds/                    # MazeWorld, RoomWorld
-│   ├── objects/                   # Puck, Box/CylinderObstacle, TurtleBot3
+│   ├── objects/                   # Puck, Box/CylinderObstacle
+│   ├── robots/                    # TurtleBot3 + turtlebot.urdf
 │   └── tests/                     # simulator 4 tests
 ├── viz/                           # krosc_viz (Qt6 Widgets)
 │   ├── CMakeLists.txt
@@ -187,7 +188,7 @@ Docker 설정은 저장소 루트의 `../docker/`에 있다.
 
 - `core`: C++20 표준 라이브러리 + pthread (Eigen/numpy 없음)
 - `sim`: `core`의 메시지 타입 + pthread. **Qt가 없어도 물리/테스트는 빌드된다.**
-- `sim_qt`: `sim` + Qt6 Widgets (`SimWindow`)
+- `sim_qt`: `sim` + Qt6 Widgets (`SimulatorWindow`)
 - `viz`: `core` + Qt6 Widgets (`VizWindow`)
 - `viz_web`: 표준 라이브러리 + pthread만 (Qt/Node 없음). `VizWeb`이 로봇 TCP 프레임을 WebSocket으로 중계
 - `examples`: `core` + `sim_qt` + `viz`
@@ -278,12 +279,18 @@ const auto response = node.call_service<krosc::msgs::SetBoolRequest, krosc::msgs
 
 ```cpp
 krosc::Krosc app(nullptr, network);  // network를 주면 Viz/VizWeb이 PeerNetwork로 붙는다
-krosc::simulator::Simulator simulator(
-    app.context(), {.noisy = true, .pucks = 10, .seed = 42,
-                    .urdf_path = "simulator/description/turtlebot3_waffle_pi.urdf"});
+auto world = std::make_unique<krosc::simulator::MazeWorld>(10, 42);
+auto robot_holder = std::make_unique<krosc::simulator::TurtleBot3>(true, 42);
+auto* robot = static_cast<krosc::simulator::TurtleBot3*>(
+    world->add(std::move(robot_holder)));
 
-krosc::simulator::SimWindow sim_window(
-    simulator.world().walls(), simulator.robot(), simulator.snapshots());
+// 데모 앱이 자기 ROS 노드/브리지를 소유한다.
+krosc::simulator::RobotBridge bridge(app.context(), *robot);
+krosc::simulator::MapPublisher map_publisher(app.context(), world->walls());
+krosc::simulator::Simulator simulator(app.context(), *world, *robot);
+
+krosc::simulator::SimulatorWindow sim_window(
+    world->walls(), simulator.snapshots(), bridge);
 sim_window.show();
 simulator.start();
 ```
@@ -421,7 +428,7 @@ ROS 2와 맞춘 노드 이름:
 - [x] URDF 파서 (링크/관절/visual/collision, xacro 인자 치환)
 - [x] DiffDriveOdometry, Ekf, RobotStatePublisher, TfEcho, TwistMux
 - [x] `sim` 패키지: MazeWorld, TurtleBot3(슬립/잡음), SimulationRunner, SnapshotRecorder
-- [x] `sim` Qt `SimWindow`: 진실 월드/퍽/로봇/잡음 없는 라이다 (QPainter 3D)
+- [x] `sim` Qt `SimulatorWindow`: 진실 월드/퍽/로봇/잡음 없는 라이다 (QPainter 3D)
 - [x] `viz` Qt `VizWindow`: 격자, TF 축, URDF, 라이다, odom/filtered, map/costmap, 경로, 궤적, 로그
 - [x] `viz` 코어 플러그인: `teleop`, `slam`, `navigation`, `manipulator` (VizWindow는 기반 UI만)
 - [x] TCP 원격 토픽(9000): 텔레메트리 + `cmd_vel`, latched 다중 tf_static, Mac `krosc_viz_app --server`
@@ -449,7 +456,7 @@ ROS 2와 맞춘 노드 이름:
 
 - 기존 파이썬 `../kros/`와는 별개다. 이름만 `krosc`로 구분한다.
 - noVNC는 로컬 개발용이다. 포트 6080을 밖에 열지 마라.
-- `viz`는 **토픽만** 본다. 진실은 `sim`의 `SimWindow`가 그린다. 같은 화면에서 바퀴 오도메트리/EKF가 진실에서
+- `viz`는 **토픽만** 본다. 진실은 `sim`의 `SimulatorWindow`가 그린다. 같은 화면에서 바퀴 오도메트리/EKF가 진실에서
   얼마나 벗어나는지 비교할 수 있다.
 - `.cpp` 스타일은 ROS 2 C++와 비슷하게 맞췄다: `Node::create_timer`, `publish`, `subscribe`, `declare_parameter`,
   `lookup_transform`, `send_transform`.

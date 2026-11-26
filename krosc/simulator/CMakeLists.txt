@@ -28,7 +28,7 @@ add_library(krosc_simulator_assets STATIC
   worlds/room_world.cpp
   objects/puck.cpp
   objects/obstacle.cpp
-  objects/turtlebot3.cpp
+  robots/turtlebot/turtlebot.cpp
 )
 add_library(krosc::simulator_assets ALIAS krosc_simulator_assets)
 target_include_directories(krosc_simulator_assets
@@ -53,8 +53,8 @@ if(Qt6_FOUND)
   endif()
   set(CMAKE_AUTOMOC ON)
   add_library(krosc_simulator_qt STATIC
-    core/view_window.cpp
-    include/krosc/simulator/view_window.hpp
+    core/simulator_window.cpp
+    include/krosc/simulator/simulator_window.hpp
   )
   add_library(krosc::simulator_qt ALIAS krosc_simulator_qt)
   target_include_directories(krosc_simulator_qt
@@ -79,12 +79,12 @@ if(Qt6_FOUND)
       krosc::viz
     )
     target_compile_definitions(krosc_simulator PRIVATE
-      KROSC_SIMULATOR_URDF="${CMAKE_CURRENT_SOURCE_DIR}/description/turtlebot3_waffle_pi.urdf"
+      KROSC_SIMULATOR_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/turtlebot/turtlebot.urdf"
     )
     target_compile_options(krosc_simulator_core PRIVATE -Wall -Wextra -Wpedantic)
   endif()
 else()
-  message(STATUS "krosc/simulator: Qt6를 찾지 못해 SimWindow/앱은 건너뛴다")
+  message(STATUS "krosc/simulator: Qt6를 찾지 못해 SimulatorWindow/앱은 건너뛴다")
 endif()
 
 if(KROSC_BUILD_TESTS)
@@ -95,7 +95,7 @@ if(KROSC_BUILD_TESTS)
   target_include_directories(krosc_simulator_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../engine/tests)
   target_link_libraries(krosc_simulator_tests PRIVATE krosc::simulator_assets)
   target_compile_definitions(krosc_simulator_tests PRIVATE
-    KROSC_SIMULATOR_URDF="${CMAKE_CURRENT_SOURCE_DIR}/description/turtlebot3_waffle_pi.urdf"
+    KROSC_SIMULATOR_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/turtlebot/turtlebot.urdf"
   )
   target_compile_options(krosc_simulator_tests PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME krosc_simulator_tests COMMAND krosc_simulator_tests)

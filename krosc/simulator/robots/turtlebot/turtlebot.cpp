@@ -1,4 +1,4 @@
-#include "krosc/simulator/objects/turtlebot3.hpp"
+#include "krosc/simulator/robots/turtlebot/turtlebot.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -32,6 +32,28 @@ double quantize(double angle, int ticks_per_rev) {
   return std::round(angle / step) * step;
 }
 
+RobotVisual box_visual(const msgs::Transform& transform, std::array<double, 3> size,
+                       std::array<double, 3> color) {
+  RobotVisual visual;
+  visual.type = RobotVisualType::Box;
+  visual.transform = transform;
+  visual.size = size;
+  visual.color = color;
+  return visual;
+}
+
+RobotVisual cylinder_visual(const msgs::Transform& transform, double radius, double length,
+                            int sides, std::array<double, 3> color) {
+  RobotVisual visual;
+  visual.type = RobotVisualType::Cylinder;
+  visual.transform = transform;
+  visual.radius = radius;
+  visual.length = length;
+  visual.sides = sides;
+  visual.color = color;
+  return visual;
+}
+
 }  // namespace
 
 TurtleBot3::TurtleBot3(bool noisy, std::optional<std::uint32_t> seed)
@@ -62,6 +84,24 @@ RobotState TurtleBot3::state() const {
     result.scan_ranges = truth_scan_ranges_;
     result.scan_pose = truth_scan_pose_;
   }
+
+  const msgs::Transform base{{pose.x, pose.y, 0.0}, tfmath::from_yaw(pose.theta)};
+  const auto local = [&](double x, double y, double z, const msgs::Quaternion& rotation = {}) {
+    return tfmath::compose(base, {{x, y, z}, rotation});
+  };
+  result.visuals.push_back(
+      box_visual(local(0.0, 0.0, 0.057), {0.266, 0.266, 0.094}, {0.765, 0.792, 0.847}));
+  result.visuals.push_back(
+      box_visual(local(0.073, -0.011, 0.084), {0.04, 0.03, 0.03}, {0.216, 0.227, 0.259}));
+  result.visuals.push_back(
+      cylinder_visual(local(-0.064, 0.0, 0.132), 0.035, 0.03, 16, {0.255, 0.267, 0.306}));
+  const msgs::Quaternion wheel_rotation = tfmath::from_rpy(kPi / 2.0, 0.0, 0.0);
+  for (double side : {-1.0, 1.0}) {
+    result.visuals.push_back(cylinder_visual(local(0.0, side * 0.144, 0.023, wheel_rotation),
+                                             0.033, 0.018, 16, {0.176, 0.184, 0.212}));
+    result.visuals.push_back(box_visual(local(-0.177, side * 0.064, 0.01),
+                                        {0.03, 0.009, 0.02}, {0.353, 0.369, 0.408}));
+  }
   return result;
 }
 
@@ -86,8 +126,14 @@ void TurtleBot3::tick(double time, double dt) {
     right_position_ = noisy_ ? quantize(right_angle_, kEncoderTicks) : right_angle_;
   }
 
-  const double contact_left = noisy_ ? left_slip_.apply(left_velocity_, rng_) : left_velocity_;
-  const double contact_right = noisy_ ? right_slip_.apply(right_velocity_, rng_) : right_velocity_;
+  // 정지 중에는 바퀴 슬립 잡음을 넣지 않는다. 실제 바퀴도 구동하지 않으면
+  // 제자리에서 랜덤하게 굴러가지 않는다.
+  const double contact_left =
+      noisy_ && std::abs(left_velocity_) > 1e-6 ? left_slip_.apply(left_velocity_, rng_)
+                                                : left_velocity_;
+  const double contact_right =
+      noisy_ && std::abs(right_velocity_) > 1e-6 ? right_slip_.apply(right_velocity_, rng_)
+                                                 : right_velocity_;
   const double linear = kWheelRadius * (contact_left + contact_right) / 2.0;
   const double angular = kWheelRadius * (contact_right - contact_left) / kWheelSeparation;
   apply_motion(dt, linear, angular);

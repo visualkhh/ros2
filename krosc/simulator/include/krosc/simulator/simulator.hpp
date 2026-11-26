@@ -23,7 +23,7 @@ struct SimulatorOptions {
 
 class Simulator {
  public:
-  Simulator(krosc::Context& context, World& world, SimRobot& robot,
+  Simulator(krosc::Context& context, World& world, SimulatorRobot& robot,
             SimulatorOptions options = {});
   ~Simulator();
 
@@ -34,7 +34,7 @@ class Simulator {
   void stop();
 
   [[nodiscard]] World& world();
-  [[nodiscard]] SimRobot& robot();
+  [[nodiscard]] SimulatorRobot& robot();
   [[nodiscard]] SimulationRunner& runner();
   [[nodiscard]] SnapshotStore& snapshots();
   [[nodiscard]] const SnapshotStore& snapshots() const;

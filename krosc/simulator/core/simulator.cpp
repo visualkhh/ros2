@@ -10,12 +10,12 @@
 namespace krosc::simulator {
 
 struct Simulator::Impl {
-  Impl(krosc::Context& context_value, World& world_value, SimRobot& robot_value,
+  Impl(krosc::Context& context_value, World& world_value, SimulatorRobot& robot_value,
        const SimulatorOptions& options)
       : world(world_value), robot(robot_value), recorder(world_value, robot_value),
         runner(world_value, options.step_hz) {
     if (robot.world != &world) {
-      throw std::invalid_argument("SimRobot을 먼저 World::add()로 월드에 넣어야 한다");
+      throw std::invalid_argument("SimulatorRobot을 먼저 World::add()로 월드에 넣어야 한다");
     }
     auto* time_source = dynamic_cast<SimulatedTimeSource*>(&context_value.time_source());
     runner.add_listener([this, time_source](World& current) {
@@ -29,13 +29,13 @@ struct Simulator::Impl {
   ~Impl() { runner.stop(); }
 
   World& world;
-  SimRobot& robot;
+  SimulatorRobot& robot;
   SnapshotRecorder recorder;
   SimulationRunner runner;
   bool started = false;
 };
 
-Simulator::Simulator(krosc::Context& context, World& world, SimRobot& robot,
+Simulator::Simulator(krosc::Context& context, World& world, SimulatorRobot& robot,
                      SimulatorOptions options)
     : impl_(std::make_unique<Impl>(context, world, robot, options)) {}
 
@@ -58,7 +58,7 @@ void Simulator::stop() {
 }
 
 World& Simulator::world() { return impl_->world; }
-SimRobot& Simulator::robot() { return impl_->robot; }
+SimulatorRobot& Simulator::robot() { return impl_->robot; }
 SimulationRunner& Simulator::runner() { return impl_->runner; }
 SnapshotStore& Simulator::snapshots() { return impl_->recorder.store(); }
 const SnapshotStore& Simulator::snapshots() const { return impl_->recorder.store(); }

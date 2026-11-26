@@ -14,7 +14,7 @@
 #include "krosc/simulator/simulator.hpp"
 #include "krosc/simulator/worlds/maze_world.hpp"
 #include "krosc/simulator/runner.hpp"
-#include "krosc/simulator/objects/turtlebot3.hpp"
+#include "krosc/simulator/robots/turtlebot/turtlebot.hpp"
 #include "krosc/tf/tf_ros.hpp"
 #include "krosc/time/time.hpp"
 

@@ -4,21 +4,21 @@
 
 namespace krosc::simulator {
 
-void SnapshotStore::set(std::shared_ptr<const SimSnapshot> snapshot) {
+void SnapshotStore::set(std::shared_ptr<const SimulatorSnapshot> snapshot) {
   std::lock_guard<std::mutex> lock(mutex_);
   latest_ = std::move(snapshot);
 }
 
-std::shared_ptr<const SimSnapshot> SnapshotStore::latest() const {
+std::shared_ptr<const SimulatorSnapshot> SnapshotStore::latest() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return latest_;
 }
 
-SnapshotRecorder::SnapshotRecorder(const World& world, const SimRobot& robot)
+SnapshotRecorder::SnapshotRecorder(const World& world, const SimulatorRobot& robot)
     : world_(world), robot_(robot) {}
 
 void SnapshotRecorder::record() {
-  auto snapshot = std::make_shared<SimSnapshot>();
+  auto snapshot = std::make_shared<SimulatorSnapshot>();
   snapshot->time = world_.time();
   snapshot->robot_pose = robot_.pose;
   const RobotState state = robot_.state();
@@ -31,6 +31,7 @@ void SnapshotRecorder::record() {
   }
   snapshot->scan_ranges = state.scan_ranges;
   snapshot->scan_pose = state.scan_pose;
+  snapshot->visuals = state.visuals;
 
   for (const auto& object : world_.objects()) {
     if (!object || object.get() == &robot_ || object->sides <= 0 || object->radius <= 0.0 ||

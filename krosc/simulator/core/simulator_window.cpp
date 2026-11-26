@@ -1,4 +1,4 @@
-#include "krosc/simulator/view_window.hpp"
+#include "krosc/simulator/simulator_window.hpp"
 
 #include <QFocusEvent>
 #include <QFont>
@@ -7,9 +7,11 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPolygonF>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QStringList>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QVector4D>
 #include <QWheelEvent>
 
@@ -33,7 +35,7 @@ QColor with_alpha(QColor color, int alpha) {
 }
 }  // namespace
 
-SimView::SimView(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
+SimulatorView::SimulatorView(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
                  std::string teleop_topic, QWidget* parent)
     : QWidget(parent), walls_(std::move(walls)), store_(store), node_(node),
       teleop_topic_(std::move(teleop_topic)) {
@@ -43,23 +45,23 @@ SimView::SimView(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& nod
   fps_clock_.start();
   reset_camera();
   teleop_timer_ = new QTimer(this);
-  connect(teleop_timer_, &QTimer::timeout, this, &SimView::publish_teleop);
+  connect(teleop_timer_, &QTimer::timeout, this, &SimulatorView::publish_teleop);
   teleop_timer_->start(50);
 }
 
-void SimView::reset_camera() {
+void SimulatorView::reset_camera() {
   camera_ = Camera{};
   follow_ = true;
   follow_target_ = camera_.target;
   update();
 }
 
-void SimView::set_camera_distance(double distance) {
+void SimulatorView::set_camera_distance(double distance) {
   camera_.distance = std::clamp(distance, 0.4, 40.0);
   update();
 }
 
-void SimView::set_follow(bool follow) {
+void SimulatorView::set_follow(bool follow) {
   follow_ = follow;
   if (follow_) {
     follow_target_ = camera_.target;
@@ -67,12 +69,12 @@ void SimView::set_follow(bool follow) {
   update();
 }
 
-QString SimView::help_text() const {
+QString SimulatorView::help_text() const {
   return QStringLiteral(
       "truth view · W/A/S/D drive · Q/Z speed · F follow · L lidar · C overview · drag orbit · wheel zoom");
 }
 
-void SimView::update_camera() {
+void SimulatorView::update_camera() {
   if (!follow_) {
     return;
   }
@@ -85,23 +87,23 @@ void SimView::update_camera() {
   camera_.target = follow_target_;
 }
 
-void SimView::compute_matrix() {
+void SimulatorView::compute_matrix() {
   view_width_ = std::max(1, width());
   view_height_ = std::max(1, height());
   const double cp = std::cos(camera_.pitch);
   const double sp = std::sin(camera_.pitch);
-  const QVector3D eye = camera_.target +
-                        QVector3D(static_cast<float>(cp * std::cos(camera_.yaw)),
-                                  static_cast<float>(cp * std::sin(camera_.yaw)), static_cast<float>(sp)) *
-                            static_cast<float>(camera_.distance);
+  eye_ = camera_.target +
+         QVector3D(static_cast<float>(cp * std::cos(camera_.yaw)),
+                   static_cast<float>(cp * std::sin(camera_.yaw)), static_cast<float>(sp)) *
+             static_cast<float>(camera_.distance);
   QMatrix4x4 view;
-  view.lookAt(eye, camera_.target, QVector3D(0.0F, 0.0F, 1.0F));
+  view.lookAt(eye_, camera_.target, QVector3D(0.0F, 0.0F, 1.0F));
   QMatrix4x4 projection;
   projection.perspective(58.0F, static_cast<float>(view_width_) / static_cast<float>(view_height_), 0.03F, 250.0F);
   matrix_ = projection * view;
 }
 
-SimView::Projected SimView::project(const QVector3D& point) const {
+SimulatorView::Projected SimulatorView::project(const QVector3D& point) const {
   const QVector4D clip = matrix_ * QVector4D(point, 1.0F);
   if (clip.w() <= 1e-6F) {
     return {QPointF{}, false};
@@ -115,7 +117,7 @@ SimView::Projected SimView::project(const QVector3D& point) const {
           true};
 }
 
-void SimView::draw_line(QPainter& painter, const QVector3D& a, const QVector3D& b, const QColor& color,
+void SimulatorView::draw_line(QPainter& painter, const QVector3D& a, const QVector3D& b, const QColor& color,
                         double width) const {
   const Projected pa = project(a);
   const Projected pb = project(b);
@@ -126,24 +128,46 @@ void SimView::draw_line(QPainter& painter, const QVector3D& a, const QVector3D& 
   painter.drawLine(pa.point, pb.point);
 }
 
-void SimView::draw_face(QPainter& painter, const std::vector<QVector3D>& points, const QColor& fill,
-                        const QColor& outline) const {
-  QPolygonF polygon;
-  for (const auto& point : points) {
-    const Projected projected = project(point);
-    if (!projected.visible) {
-      return;
-    }
-    polygon << projected.point;
+void SimulatorView::queue_face(const std::vector<QVector3D>& points, const QColor& fill,
+                               const QColor& outline) {
+  if (points.size() < 3) {
+    return;
   }
-  painter.setBrush(fill);
-  painter.setPen(QPen(outline, 1.0));
-  painter.drawPolygon(polygon);
-  painter.setBrush(Qt::NoBrush);
+  QVector3D center;
+  for (const auto& point : points) {
+    center += point;
+  }
+  center /= static_cast<float>(points.size());
+  faces_.push_back(Face{points, fill, outline, (eye_ - center).lengthSquared()});
 }
 
-void SimView::draw_box(QPainter& painter, const msgs::Transform& transform, const std::array<double, 3>& size,
-                       const QColor& fill, const QColor& outline) const {
+void SimulatorView::flush_faces(QPainter& painter) {
+  std::sort(faces_.begin(), faces_.end(),
+            [](const Face& a, const Face& b) { return a.depth > b.depth; });
+  for (const auto& face : faces_) {
+    QPolygonF polygon;
+    bool visible = true;
+    for (const auto& point : face.points) {
+      const Projected projected = project(point);
+      if (!projected.visible) {
+        visible = false;
+        break;
+      }
+      polygon << projected.point;
+    }
+    if (!visible) {
+      continue;
+    }
+    painter.setBrush(face.fill);
+    painter.setPen(QPen(face.outline, 1.0));
+    painter.drawPolygon(polygon);
+  }
+  painter.setBrush(Qt::NoBrush);
+  faces_.clear();
+}
+
+void SimulatorView::queue_box(const msgs::Transform& transform, const std::array<double, 3>& size,
+                             const QColor& fill, const QColor& outline) {
   const double hx = size[0] / 2.0;
   const double hy = size[1] / 2.0;
   const double hz = size[2] / 2.0;
@@ -159,9 +183,9 @@ void SimView::draw_box(QPainter& painter, const msgs::Transform& transform, cons
     }
   }
   const auto face = [&](int a, int b, int c, int d) {
-    draw_face(painter, {corners[static_cast<std::size_t>(a)], corners[static_cast<std::size_t>(b)],
-                        corners[static_cast<std::size_t>(c)], corners[static_cast<std::size_t>(d)]},
-              fill, outline);
+    queue_face({corners[static_cast<std::size_t>(a)], corners[static_cast<std::size_t>(b)],
+                corners[static_cast<std::size_t>(c)], corners[static_cast<std::size_t>(d)]},
+               fill, outline);
   };
   face(0, 2, 3, 1);
   face(4, 5, 7, 6);
@@ -171,8 +195,8 @@ void SimView::draw_box(QPainter& painter, const msgs::Transform& transform, cons
   face(1, 3, 7, 5);
 }
 
-void SimView::draw_cylinder(QPainter& painter, const msgs::Transform& transform, double radius, double length,
-                            int segments, const QColor& fill, const QColor& outline) const {
+void SimulatorView::queue_cylinder(const msgs::Transform& transform, double radius, double length,
+                                   int segments, const QColor& fill, const QColor& outline) {
   const int count = std::max(3, segments);
   const double half = length / 2.0;
   std::vector<QVector3D> bottom(static_cast<std::size_t>(count));
@@ -190,15 +214,15 @@ void SimView::draw_cylinder(QPainter& painter, const msgs::Transform& transform,
   }
   for (int i = 0; i < count; ++i) {
     const int next = (i + 1) % count;
-    draw_face(painter, {bottom[static_cast<std::size_t>(i)], bottom[static_cast<std::size_t>(next)],
-                        top[static_cast<std::size_t>(next)], top[static_cast<std::size_t>(i)]},
-              fill, outline);
+    queue_face({bottom[static_cast<std::size_t>(i)], bottom[static_cast<std::size_t>(next)],
+                top[static_cast<std::size_t>(next)], top[static_cast<std::size_t>(i)]},
+               fill, outline);
   }
-  draw_face(painter, top, with_alpha(fill, std::min(255, fill.alpha() + 20)), outline);
-  draw_face(painter, bottom, fill, outline);
+  queue_face(top, with_alpha(fill, std::min(255, fill.alpha() + 20)), outline);
+  queue_face(bottom, fill, outline);
 }
 
-void SimView::draw_grid(QPainter& painter) const {
+void SimulatorView::draw_grid(QPainter& painter) const {
   constexpr double kStep = 0.5;
   constexpr int kHalf = 20;
   for (int i = -kHalf; i <= kHalf; ++i) {
@@ -213,46 +237,41 @@ void SimView::draw_grid(QPainter& painter) const {
   draw_line(painter, QVector3D(0.0F, -10.0F, 0.0F), QVector3D(0.0F, 10.0F, 0.0F), QColor(90, 220, 120, 140), 1.5);
 }
 
-void SimView::draw_walls(QPainter& painter) const {
+void SimulatorView::draw_walls() {
   for (const auto& wall : walls_) {
     const msgs::Transform transform{{wall.center_x, wall.center_y, wall.height / 2.0}, {}};
-    draw_box(painter, transform, {wall.half_x * 2.0, wall.half_y * 2.0, wall.height},
-             QColor(215, 220, 232, 235), QColor(250, 252, 255, 255));
+    queue_box(transform, {wall.half_x * 2.0, wall.half_y * 2.0, wall.height},
+              QColor(215, 220, 232, 235), QColor(250, 252, 255, 255));
   }
 }
 
-void SimView::draw_objects(QPainter& painter, const SimSnapshot& snapshot) const {
+void SimulatorView::draw_objects(const SimulatorSnapshot& snapshot) {
   for (const auto& object : snapshot.objects) {
     const msgs::Transform transform{{object.pose.x, object.pose.y, object.height / 2.0},
                                     tfmath::from_yaw(object.pose.theta)};
     const QColor color(static_cast<int>(object.color[0] * 255.0), static_cast<int>(object.color[1] * 255.0),
                        static_cast<int>(object.color[2] * 255.0), 230);
-    draw_cylinder(painter, transform, object.radius, object.height, object.sides, color, color.lighter(130));
+    queue_cylinder(transform, object.radius, object.height, object.sides, color, color.lighter(130));
   }
 }
 
-void SimView::draw_robot(QPainter& painter, const SimSnapshot& snapshot) const {
+void SimulatorView::draw_robot(const SimulatorSnapshot& snapshot) {
+  for (const auto& visual : snapshot.visuals) {
+    const QColor color(static_cast<int>(visual.color[0] * 255.0),
+                       static_cast<int>(visual.color[1] * 255.0),
+                       static_cast<int>(visual.color[2] * 255.0), 235);
+    if (visual.type == RobotVisualType::Cylinder) {
+      queue_cylinder(visual.transform, visual.radius, visual.length, visual.sides, color,
+                     color.lighter(130));
+    } else {
+      queue_box(visual.transform, visual.size, color, color.lighter(130));
+    }
+  }
+}
+
+void SimulatorView::draw_robot_arrow(QPainter& painter, const SimulatorSnapshot& snapshot) const {
   const msgs::Transform base{{snapshot.robot_pose.x, snapshot.robot_pose.y, 0.0},
                              tfmath::from_yaw(snapshot.robot_pose.theta)};
-  const auto local = [&](double x, double y, double z, const msgs::Quaternion& rotation = {}) {
-    return tfmath::compose(base, {{x, y, z}, rotation});
-  };
-  draw_box(painter, local(0.0, 0.0, 0.057), {0.266, 0.266, 0.094}, QColor(195, 202, 216, 235),
-           QColor(245, 248, 255, 255));
-  draw_box(painter, local(0.073, -0.011, 0.084), {0.04, 0.03, 0.03}, QColor(55, 58, 66, 235),
-           QColor(120, 125, 138, 255));
-  draw_cylinder(painter, local(-0.064, 0.0, 0.132), 0.035, 0.03, 16, QColor(65, 68, 78, 235),
-                QColor(150, 155, 168, 255));
-  const msgs::Quaternion wheel_rotation = tfmath::from_rpy(kPi / 2.0, 0.0, 0.0);
-  draw_cylinder(painter, local(0.0, 0.144, 0.023, wheel_rotation), 0.033, 0.018, 16, QColor(45, 47, 54, 240),
-                QColor(115, 120, 132, 255));
-  draw_cylinder(painter, local(0.0, -0.144, 0.023, wheel_rotation), 0.033, 0.018, 16, QColor(45, 47, 54, 240),
-                QColor(115, 120, 132, 255));
-  for (double side : {-1.0, 1.0}) {
-    draw_box(painter, local(-0.177, side * 0.064, 0.01), {0.03, 0.009, 0.02}, QColor(90, 94, 104, 235),
-             QColor(150, 155, 168, 255));
-  }
-
   const auto arrow_end = tfmath::apply(base, msgs::Vector3{0.45, 0.0, 0.03});
   const auto arrow_left = tfmath::apply(base, msgs::Vector3{0.32, 0.09, 0.03});
   const auto arrow_right = tfmath::apply(base, msgs::Vector3{0.32, -0.09, 0.03});
@@ -267,7 +286,7 @@ void SimView::draw_robot(QPainter& painter, const SimSnapshot& snapshot) const {
             QColor(80, 235, 255, 240), 2.0);
 }
 
-void SimView::draw_scan(QPainter& painter, const SimSnapshot& snapshot) const {
+void SimulatorView::draw_scan(QPainter& painter, const SimulatorSnapshot& snapshot) const {
   if (!show_scan_ || snapshot.scan_ranges.empty()) {
     return;
   }
@@ -290,7 +309,7 @@ void SimView::draw_scan(QPainter& painter, const SimSnapshot& snapshot) const {
   painter.drawPoints(points);
 }
 
-void SimView::draw_hud(QPainter& painter, const SimSnapshot& snapshot) const {
+void SimulatorView::draw_hud(QPainter& painter, const SimulatorSnapshot& snapshot) const {
   double nearest = std::numeric_limits<double>::infinity();
   for (float range : snapshot.scan_ranges) {
     if (std::isfinite(range)) {
@@ -332,7 +351,7 @@ void SimView::draw_hud(QPainter& painter, const SimSnapshot& snapshot) const {
   }
 }
 
-void SimView::paintEvent(QPaintEvent* event) {
+void SimulatorView::paintEvent(QPaintEvent* event) {
   (void)event;
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
@@ -341,14 +360,18 @@ void SimView::paintEvent(QPaintEvent* event) {
   compute_matrix();
 
   draw_grid(painter);
-  draw_walls(painter);
+  faces_.clear();
+  draw_walls();
   const auto snapshot = store_.latest();
   if (snapshot) {
-    draw_objects(painter, *snapshot);
+    draw_objects(*snapshot);
+    draw_robot(*snapshot);
+    flush_faces(painter);
     draw_scan(painter, *snapshot);
-    draw_robot(painter, *snapshot);
+    draw_robot_arrow(painter, *snapshot);
     draw_hud(painter, *snapshot);
   } else {
+    flush_faces(painter);
     QFont font("Menlo");
     font.setPixelSize(12);
     painter.setFont(font);
@@ -365,7 +388,7 @@ void SimView::paintEvent(QPaintEvent* event) {
   }
 }
 
-void SimView::mousePressEvent(QMouseEvent* event) {
+void SimulatorView::mousePressEvent(QMouseEvent* event) {
   setFocus(Qt::MouseFocusReason);
   last_mouse_ = event->position().toPoint();
   if (event->button() == Qt::LeftButton) {
@@ -375,7 +398,7 @@ void SimView::mousePressEvent(QMouseEvent* event) {
   }
 }
 
-void SimView::mouseMoveEvent(QMouseEvent* event) {
+void SimulatorView::mouseMoveEvent(QMouseEvent* event) {
   const QPoint current = event->position().toPoint();
   const QPoint delta = current - last_mouse_;
   last_mouse_ = current;
@@ -395,19 +418,19 @@ void SimView::mouseMoveEvent(QMouseEvent* event) {
   }
 }
 
-void SimView::mouseReleaseEvent(QMouseEvent* event) {
+void SimulatorView::mouseReleaseEvent(QMouseEvent* event) {
   (void)event;
   orbiting_ = false;
   panning_ = false;
 }
 
-void SimView::wheelEvent(QWheelEvent* event) {
+void SimulatorView::wheelEvent(QWheelEvent* event) {
   const double factor = std::exp(-event->angleDelta().y() / 600.0);
   camera_.distance = std::clamp(camera_.distance * factor, 0.4, 40.0);
   update();
 }
 
-void SimView::keyPressEvent(QKeyEvent* event) {
+void SimulatorView::keyPressEvent(QKeyEvent* event) {
   if (event->isAutoRepeat()) {
     return;
   }
@@ -449,20 +472,20 @@ void SimView::keyPressEvent(QKeyEvent* event) {
   }
 }
 
-void SimView::keyReleaseEvent(QKeyEvent* event) {
+void SimulatorView::keyReleaseEvent(QKeyEvent* event) {
   if (!event->isAutoRepeat()) {
     keys_.remove(event->key());
   }
 }
 
-void SimView::focusOutEvent(QFocusEvent* event) {
+void SimulatorView::focusOutEvent(QFocusEvent* event) {
   (void)event;
   keys_.clear();
   orbiting_ = false;
   panning_ = false;
 }
 
-void SimView::publish_teleop() {
+void SimulatorView::publish_teleop() {
   const auto held = [this](std::initializer_list<int> keys) {
     return std::any_of(keys.begin(), keys.end(), [this](int key) { return keys_.contains(key); });
   };
@@ -479,26 +502,49 @@ void SimView::publish_teleop() {
   last_angular_ = angular;
 }
 
-SimWindow::SimWindow(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
-                     std::string teleop_topic, QWidget* parent)
+SimulatorWindow::SimulatorWindow(std::vector<Wall> walls, SnapshotStore& store, krosc::Node& node,
+                     std::string teleop_topic, std::vector<QWidget*> side_panels,
+                     QWidget* parent)
     : QMainWindow(parent) {
   setWindowTitle("krosc sim (truth)");
-  resize(760, 860);
-  view_ = new SimView(std::move(walls), store, node, std::move(teleop_topic), this);
-  setCentralWidget(view_);
+  resize(side_panels.empty() ? 760 : 1040, 860);
+  splitter_ = new QSplitter(Qt::Horizontal, this);
+  view_ = new SimulatorView(std::move(walls), store, node, std::move(teleop_topic), splitter_);
+  splitter_->addWidget(view_);
+  setCentralWidget(splitter_);
+  for (auto* panel : side_panels) {
+    add_side_panel(panel);
+  }
   statusBar()->showMessage(view_->help_text());
   timer_ = new QTimer(this);
   connect(timer_, &QTimer::timeout, view_, QOverload<>::of(&QWidget::update));
   timer_->start(33);
 }
 
-SimWindow::~SimWindow() {
+SimulatorWindow::~SimulatorWindow() {
   if (timer_ != nullptr) {
     timer_->stop();
   }
 }
 
-bool SimWindow::save_screenshot(const QString& path) {
+void SimulatorWindow::add_side_panel(QWidget* panel) {
+  if (panel == nullptr || splitter_ == nullptr) {
+    return;
+  }
+  if (panel_container_ == nullptr) {
+    panel_container_ = new QWidget(splitter_);
+    panel_layout_ = new QVBoxLayout(panel_container_);
+    panel_layout_->setContentsMargins(0, 0, 0, 0);
+    panel_layout_->setSpacing(0);
+    splitter_->addWidget(panel_container_);
+    splitter_->setStretchFactor(0, 1);
+    splitter_->setStretchFactor(1, 0);
+    resize(1040, 860);
+  }
+  panel_layout_->addWidget(panel);
+}
+
+bool SimulatorWindow::save_screenshot(const QString& path) {
   view_->update();
   return grab().save(path);
 }

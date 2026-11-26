@@ -136,7 +136,8 @@ cmake --build build -j
 
 ## 매니퓰레이터 (OpenMANIPULATOR-X 4축 + 그리퍼)
 
-- URDF: `robot/description/urdf/turtlebot3_real.urdf` (공식 visual STL + collision 근사, C++ Viz는 visual STL을 12mm 격자로 간소화해 렌더)
+- 실기 URDF: `engine/description/urdf/turtlebot3_real.urdf`
+- 시뮬레이터 URDF: `simulator/robot/urdf/turtlebot3_real.urdf` (의도된 복제본, 공식 visual STL + collision 근사)
 - 장착: 3층 판 맨 앞 중앙, `base_link` 기준 `x=+0.047985, y=-0.000230, z=+0.130175`
 - OpenCR: joint1~4 = ID 11~14, gripper = ID 15 (`firmware/opencr/turtlebot_opencr/arm_config.h`)
 - `joint_states`는 control `joint_state_broadcaster`가 바퀴+팔 관절을 모두 발행한다
@@ -185,12 +186,12 @@ cmake --build build -j
 
 ## Viz 플러그인 / 프로젝트 Viz main
 
-로봇 쪽 진입점이 `robot/main.cpp`라면, Viz 쪽 진입점은 `viz/main.cpp`다.
+로봇 쪽 진입점이 `engine/main.cpp`라면, Viz 쪽 진입점은 `viz/main.cpp`다.
 `viz/main.cpp`는 **인자 파싱과 `Viz` 실행만** 하고, 앱 조립은 코어 `krosc::viz::Viz`가 맡는다.
 
 ```text
 krosc_ws/
-├── robot/main.cpp            # 로봇(Pi) 엔드포인트
+├── engine/main.cpp           # 로봇(Pi) 엔드포인트
 ├── viz/
 │   ├── main.cpp              # 프로젝트 Viz 엔드포인트 (파라미터 → Viz)
 │   ├── CMakeLists.txt
@@ -291,7 +292,7 @@ Isaac `rl_maze` 정책(52관측 → 2행동, nav 50Hz)을 Pi에서 ONNX Runtime�
 - ONNX Runtime 실행 장치는 **CUDA → CoreML → CPU** 순으로 고른다. GPU가 없거나
   CUDA 세션 생성이 실패하면 CPUExecutionProvider로 내려간다.
   ONNX Runtime 없이 빌드해도 플러그인은 있고, 정책 로드가 실패하면 fallback 컨트롤러가 주행한다.
-- 폴더 스캔: `robot/ml/model_catalog.hpp`
+- 폴더 스캔: `engine/ml/model_catalog.hpp`
 - Viz: `viz/plugins/rl_nav_plugin.cpp` — 모델 선택, RL ON/OFF, fallback, 실행 장치/상태
 - 지도와 같은 방식으로 **모델 목록**을 고른다:
   - `rl_nav_model_list`(String, latch): 모델 이름들 (한 줄에 하나)
@@ -341,12 +342,19 @@ Pi에서는 타깃을 만들지 않는다.
 ```
 
 Qt 창에서 `W/A/S/D` 텔레옵, `L` 라이다 표시 토글, 드래그 orbit, 휠 zoom을 쓸 수 있다.
+오른쪽에는 `MANIPULATOR` 패널이 붙어 joint1~4/gripper를 수동 조작하고 HOME/STOW를 실행한다.
 
-실기/시뮬레이터는 `robot/robot.cpp`의 공통 `Robot` 클래스에
+기본은 노이즈 모드다. 바퀴 슬립, 엔코더 양자화, 자이로/가속도 바이어스,
+라이다 거리 잡음/드롭아웃이 `WafflePiArm(TurtleBot3)` 모델에서 생성되고,
+`SimulatorOpenCr`/`SimulatorLds`는 그 값을 실기 장치처럼 전달만 한다.
+`--no-noise`로 끌 수 있으며, Qt truth view는 잡음 없는 진실 값을 그린다.
+
+실기/시뮬레이터는 `engine/robot.cpp`의 공통 `Robot` 클래스에
 `OpenCrDevice`/`LdsDevice`만 다르게 주입한다. 시뮬레이터는
-`simulator/sim_hardware.cpp`가 월드 로봇을 OpenCR/LDS 장치처럼 감싼다.
-`simulator/map_publisher.cpp`가 `MazeWorld` 벽에서 정적 map과 `map -> odom`을 만들고,
-`robot_state_publisher`와 URDF는 실기와 같은 `Robot`이 `robot/description`으로 발행한다.
+`simulator/hardwares/opencr/simulator_opencr.cpp`와 `simulator/hardwares/lds03/simulator_lds.cpp`가 월드 로봇(`WafflePiArm`)을 OpenCR/LDS 장치처럼 감싼다.
+정적 map을 미리 발행하지 않는다. 지도는 `--slam` 매핑으로 만들거나 `artifacts/maps`의
+저장 맵을 로드해서 `map_server`/Cartographer가 만들고, URDF는 시뮬레이터용
+`simulator/robot/urdf` 복제본을 쓴다.
 
 웹 Viz로 보려면:
 
@@ -410,7 +418,7 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, MoveIt 플러그인/노드는
 `krosc/engine/include/krosc/nodes/moveit/`와 `krosc/engine/core/nodes/moveit/move_group.cpp`에 있다.
 control 레이어는 `krosc/engine/include/krosc/control/`, 실기 하드웨어 플러그인은
-`krosc_ws/robot/controls/opencr/opencr_control.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
+`krosc_ws/engine/controls/opencr/opencr_control.cpp`이고 `krosc_ws/engine/main.cpp`에서 조립한다.
 LDS-03은 물리 장치 `hardwares/lds03/lds03_device.cpp`와
 scan을 발행하는 sensor 논리 레이어 `sensors/lds03/lds03_sensor.cpp`로 나뉜다.
 OpenCR은 물리 `hardwares/opencr/opencr_serial.cpp`, 제어 `controls/opencr/opencr_control.cpp`,
@@ -421,7 +429,7 @@ Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 �
 
 ```
 krosc_ws/
-├── robot/                       # 로봇(Pi) 앱
+├── engine/                      # 로봇(Pi) 앱 엔진
 │   ├── main.cpp                 # 노드 조립, TCP 서버, 진단 루프
 │   ├── robot.cpp/.hpp            # 공통 로봇 스택 (하드웨어 주입)
 │   ├── nodes/robot_status.cpp/.hpp # arm_status/diagnostics, 팔 서비스
@@ -445,8 +453,10 @@ krosc_ws/
 │   │       └── lds03_sensor.cpp/.hpp    # scan -> scan 토픽
 │   └── description/urdf/turtlebot3_real.urdf
 ├── simulator/                   # PC 전용 krosc_ws 시뮬레이터 (Pi 미빌드)
-│   ├── sim_hardware.*           # SimOpenCr/SimLds 하드웨어 스텁
-│   └── map_publisher.*          # 정적 MazeWorld map/map→odom (앱 로컬)
+│   ├── hardwares/opencr/        # SimulatorOpenCr 스텁
+│   ├── hardwares/lds03/         # SimulatorLds 스텁
+│   ├── robot/                   # WafflePiArm + URDF 파서/시뮬레이터용 URDF 복제본
+│   └── panels/arm_panel.*       # Qt 수동 조작 패널
 ├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp
 │   ├── CMakeLists.txt

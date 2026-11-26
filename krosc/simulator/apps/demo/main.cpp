@@ -17,9 +17,9 @@
 #include "krosc/nodes/ekf.hpp"
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/qos.hpp"
-#include "krosc/simulator/objects/turtlebot3.hpp"
+#include "krosc/simulator/robots/turtlebot/turtlebot.hpp"
 #include "krosc/simulator/simulator.hpp"
-#include "krosc/simulator/view_window.hpp"
+#include "krosc/simulator/simulator_window.hpp"
 #include "krosc/simulator/worlds/maze_world.hpp"
 #include "krosc/time/time.hpp"
 #include "krosc/viz/viz_window.hpp"
@@ -29,7 +29,7 @@
 #include "robot_bridge.hpp"
 
 #ifndef KROSC_SIMULATOR_URDF
-#define KROSC_SIMULATOR_URDF "description/turtlebot3_waffle_pi.urdf"
+#define KROSC_SIMULATOR_URDF "robots/turtlebot/turtlebot.urdf"
 #endif
 
 namespace {
@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
           {"publish_tf", true}});
 
   krosc::simulator::Simulator simulator(app.context(), *world, *robot);
-  krosc::simulator::SimWindow sim_window(world->walls(), simulator.snapshots(), bridge);
+  krosc::simulator::SimulatorWindow sim_window(world->walls(), simulator.snapshots(), bridge);
   krosc::viz::VizWindow window(app.context());
   window.set_fixed_frame("map");
   if (zoom > 0.0) {

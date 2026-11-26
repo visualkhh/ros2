@@ -20,7 +20,7 @@ struct SnapshotObject {
   std::array<double, 3> color{1.0, 1.0, 1.0};
 };
 
-struct SimSnapshot {
+struct SimulatorSnapshot {
   double time = 0.0;
   msgs::Pose2D robot_pose;
   msgs::Twist command;
@@ -29,23 +29,24 @@ struct SimSnapshot {
   std::vector<SnapshotObject> objects;
   std::vector<float> scan_ranges;  // 진실 라이다 (잡음 없음)
   msgs::Pose2D scan_pose;
+  std::vector<RobotVisual> visuals;
 };
 
 class SnapshotStore {
  public:
-  void set(std::shared_ptr<const SimSnapshot> snapshot);
-  [[nodiscard]] std::shared_ptr<const SimSnapshot> latest() const;
+  void set(std::shared_ptr<const SimulatorSnapshot> snapshot);
+  [[nodiscard]] std::shared_ptr<const SimulatorSnapshot> latest() const;
 
  private:
   mutable std::mutex mutex_;
-  std::shared_ptr<const SimSnapshot> latest_;
+  std::shared_ptr<const SimulatorSnapshot> latest_;
 };
 
 // SimulationRunner의 listener에서 매 스텝 부른다. 월드/로봇은 이 스레드만 만지므로
-// 여기서 읽어도 안전하다. 구체 로봇은 SimRobot::state()로 자신의 센서 값을 준다.
+// 여기서 읽어도 안전하다. 구체 로봇은 SimulatorRobot::state()로 자신의 센서 값을 준다.
 class SnapshotRecorder {
  public:
-  SnapshotRecorder(const World& world, const SimRobot& robot);
+  SnapshotRecorder(const World& world, const SimulatorRobot& robot);
 
   void record();
   [[nodiscard]] SnapshotStore& store() { return store_; }
@@ -53,7 +54,7 @@ class SnapshotRecorder {
 
  private:
   const World& world_;
-  const SimRobot& robot_;
+  const SimulatorRobot& robot_;
   SnapshotStore store_;
 };
 

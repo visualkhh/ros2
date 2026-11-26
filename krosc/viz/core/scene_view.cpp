@@ -672,8 +672,9 @@ std::optional<std::string> SceneView::resolve_mesh_path(const std::string& filen
     return std::nullopt;  // turtlebot3 base/wheel 메시는 기존 collision 도형으로 그린다
   }
   const std::string relative = filename.substr(std::char_traits<char>::length(kPrefix));
-  for (const char* root : {"krosc_ws/robot/description/", "robot/description/",
-                           "../krosc_ws/robot/description/", "../../krosc_ws/robot/description/"}) {
+  for (const char* root : {"krosc_ws/engine/description/", "krosc_ws/simulator/robot/",
+                           "krosc_ws/robot/description/",
+                           "../krosc_ws/engine/description/", "../../krosc_ws/engine/description/"}) {
     const std::string candidate = std::string(root) + relative;
     if (std::filesystem::is_regular_file(candidate)) {
       return candidate;
