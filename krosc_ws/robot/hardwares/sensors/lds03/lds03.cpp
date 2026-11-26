@@ -14,7 +14,7 @@
 #include <thread>
 #include <utility>
 
-#include "../serial.hpp"
+#include "hardwares/serial.hpp"
 
 namespace krosc_ws {
 

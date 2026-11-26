@@ -365,9 +365,9 @@ Viz의 **MoveIt** 도킹 패널/탭은 `krosc_ws/viz/plugins/moveit_plugin.cpp` 
 핵심 계산은 `krosc/engine/core/manipulation/arm_chain.cpp`, MoveIt 플러그인/노드는
 `krosc/engine/include/krosc/nodes/moveit/`와 `krosc/engine/core/nodes/moveit/move_group.cpp`에 있다.
 control 레이어는 `krosc/engine/include/krosc/control/`, 실기 하드웨어 플러그인은
-`krosc_ws/robot/hardwares/opencr/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
+`krosc_ws/robot/hardwares/controls/opencr/opencr_system.cpp`이고 `krosc_ws/robot/main.cpp`에서 조립한다.
 LDS-03은 `krosc::sensor::Sensor`(on_init → on_activate → read → on_deactivate)를 따르며
-`krosc_ws/robot/hardwares/lds03/lds03.cpp`에 있다. 센서 레이어는
+`krosc_ws/robot/hardwares/sensors/lds03/lds03.cpp`에 있다. 센서 레이어는
 `krosc/engine/include/krosc/sensor/`에 있고 `SensorManager`가 수명주기와 read를 묶는다.
 Viz 쪽은 `krosc_ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
@@ -383,13 +383,15 @@ krosc_ws/
 │   ├── ml/onnx_policy.cpp/.hpp  # ONNX Runtime (CUDA/CoreML → CPU)
 │   ├── ml/model_catalog.hpp     # artifacts/models/rl_nav_controller 스캔
 │   ├── hardwares/
-│   │   ├── serial.cpp/.hpp          # POSIX termios
-│   │   ├── opencr/
-│   │   │   ├── opencr_system.cpp/.hpp   # control SystemInterface (바퀴+팔)
-│   │   │   ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 50Hz C/A 명령
-│   │   │   └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
-│   │   └── lds03/
-│   │       └── lds03.cpp/.hpp       # sensor::Sensor(read-only) + 패킷 파서 + 몸통 필터
+│   │   ├── serial.cpp/.hpp          # POSIX termios (공용)
+│   │   ├── controls/
+│   │   │   └── opencr/
+│   │   │       ├── opencr_system.cpp/.hpp   # control SystemInterface (바퀴+팔)
+│   │   │       ├── opencr_serial.cpp/.hpp   # OpenCR 읽기 스레드 + 50Hz C/A 명령
+│   │   │       └── opencr_protocol.cpp/.hpp # C/S/I/E/M/F 파서 (순수 함수)
+│   │   └── sensors/
+│   │       └── lds03/
+│   │           └── lds03.cpp/.hpp   # sensor::Sensor(read-only) + 패킷 파서 + 몸통 필터
 │   └── description/urdf/turtlebot3_real.urdf
 ├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
 │   ├── main.cpp

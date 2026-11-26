@@ -4,8 +4,8 @@
 #include <utility>
 #include <vector>
 
-#include "hardwares/lds03/lds03.hpp"
-#include "hardwares/opencr/opencr_protocol.hpp"
+#include "hardwares/sensors/lds03/lds03.hpp"
+#include "hardwares/controls/opencr/opencr_protocol.hpp"
 
 #include "test_framework.hpp"
 

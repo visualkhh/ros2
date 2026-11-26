@@ -42,7 +42,7 @@
 #include "krosc/control/controller_manager.hpp"
 #include "krosc/time/time.hpp"
 
-#include "hardwares/opencr/opencr_system.hpp"
+#include "hardwares/controls/opencr/opencr_system.hpp"
 #include "real_turtlebot3.hpp"
 #include "turtlebot3_driver.hpp"
 

@@ -17,10 +17,10 @@ set(KROSC_REAL_SOURCES
   robot/main.cpp
   robot/turtlebot3_driver.cpp
   robot/real_turtlebot3.cpp
-  robot/hardwares/opencr/opencr_system.cpp
-  robot/hardwares/lds03/lds03.cpp
-  robot/hardwares/opencr/opencr_protocol.cpp
-  robot/hardwares/opencr/opencr_serial.cpp
+  robot/hardwares/controls/opencr/opencr_system.cpp
+  robot/hardwares/sensors/lds03/lds03.cpp
+  robot/hardwares/controls/opencr/opencr_protocol.cpp
+  robot/hardwares/controls/opencr/opencr_serial.cpp
   robot/hardwares/serial.cpp
 )
 
@@ -87,9 +87,9 @@ if(KROSC_WS_BUILD_TESTS)
     tests/test_rl_nav_plugin.cpp
     robot/ml/onnx_policy.cpp
     robot/nodes/rl_nav_controller.cpp
-    robot/hardwares/lds03/lds03.cpp
-    robot/hardwares/opencr/opencr_protocol.cpp
-    robot/hardwares/opencr/opencr_serial.cpp
+    robot/hardwares/sensors/lds03/lds03.cpp
+    robot/hardwares/controls/opencr/opencr_protocol.cpp
+    robot/hardwares/controls/opencr/opencr_serial.cpp
     robot/hardwares/serial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../krosc/engine/tests/test_main.cpp
   )

@@ -7,8 +7,8 @@
 
 #include "krosc/msgs.hpp"
 #include "krosc/sensor/sensor_manager.hpp"
-#include "hardwares/lds03/lds03.hpp"
-#include "hardwares/opencr/opencr_serial.hpp"
+#include "hardwares/sensors/lds03/lds03.hpp"
+#include "hardwares/controls/opencr/opencr_serial.hpp"
 
 #ifndef KROSC_WS_URDF_PATH
 #define KROSC_WS_URDF_PATH "robot/description/urdf/turtlebot3_real.urdf"
