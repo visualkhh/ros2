@@ -14,6 +14,7 @@
 #include "krosc/context.hpp"
 #include "krosc/node.hpp"
 #include "krosc/simulator/simulator.hpp"
+#include "krosc/simulator/snapshot.hpp"
 #include "krosc/simulator/view_window.hpp"
 #include "krosc/time/time.hpp"
 
@@ -122,6 +123,7 @@ int main(int argc, char** argv) {
   window.show();
   window.raise();
   window.activateWindow();
+  window.view().setFocus();
   simulator.start();
   if (!robot.start()) {
     std::cerr << "[krosc_ws_sim] 로봇 시작 실패\n";
@@ -134,9 +136,21 @@ int main(int argc, char** argv) {
   std::fflush(stdout);
 
   const auto start_time = std::chrono::steady_clock::now();
+  auto last_sim_status = std::chrono::steady_clock::now();
   while (!g_stop.load()) {
     application.processEvents();
     robot.log_status();
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last_sim_status >= std::chrono::seconds(2)) {
+      last_sim_status = now;
+      if (auto snapshot = simulator.snapshots().latest()) {
+        std::printf("[krosc_ws_sim] pose=%.2f,%.2f,%.1f° cmd=%.2f,%.2f\n",
+                    snapshot->robot_pose.x, snapshot->robot_pose.y,
+                    snapshot->robot_pose.theta * 180.0 / 3.141592653589793,
+                    snapshot->command.linear.x, snapshot->command.angular.z);
+        std::fflush(stdout);
+      }
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     if (duration > 0.0 &&
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count() >=

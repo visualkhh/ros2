@@ -382,13 +382,16 @@ void ControllerManager::update() {
 }
 
 void ControllerManager::update(double time, double period) {
+  (void)time;
   std::lock_guard<std::mutex> lock(mutex_);
   if (!hardware_active_) {
     return;
   }
+  // 컨트롤러 내부의 command_time(now())와 같은 시간축(Context 시각)을 쓴다.
+  const double stamp = now();
   for (auto& entry : entries_) {
     if (entry->state == State::Active) {
-      entry->controller->update(time, period);
+      entry->controller->update(stamp, period);
     }
   }
 }
