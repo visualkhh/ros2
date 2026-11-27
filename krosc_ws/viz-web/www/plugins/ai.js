@@ -9,6 +9,8 @@ export function init(host) {
   plan.classList.add('nowrap');
   const action = row(body, 'action');
   action.classList.add('nowrap');
+  const vlmStatus = row(body, 'vlm');
+  vlmStatus.classList.add('nowrap');
 
   const serverTitle = document.createElement('div');
   serverTitle.className = 'muted';
@@ -329,6 +331,17 @@ export function init(host) {
       setLevel(plan, event.error, 'bad');
     }
   };
+  const vlmStages = { querying: '질의 중', done: '완료', error: '오류' };
+  host.onTopic('vlm/status', (message) => {
+    let event;
+    try { event = JSON.parse(message.data); } catch { return; }
+    const stage = vlmStages[event.stage] || event.stage || '-';
+    const detail = event.answer || event.error || '';
+    const clipped = detail.length > 90 ? `${detail.slice(0, 90)}…` : detail;
+    setLevel(vlmStatus, clipped ? `${stage} · ${clipped}` : stage,
+             event.stage === 'error' ? 'bad' : event.stage === 'done' ? 'ok' : 'warn');
+    vlmStatus.title = detail;
+  }, { kind: 2, qos: 'default' });
   host.onTopic('pick/status', showArmStatus);
   host.onTopic('vla/status', showArmStatus);
   host.onTopic('nav/status', showArmStatus);

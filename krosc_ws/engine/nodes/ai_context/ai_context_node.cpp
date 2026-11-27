@@ -288,7 +288,7 @@ void AiContextNode::probe_servers() {
   AiServerHealth llm;
   llm.enabled = servers_.llm_enabled && !servers_.llm_url.empty();
   if (llm.enabled) {
-    const HttpResponse response = http_get(tags_url(servers_.llm_url), 0.45);
+    const HttpResponse response = http_get(tags_url(servers_.llm_url), 0.8);
     const bool model_found = response.ok && !servers_.llm_model.empty() &&
                              response.body.find(servers_.llm_model) != std::string::npos;
     llm.ok = model_found;
@@ -302,7 +302,7 @@ void AiContextNode::probe_servers() {
   AiServerHealth vlm;
   vlm.enabled = servers_.vlm_enabled && !servers_.vlm_url.empty();
   if (vlm.enabled) {
-    const HttpResponse response = http_get(health_url(servers_.vlm_url), 0.45);
+    const HttpResponse response = http_get(health_url(servers_.vlm_url), 0.8);
     vlm.ok = response.ok;
     vlm.detail = health_detail(response);
   } else {
@@ -313,7 +313,7 @@ void AiContextNode::probe_servers() {
   AiServerHealth vla;
   vla.enabled = servers_.vla_enabled && !servers_.vla_url.empty();
   if (vla.enabled) {
-    const HttpResponse response = http_get(health_url(servers_.vla_url), 0.45);
+    const HttpResponse response = http_get(health_url(servers_.vla_url), 0.8);
     vla.ok = response.ok;
     vla.detail = health_detail(response);
   } else {

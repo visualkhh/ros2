@@ -267,6 +267,11 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
         std::lock_guard<std::mutex> lock(state->mutex);
         state->pick_status = message.data;
       });
+  vlm_subscription_ = host.model().node().subscribe<krosc::msgs::String>(
+      "vlm/status", [state = state_](const krosc::msgs::String& message) {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->vlm_status = message.data;
+      });
   context_subscription_ = host.model().node().subscribe<krosc::msgs::String>(
       "robot_context", [state = state_](const krosc::msgs::String& message) {
         std::lock_guard<std::mutex> lock(state->mutex);
@@ -285,6 +290,7 @@ void AiPlugin::shutdown() {
   info_subscription_.cancel();
   status_subscription_.cancel();
   pick_subscription_.cancel();
+  vlm_subscription_.cancel();
   context_subscription_.cancel();
 }
 
@@ -312,12 +318,14 @@ void AiPlugin::update_ui() {
   std::string info_text;
   std::string status_text;
   std::string pick_text;
+  std::string vlm_text;
   std::string context_text;
   {
     std::lock_guard<std::mutex> lock(state_->mutex);
     info_text = state_->info;
     status_text = state_->llm_status;
     pick_text = state_->pick_status;
+    vlm_text = state_->vlm_status;
     context_text = state_->context;
   }
   const auto fmt = [](const QJsonValue& value, int digits = 2) {
@@ -359,6 +367,24 @@ void AiPlugin::update_ui() {
       plan_->setText(error);
       plan_->setStyleSheet("color:#ff6b6b;");
     }
+  }
+
+  const QJsonDocument vlm =
+      QJsonDocument::fromJson(QByteArray::fromStdString(vlm_text));
+  if (vlm.isObject()) {
+    const QJsonObject event = vlm.object();
+    const QString stage = event.value("stage").toString();
+    QString detail = event.value("answer").toString(event.value("error").toString());
+    if (detail.size() > 90) {
+      detail = detail.left(90) + "…";
+    }
+    const QString label = stage == "querying" ? "질의 중"
+                          : stage == "done" ? "완료"
+                          : stage == "error" ? "오류" : stage;
+    vlm_->setText(detail.isEmpty() ? label : QString("%1 · %2").arg(label, detail));
+    vlm_->setStyleSheet(stage == "error" ? "color:#ff6b6b;"
+                         : stage == "done" ? "color:#54d18c;"
+                                           : "color:#ffb36b;");
   }
 
   const QJsonDocument context =

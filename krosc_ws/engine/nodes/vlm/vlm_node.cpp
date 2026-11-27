@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "krosc/msgs.hpp"
+#include "krosc/qos.hpp"
 
 #include "nodes/common/http_client.hpp"
 #include "nodes/common/llm_json.hpp"
@@ -67,6 +68,17 @@ VlmNode::VlmNode(krosc::Context& context, std::string url, std::string camera_to
 }
 
 krosc::msgs::String VlmNode::handle_query(const krosc::msgs::String& request) {
+  const auto publish_status = [this](const std::string& stage,
+                                     const std::string& key,
+                                     const std::string& value) {
+    std::string json = "{\"stage\":\"" + stage + "\"";
+    if (!key.empty()) {
+      json += ",\"" + key + "\":\"" + llm::escape_json(value) + "\"";
+    }
+    json += "}";
+    publish<krosc::msgs::String>("vlm/status", krosc::msgs::String{json},
+                                 krosc::QOS_DEFAULT);
+  };
   std::string question = llm::string_field(request.data, "question").value_or("");
   if (question.empty()) {
     question = request.data.empty() ? "What do you see?" : request.data;
@@ -75,6 +87,7 @@ krosc::msgs::String VlmNode::handle_query(const krosc::msgs::String& request) {
   {
     std::lock_guard<std::mutex> lock(image_mutex_);
     if (!image_seen_) {
+      publish_status("error", "error", "카메라 프레임이 없다");
       return krosc::msgs::String{"VLM 오류: 카메라 프레임이 없다"};
     }
     image = image_;
@@ -84,6 +97,7 @@ krosc::msgs::String VlmNode::handle_query(const krosc::msgs::String& request) {
     std::lock_guard<std::mutex> lock(context_mutex_);
     robot_context = robot_context_;
   }
+  publish_status("querying", "question", question);
   const std::string body =
       "{\"image_b64\":\"" + base64_encode(image.data) + "\",\"encoding\":" +
       json_quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
@@ -91,12 +105,15 @@ krosc::msgs::String VlmNode::handle_query(const krosc::msgs::String& request) {
       json_quoted(question) + ",\"context\":" + json_quoted(robot_context) + "}";
   const HttpResponse response = http_post_json(url_, body, timeout_s_);
   if (!response.ok) {
+    publish_status("error", "error", response.error);
     return krosc::msgs::String{"VLM 오류: " + response.error};
   }
   const auto answer = llm::string_field(response.body, "answer");
   if (!answer) {
+    publish_status("error", "error", "응답 파싱 실패");
     return krosc::msgs::String{"VLM 오류: 응답 파싱 실패"};
   }
+  publish_status("done", "answer", *answer);
   return krosc::msgs::String{*answer};
 }
 

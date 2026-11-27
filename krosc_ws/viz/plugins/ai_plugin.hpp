@@ -29,6 +29,7 @@ class AiPlugin final : public krosc::viz::VizPlugin {
     std::string info;
     std::string llm_status;
     std::string pick_status;
+    std::string vlm_status;
     std::string context;
   };
 
@@ -41,6 +42,7 @@ class AiPlugin final : public krosc::viz::VizPlugin {
   QLabel* command_ = nullptr;
   QLabel* plan_ = nullptr;
   QLabel* action_ = nullptr;
+  QLabel* vlm_ = nullptr;
   QLabel* source_ = nullptr;
   QLabel* route_ = nullptr;
   QLabel* llm_server_ = nullptr;
@@ -60,6 +62,7 @@ class AiPlugin final : public krosc::viz::VizPlugin {
   krosc::Subscription<krosc::msgs::String> info_subscription_;
   krosc::Subscription<krosc::msgs::String> status_subscription_;
   krosc::Subscription<krosc::msgs::String> pick_subscription_;
+  krosc::Subscription<krosc::msgs::String> vlm_subscription_;
   krosc::Subscription<krosc::msgs::String> context_subscription_;
 };
 

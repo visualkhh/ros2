@@ -220,6 +220,7 @@ int main(int argc, char** argv) {
       {"rl_nav_status", krosc::net::Kind::String, krosc::QOS_LATCHED},
       {"rl_nav_model_list", krosc::net::Kind::String, krosc::QOS_LATCHED},
       {"llm/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
+      {"vlm/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"vla/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"pick/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"nav/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
