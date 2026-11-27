@@ -54,28 +54,35 @@ struct Candidate {
   cv::Mat mask;
 };
 
-cv::Mat red_dominance_mask(const cv::Mat& bgr) {
+cv::Mat red_mask(const cv::Mat& hsv, const cv::Mat& bgr) {
   // 어두운 빨강(원기둥 앞면/그늘)은 HSV V 임계값에서 끊기고 가장자리만 남는다.
-  // R이 G/B보다 확실히 큰 픽셀을 쓰면 흰 카드/회색 바닥을 빼면서 앞면을 살릴 수 있다.
+  // R이 G/B보다 확실히 큰 픽셀과 HSV 빨강을 합쳐 앞면을 살린다.
   std::vector<cv::Mat> channels;
   cv::split(bgr, channels);
   cv::Mat bright;
   cv::Mat red_green;
   cv::Mat red_blue;
-  cv::compare(channels[2], 35, bright, cv::CMP_GT);
+  cv::compare(channels[2], 25, bright, cv::CMP_GT);
   cv::subtract(channels[2], channels[1], red_green);
   cv::subtract(channels[2], channels[0], red_blue);
-  cv::compare(red_green, 12, red_green, cv::CMP_GT);
-  cv::compare(red_blue, 12, red_blue, cv::CMP_GT);
+  cv::compare(red_green, 8, red_green, cv::CMP_GT);
+  cv::compare(red_blue, 8, red_blue, cv::CMP_GT);
   cv::bitwise_and(bright, red_green, bright);
   cv::bitwise_and(bright, red_blue, bright);
+
+  cv::Mat low;
+  cv::Mat high;
+  cv::inRange(hsv, cv::Scalar(0, 60, 15), cv::Scalar(15, 255, 255), low);
+  cv::inRange(hsv, cv::Scalar(165, 60, 15), cv::Scalar(180, 255, 255), high);
+  cv::bitwise_or(low, high, low);
+  cv::bitwise_or(bright, low, bright);
   return bright;
 }
 
 cv::Mat make_mask(const cv::Mat& hsv, const cv::Mat& bgr, const std::string& color) {
   cv::Mat mask;
   if (color == "red") {
-    mask = red_dominance_mask(bgr);
+    mask = red_mask(hsv, bgr);
   } else if (color == "yellow") {
     cv::inRange(hsv, cv::Scalar(15, 80, 60), cv::Scalar(40, 255, 255), mask);
   } else if (color == "blue") {
@@ -83,7 +90,7 @@ cv::Mat make_mask(const cv::Mat& hsv, const cv::Mat& bgr, const std::string& col
   }
   if (!mask.empty()) {
     const cv::Mat open_kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-    const cv::Mat close_kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
+    const cv::Mat close_kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(9, 9));
     cv::morphologyEx(mask, mask, cv::MORPH_OPEN, open_kernel);
     cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, close_kernel);
   }
@@ -278,7 +285,7 @@ void GraspDetectorNode::detect() {
   // 배경의 빨간 물체/케이블을 잡는 false positive를 막는다.
   // 그리퍼 최대 개방(약 6.2cm)에 가까운 후보는 pick이 거부하므로 아예
   // 발행하지 않고 마지막 valid 물체를 유지한다.
-  if (width > 0.060 || height > 0.250 || center_depth > 0.80) {
+  if (width > 0.072 || height > 0.300 || center_depth > 0.80) {
     return;
   }
   const double camera_x = (static_cast<double>(candidate->center.x) - c_cx) *
@@ -303,6 +310,10 @@ void GraspDetectorNode::detect() {
     return;
   }
   warned_tf_ = false;
+
+  // 바닥에 선 물체로 보고 중심 높이를 height/2로 쓴다. 색 중심의 optical y는
+  // 원기둥 앞면/바닥 반사에 끌려 z가 0에 가깝게 나왔다.
+  point.z = height * 0.5;
 
   krosc::msgs::Path path;
   path.header = krosc::msgs::Header{current, "odom"};

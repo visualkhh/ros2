@@ -26,7 +26,7 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kOpenGrip = 0.019;   // 그리퍼 최대 개방
 constexpr double kPuckGrip = 0.008;   // 4cm 퍽 기본 close (검출 폭이 없을 때)
 constexpr double kGripperBaseGap = 0.0244;  // finger gap at grip=0
-constexpr double kMaxObjectWidth = 0.060;   // detector가 발행하는 최대 폭
+constexpr double kMaxObjectWidth = 0.072;   // detector가 발행하는 최대 폭
 
 // 검출 폭에 맞춰 닫힘 위치를 계산한다. 물체보다 2mm 작게 목표를 두어
 // 살짝 조이는 힘이 걸리게 한다. 4cm 퍽이면 기존 8mm와 거의 같다.
