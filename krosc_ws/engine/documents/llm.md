@@ -242,7 +242,7 @@ odom 목표가 아니라 **시간 기반**이다.
 ## 11. 설정
 
 - Ollama URL: `EngineOptions::llm_ollama_url` (기본 `http://127.0.0.1:11434`)
-- 모델: `gemma3:4b` (실기 예: `KROSC_OLLAMA_MODEL=qwen2.5:1.5b`)
+- 모델: `gemma3:12b` (실기 예: `KROSC_OLLAMA_MODEL=qwen2.5:1.5b`)
 - mode: `llm`(기본, LLM-first) · `hybrid` · `rule`
 - timeout: 10초
 - `krosc_ws/engine/engine.cpp`에서 `LlmInput` 생성.

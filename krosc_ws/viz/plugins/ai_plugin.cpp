@@ -174,6 +174,9 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
   add_server("llm srv", llm_server_);
   add_server("vlm srv", vlm_server_);
   add_server("vla srv", vla_server_);
+  add_server("llm link", llm_link_);
+  add_server("vlm link", vlm_link_);
+  add_server("vla link", vla_link_);
   layout->addLayout(server_grid);
   auto* context_title = new QLabel("ROBOT CONTEXT", panel);
   context_title->setStyleSheet("color:#8a9ab3;font-size:11px;margin-top:4px;");
@@ -400,6 +403,25 @@ void AiPlugin::update_ui() {
                               fmt(camera.value("depth_age"), 1),
                               fmt(camera.value("depth_min")),
                               fmt(camera.value("depth_median"))));
+    const QJsonObject servers = c.value("servers").toObject();
+    const auto set_link = [&](QLabel* label, const QJsonObject& health) {
+      if (health.isEmpty()) {
+        label->setText("-");
+        return;
+      }
+      if (!health.value("enabled").toBool(true)) {
+        label->setText("off");
+        label->setStyleSheet("color:#8a9ab3;");
+        return;
+      }
+      const bool ok = health.value("ok").toBool();
+      label->setText(ok ? QString("연결됨 · %1").arg(health.value("detail").toString("ok"))
+                        : QString("오류 · %1").arg(health.value("detail").toString("연결 실패")));
+      label->setStyleSheet(ok ? "color:#54d18c;" : "color:#ff6b6b;");
+    };
+    set_link(llm_link_, servers.value("llm").toObject());
+    set_link(vlm_link_, servers.value("vlm").toObject());
+    set_link(vla_link_, servers.value("vla").toObject());
   }
 
   const QJsonDocument pick = QJsonDocument::fromJson(QByteArray::fromStdString(pick_text));

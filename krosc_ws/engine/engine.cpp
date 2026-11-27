@@ -238,9 +238,18 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
         options_.pick_objects_topic, options_.pick_grasp_info_topic);
   }
   if (options_.enable_ai_context) {
+    AiServerConfig ai_servers;
+    ai_servers.llm_enabled = options_.enable_llm;
+    ai_servers.llm_url = options_.llm_ollama_url;
+    ai_servers.llm_model = options_.llm_model;
+    ai_servers.vlm_enabled = options_.enable_vlm;
+    ai_servers.vlm_url = options_.vlm_url;
+    ai_servers.vla_enabled = options_.enable_vla;
+    ai_servers.vla_url = options_.vla_url;
     ai_context_ = std::make_unique<AiContextNode>(
         context_, options_.scan_topic, options_.camera_color_topic,
-        options_.camera_depth_topic, measure_robot_geometry(urdf_));
+        options_.camera_depth_topic, measure_robot_geometry(urdf_),
+        std::move(ai_servers));
   }
   if (options_.enable_pick) {
     pick_ = std::make_unique<PickPlaceNode>(context_, options_.pick_objects_topic,

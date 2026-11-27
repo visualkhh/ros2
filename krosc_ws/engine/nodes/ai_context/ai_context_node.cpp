@@ -1,18 +1,22 @@
 #include "ai_context_node.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <exception>
 #include <limits>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/tf/math.hpp"
+
+#include "nodes/common/http_client.hpp"
 
 namespace krosc_ws {
 
@@ -52,6 +56,49 @@ double battery_percent(double voltage) {
   return std::clamp((voltage - 9.6) / 3.0 * 100.0, 0.0, 100.0);
 }
 
+std::string base_url(std::string url) {
+  while (!url.empty() && url.back() == '/') {
+    url.pop_back();
+  }
+  return url;
+}
+
+std::string health_url(const std::string& url) {
+  const std::string base = base_url(url);
+  const std::size_t slash = base.rfind('/');
+  if (slash != std::string::npos) {
+    const std::string tail = base.substr(slash);
+    if (tail == "/query" || tail == "/plan") {
+      return base.substr(0, slash) + "/health";
+    }
+  }
+  return base + "/health";
+}
+
+std::string tags_url(const std::string& url) {
+  return base_url(url) + "/api/tags";
+}
+
+std::string health_detail(const HttpResponse& response) {
+  if (!response.ok) {
+    return response.error.empty() ? "연결 실패" : response.error;
+  }
+  const std::string& body = response.body;
+  const std::size_t key = body.find("\"model\"");
+  if (key == std::string::npos) {
+    return "ok";
+  }
+  const std::size_t start = body.find('"', key + 7);
+  if (start == std::string::npos) {
+    return "ok";
+  }
+  const std::size_t end = body.find('"', start + 1);
+  if (end == std::string::npos) {
+    return "ok";
+  }
+  return body.substr(start + 1, end - start - 1);
+}
+
 double value_of(const krosc::msgs::DiagnosticStatus& status, const std::string& key,
                 double fallback = 0.0) {
   for (const auto& value : status.values) {
@@ -70,12 +117,13 @@ double value_of(const krosc::msgs::DiagnosticStatus& status, const std::string& 
 
 AiContextNode::AiContextNode(krosc::Context& context, std::string scan_topic,
                              std::string color_topic, std::string depth_topic,
-                             RobotGeometry geometry)
+                             RobotGeometry geometry, AiServerConfig servers)
     : Node(context, "robot_context"),
       scan_topic_(std::move(scan_topic)),
       color_topic_(std::move(color_topic)),
       depth_topic_(std::move(depth_topic)),
-      geometry_(geometry) {
+      geometry_(geometry),
+      servers_(std::move(servers)) {
   tf_listener_ = std::make_unique<krosc::TransformListener>(tf_buffer_, *this);
   odom_subscription_ = subscribe<krosc::msgs::Odometry>(
       "odom", [this](const krosc::msgs::Odometry& message) {
@@ -217,9 +265,67 @@ AiContextNode::AiContextNode(krosc::Context& context, std::string scan_topic,
                 "arm_reach=%.3f source=%s",
                 geometry_.footprint[0], geometry_.footprint[1], geometry_.footprint[2],
                 geometry_.arm_reach, geometry_.from_urdf ? "urdf" : "fallback");
+  health_thread_ = std::thread([this] { health_loop(); });
 }
 
-AiContextNode::~AiContextNode() = default;
+AiContextNode::~AiContextNode() {
+  health_stop_.store(true);
+  if (health_thread_.joinable()) {
+    health_thread_.join();
+  }
+}
+
+void AiContextNode::health_loop() {
+  while (!health_stop_.load()) {
+    probe_servers();
+    for (int tick = 0; tick < 30 && !health_stop_.load(); ++tick) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }
+}
+
+void AiContextNode::probe_servers() {
+  AiServerHealth llm;
+  llm.enabled = servers_.llm_enabled && !servers_.llm_url.empty();
+  if (llm.enabled) {
+    const HttpResponse response = http_get(tags_url(servers_.llm_url), 0.45);
+    const bool model_found = response.ok && !servers_.llm_model.empty() &&
+                             response.body.find(servers_.llm_model) != std::string::npos;
+    llm.ok = model_found;
+    llm.detail = model_found ? servers_.llm_model
+                             : (response.ok ? "model not found" : health_detail(response));
+  } else {
+    llm.detail = "disabled";
+  }
+  llm.checked_at = now();
+
+  AiServerHealth vlm;
+  vlm.enabled = servers_.vlm_enabled && !servers_.vlm_url.empty();
+  if (vlm.enabled) {
+    const HttpResponse response = http_get(health_url(servers_.vlm_url), 0.45);
+    vlm.ok = response.ok;
+    vlm.detail = health_detail(response);
+  } else {
+    vlm.detail = "disabled";
+  }
+  vlm.checked_at = now();
+
+  AiServerHealth vla;
+  vla.enabled = servers_.vla_enabled && !servers_.vla_url.empty();
+  if (vla.enabled) {
+    const HttpResponse response = http_get(health_url(servers_.vla_url), 0.45);
+    vla.ok = response.ok;
+    vla.detail = health_detail(response);
+  } else {
+    vla.detail = "disabled";
+  }
+  vla.checked_at = now();
+
+  std::lock_guard<std::mutex> lock(health_mutex_);
+  llm_health_ = std::move(llm);
+  vlm_health_ = std::move(vlm);
+  vla_health_ = std::move(vla);
+}
 
 void AiContextNode::update() {
   const double current = now();
@@ -326,8 +432,22 @@ void AiContextNode::update() {
         << ",\"right_vel\":" << fixed(wheel_right_vel_, 3) << "}"
         << ",\"battery\":{\"voltage\":" << fixed(battery_voltage_, 2)
         << ",\"percent\":" << fixed(battery_percent_, 1)
-        << ",\"opencr\":\"" << escape_json(opencr_message_) << "\"}"
-        << "}";
+        << ",\"opencr\":\"" << escape_json(opencr_message_) << "\"}";
+    {
+      std::lock_guard<std::mutex> health_lock(health_mutex_);
+      const auto emit = [&](const char* name, const AiServerHealth& health) {
+        out << ",\"" << name << "\":{\"enabled\":" << (health.enabled ? "true" : "false")
+            << ",\"ok\":" << (health.ok ? "true" : "false")
+            << ",\"age\":" << fixed(health.checked_at > 0.0 ? current - health.checked_at : 999.0, 1)
+            << ",\"detail\":\"" << escape_json(health.detail) << "\"}";
+      };
+      out << ",\"servers\":{";
+      emit("llm", llm_health_);
+      emit("vlm", vlm_health_);
+      emit("vla", vla_health_);
+      out << "}";
+    }
+    out << "}";
   }
   publish<krosc::msgs::String>("robot_context",
                                krosc::msgs::String{out.str()}, krosc::QOS_DEFAULT);

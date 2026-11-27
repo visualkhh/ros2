@@ -1,9 +1,11 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "krosc/msgs.hpp"
@@ -22,6 +24,24 @@ struct RobotGeometry {
   bool from_urdf = false;
 };
 
+// AI 서버 헬스 체크 대상. URL이 비어 있거나 enabled=false면 검사하지 않는다.
+struct AiServerConfig {
+  bool llm_enabled = false;
+  std::string llm_url;
+  std::string llm_model;
+  bool vlm_enabled = false;
+  std::string vlm_url;
+  bool vla_enabled = false;
+  std::string vla_url;
+};
+
+struct AiServerHealth {
+  bool enabled = false;
+  bool ok = false;
+  double checked_at = 0.0;
+  std::string detail = "not checked";
+};
+
 // LLM/VLA/VLM이 행동 전에 참고할 AI 상태 스냅샷.
 // 소유권: 하드웨어 상태/진단은 RobotStatus, 자세/속도는 센서/컨트롤러,
 // TF는 robot_state_publisher가 소유한다. 이 노드는 그 canonical 토픽들을
@@ -31,7 +51,7 @@ class AiContextNode final : public krosc::Node {
  public:
   AiContextNode(krosc::Context& context, std::string scan_topic,
                 std::string color_topic, std::string depth_topic,
-                RobotGeometry geometry = {});
+                RobotGeometry geometry = {}, AiServerConfig servers = {});
   ~AiContextNode() override;
 
   AiContextNode(const AiContextNode&) = delete;
@@ -39,11 +59,21 @@ class AiContextNode final : public krosc::Node {
 
  private:
   void update();
+  void health_loop();
+  void probe_servers();
 
   std::string scan_topic_;
   std::string color_topic_;
   std::string depth_topic_;
   RobotGeometry geometry_;
+  AiServerConfig servers_;
+
+  std::atomic<bool> health_stop_{false};
+  std::thread health_thread_;
+  mutable std::mutex health_mutex_;
+  AiServerHealth llm_health_;
+  AiServerHealth vlm_health_;
+  AiServerHealth vla_health_;
 
   mutable std::mutex state_mutex_;
   bool odom_seen_ = false;

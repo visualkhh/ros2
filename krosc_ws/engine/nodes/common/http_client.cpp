@@ -284,4 +284,50 @@ HttpResponse http_post_json(const std::string& url, const std::string& body,
   return response;
 }
 
+HttpResponse http_get(const std::string& url, double timeout_s) {
+  HttpResponse response;
+  const Endpoint endpoint = parse_endpoint(url);
+  if (!endpoint.ok) {
+    response.error = endpoint.error;
+    return response;
+  }
+  const std::string request =
+      "GET " + endpoint.path + " HTTP/1.1\r\nHost: " + endpoint.host +
+      "\r\nConnection: close\r\n\r\n";
+  std::string error;
+  const int fd = connect_socket(endpoint, timeout_s, error);
+  if (fd < 0) {
+    response.error = std::move(error);
+    return response;
+  }
+  std::string raw;
+  const bool sent = send_all(fd, request, error);
+  const bool received = sent && receive_all(fd, raw, error);
+  close(fd);
+  if (!sent || !received) {
+    response.error = std::move(error);
+    return response;
+  }
+  const std::size_t header_end = raw.find("\r\n\r\n");
+  if (header_end == std::string::npos) {
+    response.error = "HTTP 헤더를 찾지 못했다";
+    return response;
+  }
+  const std::size_t status_end = raw.find("\r\n");
+  response.status = parse_status(raw.substr(0, status_end));
+  const std::string headers = raw.substr(0, header_end);
+  std::string payload = raw.substr(header_end + 4);
+  if (has_header_value(headers, "Transfer-Encoding", "chunked")) {
+    payload = decode_chunked(payload);
+  }
+  response.body = std::move(payload);
+  if (response.status < 200 || response.status >= 300) {
+    response.error = "HTTP " + std::to_string(response.status) + ": " +
+                     response.body.substr(0, 200);
+    return response;
+  }
+  response.ok = true;
+  return response;
+}
+
 }  // namespace krosc_ws

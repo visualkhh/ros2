@@ -21,6 +21,9 @@ export function init(host) {
   const llmServer = row(body, 'llm srv');
   const vlmServer = row(body, 'vlm srv');
   const vlaServer = row(body, 'vla srv');
+  const llmLink = row(body, 'llm link');
+  const vlmLink = row(body, 'vlm link');
+  const vlaLink = row(body, 'vla link');
 
   const contextTitle = document.createElement('div');
   contextTitle.className = 'muted';
@@ -172,15 +175,35 @@ export function init(host) {
     const mode = entry.mode ? ` [${entry.mode}]` : '';
     return `${entry.model || '-'} @ ${compactUrl(entry.url)}${mode}${suffix}`;
   };
+  let aiInfo = null;
+  let aiHealth = null;
+  const linkText = (health) => {
+    if (!health) return '-';
+    if (health.enabled === false) return 'off';
+    if (health.ok) {
+      return `연결됨 · ${health.detail || 'ok'}`;
+    }
+    return `오류 · ${health.detail || '연결 실패'}`;
+  };
+  const renderServers = () => {
+    if (aiInfo) {
+      setLevel(llmServer, serverText(aiInfo.llm));
+      setLevel(vlmServer, serverText(aiInfo.vlm));
+      setLevel(vlaServer, serverText(aiInfo.vla));
+      llmServer.title = JSON.stringify(aiInfo.llm || {});
+      vlmServer.title = JSON.stringify(aiInfo.vlm || {});
+      vlaServer.title = JSON.stringify(aiInfo.vla || {});
+    }
+    if (!aiHealth) return;
+    for (const [node, entry] of [[llmLink, aiHealth.llm], [vlmLink, aiHealth.vlm],
+                                  [vlaLink, aiHealth.vla]]) {
+      setLevel(node, linkText(entry),
+               entry && entry.enabled !== false ? (entry.ok ? 'ok' : 'bad') : '');
+    }
+  };
   host.onTopic('ai_info', (message) => {
-    let info;
-    try { info = JSON.parse(message.data); } catch { return; }
-    setLevel(llmServer, serverText(info.llm));
-    setLevel(vlmServer, serverText(info.vlm));
-    setLevel(vlaServer, serverText(info.vla));
-    llmServer.title = JSON.stringify(info.llm || {});
-    vlmServer.title = JSON.stringify(info.vlm || {});
-    vlaServer.title = JSON.stringify(info.vla || {});
+    try { aiInfo = JSON.parse(message.data); } catch { return; }
+    renderServers();
   }, { kind: 2, qos: 'latched' });
 
   const format = (value, digits = 2) => Number.isFinite(Number(value))
@@ -208,6 +231,10 @@ export function init(host) {
     }
     if (context.camera) {
       setLevel(cameraRow, `C ${context.camera.color || '-'} ${format(context.camera.color_age, 1)}s · D ${context.camera.depth || '-'} ${format(context.camera.depth_age, 1)}s · z ${format(context.camera.depth_min)}~${format(context.camera.depth_median)}m`);
+    }
+    if (context.servers) {
+      aiHealth = context.servers;
+      renderServers();
     }
   }, { kind: 2, qos: 'default' });
 
