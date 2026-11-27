@@ -69,11 +69,13 @@ double value_of(const krosc::msgs::DiagnosticStatus& status, const std::string& 
 }  // namespace
 
 AiContextNode::AiContextNode(krosc::Context& context, std::string scan_topic,
-                                   std::string color_topic, std::string depth_topic)
+                             std::string color_topic, std::string depth_topic,
+                             RobotGeometry geometry)
     : Node(context, "robot_context"),
       scan_topic_(std::move(scan_topic)),
       color_topic_(std::move(color_topic)),
-      depth_topic_(std::move(depth_topic)) {
+      depth_topic_(std::move(depth_topic)),
+      geometry_(geometry) {
   tf_listener_ = std::make_unique<krosc::TransformListener>(tf_buffer_, *this);
   odom_subscription_ = subscribe<krosc::msgs::Odometry>(
       "odom", [this](const krosc::msgs::Odometry& message) {
@@ -211,6 +213,10 @@ AiContextNode::AiContextNode(krosc::Context& context, std::string scan_topic,
   timer_ = create_timer(0.2, [this] { update(); });
   logger().info("AiContextNode: ready scan=%s color=%s depth=%s",
                 scan_topic_.c_str(), color_topic_.c_str(), depth_topic_.c_str());
+  logger().info("AiContextNode: geometry footprint=%.3fx%.3f height=%.3f "
+                "arm_reach=%.3f source=%s",
+                geometry_.footprint[0], geometry_.footprint[1], geometry_.footprint[2],
+                geometry_.arm_reach, geometry_.from_urdf ? "urdf" : "fallback");
 }
 
 AiContextNode::~AiContextNode() = default;
@@ -276,9 +282,13 @@ void AiContextNode::update() {
         << ",\"y\":" << fixed(pose_y) << ",\"yaw\":" << fixed(pose_yaw)
         << "},\"velocity\":{\"linear\":" << fixed(odom_linear_)
         << ",\"angular\":" << fixed(odom_angular_) << "}"
-        << ",\"robot\":{\"footprint\":[0.266,0.266],\"height\":0.141,"
-        << "\"arm_base\":[-0.092,0,0.091],\"arm_reach\":0.449,"
-        << "\"camera_mount\":[0.1167547,0.0325,0.0775]}"
+        << ",\"robot\":{\"footprint\":[" << fixed(geometry_.footprint[0], 3) << ","
+        << fixed(geometry_.footprint[1], 3) << "],\"height\":"
+        << fixed(geometry_.footprint[2], 3) << ",\"arm_base\":["
+        << fixed(geometry_.arm_base[0], 3) << "," << fixed(geometry_.arm_base[1], 3)
+        << "," << fixed(geometry_.arm_base[2], 3) << "],\"arm_reach\":"
+        << fixed(geometry_.arm_reach, 3) << ",\"from_urdf\":"
+        << (geometry_.from_urdf ? "true" : "false") << "}"
         << ",\"tf\":{\"map_base\":" << (tf_ok ? "true" : "false")
         << ",\"camera_link\":" << (camera_tf ? "true" : "false")
         << ",\"tcp_link\":" << (tcp_tf ? "true" : "false")

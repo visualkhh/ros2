@@ -1,6 +1,9 @@
 #include "engine.hpp"
 
+#include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -8,6 +11,7 @@
 #include <numbers>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -31,6 +35,7 @@
 #include "krosc/msgs.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/sensor/sensor_manager.hpp"
+#include "krosc/urdf.hpp"
 
 #include "controls/opencr/opencr_control.hpp"
 #include "hardwares/lds03/lds_device.hpp"
@@ -75,6 +80,108 @@ std::vector<bool> ekf_config(std::initializer_list<int> enabled) {
     }
   }
   return config;
+}
+
+// AI가 "내 몸 크기"를 하드코딩이 아니라 실제 URDF에서 알도록 정적 치수를 뽑는다.
+// 실시간 카메라/TCP 위치는 AiContextNode가 TF로 따로 채운다.
+RobotGeometry measure_robot_geometry(const std::string& text) {
+  RobotGeometry geometry;
+  krosc::UrdfRobot robot;
+  try {
+    robot = krosc::parse_urdf(text);
+  } catch (const std::exception&) {
+    return geometry;
+  }
+
+  std::map<std::string, const krosc::UrdfJoint*> parent_joint;
+  for (const auto& joint : robot.joints) {
+    parent_joint[joint.child] = &joint;
+  }
+
+  const auto link_offset = [&parent_joint](const std::string& name) {
+    std::array<double, 3> offset{0.0, 0.0, 0.0};
+    std::string current = name;
+    for (int depth = 0; depth < 32; ++depth) {
+      const auto found = parent_joint.find(current);
+      if (found == parent_joint.end()) {
+        break;
+      }
+      const auto& joint = *found->second;
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        offset[axis] += joint.xyz[axis];
+      }
+      current = joint.parent;
+      if (current == "base_footprint") {
+        break;
+      }
+    }
+    return offset;
+  };
+
+  // 몸체(footprint/height)는 base_link 충돌 박스와 base_scan까지의 고정 체인에서 구한다.
+  if (const auto* base = robot.find_link("base_link")) {
+    for (const auto& collision : base->collisions) {
+      if (collision.geometry.type != krosc::UrdfGeometryType::Box) {
+        continue;
+      }
+      geometry.footprint[0] = collision.geometry.size[0];
+      geometry.footprint[1] = collision.geometry.size[1];
+      geometry.footprint[2] = link_offset("base_link")[2] + collision.xyz[2] +
+                              collision.geometry.size[2] * 0.5;
+      break;
+    }
+  }
+  for (const auto* link : {robot.find_link("base_scan"), robot.find_link("base_link")}) {
+    if (link == nullptr) {
+      continue;
+    }
+    for (const auto& collision : link->collisions) {
+      if (collision.geometry.type != krosc::UrdfGeometryType::Box) {
+        continue;
+      }
+      const double top = link_offset(link->name)[2] + collision.xyz[2] +
+                         collision.geometry.size[2] * 0.5;
+      geometry.footprint[2] = std::max(geometry.footprint[2], top);
+      break;
+    }
+  }
+
+  // 팔 베이스와 완전히 폈을 때의 도달 거리.
+  for (const auto& joint : robot.joints) {
+    if (joint.name == "arm_base_joint") {
+      geometry.arm_base = joint.xyz;
+      break;
+    }
+  }
+  double reach = 0.0;
+  std::string current = "link1";
+  for (int depth = 0; depth < 16; ++depth) {
+    const krosc::UrdfJoint* next = nullptr;
+    for (const auto& joint : robot.joints) {
+      if (joint.parent == current && joint.movable()) {
+        next = &joint;
+        break;
+      }
+    }
+    if (next == nullptr) {
+      break;
+    }
+    reach += std::hypot(std::hypot(next->xyz[0], next->xyz[1]), next->xyz[2]);
+    current = next->child;
+  }
+  if (const auto* tip = robot.find_link("gripper_left_link")) {
+    for (const auto& collision : tip->collisions) {
+      if (collision.geometry.type == krosc::UrdfGeometryType::Box) {
+        reach += collision.xyz[0] + collision.geometry.size[0] * 0.5;
+        break;
+      }
+    }
+  }
+  if (reach > 0.0) {
+    geometry.arm_reach = reach;
+  }
+  geometry.from_urdf = true;
+  return geometry;
 }
 
 }  // namespace
@@ -133,7 +240,7 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
   if (options_.enable_ai_context) {
     ai_context_ = std::make_unique<AiContextNode>(
         context_, options_.scan_topic, options_.camera_color_topic,
-        options_.camera_depth_topic);
+        options_.camera_depth_topic, measure_robot_geometry(urdf_));
   }
   if (options_.enable_pick) {
     pick_ = std::make_unique<PickPlaceNode>(context_, options_.pick_objects_topic,

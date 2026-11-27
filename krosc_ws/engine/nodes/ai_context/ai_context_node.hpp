@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -12,6 +13,15 @@
 
 namespace krosc_ws {
 
+// URDF에서 계산한 정적 치수. LLM/VLA/VLM이 도달 가능성과 통과 가능성을
+// 판단할 때 사용한다. TF가 알려주는 실시간 카메라/TCP 위치와 별개다.
+struct RobotGeometry {
+  std::array<double, 3> footprint{0.266, 0.266, 0.141};  // x, y, base 높이
+  std::array<double, 3> arm_base{-0.092, 0.0, 0.091};    // base_link 기준
+  double arm_reach = 0.449;                              // arm_base에서 손끝까지
+  bool from_urdf = false;
+};
+
 // LLM/VLA/VLM이 행동 전에 참고할 AI 상태 스냅샷.
 // 소유권: 하드웨어 상태/진단은 RobotStatus, 자세/속도는 센서/컨트롤러,
 // TF는 robot_state_publisher가 소유한다. 이 노드는 그 canonical 토픽들을
@@ -20,7 +30,8 @@ namespace krosc_ws {
 class AiContextNode final : public krosc::Node {
  public:
   AiContextNode(krosc::Context& context, std::string scan_topic,
-                std::string color_topic, std::string depth_topic);
+                std::string color_topic, std::string depth_topic,
+                RobotGeometry geometry = {});
   ~AiContextNode() override;
 
   AiContextNode(const AiContextNode&) = delete;
@@ -32,6 +43,7 @@ class AiContextNode final : public krosc::Node {
   std::string scan_topic_;
   std::string color_topic_;
   std::string depth_topic_;
+  RobotGeometry geometry_;
 
   mutable std::mutex state_mutex_;
   bool odom_seen_ = false;

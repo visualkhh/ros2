@@ -28,6 +28,7 @@ export function init(host) {
   contextTitle.style.marginTop = '4px';
   body.append(contextTitle);
   const poseRow = row(body, 'pose');
+  const sizeRow = row(body, 'size');
   const lidarRow = row(body, 'lidar');
   const armRow = row(body, 'arm');
   const wheelsRow = row(body, 'wheels');
@@ -189,6 +190,10 @@ export function init(host) {
     try { context = JSON.parse(message.data); } catch { return; }
     if (context.pose) {
       setLevel(poseRow, `${context.pose.frame || '-'} x ${format(context.pose.x)} y ${format(context.pose.y)} yaw ${format(context.pose.yaw, 1)}°`);
+    }
+    if (context.robot && Array.isArray(context.robot.footprint)) {
+      const [fx, fy] = context.robot.footprint;
+      setLevel(sizeRow, `foot ${format(fx)}x${format(fy)} · h ${format(context.robot.height)} · reach ${format(context.robot.arm_reach)} m${context.robot.from_urdf ? ' · URDF' : ''}`);
     }
     if (context.lidar) {
       setLevel(lidarRow, `front ${format(context.lidar.front)} · left ${format(context.lidar.left)} · right ${format(context.lidar.right)} m`,

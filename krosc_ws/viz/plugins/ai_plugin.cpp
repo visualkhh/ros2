@@ -190,6 +190,7 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
     context_grid->addWidget(target, row, 1);
   };
   add_context("pose", pose_);
+  add_context("size", size_);
   add_context("lidar", lidar_);
   add_context("arm", arm_);
   add_context("wheels", wheels_);
@@ -366,6 +367,15 @@ void AiPlugin::update_ui() {
                        .arg(pose.value("frame").toString("-"),
                             fmt(pose.value("x")), fmt(pose.value("y")),
                             fmt(pose.value("yaw"), 1)));
+    const QJsonObject robot = c.value("robot").toObject();
+    const QJsonArray footprint = robot.value("footprint").toArray();
+    if (footprint.size() >= 2) {
+      size_->setText(QString("foot %1x%2 · h %3 · reach %4 m%5")
+                         .arg(fmt(footprint.at(0)), fmt(footprint.at(1)),
+                              fmt(robot.value("height")),
+                              fmt(robot.value("arm_reach")),
+                              robot.value("from_urdf").toBool() ? " · URDF" : ""));
+    }
     const QJsonObject lidar = c.value("lidar").toObject();
     lidar_->setText(QString("front %1 · left %2 · right %3 m")
                         .arg(fmt(lidar.value("front")), fmt(lidar.value("left")),
