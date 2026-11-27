@@ -78,7 +78,8 @@ QString route_target(const QString& intent) {
 }
 
 QString route_text(const QJsonObject& plan, const QString& source) {
-  const QString origin = source == "llm" ? "LLM" : source == "rule" ? "rule" : "-";
+  const QString origin = source == "llm" ? "LLM" : source == "rule" ? "rule"
+      : source == "llm+rule" || source == "rule+llm" ? "LLM+rule" : "-";
   return origin + " → " + route_target(plan.value("intent").toString());
 }
 
@@ -89,10 +90,12 @@ QString server_text(const QJsonValue& value) {
   if (url.startsWith("http://")) url.remove(0, 7);
   if (url.startsWith("https://")) url.remove(0, 8);
   const QString model = entry.value("model").toString();
+  const QString mode = entry.value("mode").toString();
   const bool enabled = entry.value("enabled").toBool(true);
+  const QString suffix = (mode.isEmpty() ? QString() : QString(" [%1]").arg(mode)) +
+                         (enabled ? QString() : QString(" (off)"));
   return QString("%1 @ %2%3").arg(model.isEmpty() ? "-" : model,
-                                   url.isEmpty() ? "-" : url,
-                                   enabled ? "" : " (off)");
+                                   url.isEmpty() ? "-" : url, suffix);
 }
 
 QString plan_text(const QJsonObject& plan) {
@@ -311,7 +314,8 @@ void AiPlugin::update_ui() {
       plan_->setText(plan_text(plan));
       const QString source = event.value("source").toString();
       source_->setText(source.isEmpty() ? "-" : source);
-      source_->setStyleSheet(source == "llm" ? "color:#ffb36b;" : "color:#54d18c;");
+      source_->setStyleSheet(source == "llm" || source == "llm+rule"
+                                 ? "color:#ffb36b;" : "color:#54d18c;");
       route_->setText(route_text(plan, source));
     }
     const QString error = event.value("error").toString();

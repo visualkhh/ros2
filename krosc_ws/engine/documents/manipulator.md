@@ -57,10 +57,10 @@ pose.pose.position = {object->pose.x, object->pose.y,
 5. `switch_arm()`: `controller_manager/switch_controller`로
    `joint_trajectory_controller` 활성화 (strictness 0; best effort).
 6. MoveIt `move_to()` joint-space:
-   - `approach`: `x,y, center+0.13`, pitch 20°, grip 19 mm
+   - `approach`: `x,y, center+0.07`, pitch 35°, grip 19 mm
    - `descend`: `x,y, center+0.015`, pitch 45°
    - `close`: 같은 pose, grip 8 mm
-   - `lift`: `x,y, center+0.16`, pitch 20°, grip 8 mm
+   - `lift`: `x,y, center+0.12`, pitch 20°, grip 8 mm
 7. `move_to()`는 action status뿐 아니라 **MoveGroupResult.error_code**까지 검사한다.
    `PLANNING_FAILED`/`INVALID_GOAL`인데 done으로 넘어가던 버그를 막는다.
 

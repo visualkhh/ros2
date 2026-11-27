@@ -148,7 +148,8 @@ export function init(host) {
     unsupported: '-',
   };
   const routeText = (plan, src) => {
-    const origin = src === 'llm' ? 'LLM' : src === 'rule' ? 'rule' : '-';
+    const origin = src === 'llm' ? 'LLM' : src === 'rule' ? 'rule'
+      : src === 'llm+rule' || src === 'rule+llm' ? 'LLM+rule' : '-';
     const target = plan && plan.intent ? (routeTargets[plan.intent] || plan.intent) : '-';
     return `${origin} → ${target}`;
   };
@@ -156,7 +157,8 @@ export function init(host) {
   const serverText = (entry) => {
     if (!entry) return '-';
     const suffix = entry.enabled === false ? ' (off)' : '';
-    return `${entry.model || '-'} @ ${compactUrl(entry.url)}${suffix}`;
+    const mode = entry.mode ? ` [${entry.mode}]` : '';
+    return `${entry.model || '-'} @ ${compactUrl(entry.url)}${mode}${suffix}`;
   };
   host.onTopic('ai_info', (message) => {
     let info;
@@ -193,7 +195,8 @@ export function init(host) {
                  : event.stage === 'thinking' || event.stage === 'executing' ? 'warn' : '');
     if (event.plan) {
       if (event.source) {
-        setLevel(source, event.source, event.source === 'llm' ? 'warn' : 'ok');
+        setLevel(source, event.source,
+                 event.source === 'llm' || event.source === 'llm+rule' ? 'warn' : 'ok');
       }
       setLevel(route, routeText(event.plan, event.source));
       const parts = [event.plan.intent];

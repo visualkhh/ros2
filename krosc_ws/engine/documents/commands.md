@@ -2,8 +2,8 @@
 
 > 이 문서는 **실제로 동작하는 명령 90개**를 모은 것이다.
 > 매니퓰레이터 20 + 주행 20 + 엔터테인먼트 30 + 비프음 20.
-> `krosc_ws/engine/nodes/command_rules.cpp`가 먼저 결정적으로 해석하고,
-> 규칙에 없으면 Ollama(`gemma3:4b`)로 폴백한다.
+> 기본 `KROSC_LLM_MODE=llm`에서는 Ollama가 먼저 intent를 정하고,
+> `command_rules.cpp`의 90개 규칙은 LLM 실패/unsupported 시 fallback이다.
 > 표의 `plan`은 AI 패널의 `plan` 줄, `llm/status`의 `plan` JSON과 같은 모양이다.
 
 ## 0. 읽는 법

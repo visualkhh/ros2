@@ -23,7 +23,7 @@ namespace krosc_ws {
 class LlmInput final : public krosc::Node {
  public:
   LlmInput(krosc::Context& context, std::string ollama_url, std::string model,
-           double timeout_s);
+           double timeout_s, std::string mode = "llm");
   ~LlmInput() override;
 
   LlmInput(const LlmInput&) = delete;
@@ -66,6 +66,7 @@ class LlmInput final : public krosc::Node {
 
   std::unique_ptr<OllamaClient> client_;
   std::unique_ptr<MoveClient> move_;
+  std::string mode_;
 
   std::deque<Request> queue_;
   std::mutex queue_mutex_;

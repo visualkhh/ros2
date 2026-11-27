@@ -2,7 +2,8 @@
 
 > **한 문장**: LLM은 "무슨 일을 할지"만 정하고, 실제 모터/팔/주행은
 > `pick_place`, `nav_behavior`, `vla_node`, `robot_status`가 결정적으로 실행한다.
-> 자주 쓰는 90개 명령은 LLM 없이 `command_rules`가 먼저 잡는다.
+> 기본 `KROSC_LLM_MODE=llm`에서는 LLM이 먼저 intent를 정하고,
+> 90개 `command_rules`는 LLM 실패/unsupported 시 fallback으로 쓴다.
 
 ## 0. 3분 따라가기 — "노란 퍽을 집어 올려"
 
@@ -12,8 +13,9 @@
         │  WebRPC llm/command
         ▼
 ② llm_input
-   command_rules 매칭
+   Ollama intent (기본 llm 모드)
    {"intent":"pick","target":"yellow"}
+   ※ 규칙 명령도 Ollama를 타며, 실패 시 command_rules fallback
         │  service pick/command
         ▼
 ③ pick_place
@@ -23,10 +25,10 @@
         │  MoveIt move_action
         ▼
 ④ MoveGroup
-   approach(z=center+0.13, pitch 20°, grip 19mm)
+   approach(z=center+0.07, pitch 35°, grip 19mm)
    descend (z=center+0.015, pitch 45°)
    close   (grip 8mm)
-   lift    (z=center+0.16, pitch 20°)
+   lift    (z=center+0.12, pitch 20°)
         │
         ▼
 ⑤ 시뮬레이터 WafflePiArm

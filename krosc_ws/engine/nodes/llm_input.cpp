@@ -55,8 +55,10 @@ Convert the user's Korean or English request into exactly one intent.
 - approach: drive forward close to the visible wall or object ahead using the lidar. No arguments.
 - dance: entertainment motion. style = dance (default), spin (turn in place), wiggle (shake side to side), bow (greet), celebrate (success melody + dance), show (roam + arm wave + melody), wave (arm wave in place).
   Examples: "춤춰" -> dance style dance; "빙글빙글 돌아" -> spin; "흔들어" -> wiggle; "인사해" -> bow; "축하해" -> celebrate; "노래부르면서 춤춰" -> show; "손 흔들어" -> wave.
-- vlm_query: ask the camera/scene a question. Put the question in question.
-- vla_pick: use the learned VLA policy, only when the user explicitly asks for it (red/blue cube).
+- vlm_query: use this when the user asks what the camera sees, asks to describe/identify the scene, or asks any visual question. Put the question in question.
+  Examples: "지금 카메라에 뭐가 보여?" -> vlm_query; "앞에 뭐 있어?" -> vlm_query.
+- vla_pick: use the learned VLA policy when the user asks to pick/place a red or blue cube, asks for a VLA/learned policy, or asks for an AI/learned pick. Put the color/object in target.
+- pick: deterministic manipulator pick, normally for the yellow puck or known objects. Red/blue cube or "VLA" requests should use vla_pick.
 - unsupported: multiple actions, missing distance/preset, or anything else.
 Always include meters in the JSON. Use 0 when the intent is not drive.
 Return only the JSON object. Do not explain.)";
@@ -146,11 +148,12 @@ void apply_direction_hint(const std::string& text, llm::Plan& plan) {
 }  // namespace
 
 LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string model,
-                   double timeout_s)
+                   double timeout_s, std::string mode)
     : Node(context, "llm_input"),
       client_(std::make_unique<OllamaClient>(std::move(ollama_url), std::move(model),
                                              timeout_s)),
-      move_(std::make_unique<MoveClient>(context, krosc::msgs::moveit::MOVE_ACTION)) {
+      move_(std::make_unique<MoveClient>(context, krosc::msgs::moveit::MOVE_ACTION)),
+      mode_(std::move(mode)) {
   odom_subscription_ = subscribe<krosc::msgs::Odometry>(
       "odom", [this](const krosc::msgs::Odometry& message) {
         std::lock_guard<std::mutex> lock(odom_mutex_);
@@ -245,25 +248,47 @@ void LlmInput::worker_loop() {
 
 void LlmInput::process(const Request& request) {
   publish_status(request.id, "thinking");
+  const auto rule = llm::parse_command(request.text);
   llm::Plan plan;
   std::string source = "rule";
-  if (const auto rule = llm::parse_command(request.text)) {
+
+  // stop은 서버 장애와 무관하게 즉시 처리한다. 나머지는 LLM이 우선 라우팅한다.
+  if (rule && rule->intent == "stop") {
     plan = *rule;
+    source = "rule";
+  } else if (mode_ == "rule" && rule) {
+    plan = *rule;
+    source = "rule";
   } else {
-    source = "llm";
     const OllamaReply reply = client_->chat(kSystemPrompt, request.text, kSchema);
-    if (!reply.ok) {
+    if (reply.ok) {
+      const auto parsed = llm::parse_plan(reply.content);
+      if (parsed) {
+        if (parsed->intent == "unsupported" && rule) {
+          // LLM이 모르는 명령은 검증된 90개 규칙으로 fallback.
+          plan = *rule;
+          source = "llm+rule";
+        } else {
+          plan = *parsed;
+          source = "llm";
+          apply_direction_hint(request.text, plan);
+        }
+      } else if (rule) {
+        plan = *rule;
+        source = "rule";
+      } else {
+        publish_status(request.id, "error",
+                       ",\"error\":" + json_quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
+        return;
+      }
+    } else if (rule) {
+      // LLM 서버가 죽어도 알려진 명령은 결정적으로 계속한다.
+      plan = *rule;
+      source = "rule";
+    } else {
       publish_status(request.id, "error", ",\"error\":" + json_quoted(reply.error));
       return;
     }
-    const auto parsed = llm::parse_plan(reply.content);
-    if (!parsed) {
-      publish_status(request.id, "error",
-                     ",\"error\":" + json_quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
-      return;
-    }
-    plan = *parsed;
-    apply_direction_hint(request.text, plan);
   }
   std::string plan_json = "{\"intent\":" + json_quoted(plan.intent);
   if (plan.meters != 0.0) {

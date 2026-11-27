@@ -139,7 +139,7 @@ void usage() {
                "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR,\n"
                "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_CAMERA (1), KROSC_CAMERA_SERIAL,\n"
                "     KROSC_CAMERA_RATE (5), KROSC_CAMERA_DEPTH_RATE (2), KROSC_EXECUTOR_THREADS (10),\n"
-               "     KROSC_GRASP_DETECTOR (1), KROSC_OLLAMA_URL, KROSC_OLLAMA_MODEL,\n"
+               "     KROSC_GRASP_DETECTOR (1), KROSC_OLLAMA_URL, KROSC_OLLAMA_MODEL, KROSC_LLM_MODE (llm|hybrid|rule),\n"
                "     KROSC_VLA_URL (http://127.0.0.1:8765/plan), KROSC_VLM_URL (http://127.0.0.1:8766/query)\n";
 }
 
@@ -335,6 +335,7 @@ int main(int argc, char** argv) {
   engine_options.llm_ollama_url =
       env_or("KROSC_OLLAMA_URL", engine_options.llm_ollama_url);
   engine_options.llm_model = env_or("KROSC_OLLAMA_MODEL", engine_options.llm_model);
+  engine_options.llm_mode = env_or("KROSC_LLM_MODE", engine_options.llm_mode);
   engine_options.vla_url = env_or("KROSC_VLA_URL", engine_options.vla_url);
   engine_options.vlm_url = env_or("KROSC_VLM_URL", engine_options.vlm_url);
   engine_options.control_read_period = 0.02;

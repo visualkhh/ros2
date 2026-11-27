@@ -69,6 +69,10 @@ struct EngineOptions {
   // llm_input 노드가 직접 호출하는 Ollama 서버. 원격 서버는 KROSC_OLLAMA_URL로 덮어쓴다.
   std::string llm_ollama_url = "http://127.0.0.1:11434";
   std::string llm_model = "gemma3:4b";
+  // llm: Ollama가 intent를 결정(규칙은 실패/unsupported fallback)
+  // hybrid: Ollama 호출 + 알려진 규칙 명령은 규칙 결과 우선
+  // rule: 규칙 우선, 규칙에 없을 때만 Ollama
+  std::string llm_mode = "llm";
   double llm_timeout = 10.0;
   bool enable_vla = true;
   bool enable_vlm = true;

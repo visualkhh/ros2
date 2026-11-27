@@ -1,8 +1,10 @@
-# LLM: 규칙 우선 intent parser / router
+# LLM: intent parser / router (LLM-first, 규칙 fallback)
 
 > LLM은 **모터를 제어하지 않는다.** 문장을 `{intent, 파라미터}` JSON으로 바꾸고,
 > C++ 라우터가 기존 서비스/액션으로 넘긴다.
-> 자주 쓰는 90개 명령은 **Ollama 없이** `command_rules.cpp`가 먼저 해석한다.
+> 기본 `KROSC_LLM_MODE=llm`에서는 **모든 명령이 Ollama를 먼저** 타서
+> `vlm_query`/`vla_pick`/`pick` 등을 결정한다. 90개 규칙은 LLM 실패/unsupported
+> 시 fallback이다. `KROSC_LLM_MODE=hybrid|rule`로 바꿀 수 있다.
 
 ## 1. 소스
 
@@ -26,9 +28,9 @@ browser ai.js
       context.services().call<String,String>('llm/command', text)
         → llm_input::handle_command
           → queue + worker
-            → llm::parse_command(text)   ← 1차: 90개 규칙
-              ├─ 매칭됨: source="rule", Ollama 호출 없음
-              └─ 없음:   source="llm", POST /api/chat
+            → POST /api/chat (mode=llm, 기본)
+              ├─ 성공: source="llm", LLM intent 사용
+              └─ 실패/unsupported: source="rule"|"llm+rule", 90개 규칙 fallback
             → parse_plan + apply_direction_hint
             → dispatch
 ```
