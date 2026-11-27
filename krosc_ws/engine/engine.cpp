@@ -225,7 +225,8 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
   if (options_.enable_vla) {
     vla_ = std::make_unique<VlaNode>(context_, options_.vla_url,
                                      options_.camera_color_topic,
-                                     options_.vla_period, options_.vla_timeout);
+                                     options_.vla_period, options_.vla_timeout,
+                                     options_.vla_replan_steps);
   }
   if (options_.enable_vlm) {
     vlm_ = std::make_unique<VlmNode>(context_, options_.vlm_url,

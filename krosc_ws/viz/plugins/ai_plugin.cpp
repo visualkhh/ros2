@@ -42,6 +42,7 @@ QString stage_text(const QString& stage) {
 QString pick_stage_text(const QString& stage) {
   if (stage == "switching") return "컨트롤러 전환";
   if (stage == "planning") return "계획";
+  if (stage == "replanning") return "재계획";
   if (stage == "executing") return "실행";
   if (stage == "approach") return "접근";
   if (stage == "approaching") return "벽/물체 접근";

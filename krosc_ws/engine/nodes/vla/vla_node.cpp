@@ -115,12 +115,13 @@ std::vector<double> number_array_field(const std::string& json,
 }  // namespace
 
 VlaNode::VlaNode(krosc::Context& context, std::string url, std::string camera_topic,
-                 double period_s, double timeout_s)
+                 double period_s, double timeout_s, std::size_t replan_steps)
     : Node(context, "vla"),
       url_(std::move(url)),
       camera_topic_(std::move(camera_topic)),
       period_s_(period_s > 0.0 ? period_s : 0.25),
-      timeout_s_(timeout_s > 0.0 ? timeout_s : 180.0) {
+      timeout_s_(timeout_s > 0.0 ? timeout_s : 180.0),
+      replan_steps_(replan_steps) {
   camera_subscription_ = subscribe<krosc::msgs::Image>(
       camera_topic_, [this](const krosc::msgs::Image& message) {
         std::lock_guard<std::mutex> lock(image_mutex_);
@@ -257,6 +258,16 @@ void VlaNode::worker_loop() {
     std::string instruction;
     std::string error;
     if (!request_plan(id, target, actions, instruction, error)) {
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (plan_id_ == id) {
+          plan_active_ = false;
+          actions_.clear();
+        }
+      }
+      stop_motion();
+      std::string ignored;
+      (void)switch_arm(false, ignored);
       publish_status(id, "error", ",\"error\":" + json_quoted(error));
       continue;
     }
@@ -271,6 +282,13 @@ void VlaNode::worker_loop() {
     }
     std::string switch_error;
     if (!switch_arm(true, switch_error)) {
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (plan_id_ == id) {
+          plan_active_ = false;
+          actions_.clear();
+        }
+      }
       publish_status(id, "error",
                      ",\"error\":" + json_quoted("controller switch: " + switch_error));
       continue;
@@ -289,6 +307,7 @@ void VlaNode::worker_loop() {
         plan_index_ = 0;
         plan_total_ = actions.size();
         plan_instruction_ = instruction;
+        plan_target_ = target;
       }
     }
     if (cancelled) {
@@ -308,17 +327,38 @@ void VlaNode::tick() {
   std::uint64_t id = 0;
   std::size_t index = 0;
   std::size_t total = 0;
+  bool replan = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!plan_active_ || actions_.empty()) {
       return;
     }
-    action = actions_.front();
-    actions_.pop_front();
-    ++plan_index_;
     id = plan_id_;
     index = plan_index_;
     total = plan_total_;
+    // 92스텝 청크를 끝까지 open-loop로 실행하면 23초 동안 새 관측을 못 본다.
+    // N스텝마다 큐를 비우고 최신 카메라/관절/odom으로 다시 계획한다.
+    if (replan_steps_ > 0 && plan_index_ >= replan_steps_ &&
+        plan_index_ < plan_total_ && !pending_) {
+      actions_.clear();
+      pending_ = true;
+      pending_id_ = plan_id_;
+      pending_target_ = plan_target_;
+      replan = true;
+    } else {
+      action = actions_.front();
+      actions_.pop_front();
+      ++plan_index_;
+      index = plan_index_;
+    }
+  }
+  if (replan) {
+    stop_motion();
+    publish_status(id, "replanning",
+                   ",\"index\":" + std::to_string(index) +
+                       ",\"steps\":" + std::to_string(total));
+    condition_.notify_one();
+    return;
   }
   apply_action(action);
   publish_status(id, "executing",

@@ -94,6 +94,8 @@ struct EngineOptions {
   std::string nav_scan_topic = "scan";
   double vla_period = 0.25;
   double vla_timeout = 180.0;
+  // 0이면 한 청크를 끝까지 open-loop 실행. >0이면 N스텝마다 최신 관측으로 재계획.
+  std::size_t vla_replan_steps = 8;
   double vlm_timeout = 60.0;
   double wheel_radius = 0.033;
   double wheel_separation = 0.287;

@@ -294,6 +294,7 @@ export function init(host) {
   const armStages = {
     switching: '컨트롤러 전환',
     planning: '계획',
+    replanning: '재계획',
     executing: '실행',
     approach: '접근',
     approaching: '벽/물체 접근',

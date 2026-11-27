@@ -24,7 +24,7 @@ namespace krosc_ws {
 class VlaNode final : public krosc::Node {
  public:
   VlaNode(krosc::Context& context, std::string url, std::string camera_topic,
-          double period_s, double timeout_s);
+          double period_s, double timeout_s, std::size_t replan_steps = 8);
   ~VlaNode() override;
 
   VlaNode(const VlaNode&) = delete;
@@ -54,6 +54,7 @@ class VlaNode final : public krosc::Node {
   std::string camera_topic_;
   double period_s_ = 0.25;
   double timeout_s_ = 180.0;
+  std::size_t replan_steps_ = 8;
 
   std::thread worker_;
   std::mutex mutex_;
@@ -71,6 +72,7 @@ class VlaNode final : public krosc::Node {
   std::size_t plan_index_ = 0;
   std::size_t plan_total_ = 0;
   std::string plan_instruction_;
+  std::string plan_target_;
 
   std::mutex image_mutex_;
   krosc::msgs::Image image_;

@@ -338,6 +338,13 @@ int main(int argc, char** argv) {
   engine_options.llm_mode = env_or("KROSC_LLM_MODE", engine_options.llm_mode);
   engine_options.vla_url = env_or("KROSC_VLA_URL", engine_options.vla_url);
   engine_options.vlm_url = env_or("KROSC_VLM_URL", engine_options.vlm_url);
+  try {
+    engine_options.vla_replan_steps = static_cast<std::size_t>(
+        std::max(0, std::stoi(env_or("KROSC_VLA_REPLAN_STEPS",
+                                     std::to_string(engine_options.vla_replan_steps)))));
+  } catch (const std::exception&) {
+    // 기본값 유지
+  }
   engine_options.control_read_period = 0.02;
   engine_options.control_write_period = 0.02;
   engine_options.control_period = 0.01;
