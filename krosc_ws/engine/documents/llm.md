@@ -243,6 +243,8 @@ odom 목표가 아니라 **시간 기반**이다.
 - 모델: `gemma3:4b`
 - timeout: 10초
 - `krosc_ws/engine/engine.cpp`에서 `LlmInput` 생성.
+- 원격 Ollama는 `KROSC_OLLAMA_URL=http://<server>:11434`로 덮어쓴다.
+  (90개 규칙은 Ollama 없이도 동작한다.)
 
 ## 12. 테스트
 

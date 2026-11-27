@@ -52,6 +52,7 @@ class VlaNode;
 class VlmNode;
 class PickPlaceNode;
 class NavBehaviorNode;
+class GraspDetectorNode;
 
 struct EngineOptions {
   std::string urdf_path;
@@ -73,9 +74,13 @@ struct EngineOptions {
   bool enable_vlm = true;
   bool enable_pick = true;
   bool enable_nav_behavior = true;
+  // 실기 D435 color/depth에서 물체를 찾아 pick_objects_topic으로 발행한다.
+  // 시뮬레이터는 자체 world publisher가 있으므로 false로 둔다.
+  bool enable_grasp_detector = false;
   std::string vla_url = "http://127.0.0.1:8765/plan";
   std::string vlm_url = "http://127.0.0.1:8766/query";
   std::string pick_objects_topic = "sim_graspable";
+  std::string pick_grasp_info_topic = "grasp_info";
   std::string nav_costmap_topic = "global_costmap/costmap";
   std::string nav_scan_topic = "scan";
   double vla_period = 0.25;
@@ -144,6 +149,7 @@ class Engine {
   std::unique_ptr<VlmNode> vlm_;
   std::unique_ptr<PickPlaceNode> pick_;
   std::unique_ptr<NavBehaviorNode> nav_behavior_;
+  std::unique_ptr<GraspDetectorNode> grasp_detector_;
   std::unique_ptr<krosc::sensor::SensorManager> sensors_;
   std::unique_ptr<krosc::control::ControlManager> controls_;
   std::unique_ptr<krosc::control::ControllerManager> controller_manager_;

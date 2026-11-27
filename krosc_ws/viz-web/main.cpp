@@ -223,6 +223,8 @@ int main(int argc, char** argv) {
       {"vla/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"pick/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"nav/status", krosc::net::Kind::String, krosc::QOS_DEFAULT},
+      {"sim_graspable", krosc::net::Kind::Path, krosc::QOS_DEFAULT},
+      {"grasp_info", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"camera/color/image_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
       {"camera/depth/image_rect_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
   };

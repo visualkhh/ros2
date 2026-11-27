@@ -13,6 +13,9 @@ set(KROSC_BUILD_VIZ OFF)
 set(KROSC_BUILD_EXAMPLES OFF)
 add_subdirectory(../krosc/engine engine_build)
 
+# 실기 D435 물체 검출. OpenCV가 없으면 GraspDetectorNode는 no-op으로 빌드된다.
+find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
+
 set(KROSC_REAL_SOURCES
   engine/main.cpp
   engine/engine.cpp
@@ -26,6 +29,7 @@ set(KROSC_REAL_SOURCES
   engine/nodes/vlm_node.cpp
   engine/nodes/pick_place_node.cpp
   engine/nodes/nav_behavior_node.cpp
+  engine/nodes/grasp_detector_node.cpp
   engine/controls/opencr/opencr_control.cpp
   engine/hardwares/lds03/lds03_device.cpp
   engine/sensors/lds03/lds03_sensor.cpp
@@ -109,6 +113,14 @@ target_include_directories(krosc_real PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/engine
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(krosc_real PRIVATE krosc::core)
+if(OpenCV_FOUND)
+  target_include_directories(krosc_real PRIVATE ${OpenCV_INCLUDE_DIRS})
+  target_link_libraries(krosc_real PRIVATE ${OpenCV_LIBS})
+  target_compile_definitions(krosc_real PRIVATE KROSC_WS_HAS_OPENCV=1)
+  message(STATUS "krosc_ws: OpenCV ${OpenCV_VERSION} — 실기 D435 grasp detector 활성")
+else()
+  message(STATUS "krosc_ws: OpenCV 없음 — 실기 grasp detector 비활성")
+endif()
 if(KROSC_WS_REALSENSE_FOUND)
   set(_krosc_rs2_target "")
   if(TARGET realsense2::realsense2)
@@ -198,6 +210,7 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     engine/nodes/vlm_node.cpp
     engine/nodes/pick_place_node.cpp
     engine/nodes/nav_behavior_node.cpp
+    engine/nodes/grasp_detector_node.cpp
     engine/controls/opencr/opencr_control.cpp
     engine/sensors/lds03/lds03_sensor.cpp
     engine/sensors/opencr/opencr_imu.cpp
@@ -213,6 +226,11 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
   endif()
   target_link_libraries(krosc_ws_simulator PRIVATE
     krosc::core krosc::simulator_assets krosc::simulator krosc::simulator_qt)
+  if(OpenCV_FOUND)
+    target_include_directories(krosc_ws_simulator PRIVATE ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(krosc_ws_simulator PRIVATE ${OpenCV_LIBS})
+    target_compile_definitions(krosc_ws_simulator PRIVATE KROSC_WS_HAS_OPENCV=1)
+  endif()
   if(TARGET Qt6::Multimedia)
     target_link_libraries(krosc_ws_simulator PRIVATE Qt6::Multimedia)
     target_compile_definitions(krosc_ws_simulator PRIVATE KROSC_WS_SIM_AUDIO=1)

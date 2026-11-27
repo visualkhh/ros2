@@ -33,6 +33,7 @@
 #include "controls/opencr/opencr_control.hpp"
 #include "hardwares/lds03/lds_device.hpp"
 #include "hardwares/opencr/opencr_device.hpp"
+#include "nodes/grasp_detector_node.hpp"
 #include "nodes/llm_input.hpp"
 #include "nodes/nav_behavior_node.hpp"
 #include "nodes/pick_place_node.hpp"
@@ -120,8 +121,14 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
                                      options_.camera_color_topic,
                                      options_.vlm_timeout);
   }
+  if (options_.enable_grasp_detector) {
+    grasp_detector_ = std::make_unique<GraspDetectorNode>(
+        context_, options_.camera_color_topic, options_.camera_depth_topic,
+        options_.pick_objects_topic, options_.pick_grasp_info_topic);
+  }
   if (options_.enable_pick) {
-    pick_ = std::make_unique<PickPlaceNode>(context_, options_.pick_objects_topic);
+    pick_ = std::make_unique<PickPlaceNode>(context_, options_.pick_objects_topic,
+                                            options_.pick_grasp_info_topic);
   }
   if (options_.enable_nav_behavior) {
     nav_behavior_ = std::make_unique<NavBehaviorNode>(

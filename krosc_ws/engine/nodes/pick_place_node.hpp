@@ -19,10 +19,11 @@ namespace krosc_ws {
 // 노드가 궤적/그리퍼 시퀀스를 소유하고, 시뮬레이터는 그리퍼가 닫히면 물체를 붙인다.
 //
 // service: pick/command (String JSON {"action":"pick"|"place","color":"yellow"}) -> accepted
-// topic:   pick/status (String JSON), sim_graspable (Path) 구독
+// topic:   pick/status (String JSON), sim_graspable (Path), grasp_info (String) 구독
 class PickPlaceNode final : public krosc::Node {
  public:
-  PickPlaceNode(krosc::Context& context, std::string objects_topic);
+  PickPlaceNode(krosc::Context& context, std::string objects_topic,
+                std::string info_topic = "grasp_info");
   ~PickPlaceNode() override;
 
   PickPlaceNode(const PickPlaceNode&) = delete;
@@ -54,6 +55,7 @@ class PickPlaceNode final : public krosc::Node {
                       std::string& error) const;
 
   std::string objects_topic_;
+  std::string info_topic_;
   std::unique_ptr<MoveClient> move_;
   std::unique_ptr<NavClient> nav_;
   std::mutex move_mutex_;
@@ -76,6 +78,13 @@ class PickPlaceNode final : public krosc::Node {
   krosc::msgs::Path objects_;
   bool objects_seen_ = false;
 
+  // 실기 D435 detector가 보내는 물체 크기. 없으면 기존 4cm 퍽 기본값을 쓴다.
+  mutable std::mutex info_mutex_;
+  double object_width_ = 0.0;
+  double object_height_ = 0.0;
+  std::string object_color_;
+  double holding_grip_ = 0.0;
+
   mutable std::mutex odom_mutex_;
   double odom_x_ = 0.0;
   double odom_y_ = 0.0;
@@ -88,6 +97,7 @@ class PickPlaceNode final : public krosc::Node {
   double pick_y_ = 0.0;
 
   krosc::Subscription<krosc::msgs::Path> objects_subscription_;
+  krosc::Subscription<krosc::msgs::String> info_subscription_;
   krosc::Subscription<krosc::msgs::Odometry> odom_subscription_;
 };
 

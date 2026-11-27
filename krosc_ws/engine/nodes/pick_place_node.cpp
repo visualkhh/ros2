@@ -23,8 +23,16 @@ namespace krosc_ws {
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kOpenGrip = 0.019;   // 4cm 퍽을 넣을 수 있는 최대 개방
-constexpr double kPuckGrip = 0.008;   // 4cm 퍽을 닫아 잡는 위치 (완전 0은 과폐쇄)
+constexpr double kOpenGrip = 0.019;   // 그리퍼 최대 개방
+constexpr double kPuckGrip = 0.008;   // 4cm 퍽 기본 close (검출 폭이 없을 때)
+constexpr double kGripperBaseGap = 0.0244;  // finger gap at grip=0
+constexpr double kMaxObjectWidth = 0.063;   // 최대 개방(약 6.2cm)보다 큰 물체는 거부
+
+// 검출 폭에 맞춰 닫힘 위치를 계산한다. 물체보다 2mm 작게 목표를 두어
+// 살짝 조이는 힘이 걸리게 한다. 4cm 퍽이면 기존 8mm와 거의 같다.
+double close_grip_for(double width) {
+  return std::clamp((width - 0.002 - kGripperBaseGap) / 2.0, 0.006, kOpenGrip);
+}
 
 std::string number(double value) {
   char buffer[32];
@@ -47,9 +55,11 @@ double wrap_angle(double angle) { return std::atan2(std::sin(angle), std::cos(an
 
 }  // namespace
 
-PickPlaceNode::PickPlaceNode(krosc::Context& context, std::string objects_topic)
+PickPlaceNode::PickPlaceNode(krosc::Context& context, std::string objects_topic,
+                             std::string info_topic)
     : Node(context, "pick_place"),
       objects_topic_(std::move(objects_topic)),
+      info_topic_(std::move(info_topic)),
       move_(std::make_unique<MoveClient>(context,
                                          krosc::msgs::moveit::MOVE_ACTION)),
       nav_(std::make_unique<NavClient>(context,
@@ -59,6 +69,19 @@ PickPlaceNode::PickPlaceNode(krosc::Context& context, std::string objects_topic)
         std::lock_guard<std::mutex> lock(object_mutex_);
         objects_ = message;
         objects_seen_ = true;
+      });
+  info_subscription_ = subscribe<krosc::msgs::String>(
+      info_topic_, [this](const krosc::msgs::String& message) {
+        std::lock_guard<std::mutex> lock(info_mutex_);
+        if (const auto width = llm::number_field(message.data, "width")) {
+          object_width_ = *width;
+        }
+        if (const auto height = llm::number_field(message.data, "height")) {
+          object_height_ = *height;
+        }
+        if (const auto color = llm::string_field(message.data, "color")) {
+          object_color_ = *color;
+        }
       });
   odom_subscription_ = subscribe<krosc::msgs::Odometry>(
       "odom", [this](const krosc::msgs::Odometry& message) {
@@ -78,8 +101,8 @@ PickPlaceNode::PickPlaceNode(krosc::Context& context, std::string objects_topic)
         return krosc::msgs::TriggerResponse{true, "pick stop"};
       });
   worker_ = std::thread([this] { worker_loop(); });
-  logger().info("PickPlaceNode: ready service=pick/command objects=%s",
-                objects_topic_.c_str());
+  logger().info("PickPlaceNode: ready service=pick/command objects=%s info=%s",
+                objects_topic_.c_str(), info_topic_.c_str());
 }
 
 PickPlaceNode::~PickPlaceNode() {
@@ -318,7 +341,8 @@ bool PickPlaceNode::object_odom(double& x, double& y, double& z,
 }
 
 bool PickPlaceNode::approach(std::uint64_t id, std::string& error) {
-  constexpr double kStandoff = 0.32;
+  // 팔 base(-0.092m)에서 0.30m 앞이면 3D 도달거리에 여유가 있다.
+  constexpr double kStandoff = 0.30;
   const auto started = std::chrono::steady_clock::now();
   auto last_progress = started;
   double last_range = std::numeric_limits<double>::infinity();
@@ -377,12 +401,14 @@ bool PickPlaceNode::approach(std::uint64_t id, std::string& error) {
     const double dy = oy - ry;
     const double range = std::hypot(dx, dy);
     const double bearing = wrap_angle(std::atan2(dy, dx) - ryaw);
-    if (range <= kStandoff + 0.04) {
+    if (range <= kStandoff + 0.01) {
       break;
     }
     const double angular = std::clamp(1.6 * bearing, -1.0, 1.0);
+    // 0.32m standoff까지 실제로 전진한다. 예전 +0.12m 조건은 0.36m 물체에서
+    // 회전만 하다 stall로 끝났다.
     const double linear =
-        (std::abs(bearing) < 0.35 && range > kStandoff + 0.12) ? 0.12 : 0.0;
+        (std::abs(bearing) < 0.35 && range > kStandoff + 0.005) ? 0.10 : 0.0;
     publish<krosc::msgs::Twist>(
         "cmd_vel_nav",
         krosc::msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}});
@@ -491,7 +517,6 @@ bool PickPlaceNode::navigate_to_puck(std::uint64_t id, std::string& error) {
 
 bool PickPlaceNode::pick(std::uint64_t id, const std::string& color,
                          std::string& error) {
-  (void)color;
   if (!approach(id, error)) {
     return false;
   }
@@ -507,6 +532,23 @@ bool PickPlaceNode::pick(std::uint64_t id, const std::string& color,
             " y=" + number(y) + ")";
     return false;
   }
+
+  double width = 0.0;
+  std::string detected_color;
+  {
+    std::lock_guard<std::mutex> lock(info_mutex_);
+    width = object_width_;
+    detected_color = object_color_;
+  }
+  if (width > kMaxObjectWidth) {
+    error = "물체 폭 " + number(width) + "m가 그리퍼 최대 개방(" +
+            number(kMaxObjectWidth) + "m)보다 크다";
+    return false;
+  }
+  const double close_grip = width > 0.030 ? close_grip_for(width) : kPuckGrip;
+  logger().info("pick: color=%s detected=%s width=%.3f open=%.3f close=%.3f",
+                color.c_str(), detected_color.c_str(), width, kOpenGrip, close_grip);
+
   const double center = z;
   if (!move_to(id, "approach", x, y, center + 0.13, 20.0, kOpenGrip, error)) {
     return false;
@@ -514,14 +556,15 @@ bool PickPlaceNode::pick(std::uint64_t id, const std::string& color,
   if (!move_to(id, "descend", x, y, center + 0.015, 45.0, kOpenGrip, error)) {
     return false;
   }
-  if (!move_to(id, "close", x, y, center + 0.015, 45.0, kPuckGrip, error)) {
+  if (!move_to(id, "close", x, y, center + 0.015, 45.0, close_grip, error)) {
     return false;
   }
-  if (!move_to(id, "lift", x, y, center + 0.16, 20.0, kPuckGrip, error)) {
+  if (!move_to(id, "lift", x, y, center + 0.16, 20.0, close_grip, error)) {
     return false;
   }
   pick_x_ = x;
   pick_y_ = y;
+  holding_grip_ = close_grip;
   holding_ = true;
   return true;
 }
@@ -532,6 +575,7 @@ bool PickPlaceNode::place(std::uint64_t id, const std::string& target,
     error = "들고 있는 물체가 없다";
     return false;
   }
+  const double hold_grip = holding_grip_ > 0.0 ? holding_grip_ : kPuckGrip;
   const std::string where = lower_copy(target);
   if (where == "body" || where == "deck" || where == "robot" ||
       where == "내몸" || where == "몸") {
@@ -557,10 +601,10 @@ bool PickPlaceNode::place(std::uint64_t id, const std::string& target,
       std::snprintf(extra, sizeof(extra),
                     ",\"target\":\"body\",\"x\":%.3f,\"y\":%.3f", x, y);
       publish_status(id, "body_approach", extra);
-      if (!move_to(id, "body_approach", x, y, 0.26, 30.0, kPuckGrip, error)) {
+      if (!move_to(id, "body_approach", x, y, 0.26, 30.0, hold_grip, error)) {
         return false;
       }
-      if (!move_to(id, "body_lower", x, y, 0.17, 30.0, kPuckGrip, error)) {
+      if (!move_to(id, "body_lower", x, y, 0.17, 30.0, hold_grip, error)) {
         return false;
       }
       if (!move_to(id, "body_open", x, y, 0.17, 30.0, kOpenGrip, error)) {
@@ -584,9 +628,10 @@ bool PickPlaceNode::place(std::uint64_t id, const std::string& target,
       }
     }
     holding_ = false;
+    holding_grip_ = 0.0;
     return true;
   }
-  if (!move_to(id, "lower", pick_x_, pick_y_, 0.06, 45.0, kPuckGrip, error)) {
+  if (!move_to(id, "lower", pick_x_, pick_y_, 0.06, 45.0, hold_grip, error)) {
     return false;
   }
   if (!move_to(id, "open", pick_x_, pick_y_, 0.06, 45.0, kOpenGrip, error)) {
@@ -596,6 +641,7 @@ bool PickPlaceNode::place(std::uint64_t id, const std::string& target,
     return false;
   }
   holding_ = false;
+  holding_grip_ = 0.0;
   return true;
 }
 

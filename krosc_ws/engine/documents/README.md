@@ -219,6 +219,8 @@ KROSC_TEST_FILTER=commands_ ./krosc_ws/build-mac/krosc_ws_tests
 ## 10. 현재 한계
 
 - 12cm 대형 퍽은 4cm 그리퍼로 못 잡는다. 잡을 수 있는 **4cm × 12cm 노란 퍽**을 따로 추가했다.
+- 실기 pick은 D435 color/depth detector(`grasp_info`의 width)로 그리퍼 close를 맞춘다.
+  물체가 최대 개방(약 6.2cm)보다 크면 거부한다. 검출은 red/yellow/blue만 지원한다.
 - 시뮬레이터 grasp는 **kinematic attach**다. 실제 물리 마찰/미끄러짐은 아니다.
 - nav2 hide/pick 접근은 **map + localization**이 필요하다. 지도가 실제 월드와 어긋나면
   nav2가 replan만 반복할 수 있다(90초 후 에러).

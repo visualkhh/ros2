@@ -138,7 +138,9 @@ void usage() {
                "  --camera-depth-decimation: depth 축소 배율 (기본 4 -> 160x120)\n"
                "env: OPENCR_PORT (/dev/opencr), LIDAR_PORT (auto), KROSC_SERVER_PORT (9000), KROSC_MAPS_DIR,\n"
                "     KROSC_SCAN_TOPIC (scan), KROSC_IMU_TOPIC (imu), KROSC_CAMERA (1), KROSC_CAMERA_SERIAL,\n"
-               "     KROSC_CAMERA_RATE (5), KROSC_CAMERA_DEPTH_RATE (2), KROSC_EXECUTOR_THREADS (10)\n";
+               "     KROSC_CAMERA_RATE (5), KROSC_CAMERA_DEPTH_RATE (2), KROSC_EXECUTOR_THREADS (10),\n"
+               "     KROSC_GRASP_DETECTOR (1), KROSC_OLLAMA_URL, KROSC_OLLAMA_MODEL,\n"
+               "     KROSC_VLA_URL (http://127.0.0.1:8765/plan), KROSC_VLM_URL (http://127.0.0.1:8766/query)\n";
 }
 
 }  // namespace
@@ -326,6 +328,15 @@ int main(int argc, char** argv) {
   engine_options.enable_camera = enable_camera;
   engine_options.camera_period = 1.0 / camera_rate;
   engine_options.camera_depth_period = 1.0 / camera_depth_rate;
+  // 실기 D435 인식: color/depth에서 물체를 찾아 pick에 넘긴다.
+  // 카메라가 없거나 인식만 끄고 싶으면 KROSC_GRASP_DETECTOR=0.
+  engine_options.enable_grasp_detector = env_or("KROSC_GRASP_DETECTOR", "1") != "0";
+  // 사이드카/LLM은 Pi 밖(PC/GPU 서버)에서 돌릴 수 있다.
+  engine_options.llm_ollama_url =
+      env_or("KROSC_OLLAMA_URL", engine_options.llm_ollama_url);
+  engine_options.llm_model = env_or("KROSC_OLLAMA_MODEL", engine_options.llm_model);
+  engine_options.vla_url = env_or("KROSC_VLA_URL", engine_options.vla_url);
+  engine_options.vlm_url = env_or("KROSC_VLM_URL", engine_options.vlm_url);
   engine_options.control_read_period = 0.02;
   engine_options.control_write_period = 0.02;
   engine_options.control_period = 0.01;

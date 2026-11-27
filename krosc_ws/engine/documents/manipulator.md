@@ -189,3 +189,27 @@ if (camera_inside_visual(visual)) continue;  // base/deck/mount/housing
   → body_lower z=0.17 / open / retreat
   → 시뮬 on_robot payload, 로봇과 함께 이동
 ```
+
+## 7. 실기 D435 grasp detector
+
+`sim_graspable`은 원래 시뮬레이터 world만 발행했다. 실기에서도 pick을 쓰기 위해
+`GraspDetectorNode`가 D435 color/depth에서 물체를 찾아 같은 토픽을 발행한다.
+
+```text
+camera/color/image_raw (jpeg)  ─┐
+camera/depth/image_rect_raw    ─┼→ HSV red/yellow/blue → 가장 큰 blob
+                                │   depth nearest cluster → deproject
+                                │   camera_color_optical_frame → odom (TF)
+                                ▼
+                       sim_graspable (Path, odom)
+                       grasp_info   (String JSON: color,width,height,depth,x,y,z)
+```
+
+- 실기 `krosc_real`에서 `KROSC_GRASP_DETECTOR=1`이 기본이다. `0`이면 끈다.
+- `grasp_info`의 `width`로 그리퍼 close 값을 계산한다.
+  `close = clamp((width - 0.002 - 0.0244) / 2, 0.006, 0.019)`, `open = 0.019`.
+- `width > 0.063 m`면 그리퍼 최대 개방보다 크다고 보고 pick을 거부한다.
+- OpenCV가 없는 환경에서는 노드가 no-op으로 빌드된다.
+- 실기 local approach는 0.30m standoff까지 실제로 전진한다. 예전 0.32+0.04/0.12m
+  조건은 0.36m 앞 물체에서 제자리 회전만 하다 stall로 끝났다.
+- `grasp_info`/`sim_graspable`은 웹 Topics에도 표시된다.
