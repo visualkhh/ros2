@@ -298,18 +298,30 @@ std::optional<msgs::PoseStamped> VizModel::pose_in_fixed(const std::string& fram
     pose.pose.orientation.w = 1.0;
     return pose;
   }
-  try {
-    const msgs::TransformStamped transform = buffer_.lookup_transform(fixed_frame_, frame, stamp);
-    msgs::PoseStamped pose;
-    pose.header.stamp = transform.header.stamp;
-    pose.header.frame_id = fixed_frame_;
-    pose.pose.position = {transform.transform.translation.x, transform.transform.translation.y,
-                          transform.transform.translation.z};
-    pose.pose.orientation = transform.transform.rotation;
-    return pose;
-  } catch (const TransformException&) {
+  const auto lookup = [&](const std::string& target) {
+    try {
+      return std::optional<msgs::TransformStamped>(
+          buffer_.lookup_transform(target, frame, stamp));
+    } catch (const TransformException&) {
+      return std::optional<msgs::TransformStamped>{};
+    }
+  };
+  auto transform = lookup(fixed_frame_);
+  // SLAM idle/지도 없음: map→odom이 없으면 odom 기준으로 표시한다.
+  // (웹 viz의 frameTransform과 같은 fallback)
+  if (!transform && fixed_frame_ == "map") {
+    transform = lookup("odom");
+  }
+  if (!transform) {
     return std::nullopt;
   }
+  msgs::PoseStamped pose;
+  pose.header.stamp = transform->header.stamp;
+  pose.header.frame_id = fixed_frame_;
+  pose.pose.position = {transform->transform.translation.x, transform->transform.translation.y,
+                        transform->transform.translation.z};
+  pose.pose.orientation = transform->transform.rotation;
+  return pose;
 }
 
 std::optional<msgs::TransformStamped> VizModel::transform_in_fixed(const std::string& frame) const {
@@ -319,6 +331,12 @@ std::optional<msgs::TransformStamped> VizModel::transform_in_fixed(const std::st
   try {
     return buffer_.lookup_transform(fixed_frame_, frame, std::nullopt);
   } catch (const TransformException&) {
+    if (fixed_frame_ == "map") {
+      try {
+        return buffer_.lookup_transform("odom", frame, std::nullopt);
+      } catch (const TransformException&) {
+      }
+    }
     return std::nullopt;
   }
 }
