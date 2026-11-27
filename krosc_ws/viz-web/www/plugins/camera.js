@@ -72,8 +72,9 @@ const STYLE = `
 }
 .camera-canvas {
   width: 100%;
-  height: auto;
-  max-height: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
   display: block;
 }
 .camera-empty {

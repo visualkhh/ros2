@@ -2966,6 +2966,70 @@ async function loadPlugins() {
   setInterval(refreshTopics, 5000);
 }
 
+
+// Qt viz의 QSplitter처럼 좌/우 패널(모바일에선 상하 높이)을 드래그로 조절한다.
+// 데스크톱: --left-width/--right-width, 모바일: --stage-height/--right-height.
+function installSplitters() {
+  const root = document.documentElement;
+  const left = $('left');
+  const right = $('right');
+  const stage = $('stage');
+  const handles = [
+    { element: $('left-resizer'), mode: 'left' },
+    { element: $('right-resizer'), mode: 'right' },
+  ].filter((item) => item.element !== null);
+  const mobile = window.matchMedia('(max-width: 980px)');
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const setVar = (name, value) => root.style.setProperty(name, `${Math.round(value)}px`);
+
+  for (const handle of handles) {
+    handle.element.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startLeft = left.getBoundingClientRect().width;
+      const startRight = right.getBoundingClientRect().width;
+      const startStage = stage.getBoundingClientRect().height;
+      const startRightHeight = right.getBoundingClientRect().height;
+      const isMobile = mobile.matches;
+      handle.element.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      try { handle.element.setPointerCapture(event.pointerId); } catch (error) { /* synthetic */ }
+
+      const onMove = (moveEvent) => {
+        if (isMobile) {
+          if (handle.mode === 'right') {
+            setVar('--stage-height', clamp(startStage + (moveEvent.clientY - startY),
+                                          160, Math.max(200, window.innerHeight * 0.8)));
+          } else {
+            setVar('--right-height', clamp(startRightHeight + (moveEvent.clientY - startY),
+                                           120, Math.max(160, window.innerHeight * 0.8)));
+          }
+        } else if (handle.mode === 'left') {
+          setVar('--left-width', clamp(startLeft + (moveEvent.clientX - startX),
+                                       140, Math.max(180, Math.min(560, window.innerWidth * 0.55))));
+        } else {
+          setVar('--right-width', clamp(startRight - (moveEvent.clientX - startX),
+                                        220, Math.max(260, Math.min(700, window.innerWidth * 0.62))));
+        }
+      };
+      const finish = () => {
+        handle.element.classList.remove('dragging');
+        document.body.style.userSelect = '';
+        handle.element.removeEventListener('pointermove', onMove);
+        handle.element.removeEventListener('pointerup', finish);
+        handle.element.removeEventListener('pointercancel', finish);
+      };
+      handle.element.addEventListener('pointermove', onMove);
+      handle.element.addEventListener('pointerup', finish);
+      handle.element.addEventListener('pointercancel', finish);
+    });
+  }
+}
+
+installSplitters();
+
 {
   const modal = $('topic-modal');
   const close = $('topic-modal-close');

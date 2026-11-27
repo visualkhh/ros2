@@ -8,6 +8,12 @@
   --warn: #ffb36b;
   --bad: #ff6b6b;
   --blue: #6aa9ff;
+  /* Qt viz의 splitter처럼 JS가 px로 덮어쓴다. */
+  --left-width: clamp(190px, 16vw, 260px);
+  --right-width: clamp(280px, 24vw, 360px);
+  --stage-height: 52vh;
+  --right-height: 45vh;
+  --left-height: 38vh;
 }
 
 * { box-sizing: border-box; }
@@ -64,11 +70,28 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .check { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 
 main {
+  position: relative;
   display: grid;
-  grid-template-columns: clamp(190px, 16vw, 260px) minmax(0, 1fr) clamp(280px, 24vw, 360px);
+  grid-template-columns: var(--left-width) minmax(0, 1fr) var(--right-width);
   height: calc(100% - 48px);
   min-height: 0;
 }
+.resizer {
+  position: absolute;
+  z-index: 30;
+  touch-action: none;
+  user-select: none;
+}
+#left-resizer, #right-resizer {
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+}
+#left-resizer { left: var(--left-width); transform: translateX(-3.5px); }
+#right-resizer { right: var(--right-width); transform: translateX(3.5px); }
+#left-resizer:hover, #right-resizer:hover,
+.resizer.dragging { background: #2f8a59; }
 aside {
   min-width: 0;
   overflow-x: hidden;
@@ -489,7 +512,7 @@ aside {
 .diag .kv { color: #6f8199; font-size: 11px; }
 
 @media (max-width: 1250px) {
-  main { grid-template-columns: 210px minmax(0, 1fr) 300px; }
+  main { grid-template-columns: var(--left-width) minmax(0, 1fr) var(--right-width); }
 }
 @media (max-width: 980px) {
   body { overflow-y: auto; }
@@ -502,24 +525,40 @@ aside {
   #stage {
     order: 1;
     width: 100%;
-    height: 52vh;
-    min-height: 280px;
+    height: var(--stage-height);
+    min-height: 160px;
     flex: 0 0 auto;
   }
   #right {
     order: 2;
     width: 100%;
-    max-height: 45vh;
+    height: var(--right-height);
+    max-height: none;
+    flex: 0 0 auto;
     border-left: 0;
     border-top: 1px solid var(--line);
   }
   #left {
     order: 3;
     width: 100%;
-    max-height: 40vh;
+    height: var(--left-height);
+    max-height: none;
+    flex: 0 0 auto;
     border-right: 0;
     border-top: 1px solid var(--line);
   }
+  #left-resizer, #right-resizer {
+    top: auto;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 7px;
+    transform: none;
+    cursor: row-resize;
+  }
+  #right-resizer { top: var(--stage-height); }
+  #left-resizer { top: calc(var(--stage-height) + var(--right-height)); }
   #control-panel-tabs { position: sticky; top: 0; z-index: 2; }
   /* 모바일: 레이어 버튼이 view 탭을 가리지 않게 우측 하단으로 */
   #view-tools {
@@ -536,7 +575,9 @@ aside {
 }
 @media (max-width: 720px) {
   header { height: auto; min-height: 48px; flex-wrap: wrap; padding: 6px 10px; gap: 8px; }
-  #stage { height: 45vh; min-height: 240px; }
-  #right { max-height: 45vh; }
-  #left { max-height: 38vh; }
+  #stage { height: var(--stage-height); min-height: 160px; }
+  #right { height: var(--right-height); max-height: none; }
+  #left { height: var(--left-height); max-height: none; }
+  #right-resizer { top: var(--stage-height); }
+  #left-resizer { top: calc(var(--stage-height) + var(--right-height)); }
 }
