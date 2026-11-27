@@ -692,13 +692,22 @@ bool PickPlaceNode::place(std::uint64_t id, const std::string& target,
     holding_grip_ = 0.0;
     return true;
   }
-  if (!move_to(id, "lower", pick_x_, pick_y_, 0.06, 45.0, hold_grip, error)) {
+  // 실기에서 pick 위치에 따라 lower 0.06m/45°가 IK 경계에 걸린다.
+  // 1cm 위/완만한 자세로 한 번 fallback한 뒤 open/retreat도 같은 자세를 쓴다.
+  double place_z = 0.06;
+  double place_pitch = 45.0;
+  if (!move_to(id, "lower", pick_x_, pick_y_, place_z, place_pitch, hold_grip, error)) {
+    error.clear();
+    place_z = 0.07;
+    place_pitch = 35.0;
+    if (!move_to(id, "lower", pick_x_, pick_y_, place_z, place_pitch, hold_grip, error)) {
+      return false;
+    }
+  }
+  if (!move_to(id, "open", pick_x_, pick_y_, place_z, place_pitch, kOpenGrip, error)) {
     return false;
   }
-  if (!move_to(id, "open", pick_x_, pick_y_, 0.06, 45.0, kOpenGrip, error)) {
-    return false;
-  }
-  if (!move_to(id, "retreat", pick_x_, pick_y_, 0.26, 20.0, kOpenGrip, error)) {
+  if (!move_to(id, "retreat", pick_x_, pick_y_, 0.24, 20.0, kOpenGrip, error)) {
     return false;
   }
   holding_ = false;
