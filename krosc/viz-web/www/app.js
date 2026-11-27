@@ -2188,9 +2188,12 @@ function draw3dPrimitive(primitive, transform) {
     context3d.stroke();
     context3d.fillStyle = isArmLink(primitive.name)
       ? 'rgba(150, 165, 185, 0.14)' : 'rgba(190, 170, 110, 0.22)';
+    // 8개 코너를 그대로 채우면 자기교차 다각형이 된다. 위쪽 면(1,3,7,5)만 채운다.
     context3d.beginPath();
-    context3d.moveTo(projected[0].x, projected[0].y);
-    for (const point of projected.slice(1)) context3d.lineTo(point.x, point.y);
+    context3d.moveTo(projected[1].x, projected[1].y);
+    for (const index of [3, 7, 5]) {
+      context3d.lineTo(projected[index].x, projected[index].y);
+    }
     context3d.closePath();
     context3d.fill();
   } else if (primitive.type === 'cylinder') {
