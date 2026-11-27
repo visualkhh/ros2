@@ -106,11 +106,21 @@ class AiContextNode final : public krosc::Node {
   double joints_stamp_ = 0.0;
   std::vector<double> arm_joints_;
   double gripper_ = 0.0;
+  bool arm_status_seen_ = false;
+  double arm_status_stamp_ = 0.0;
+  bool arm_present_ = false;
+  std::vector<double> arm_temperature_;
+  std::vector<double> arm_current_;
+  std::vector<int> arm_error_;
   bool wheel_seen_ = false;
   double wheel_left_pos_ = 0.0;
   double wheel_right_pos_ = 0.0;
   double wheel_left_vel_ = 0.0;
   double wheel_right_vel_ = 0.0;
+  double wheel_left_temperature_ = 0.0;
+  double wheel_right_temperature_ = 0.0;
+  double wheel_left_current_ = 0.0;
+  double wheel_right_current_ = 0.0;
 
   std::string opencr_message_;
   double battery_voltage_ = 0.0;
@@ -122,6 +132,7 @@ class AiContextNode final : public krosc::Node {
   krosc::Subscription<krosc::msgs::Odometry> odom_subscription_;
   krosc::Subscription<krosc::msgs::LaserScan> scan_subscription_;
   krosc::Subscription<krosc::msgs::JointState> joint_subscription_;
+  krosc::Subscription<krosc::msgs::String> arm_status_subscription_;
   krosc::Subscription<krosc::msgs::DiagnosticArray> diagnostics_subscription_;
   krosc::Subscription<krosc::msgs::Image> color_subscription_;
   krosc::Subscription<krosc::msgs::Image> depth_subscription_;

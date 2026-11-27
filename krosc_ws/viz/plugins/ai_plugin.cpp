@@ -197,6 +197,7 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
   add_context("size", size_);
   add_context("lidar", lidar_);
   add_context("arm", arm_);
+  add_context("motor", motor_);
   add_context("wheels", wheels_);
   add_context("cam/depth", camera_);
   layout->addLayout(context_grid);
@@ -418,7 +419,21 @@ void AiPlugin::update_ui() {
     arm_->setText(QString("j %1 · grip %2 mm")
                       .arg(joints.join(" / "),
                            fmt(arm.value("gripper").toDouble() * 1000.0, 1)));
+    QStringList temperatures;
+    for (const QJsonValue& value : arm.value("temperature").toArray()) {
+      temperatures << fmt(value, 0);
+    }
+    QStringList currents;
+    for (const QJsonValue& value : arm.value("current").toArray()) {
+      currents << fmt(value, 2);
+    }
     const QJsonObject wheels = c.value("wheels").toObject();
+    if (!temperatures.isEmpty() || !currents.isEmpty()) {
+      motor_->setText(QString("arm T %1°C · I %2A · wheel %3/%4°C")
+                          .arg(temperatures.join("/"), currents.join("/"),
+                               fmt(wheels.value("left_temperature"), 0),
+                               fmt(wheels.value("right_temperature"), 0)));
+    }
     wheels_->setText(QString("l %1 · r %2 m/s")
                          .arg(fmt(wheels.value("left_vel")),
                               fmt(wheels.value("right_vel"))));

@@ -280,11 +280,16 @@ open http://localhost:8080
 | `lidar.front/left/right/rear` | 4방향 최근접 거리(m), 0이면 미검출 | `scan` |
 | `camera.color/depth`, `depth_min/median` | 해상도, age, 중앙 영역 depth 요약 | color/depth 토픽 |
 | `arm.joints`, `arm.gripper` | 4관절 rad, 그리퍼 m | `joint_states` |
-| `wheels`, `battery` | 바퀴 위치/속도, 전압/%, OpenCR 상태 | `joint_states`, `diagnostics` |
+| `arm.temperature/current/error` | 매니퓰레이터 모터 온도(°C)/전류(A)/에러 | `arm_status` |
+| `wheels` | 바퀴 위치/속도, 좌우 모터 온도/전류 | `joint_states`, `diagnostics` |
+| `battery` | 전압/%, OpenCR 상태 | `diagnostics` |
+| `servers` | LLM/VLM/VLA health (ok, age, 상세) | HTTP health |
 
 - LLM 호출 시 user 메시지에 `"Robot state JSON: ..."`로 붙는다. LLM은 행동 전에
   도달 가능성, 장애물, 센서 stale, 그리퍼 파지 여부를 확인하고 불가능하면
-  `unsupported`를 반환해야 한다.
-- VLA/VLM 요청 본문에도 `context` 문자열로 포함된다.
+  `unsupported`를 반환해야 한다. LLM은 **텍스트 라우터**라 카메라 픽셀은 넣지 않고
+  카메라/depth 메타데이터만 넣는다. 실제 이미지가 필요한 질문은 `vlm_query`로 보낸다.
+- VLM 요청은 `image_b64` + `question` + `context`, VLA 요청은 `image_b64` +
+  `instruction` + `state` + `context`로 **실제 이미지와 상태를 함께** 보낸다.
 - 웹/Qt AI 패널의 `ROBOT CONTEXT` 행(pose, size, lidar, arm, wheels, cam/depth)이
   같은 스냅샷을 표시한다.

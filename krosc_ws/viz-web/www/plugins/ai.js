@@ -36,6 +36,7 @@ export function init(host) {
   const sizeRow = row(body, 'size');
   const lidarRow = row(body, 'lidar');
   const armRow = row(body, 'arm');
+  const motorRow = row(body, 'motor');
   const wheelsRow = row(body, 'wheels');
   const cameraRow = row(body, 'cam/depth');
 
@@ -227,6 +228,14 @@ export function init(host) {
     if (context.arm) {
       const joints = (context.arm.joints || []).map((value) => format(value, 1)).join(' / ');
       setLevel(armRow, `j ${joints} · grip ${format((context.arm.gripper || 0) * 1000, 1)} mm`);
+      const temps = (context.arm.temperature || []).map((value) => format(value, 0)).join('/');
+      const currents = (context.arm.current || []).map((value) => format(value, 2)).join('/');
+      if (temps || currents) {
+        const wheelTemp = context.wheels
+          ? ` · wheel ${format(context.wheels.left_temperature, 0)}/${format(context.wheels.right_temperature, 0)}°C` : '';
+        setLevel(motorRow, `arm T ${temps || '-'}°C · I ${currents || '-'}A${wheelTemp}`,
+                 (context.arm.temperature || []).some((value) => value >= 60) ? 'warn' : '');
+      }
     }
     if (context.wheels) {
       setLevel(wheelsRow, `l ${format(context.wheels.left_vel)} · r ${format(context.wheels.right_vel)} m/s`);

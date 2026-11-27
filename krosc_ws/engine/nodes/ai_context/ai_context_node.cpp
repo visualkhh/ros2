@@ -79,6 +79,60 @@ std::string tags_url(const std::string& url) {
   return base_url(url) + "/api/tags";
 }
 
+std::vector<std::string> split(const std::string& text, char separator) {
+  std::vector<std::string> parts;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    const std::size_t end = text.find(separator, start);
+    parts.push_back(text.substr(start, end == std::string::npos ? std::string::npos
+                                                                : end - start));
+    if (end == std::string::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+  return parts;
+}
+
+std::string field_value(const std::vector<std::string>& fields, const std::string& prefix) {
+  for (const auto& field : fields) {
+    if (field.rfind(prefix, 0) == 0) {
+      return field.substr(prefix.size());
+    }
+  }
+  return {};
+}
+
+std::vector<double> number_list(const std::string& text) {
+  std::vector<double> values;
+  for (const auto& item : split(text, ',')) {
+    if (item.empty() || item == "x") {
+      continue;
+    }
+    try {
+      values.push_back(std::stod(item));
+    } catch (const std::exception&) {
+    }
+  }
+  return values;
+}
+
+std::vector<int> int_list(const std::string& text) {
+  std::vector<int> values;
+  for (const auto& item : split(text, ',')) {
+    if (item.empty() || item == "x") {
+      values.push_back(-1);
+      continue;
+    }
+    try {
+      values.push_back(std::stoi(item));
+    } catch (const std::exception&) {
+      values.push_back(-1);
+    }
+  }
+  return values;
+}
+
 std::string health_detail(const HttpResponse& response) {
   if (!response.ok) {
     return response.error.empty() ? "연결 실패" : response.error;
@@ -208,6 +262,20 @@ AiContextNode::AiContextNode(krosc::Context& context, std::string scan_topic,
         }
         joints_stamp_ = now();
       }, krosc::QOS_DEFAULT);
+  arm_status_subscription_ = subscribe<krosc::msgs::String>(
+      "arm_status", [this](const krosc::msgs::String& message) {
+        const auto fields = split(message.data, ';');
+        std::vector<double> temperatures = number_list(field_value(fields, "temp="));
+        std::vector<double> currents = number_list(field_value(fields, "cur="));
+        std::vector<int> errors = int_list(field_value(fields, "err="));
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        arm_present_ = field_value(fields, "present=") == "1";
+        arm_temperature_ = std::move(temperatures);
+        arm_current_ = std::move(currents);
+        arm_error_ = std::move(errors);
+        arm_status_stamp_ = now();
+        arm_status_seen_ = true;
+      }, krosc::QOS_DEFAULT);
   diagnostics_subscription_ = subscribe<krosc::msgs::DiagnosticArray>(
       "diagnostics", [this](const krosc::msgs::DiagnosticArray& message) {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -216,6 +284,10 @@ AiContextNode::AiContextNode(krosc::Context& context, std::string scan_topic,
             opencr_message_ = status.message;
             battery_voltage_ = value_of(status, "battery", 0.0);
             battery_percent_ = battery_percent(battery_voltage_);
+            wheel_left_temperature_ = value_of(status, "left_temperature", 0.0);
+            wheel_right_temperature_ = value_of(status, "right_temperature", 0.0);
+            wheel_left_current_ = value_of(status, "left_current", 0.0);
+            wheel_right_current_ = value_of(status, "right_current", 0.0);
           }
         }
       }, krosc::QOS_DEFAULT);
@@ -424,12 +496,35 @@ void AiContextNode::update() {
       if (index != 0) out << ",";
       out << fixed(arm_joints_[index], 3);
     }
-    out << "],\"gripper\":" << fixed(gripper_, 3) << "}"
+    out << "],\"gripper\":" << fixed(gripper_, 3)
+        << ",\"present\":" << (arm_present_ ? "true" : "false")
+        << ",\"status_age\":"
+        << fixed(arm_status_stamp_ > 0.0 ? current - arm_status_stamp_ : 999.0, 1)
+        << ",\"temperature\":[";
+    for (std::size_t index = 0; index < arm_temperature_.size(); ++index) {
+      if (index != 0) out << ",";
+      out << fixed(arm_temperature_[index], 1);
+    }
+    out << "],\"current\":[";
+    for (std::size_t index = 0; index < arm_current_.size(); ++index) {
+      if (index != 0) out << ",";
+      out << fixed(arm_current_[index], 2);
+    }
+    out << "],\"error\":[";
+    for (std::size_t index = 0; index < arm_error_.size(); ++index) {
+      if (index != 0) out << ",";
+      out << arm_error_[index];
+    }
+    out << "]}"
         << ",\"wheels\":{\"ok\":" << (wheel_seen_ ? "true" : "false")
         << ",\"left_pos\":" << fixed(wheel_left_pos_, 3)
         << ",\"right_pos\":" << fixed(wheel_right_pos_, 3)
         << ",\"left_vel\":" << fixed(wheel_left_vel_, 3)
-        << ",\"right_vel\":" << fixed(wheel_right_vel_, 3) << "}"
+        << ",\"right_vel\":" << fixed(wheel_right_vel_, 3)
+        << ",\"left_temperature\":" << fixed(wheel_left_temperature_, 1)
+        << ",\"right_temperature\":" << fixed(wheel_right_temperature_, 1)
+        << ",\"left_current\":" << fixed(wheel_left_current_, 2)
+        << ",\"right_current\":" << fixed(wheel_right_current_, 2) << "}"
         << ",\"battery\":{\"voltage\":" << fixed(battery_voltage_, 2)
         << ",\"percent\":" << fixed(battery_percent_, 1)
         << ",\"opencr\":\"" << escape_json(opencr_message_) << "\"}";

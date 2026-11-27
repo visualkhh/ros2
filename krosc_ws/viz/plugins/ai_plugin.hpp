@@ -55,6 +55,7 @@ class AiPlugin final : public krosc::viz::VizPlugin {
   QLabel* size_ = nullptr;
   QLabel* lidar_ = nullptr;
   QLabel* arm_ = nullptr;
+  QLabel* motor_ = nullptr;
   QLabel* wheels_ = nullptr;
   QLabel* camera_ = nullptr;
   QTextEdit* input_ = nullptr;
