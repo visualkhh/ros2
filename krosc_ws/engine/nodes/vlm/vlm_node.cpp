@@ -10,8 +10,8 @@
 
 #include "krosc/msgs.hpp"
 
-#include "http_client.hpp"
-#include "llm_json.hpp"
+#include "nodes/common/http_client.hpp"
+#include "nodes/common/llm_json.hpp"
 
 namespace krosc_ws {
 
@@ -48,6 +48,11 @@ VlmNode::VlmNode(krosc::Context& context, std::string url, std::string camera_to
       url_(std::move(url)),
       camera_topic_(std::move(camera_topic)),
       timeout_s_(timeout_s > 0.0 ? timeout_s : 60.0) {
+  context_subscription_ = subscribe<krosc::msgs::String>(
+      "robot_context", [this](const krosc::msgs::String& message) {
+        std::lock_guard<std::mutex> lock(context_mutex_);
+        robot_context_ = message.data;
+      });
   camera_subscription_ = subscribe<krosc::msgs::Image>(
       camera_topic_, [this](const krosc::msgs::Image& message) {
         std::lock_guard<std::mutex> lock(image_mutex_);
@@ -74,11 +79,16 @@ krosc::msgs::String VlmNode::handle_query(const krosc::msgs::String& request) {
     }
     image = image_;
   }
+  std::string robot_context;
+  {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    robot_context = robot_context_;
+  }
   const std::string body =
       "{\"image_b64\":\"" + base64_encode(image.data) + "\",\"encoding\":" +
       json_quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
       ",\"height\":" + std::to_string(image.height) + ",\"question\":" +
-      json_quoted(question) + "}";
+      json_quoted(question) + ",\"context\":" + json_quoted(robot_context) + "}";
   const HttpResponse response = http_post_json(url_, body, timeout_s_);
   if (!response.ok) {
     return krosc::msgs::String{"VLM 오류: " + response.error};

@@ -3,8 +3,8 @@
 #include <string>
 #include <utility>
 
-#include "http_client.hpp"
-#include "llm_json.hpp"
+#include "nodes/common/http_client.hpp"
+#include "nodes/common/llm_json.hpp"
 
 namespace krosc_ws {
 

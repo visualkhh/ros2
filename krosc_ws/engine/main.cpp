@@ -52,7 +52,7 @@
 #endif
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
-#include "nodes/rl_nav_controller.hpp"
+#include "nodes/rl_nav/rl_nav_controller.hpp"
 #endif
 
 #ifndef KROSC_WS_URDF_PATH

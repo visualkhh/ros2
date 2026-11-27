@@ -7,8 +7,8 @@
 
 | 파일 | 역할 |
 |---|---|
-| `krosc_ws/engine/nodes/robot_status.cpp` | `buzzer`, `buzzer/melody`, 멜로디 시퀀서 |
-| `krosc_ws/engine/nodes/command_rules.cpp` | 20개 비프 문장 → melody |
+| `krosc_ws/engine/nodes/robot_status/robot_status.cpp` | `buzzer`, `buzzer/melody`, 멜로디 시퀀서 |
+| `krosc_ws/engine/nodes/llm_input/command_rules.cpp` | 20개 비프 문장 → melody |
 | `krosc_ws/engine/hardwares/opencr/opencr_serial.cpp` | `B,<Hz>,<ms>` 전송 |
 | `firmware/opencr/tb3_wheels/tb3_wheels.ino` | `tone(BDPIN_BUZZER, hz, ms)` |
 | `krosc_ws/simulator/hardwares/opencr/simulator_buzzer.cpp` | Qt `QAudioSink`로 시뮬 소리 |

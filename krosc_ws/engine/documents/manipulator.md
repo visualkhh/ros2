@@ -4,13 +4,13 @@
 
 | 파일 | 역할 |
 |---|---|
-| `krosc_ws/engine/nodes/pick_place_node.cpp` | nav2 접근, MoveIt 시퀀스, gripper, floor/body |
+| `krosc_ws/engine/nodes/pick_place/pick_place_node.cpp` | nav2 접근, MoveIt 시퀀스, gripper, floor/body |
 | `krosc_ws/simulator/robot/waffle_pi_arm.cpp` | TCP FK, grasp attach, on_robot payload |
 | `krosc_ws/simulator/worlds/maze_world.cpp` | 노란 graspable 퍽 (r=0.02, h=0.12) |
 | `krosc_ws/simulator/main.cpp` | `sim_graspable` Path 발행 |
 | `krosc_ws/simulator/hardwares/realsense/simulator_realsense.cpp` | D435에 로봇 팔/그리퍼 렌더 |
 | `krosc/simulator/include/krosc/simulator/world.hpp` | `graspable`, `held`, `on_robot`, `z` |
-| `krosc_ws/engine/nodes/llm_input.cpp` | pick/place intent → `pick/command` |
+| `krosc_ws/engine/nodes/llm_input/llm_input.cpp` | pick/place intent → `pick/command` |
 
 ## 2. 그리퍼와 물체
 

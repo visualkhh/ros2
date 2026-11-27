@@ -85,9 +85,13 @@ class VlaNode final : public krosc::Node {
   double yaw_rate_ = 0.0;
   bool odom_seen_ = false;
 
+  std::mutex context_mutex_;
+  std::string robot_context_;
+
   krosc::Timer timer_;
   krosc::Subscription<krosc::msgs::Image> camera_subscription_;
   krosc::Subscription<krosc::msgs::JointState> joint_subscription_;
+  krosc::Subscription<krosc::msgs::String> context_subscription_;
   krosc::Subscription<krosc::msgs::Odometry> odom_subscription_;
 };
 

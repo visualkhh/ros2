@@ -6,7 +6,7 @@
 #include "krosc/nodes/nav2/controllers/controller.hpp"
 #include "krosc/nodes/nav2/costmap/costmap_2d_ros.hpp"
 
-#include "nodes/rl_nav_controller.hpp"
+#include "nodes/rl_nav/rl_nav_controller.hpp"
 
 #include "test_framework.hpp"
 

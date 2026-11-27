@@ -19,17 +19,18 @@ find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
 set(KROSC_REAL_SOURCES
   engine/main.cpp
   engine/engine.cpp
-  engine/nodes/robot_status.cpp
-  engine/nodes/llm_input.cpp
-  engine/nodes/llm_client.cpp
-  engine/nodes/llm_json.cpp
-  engine/nodes/command_rules.cpp
-  engine/nodes/http_client.cpp
-  engine/nodes/vla_node.cpp
-  engine/nodes/vlm_node.cpp
-  engine/nodes/pick_place_node.cpp
-  engine/nodes/nav_behavior_node.cpp
-  engine/nodes/grasp_detector_node.cpp
+  engine/nodes/robot_status/robot_status.cpp
+  engine/nodes/llm_input/llm_input.cpp
+  engine/nodes/llm_input/llm_client.cpp
+  engine/nodes/common/llm_json.cpp
+  engine/nodes/llm_input/command_rules.cpp
+  engine/nodes/common/http_client.cpp
+  engine/nodes/vla/vla_node.cpp
+  engine/nodes/vlm/vlm_node.cpp
+  engine/nodes/pick_place/pick_place_node.cpp
+  engine/nodes/nav_behavior/nav_behavior_node.cpp
+  engine/nodes/grasp_detector/grasp_detector_node.cpp
+  engine/nodes/ai_context/ai_context_node.cpp
   engine/controls/opencr/opencr_control.cpp
   engine/hardwares/lds03/lds03_device.cpp
   engine/sensors/lds03/lds03_sensor.cpp
@@ -93,7 +94,7 @@ set(KROSC_WS_RL_NAV_FOUND OFF)
 if(KROSC_WS_BUILD_RL_NAV)
   list(APPEND KROSC_REAL_SOURCES
     engine/ml/onnx_policy.cpp
-    engine/nodes/rl_nav_controller.cpp)
+    engine/nodes/rl_nav/rl_nav_controller.cpp)
   find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
     HINTS "${KROSC_WS_ONNXRUNTIME_ROOT}" ENV ONNXRUNTIME_ROOT ENV HOMEBREW_PREFIX
     PATH_SUFFIXES include include/onnxruntime)
@@ -200,17 +201,18 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     simulator/panels/arm_panel.cpp
     simulator/panels/camera_panel.cpp
     engine/engine.cpp
-    engine/nodes/robot_status.cpp
-    engine/nodes/llm_input.cpp
-    engine/nodes/llm_client.cpp
-    engine/nodes/llm_json.cpp
-    engine/nodes/command_rules.cpp
-    engine/nodes/http_client.cpp
-    engine/nodes/vla_node.cpp
-    engine/nodes/vlm_node.cpp
-    engine/nodes/pick_place_node.cpp
-    engine/nodes/nav_behavior_node.cpp
-    engine/nodes/grasp_detector_node.cpp
+    engine/nodes/robot_status/robot_status.cpp
+    engine/nodes/llm_input/llm_input.cpp
+    engine/nodes/llm_input/llm_client.cpp
+    engine/nodes/common/llm_json.cpp
+    engine/nodes/llm_input/command_rules.cpp
+    engine/nodes/common/http_client.cpp
+    engine/nodes/vla/vla_node.cpp
+    engine/nodes/vlm/vlm_node.cpp
+    engine/nodes/pick_place/pick_place_node.cpp
+    engine/nodes/nav_behavior/nav_behavior_node.cpp
+    engine/nodes/grasp_detector/grasp_detector_node.cpp
+    engine/nodes/ai_context/ai_context_node.cpp
     engine/controls/opencr/opencr_control.cpp
     engine/sensors/lds03/lds03_sensor.cpp
     engine/sensors/opencr/opencr_imu.cpp
@@ -246,7 +248,7 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
   if(KROSC_WS_BUILD_RL_NAV)
     target_sources(krosc_ws_simulator PRIVATE
       engine/ml/onnx_policy.cpp
-      engine/nodes/rl_nav_controller.cpp)
+      engine/nodes/rl_nav/rl_nav_controller.cpp)
     target_compile_definitions(krosc_ws_simulator PRIVATE KROSC_WS_ENABLE_RL_NAV=1)
     if(KROSC_WS_RL_NAV_FOUND)
       target_include_directories(krosc_ws_simulator PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
@@ -274,10 +276,10 @@ if(KROSC_WS_BUILD_TESTS)
     tests/test_rl_nav_plugin.cpp
     tests/test_llm.cpp
     tests/test_commands.cpp
-    engine/nodes/llm_json.cpp
-    engine/nodes/command_rules.cpp
+    engine/nodes/common/llm_json.cpp
+    engine/nodes/llm_input/command_rules.cpp
     engine/ml/onnx_policy.cpp
-    engine/nodes/rl_nav_controller.cpp
+    engine/nodes/rl_nav/rl_nav_controller.cpp
     engine/hardwares/lds03/lds03_device.cpp
     engine/hardwares/opencr/opencr_protocol.cpp
     engine/hardwares/opencr/opencr_serial.cpp

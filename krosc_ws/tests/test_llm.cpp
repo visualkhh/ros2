@@ -1,6 +1,6 @@
 #include <string>
 
-#include "nodes/llm_json.hpp"
+#include "nodes/common/llm_json.hpp"
 
 #include "test_framework.hpp"
 

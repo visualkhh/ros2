@@ -1,4 +1,4 @@
-#include "nodes/rl_nav_controller.hpp"
+#include "nodes/rl_nav/rl_nav_controller.hpp"
 
 #include <algorithm>
 #include <chrono>

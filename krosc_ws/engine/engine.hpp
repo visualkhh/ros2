@@ -53,6 +53,7 @@ class VlmNode;
 class PickPlaceNode;
 class NavBehaviorNode;
 class GraspDetectorNode;
+class AiContextNode;
 
 struct EngineOptions {
   std::string urdf_path;
@@ -81,6 +82,8 @@ struct EngineOptions {
   // 실기 D435 color/depth에서 물체를 찾아 pick_objects_topic으로 발행한다.
   // 시뮬레이터는 자체 world publisher가 있으므로 false로 둔다.
   bool enable_grasp_detector = false;
+  // LLM/VLA/VLM이 행동 전에 참고할 현재 상태 스냅샷 (RobotStatus의 canonical 토픽 조합).
+  bool enable_ai_context = true;
   std::string vla_url = "http://127.0.0.1:8765/plan";
   std::string vlm_url = "http://127.0.0.1:8766/query";
   std::string vla_model = "waffle-color-73";
@@ -158,6 +161,7 @@ class Engine {
   std::unique_ptr<PickPlaceNode> pick_;
   std::unique_ptr<NavBehaviorNode> nav_behavior_;
   std::unique_ptr<GraspDetectorNode> grasp_detector_;
+  std::unique_ptr<AiContextNode> ai_context_;
   std::unique_ptr<krosc::sensor::SensorManager> sensors_;
   std::unique_ptr<krosc::control::ControlManager> controls_;
   std::unique_ptr<krosc::control::ControllerManager> controller_manager_;

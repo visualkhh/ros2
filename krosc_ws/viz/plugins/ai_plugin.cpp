@@ -3,6 +3,7 @@
 #include <QDockWidget>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -174,6 +175,26 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
   add_server("vlm srv", vlm_server_);
   add_server("vla srv", vla_server_);
   layout->addLayout(server_grid);
+  auto* context_title = new QLabel("ROBOT CONTEXT", panel);
+  context_title->setStyleSheet("color:#8a9ab3;font-size:11px;margin-top:4px;");
+  layout->addWidget(context_title);
+  auto* context_grid = new QGridLayout();
+  context_grid->setHorizontalSpacing(8);
+  context_grid->setVerticalSpacing(3);
+  const auto add_context = [&](const char* label, QLabel*& target) {
+    const int row = context_grid->rowCount();
+    context_grid->addWidget(new QLabel(label, panel), row, 0);
+    target = new QLabel("-", panel);
+    target->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    target->setWordWrap(true);
+    context_grid->addWidget(target, row, 1);
+  };
+  add_context("pose", pose_);
+  add_context("lidar", lidar_);
+  add_context("arm", arm_);
+  add_context("wheels", wheels_);
+  add_context("cam/depth", camera_);
+  layout->addLayout(context_grid);
 
   input_ = new QTextEdit(panel);
   input_->setPlaceholderText("예: 앞으로 1m 전진해줘");
@@ -242,6 +263,11 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
         std::lock_guard<std::mutex> lock(state->mutex);
         state->pick_status = message.data;
       });
+  context_subscription_ = host.model().node().subscribe<krosc::msgs::String>(
+      "robot_context", [state = state_](const krosc::msgs::String& message) {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->context = message.data;
+      });
   timer_ = new QTimer(dock_);
   QObject::connect(timer_, &QTimer::timeout, dock_, [this] { update_ui(); });
   timer_->start(250);
@@ -255,6 +281,7 @@ void AiPlugin::shutdown() {
   info_subscription_.cancel();
   status_subscription_.cancel();
   pick_subscription_.cancel();
+  context_subscription_.cancel();
 }
 
 void AiPlugin::send_text(const QString& text) {
@@ -281,12 +308,17 @@ void AiPlugin::update_ui() {
   std::string info_text;
   std::string status_text;
   std::string pick_text;
+  std::string context_text;
   {
     std::lock_guard<std::mutex> lock(state_->mutex);
     info_text = state_->info;
     status_text = state_->llm_status;
     pick_text = state_->pick_status;
+    context_text = state_->context;
   }
+  const auto fmt = [](const QJsonValue& value, int digits = 2) {
+    return QString::number(value.toDouble(), 'f', digits);
+  };
 
   const QJsonDocument info = QJsonDocument::fromJson(QByteArray::fromStdString(info_text));
   if (info.isObject()) {
@@ -323,6 +355,41 @@ void AiPlugin::update_ui() {
       plan_->setText(error);
       plan_->setStyleSheet("color:#ff6b6b;");
     }
+  }
+
+  const QJsonDocument context =
+      QJsonDocument::fromJson(QByteArray::fromStdString(context_text));
+  if (context.isObject()) {
+    const QJsonObject c = context.object();
+    const QJsonObject pose = c.value("pose").toObject();
+    pose_->setText(QString("%1 x %2 y %3 yaw %4°")
+                       .arg(pose.value("frame").toString("-"),
+                            fmt(pose.value("x")), fmt(pose.value("y")),
+                            fmt(pose.value("yaw"), 1)));
+    const QJsonObject lidar = c.value("lidar").toObject();
+    lidar_->setText(QString("front %1 · left %2 · right %3 m")
+                        .arg(fmt(lidar.value("front")), fmt(lidar.value("left")),
+                             fmt(lidar.value("right"))));
+    const QJsonObject arm = c.value("arm").toObject();
+    QStringList joints;
+    for (const QJsonValue& value : arm.value("joints").toArray()) {
+      joints << fmt(value, 1);
+    }
+    arm_->setText(QString("j %1 · grip %2 mm")
+                      .arg(joints.join(" / "),
+                           fmt(arm.value("gripper").toDouble() * 1000.0, 1)));
+    const QJsonObject wheels = c.value("wheels").toObject();
+    wheels_->setText(QString("l %1 · r %2 m/s")
+                         .arg(fmt(wheels.value("left_vel")),
+                              fmt(wheels.value("right_vel"))));
+    const QJsonObject camera = c.value("camera").toObject();
+    camera_->setText(QString("C %1 %2s · D %3 %4s · z %5~%6 m")
+                         .arg(camera.value("color").toString("-"),
+                              fmt(camera.value("color_age"), 1),
+                              camera.value("depth").toString("-"),
+                              fmt(camera.value("depth_age"), 1),
+                              fmt(camera.value("depth_min")),
+                              fmt(camera.value("depth_median"))));
   }
 
   const QJsonDocument pick = QJsonDocument::fromJson(QByteArray::fromStdString(pick_text));

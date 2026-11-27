@@ -15,8 +15,8 @@
 #include "krosc/control/controller_manager.hpp"
 #include "krosc/msgs.hpp"
 
-#include "http_client.hpp"
-#include "llm_json.hpp"
+#include "nodes/common/http_client.hpp"
+#include "nodes/common/llm_json.hpp"
 
 namespace krosc_ws {
 
@@ -149,6 +149,11 @@ VlaNode::VlaNode(krosc::Context& context, std::string url, std::string camera_to
         std::lock_guard<std::mutex> lock(joints_mutex_);
         joints_ = values;
         joints_seen_ = true;
+      });
+  context_subscription_ = subscribe<krosc::msgs::String>(
+      "robot_context", [this](const krosc::msgs::String& message) {
+        std::lock_guard<std::mutex> lock(context_mutex_);
+        robot_context_ = message.data;
       });
   odom_subscription_ = subscribe<krosc::msgs::Odometry>(
       "odom", [this](const krosc::msgs::Odometry& message) {
@@ -416,11 +421,17 @@ bool VlaNode::request_plan(std::uint64_t, const std::string& target,
     state += "," + number(value);
   }
   state += "]";
+  std::string robot_context;
+  {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    robot_context = robot_context_;
+  }
   const std::string body =
       "{\"image_b64\":\"" + base64_encode(image.data) + "\",\"encoding\":" +
       json_quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
       ",\"height\":" + std::to_string(image.height) + ",\"instruction\":" +
-      json_quoted(instruction) + ",\"state\":" + state + "}";
+      json_quoted(instruction) + ",\"state\":" + state +
+      ",\"context\":" + json_quoted(robot_context) + "}";
 
   const HttpResponse response = http_post_json(url_, body, timeout_s_);
   if (!response.ok) {

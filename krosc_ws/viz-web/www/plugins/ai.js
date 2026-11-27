@@ -22,6 +22,17 @@ export function init(host) {
   const vlmServer = row(body, 'vlm srv');
   const vlaServer = row(body, 'vla srv');
 
+  const contextTitle = document.createElement('div');
+  contextTitle.className = 'muted';
+  contextTitle.textContent = 'ROBOT CONTEXT';
+  contextTitle.style.marginTop = '4px';
+  body.append(contextTitle);
+  const poseRow = row(body, 'pose');
+  const lidarRow = row(body, 'lidar');
+  const armRow = row(body, 'arm');
+  const wheelsRow = row(body, 'wheels');
+  const cameraRow = row(body, 'cam/depth');
+
   const inputRow = document.createElement('div');
   inputRow.style.display = 'block';
   inputRow.style.margin = '6px 0 4px';
@@ -170,6 +181,30 @@ export function init(host) {
     vlmServer.title = JSON.stringify(info.vlm || {});
     vlaServer.title = JSON.stringify(info.vla || {});
   }, { kind: 2, qos: 'latched' });
+
+  const format = (value, digits = 2) => Number.isFinite(Number(value))
+    ? Number(value).toFixed(digits) : '-';
+  host.onTopic('robot_context', (message) => {
+    let context;
+    try { context = JSON.parse(message.data); } catch { return; }
+    if (context.pose) {
+      setLevel(poseRow, `${context.pose.frame || '-'} x ${format(context.pose.x)} y ${format(context.pose.y)} yaw ${format(context.pose.yaw, 1)}°`);
+    }
+    if (context.lidar) {
+      setLevel(lidarRow, `front ${format(context.lidar.front)} · left ${format(context.lidar.left)} · right ${format(context.lidar.right)} m`,
+               context.lidar.front > 0.0 && context.lidar.front < 0.25 ? 'warn' : '');
+    }
+    if (context.arm) {
+      const joints = (context.arm.joints || []).map((value) => format(value, 1)).join(' / ');
+      setLevel(armRow, `j ${joints} · grip ${format((context.arm.gripper || 0) * 1000, 1)} mm`);
+    }
+    if (context.wheels) {
+      setLevel(wheelsRow, `l ${format(context.wheels.left_vel)} · r ${format(context.wheels.right_vel)} m/s`);
+    }
+    if (context.camera) {
+      setLevel(cameraRow, `C ${context.camera.color || '-'} ${format(context.camera.color_age, 1)}s · D ${context.camera.depth || '-'} ${format(context.camera.depth_age, 1)}s · z ${format(context.camera.depth_min)}~${format(context.camera.depth_median)}m`);
+    }
+  }, { kind: 2, qos: 'default' });
 
   const stages = {
     thinking: '의도 파악 중…',

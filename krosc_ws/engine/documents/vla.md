@@ -7,11 +7,11 @@
 
 | 파일 | 역할 |
 |---|---|
-| `krosc_ws/engine/nodes/vla_node.cpp` | 관측 수집, `/plan` 호출, 4 Hz 큐, 안전, 상태 |
+| `krosc_ws/engine/nodes/vla/vla_node.cpp` | 관측 수집, `/plan` 호출, 4 Hz 큐, 안전, 상태 |
 | `krosc_ws/tools/vla_server.py` | waffle-color policy HTTP sidecar `/plan` |
 | `krosc_ws/tools/learning/` | `policy.py`, `color_imitation.py`, `actions.py` |
 | `krosc_ws/artifacts/models/vla/` | `waffle-hf-vla.pt`, `waffle-color-73.npz` |
-| `krosc_ws/engine/nodes/llm_input.cpp` | `vla_pick` → `vla/command` |
+| `krosc_ws/engine/nodes/llm_input/llm_input.cpp` | `vla_pick` → `vla/command` |
 
 ## 2. 경로
 

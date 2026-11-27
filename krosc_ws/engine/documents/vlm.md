@@ -7,9 +7,9 @@
 
 | 파일 | 역할 |
 |---|---|
-| `krosc_ws/engine/nodes/vlm_node.cpp` | 최신 D435 프레임 보관, `vlm/query` 서비스 |
+| `krosc_ws/engine/nodes/vlm/vlm_node.cpp` | 최신 D435 프레임 보관, `vlm/query` 서비스 |
 | `krosc_ws/tools/vlm_server.py` | SmolVLM2-500M HTTP sidecar `/query` |
-| `krosc_ws/engine/nodes/llm_input.cpp` | `vlm_query` → `vlm/query` |
+| `krosc_ws/engine/nodes/llm_input/llm_input.cpp` | `vlm_query` → `vlm/query` |
 | `krosc_ws/viz-web/www/plugins/ai.js` | AI 패널 결과 표시 |
 
 ## 2. 경로

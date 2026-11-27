@@ -29,6 +29,7 @@ class AiPlugin final : public krosc::viz::VizPlugin {
     std::string info;
     std::string llm_status;
     std::string pick_status;
+    std::string context;
   };
 
   void send_text(const QString& text);
@@ -45,11 +46,17 @@ class AiPlugin final : public krosc::viz::VizPlugin {
   QLabel* llm_server_ = nullptr;
   QLabel* vlm_server_ = nullptr;
   QLabel* vla_server_ = nullptr;
+  QLabel* pose_ = nullptr;
+  QLabel* lidar_ = nullptr;
+  QLabel* arm_ = nullptr;
+  QLabel* wheels_ = nullptr;
+  QLabel* camera_ = nullptr;
   QTextEdit* input_ = nullptr;
   QTimer* timer_ = nullptr;
   krosc::Subscription<krosc::msgs::String> info_subscription_;
   krosc::Subscription<krosc::msgs::String> status_subscription_;
   krosc::Subscription<krosc::msgs::String> pick_subscription_;
+  krosc::Subscription<krosc::msgs::String> context_subscription_;
 };
 
 }  // namespace krosc_ws::viz

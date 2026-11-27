@@ -17,7 +17,7 @@
 #include "krosc/msgs.hpp"
 #include "krosc/tf/math.hpp"
 
-#include "llm_json.hpp"
+#include "nodes/common/llm_json.hpp"
 #include "command_rules.hpp"
 
 namespace krosc_ws {
@@ -60,6 +60,8 @@ Convert the user's Korean or English request into exactly one intent.
 - vla_pick: use the learned VLA policy when the user asks to pick/place a red or blue cube, asks for a VLA/learned policy, or asks for an AI/learned pick. Put the color/object in target.
 - pick: deterministic manipulator pick, normally for the yellow puck or known objects. Red/blue cube or "VLA" requests should use vla_pick.
 - unsupported: multiple actions, missing distance/preset, or anything else.
+The user message includes a compact JSON snapshot of the robot state (pose/TF, lidar, camera/depth, arm, wheels, battery). Before choosing, use it to check reachability, obstacles, stale sensors, and whether the manipulator is already holding something. If the requested action is unsafe or impossible from the current state, return unsupported.
+When the user asks about the camera/scene, choose vlm_query. When the user asks for a red/blue cube, VLA, or a learned pick, choose vla_pick. Use pick for the deterministic yellow puck/known object.
 Always include meters in the JSON. Use 0 when the intent is not drive.
 Return only the JSON object. Do not explain.)";
 
@@ -154,6 +156,11 @@ LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string 
                                              timeout_s)),
       move_(std::make_unique<MoveClient>(context, krosc::msgs::moveit::MOVE_ACTION)),
       mode_(std::move(mode)) {
+  context_subscription_ = subscribe<krosc::msgs::String>(
+      "robot_context", [this](const krosc::msgs::String& message) {
+        std::lock_guard<std::mutex> lock(context_mutex_);
+        robot_context_ = message.data;
+      }, krosc::QOS_DEFAULT);
   odom_subscription_ = subscribe<krosc::msgs::Odometry>(
       "odom", [this](const krosc::msgs::Odometry& message) {
         std::lock_guard<std::mutex> lock(odom_mutex_);
@@ -260,7 +267,15 @@ void LlmInput::process(const Request& request) {
     plan = *rule;
     source = "rule";
   } else {
-    const OllamaReply reply = client_->chat(kSystemPrompt, request.text, kSchema);
+    std::string robot_context;
+    {
+      std::lock_guard<std::mutex> lock(context_mutex_);
+      robot_context = robot_context_;
+    }
+    const std::string user_text = robot_context.empty()
+        ? request.text
+        : "Robot state JSON: " + robot_context + "\nUser command: " + request.text;
+    const OllamaReply reply = client_->chat(kSystemPrompt, user_text, kSchema);
     if (reply.ok) {
       const auto parsed = llm::parse_plan(reply.content);
       if (parsed) {

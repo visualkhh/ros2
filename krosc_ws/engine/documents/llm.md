@@ -10,11 +10,11 @@
 
 | 파일 | 역할 |
 |---|---|
-| `krosc_ws/engine/nodes/command_rules.cpp` | 90개 자연어 규칙, 결정적 파서 |
-| `krosc_ws/engine/nodes/llm_input.cpp` | 규칙→Ollama 폴백, worker, dispatch, drive/turn/dance |
-| `krosc_ws/engine/nodes/llm_json.cpp` | Ollama 응답/plan 파서, JSON escape |
-| `krosc_ws/engine/nodes/llm_client.cpp` | `/api/chat` 요청 본문 + 응답 content |
-| `krosc_ws/engine/nodes/http_client.cpp` | 의존성 없는 HTTP/1.1 POST (POSIX 소켓) |
+| `krosc_ws/engine/nodes/llm_input/command_rules.cpp` | 90개 자연어 규칙, 결정적 파서 |
+| `krosc_ws/engine/nodes/llm_input/llm_input.cpp` | 규칙→Ollama 폴백, worker, dispatch, drive/turn/dance |
+| `krosc_ws/engine/nodes/common/llm_json.cpp` | Ollama 응답/plan 파서, JSON escape |
+| `krosc_ws/engine/nodes/llm_input/llm_client.cpp` | `/api/chat` 요청 본문 + 응답 content |
+| `krosc_ws/engine/nodes/common/http_client.cpp` | 의존성 없는 HTTP/1.1 POST (POSIX 소켓) |
 | `krosc_ws/viz-web/main.cpp` | `llm/command` RPC 브리지 |
 | `krosc_ws/viz-web/www/plugins/ai.js` | AI 패널, 버튼, `llm/status` 표시 |
 | `krosc_ws/engine/documents/commands.md` | 90개 명령 표 |

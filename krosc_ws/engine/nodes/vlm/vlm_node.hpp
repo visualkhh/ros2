@@ -29,6 +29,10 @@ class VlmNode final : public krosc::Node {
   krosc::msgs::Image image_;
   bool image_seen_ = false;
 
+  std::mutex context_mutex_;
+  std::string robot_context_;
+
+  krosc::Subscription<krosc::msgs::String> context_subscription_;
   krosc::Subscription<krosc::msgs::Image> camera_subscription_;
 };
 

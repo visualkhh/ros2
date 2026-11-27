@@ -8,9 +8,9 @@
 
 | 파일 | 역할 |
 |---|---|
-| `krosc_ws/engine/nodes/llm_input.cpp` | drive/turn intent, `cmd_vel_nav` |
-| `krosc_ws/engine/nodes/nav_behavior_node.cpp` | `nav/hide`, `nav/approach`, `nav/status` |
-| `krosc_ws/engine/nodes/command_rules.cpp` | 20개 주행 문장 파싱 |
+| `krosc_ws/engine/nodes/llm_input/llm_input.cpp` | drive/turn intent, `cmd_vel_nav` |
+| `krosc_ws/engine/nodes/nav_behavior/nav_behavior_node.cpp` | `nav/hide`, `nav/approach`, `nav/status` |
+| `krosc_ws/engine/nodes/llm_input/command_rules.cpp` | 20개 주행 문장 파싱 |
 | `krosc_ws/engine/engine.cpp` | twist_mux → velocity_smoother → collision_monitor |
 | `krosc/engine/core/nodes/nav2/*` | planner/controller/BT navigator |
 | `krosc/engine/core/nodes/nav2/costmap/*` | global/local costmap |

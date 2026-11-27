@@ -226,6 +226,7 @@ int main(int argc, char** argv) {
       {"sim_graspable", krosc::net::Kind::Path, krosc::QOS_DEFAULT},
       {"grasp_info", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"ai_info", krosc::net::Kind::String, krosc::QOS_LATCHED},
+      {"robot_context", krosc::net::Kind::String, krosc::QOS_DEFAULT},
       {"camera/color/image_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
       {"camera/depth/image_rect_raw", krosc::net::Kind::Image, krosc::QOS_SENSOR_DATA},
   };

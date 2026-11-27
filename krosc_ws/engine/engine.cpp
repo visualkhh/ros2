@@ -35,13 +35,14 @@
 #include "controls/opencr/opencr_control.hpp"
 #include "hardwares/lds03/lds_device.hpp"
 #include "hardwares/opencr/opencr_device.hpp"
-#include "nodes/grasp_detector_node.hpp"
-#include "nodes/llm_input.hpp"
-#include "nodes/nav_behavior_node.hpp"
-#include "nodes/pick_place_node.hpp"
-#include "nodes/robot_status.hpp"
-#include "nodes/vla_node.hpp"
-#include "nodes/vlm_node.hpp"
+#include "nodes/ai_context/ai_context_node.hpp"
+#include "nodes/grasp_detector/grasp_detector_node.hpp"
+#include "nodes/llm_input/llm_input.hpp"
+#include "nodes/nav_behavior/nav_behavior_node.hpp"
+#include "nodes/pick_place/pick_place_node.hpp"
+#include "nodes/robot_status/robot_status.hpp"
+#include "nodes/vla/vla_node.hpp"
+#include "nodes/vlm/vlm_node.hpp"
 #include "sensors/lds03/lds03_sensor.hpp"
 #include "sensors/opencr/opencr_imu.hpp"
 #include "sensors/realsense/realsense_sensor.hpp"
@@ -49,7 +50,7 @@
 #include "hardwares/realsense/realsense_camera.hpp"
 
 #ifdef KROSC_WS_ENABLE_RL_NAV
-#include "nodes/rl_nav_controller.hpp"
+#include "nodes/rl_nav/rl_nav_controller.hpp"
 #endif
 
 namespace krosc_ws {
@@ -128,6 +129,11 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
     grasp_detector_ = std::make_unique<GraspDetectorNode>(
         context_, options_.camera_color_topic, options_.camera_depth_topic,
         options_.pick_objects_topic, options_.pick_grasp_info_topic);
+  }
+  if (options_.enable_ai_context) {
+    ai_context_ = std::make_unique<AiContextNode>(
+        context_, options_.scan_topic, options_.camera_color_topic,
+        options_.camera_depth_topic);
   }
   if (options_.enable_pick) {
     pick_ = std::make_unique<PickPlaceNode>(context_, options_.pick_objects_topic,
@@ -400,8 +406,8 @@ void Engine::publish_ai_info() {
   // AI 패널이 "어느 서버/모델로 배선됐는지" 바로 보여줄 수 있게 latched JSON.
   std::ostringstream out;
   out << "{\"llm\":{\"enabled\":" << (options_.enable_llm ? "true" : "false")
-      << ",\"url\":\"" << options_.llm_ollama_url << "\",\"model\":" 
-      << "\"" << options_.llm_model << "\"},"
+      << ",\"url\":\"" << options_.llm_ollama_url << "\",\"model\":\""
+      << options_.llm_model << "\",\"mode\":\"" << options_.llm_mode << "\"},"
       << "\"vlm\":{\"enabled\":" << (options_.enable_vlm ? "true" : "false")
       << ",\"url\":\"" << options_.vlm_url << "\",\"model\":\""
       << options_.vlm_model << "\"},"

@@ -67,6 +67,8 @@ class LlmInput final : public krosc::Node {
   std::unique_ptr<OllamaClient> client_;
   std::unique_ptr<MoveClient> move_;
   std::string mode_;
+  mutable std::mutex context_mutex_;
+  std::string robot_context_;
 
   std::deque<Request> queue_;
   std::mutex queue_mutex_;
@@ -102,6 +104,7 @@ class LlmInput final : public krosc::Node {
   std::string move_goal_id_;
 
   krosc::Timer drive_timer_;
+  krosc::Subscription<krosc::msgs::String> context_subscription_;
   krosc::Subscription<krosc::msgs::Odometry> odom_subscription_;
 };
 

@@ -16,7 +16,7 @@
 #include "krosc/msgs.hpp"
 #include "krosc/tf/math.hpp"
 
-#include "llm_json.hpp"
+#include "nodes/common/llm_json.hpp"
 
 namespace krosc_ws {
 
