@@ -141,3 +141,21 @@ krosc_ws/artifacts/models/vla/hf-cache/   # SmolVLM2 weights (HF_HOME)
 - VLA의 성공 pick/place는 아직 실측 전이다. 현재 검증된 것은
   sidecar 로드/응답, `vla_node` 경로, 4 Hz 큐/리밋/상태다.
 - 노란 퍽은 `pick`(MoveIt 결정적)을 쓴다. VLA는 red/blue 학습 정책용이다.
+
+## 8. VLA와 MoveIt의 관계
+
+현재 `vla_node`는 **MoveIt goal을 보내지 않는다.**
+
+- VLA sidecar가 `92 x 7` action chunk(베이스 v/w + 4관절 + 그리퍼)를 반환
+- `vla_node`가 4Hz timer로 `cmd_vel_nav`(Twist)와 `arm_joint_command`(JointState)를 직접 publish
+- MoveIt goal(`move_action`)은 `pick_place`의 결정적 pick/place, MoveIt 패널,
+  `arm_preset` 등에서 사용
+
+즉 VLA는 "목표 pose를 MoveIt에 넘기는 상위 planner"가 아니라 학습된 저수준
+action policy다. 목표 pose 기반으로 바꾸려면 action head가 관절이 아니라
+TCP pose/waypoint를 출력하도록 새 모델을 학습하고, `vla_node`가 그 목표를
+`move_action`으로 보내야 한다. 현재 모델 출력(관절)을 MoveIt goal로 변환하려면
+별도 IK가 필요하고, 학습된 trajectory를 버리게 된다.
+
+- 안전한 결정적 pick/place: `pick_place` → MoveIt
+- 학습된 red/blue cube pick: `vla` → 관절 action chunk (MoveIt 미사용)

@@ -436,14 +436,16 @@ void AiContextNode::update() {
     {
       std::lock_guard<std::mutex> health_lock(health_mutex_);
       const auto emit = [&](const char* name, const AiServerHealth& health) {
-        out << ",\"" << name << "\":{\"enabled\":" << (health.enabled ? "true" : "false")
+        out << "\"" << name << "\":{\"enabled\":" << (health.enabled ? "true" : "false")
             << ",\"ok\":" << (health.ok ? "true" : "false")
             << ",\"age\":" << fixed(health.checked_at > 0.0 ? current - health.checked_at : 999.0, 1)
             << ",\"detail\":\"" << escape_json(health.detail) << "\"}";
       };
       out << ",\"servers\":{";
       emit("llm", llm_health_);
+      out << ",";
       emit("vlm", vlm_health_);
+      out << ",";
       emit("vla", vla_health_);
       out << "}";
     }
