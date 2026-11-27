@@ -156,6 +156,7 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
   add_row("command", command_);
   add_row("plan", plan_, true);
   add_row("action", action_, true);
+  add_row("vlm", vlm_, true);
   auto* server_title = new QLabel("SERVER / ROUTING", panel);
   server_title->setStyleSheet("color:#8a9ab3;font-size:11px;margin-top:4px;");
   layout->addLayout(grid);
