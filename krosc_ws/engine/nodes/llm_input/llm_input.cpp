@@ -384,18 +384,26 @@ void LlmInput::worker_loop() {
 
 void LlmInput::process(const Request& request) {
   action_cancel_.store(false);
+  {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    action_front_baseline_.store(
+        llm::number_field(robot_context_, "front").value_or(0.0));
+  }
   publish_status(request.id, "thinking");
   const auto rule = llm::parse_command(request.text);
   llm::Plan plan;
   std::string source = "rule";
+  std::string via = "rule";
 
   // stop은 서버 장애와 무관하게 즉시 처리한다. 나머지는 LLM이 우선 라우팅한다.
   if (rule && rule->intent == "stop") {
     plan = *rule;
     source = "rule";
+    via = "rule (safety stop)";
   } else if (mode_ == "rule" && rule) {
     plan = *rule;
     source = "rule";
+    via = "rule (mode=rule)";
   } else {
     std::string robot_context;
     {
@@ -424,15 +432,22 @@ void LlmInput::process(const Request& request) {
           // LLM이 모르는 명령은 검증된 90개 규칙으로 fallback.
           plan = *rule;
           source = "llm+rule";
+          via = "LLM→rule (unsupported)";
         } else {
           plan = *parsed;
           source = "llm";
+          via = "LLM";
           apply_direction_hint(request.text, plan);
+          const std::string before = source;
           apply_parameter_hints(request.text, plan, rule, source);
+          if (source != before) {
+            via = "LLM+rule (parameter fallback)";
+          }
         }
       } else if (rule) {
         plan = *rule;
         source = "rule";
+        via = "LLM→rule (parse)";
       } else {
         publish_status(request.id, "error",
                        ",\"error\":" + json_quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
@@ -442,6 +457,11 @@ void LlmInput::process(const Request& request) {
       // LLM 서버가 죽어도 알려진 명령은 결정적으로 계속한다.
       plan = *rule;
       source = "rule";
+      std::string reason = reply.error.empty() ? "error" : reply.error;
+      if (reason.size() > 80) {
+        reason.resize(80);
+      }
+      via = "LLM→rule (" + reason + ")";
     } else {
       publish_status(request.id, "error", ",\"error\":" + json_quoted(reply.error));
       return;
@@ -474,7 +494,9 @@ void LlmInput::process(const Request& request) {
   }
   plan_json += "}";
   publish_status(request.id, "plan",
-                 ",\"source\":" + json_quoted(source) + ",\"plan\":" + plan_json);
+                 ",\"source\":" + json_quoted(source) +
+                     ",\"via\":" + json_quoted(via) +
+                     ",\"plan\":" + plan_json);
   dispatch(request.id, plan.intent, plan.meters, plan.degrees, plan.direction,
            plan.preset, plan.melody, plan.question, plan.target, plan.style);
 }
@@ -994,9 +1016,17 @@ std::string LlmInput::safety_stop_reason(const std::string& tool) const {
   if (battery && *battery < 10.0) {
     return "배터리 부족 (" + number(*battery) + "%)";
   }
+  const auto arm_temperature = llm::number_field(context, "max_temperature");
+  if (arm_temperature && *arm_temperature >= 75.0) {
+    return "매니퓰레이터 과열 (" + number(*arm_temperature) + "°C)";
+  }
   const auto front = llm::number_field(context, "front");
   const bool moving = tool == "drive" || tool == "nav" || tool == "vla";
-  if (moving && front && *front > 0.0 && *front < 0.12) {
+  // 팔이 라이다 전방을 가리는 경우가 있어, 시작 시점보다 새로 가까워진 경우만
+  // 장애물로 판단한다. (정지 상태에서 0.05m로 보이는 것은 팔 occlusion)
+  const double baseline = action_front_baseline_.load();
+  if (moving && front && *front > 0.0 && baseline > 0.0 &&
+      *front < 0.12 && *front < baseline - 0.04) {
     return "전방 장애물 (" + number(*front) + " m)";
   }
   return {};

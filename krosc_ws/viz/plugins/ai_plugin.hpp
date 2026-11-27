@@ -45,6 +45,7 @@ class AiPlugin final : public krosc::viz::VizPlugin {
   QLabel* vlm_ = nullptr;
   QLabel* source_ = nullptr;
   QLabel* route_ = nullptr;
+  QLabel* via_ = nullptr;
   QLabel* llm_server_ = nullptr;
   QLabel* vlm_server_ = nullptr;
   QLabel* vla_server_ = nullptr;

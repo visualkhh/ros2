@@ -504,6 +504,14 @@ void AiContextNode::update() {
         << ",\"present\":" << (arm_present_ ? "true" : "false")
         << ",\"status_age\":"
         << fixed(arm_status_stamp_ > 0.0 ? current - arm_status_stamp_ : 999.0, 1)
+        << ",\"max_temperature\":";
+    double arm_max_temperature = 0.0;
+    for (const double value : arm_temperature_) {
+      if (std::isfinite(value)) {
+        arm_max_temperature = std::max(arm_max_temperature, value);
+      }
+    }
+    out << fixed(arm_max_temperature, 1)
         << ",\"temperature\":[";
     for (std::size_t index = 0; index < arm_temperature_.size(); ++index) {
       if (index != 0) out << ",";

@@ -105,6 +105,7 @@ class LlmInput final : public krosc::Node {
   std::atomic<bool> stopping_{false};
   std::atomic<bool> action_cancel_{false};
   std::atomic<std::uint64_t> next_id_{1};
+  std::atomic<double> action_front_baseline_{0.0};
 
   std::mutex action_mutex_;
   std::condition_variable action_cv_;

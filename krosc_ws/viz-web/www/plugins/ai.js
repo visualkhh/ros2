@@ -20,6 +20,8 @@ export function init(host) {
   const source = row(body, 'source');
   const route = row(body, 'route');
   route.classList.add('nowrap');
+  const via = row(body, 'via');
+  via.classList.add('nowrap');
   const llmServer = row(body, 'llm srv');
   const vlmServer = row(body, 'vlm srv');
   const vlaServer = row(body, 'vla srv');
@@ -278,6 +280,8 @@ export function init(host) {
                  event.source === 'llm' || event.source === 'llm+rule' ? 'warn' : 'ok');
       }
       setLevel(route, routeText(event.plan, event.source));
+      setLevel(via, event.via || '-',
+               String(event.via || '').includes('rule') ? 'warn' : 'ok');
       const parts = [event.plan.intent];
       if (event.plan.direction) parts.push(event.plan.direction);
       if (event.plan.meters !== undefined) parts.push(`${event.plan.meters} m`);

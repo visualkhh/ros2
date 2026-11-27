@@ -173,6 +173,7 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
   };
   add_server("source", source_);
   add_server("route", route_);
+  add_server("via", via_);
   add_server("llm srv", llm_server_);
   add_server("vlm srv", vlm_server_);
   add_server("vla srv", vla_server_);
@@ -364,6 +365,9 @@ void AiPlugin::update_ui() {
       source_->setStyleSheet(source == "llm" || source == "llm+rule"
                                  ? "color:#ffb36b;" : "color:#54d18c;");
       route_->setText(route_text(plan, source));
+      const QString via = event.value("via").toString();
+      via_->setText(via.isEmpty() ? "-" : via);
+      via_->setStyleSheet(via.contains("rule") ? "color:#ffb36b;" : "color:#54d18c;");
     }
     const QString error = event.value("error").toString();
     if (!error.isEmpty()) {
