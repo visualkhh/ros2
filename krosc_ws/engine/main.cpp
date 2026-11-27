@@ -336,6 +336,12 @@ int main(int argc, char** argv) {
       env_or("KROSC_OLLAMA_URL", engine_options.llm_ollama_url);
   engine_options.llm_model = env_or("KROSC_OLLAMA_MODEL", engine_options.llm_model);
   engine_options.llm_mode = env_or("KROSC_LLM_MODE", engine_options.llm_mode);
+  try {
+    engine_options.llm_timeout = std::max(
+        1.0, std::stod(env_or("KROSC_LLM_TIMEOUT", std::to_string(engine_options.llm_timeout))));
+  } catch (const std::exception&) {
+    // 기본값 유지
+  }
   engine_options.vla_url = env_or("KROSC_VLA_URL", engine_options.vla_url);
   engine_options.vlm_url = env_or("KROSC_VLM_URL", engine_options.vlm_url);
   try {

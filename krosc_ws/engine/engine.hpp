@@ -74,7 +74,7 @@ struct EngineOptions {
   // hybrid: Ollama 호출 + 알려진 규칙 명령은 규칙 결과 우선
   // rule: 규칙 우선, 규칙에 없을 때만 Ollama
   std::string llm_mode = "llm";
-  double llm_timeout = 10.0;
+  double llm_timeout = 30.0;
   bool enable_vla = true;
   bool enable_vlm = true;
   bool enable_pick = true;

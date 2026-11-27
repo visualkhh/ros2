@@ -244,7 +244,7 @@ odom 목표가 아니라 **시간 기반**이다.
 - Ollama URL: `EngineOptions::llm_ollama_url` (기본 `http://127.0.0.1:11434`)
 - 모델: `gemma3:12b` (실기 예: `KROSC_OLLAMA_MODEL=qwen2.5:1.5b`)
 - mode: `llm`(기본, LLM-first) · `hybrid` · `rule`
-- timeout: 10초
+- timeout: 30초 (`KROSC_LLM_TIMEOUT`로 변경, gemma3:12b 첫 로딩 대비)
 - `krosc_ws/engine/engine.cpp`에서 `LlmInput` 생성.
 - 원격 Ollama는 `KROSC_OLLAMA_URL=http://<server>:11434`로 덮어쓴다.
 - LLM이 실패하거나 `unsupported`를 내면 90개 규칙으로 fallback한다.
