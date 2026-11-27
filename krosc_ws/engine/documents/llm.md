@@ -275,6 +275,7 @@ open http://localhost:8080
 | `pose`, `velocity` | map/odom 기준 x, y, yaw, 선속도, 각속도 | TF, `odom` |
 | `robot.footprint`, `height` | 0.266 x 0.266 m, 0.149 m (base_scan 포함) | URDF 충돌 박스 |
 | `robot.arm_base`, `arm_reach` | base_link 기준 팔 베이스, 완전히 폈을 때 도달 거리 | URDF arm 체인 |
+| `tf.map_base`, `tf.odom_base` | map/odom→base TF 정합 여부 | TF |
 | `tf.camera`, `tf.tcp` | base_link 기준 카메라/TCP 실시간 위치 | TF |
 | `lidar.front/left/right/rear` | 4방향 최근접 거리(m), 0이면 미검출 | `scan` |
 | `camera.color/depth`, `depth_min/median` | 해상도, age, 중앙 영역 depth 요약 | color/depth 토픽 |
