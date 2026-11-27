@@ -74,19 +74,31 @@ waffle-color-73.npz  (color trajectory head)
 
 ## 6. sidecar 실행
 
-```bash
-krosc_ws/tools/vla-venv/bin/python krosc_ws/tools/vla_server.py --threads 6
-# [vla_server] ready http://127.0.0.1:8765/plan
-```
-
-원격 PC/GPU 서버에서 돌릴 때는 sidecar를 `--host 0.0.0.0`으로 열고,
-로봇 쪽 `vla_node`가 그 주소를 보게 한다 (실기 기본은 localhost).
+로봇(Pi)에는 torch/transformers가 없으므로 **PC에서 sidecar를 띄우고 로봇이
+PC LAN IP로 접속**한다. Pi와 PC가 분리된 구성에서는 반드시 `--host 0.0.0.0`.
 
 ```bash
-KROSC_VLA_URL=http://<server-ip>:8765/plan ./build/krosc_real
+# PC 최초 1회 + VLM/VLA 동시 실행
+krosc_ws/tools/ai-sidecars.sh start
+
+# 개별 실행
+krosc_ws/tools/vla-venv/bin/python krosc_ws/tools/vla_server.py   --host 0.0.0.0 --threads 8
+# [vla_server] ready http://0.0.0.0:8765/plan
 ```
 
-Pi에는 현재 torch/transformers가 없어 sidecar를 직접 돌리지 않는다.
+로봇 쪽:
+
+```bash
+KROSC_VLA_URL=http://10.2.150.129:8765/plan ./build/krosc_real
+```
+
+PC 방화벽(UFW)이 켜져 있으면 8765를 열어야 한다.
+
+```bash
+sudo ufw allow from 10.2.150.0/23 to any port 8765 proto tcp
+```
+
+Pi에는 torch/transformers가 없어 sidecar를 직접 돌리지 않는다.
 결정적 `pick`/`place`는 VLA 없이 동작한다.
 
 모델/캐시:
