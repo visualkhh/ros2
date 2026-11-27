@@ -400,6 +400,11 @@ void LlmInput::process(const Request& request) {
     plan = *rule;
     source = "rule";
     via = "rule (safety stop)";
+  } else if (rule && rule->intent == "arm_preset") {
+    // 팔 preset은 LLM이 pick 등으로 오분류하는 경우가 있어 결정적으로 처리한다.
+    plan = *rule;
+    source = "rule";
+    via = "rule (arm preset)";
   } else if (mode_ == "rule" && rule) {
     plan = *rule;
     source = "rule";

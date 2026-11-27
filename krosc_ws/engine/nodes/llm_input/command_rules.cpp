@@ -135,7 +135,7 @@ std::optional<Plan> parse_command(std::string_view input) {
       plan.preset = "stow";
       return plan;
     }
-    if (has_any(text, {"홈", "home", "기본", "원위치", "초기", "올려"})) {
+    if (has_any(text, {"홈", "home", "기본", "원위치", "초기", "올려", "펴"})) {
       plan.intent = "arm_preset";
       plan.preset = "home";
       return plan;
