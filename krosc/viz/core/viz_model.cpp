@@ -406,7 +406,9 @@ void VizModel::publish_cmd_vel(double linear, double angular) {
   msgs::Twist twist;
   twist.linear.x = linear;
   twist.angular.z = angular;
-  node_.publish("cmd_vel", twist, QOS_COMMAND);
+  // twist_mux의 teleop priority(100)를 타도록 cmd_vel_teleop로 보낸다.
+  // cmd_vel로 직접 보내면 smoother/collision monitor 출력과 경쟁한다.
+  node_.publish("cmd_vel_teleop", twist, QOS_COMMAND);
 }
 
 bool VizModel::navigate_to_pose(const msgs::PoseStamped& goal, std::string& error) {

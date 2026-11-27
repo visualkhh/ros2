@@ -41,6 +41,9 @@ const state = {
   },
 };
 
+// Teleop 플러그인 슬라이더와 키보드 WASD가 같은 속도를 쓰도록 공유한다.
+const teleopSpeeds = { linear: 0.18, angular: 0.8 };
+
 // 서버가 아는 토픽 카탈로그와 현재 구독 상태. 플러그인이 추가한 토픽도 여기에 합친다.
 const topicCatalog = new Map();
 const topicEntries = new Map();
@@ -1156,6 +1159,16 @@ const host = {
     return rpc('params/get', { node, names });
   },
   sendTwist,
+  setTeleopSpeed(linear, angular) {
+    const nextLinear = Number(linear);
+    const nextAngular = Number(angular);
+    if (Number.isFinite(nextLinear)) {
+      teleopSpeeds.linear = Math.min(0.30, Math.max(0.03, nextLinear));
+    }
+    if (Number.isFinite(nextAngular)) {
+      teleopSpeeds.angular = Math.min(1.8, Math.max(0.2, nextAngular));
+    }
+  },
   sendJointState,
   setGoalMode(mode) { state.goalMode = mode === 'preview' ? 'preview' : 'move'; },
   cancelNavigation() {
@@ -2936,11 +2949,13 @@ document.addEventListener('selectstart', (event) => {
 function sendKeyboard() {
   let linear = 0;
   let angular = 0;
-  if (keys.has('w') || keys.has('arrowup')) linear += 0.18;
-  if (keys.has('s') || keys.has('arrowdown')) linear -= 0.12;
-  if (keys.has('a') || keys.has('arrowleft')) angular += 0.8;
-  if (keys.has('d') || keys.has('arrowright')) angular -= 0.8;
-  sendTwist('cmd_vel', linear, angular);
+  const linearSpeed = teleopSpeeds.linear;
+  const angularSpeed = teleopSpeeds.angular;
+  if (keys.has('w') || keys.has('arrowup')) linear += linearSpeed;
+  if (keys.has('s') || keys.has('arrowdown')) linear -= linearSpeed * 0.65;
+  if (keys.has('a') || keys.has('arrowleft')) angular += angularSpeed;
+  if (keys.has('d') || keys.has('arrowright')) angular -= angularSpeed;
+  sendTwist('cmd_vel_teleop', linear, angular);
 }
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement ||
@@ -2965,13 +2980,13 @@ window.addEventListener('keyup', (event) => {
   if (keys.size === 0 && teleopTimer) {
     clearInterval(teleopTimer);
     teleopTimer = null;
-    sendTwist('cmd_vel', 0, 0);
+    sendTwist('cmd_vel_teleop', 0, 0);
   }
 });
 window.addEventListener('blur', () => {
   keys.clear();
   if (teleopTimer) { clearInterval(teleopTimer); teleopTimer = null; }
-  sendTwist('cmd_vel', 0, 0);
+  sendTwist('cmd_vel_teleop', 0, 0);
 });
 
 async function loadPlugins() {
