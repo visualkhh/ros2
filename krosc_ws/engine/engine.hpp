@@ -79,6 +79,8 @@ struct EngineOptions {
   bool enable_grasp_detector = false;
   std::string vla_url = "http://127.0.0.1:8765/plan";
   std::string vlm_url = "http://127.0.0.1:8766/query";
+  std::string vla_model = "waffle-color-73";
+  std::string vlm_model = "SmolVLM2-500M";
   std::string pick_objects_topic = "sim_graspable";
   std::string pick_grasp_info_topic = "grasp_info";
   std::string nav_costmap_topic = "global_costmap/costmap";
@@ -132,6 +134,8 @@ class Engine {
   [[nodiscard]] LdsDevice* lidar() { return lidar_; }
 
  private:
+  void publish_ai_info();
+
   krosc::Context& context_;
   OpenCrDevice& opencr_;
   LdsDevice* lidar_;

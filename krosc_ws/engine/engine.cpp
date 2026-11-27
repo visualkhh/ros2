@@ -28,6 +28,8 @@
 #include "krosc/nodes/robot_state_publisher.hpp"
 #include "krosc/nodes/twist_mux.hpp"
 #include "krosc/nodes/velocity_smoother.hpp"
+#include "krosc/msgs.hpp"
+#include "krosc/qos.hpp"
 #include "krosc/sensor/sensor_manager.hpp"
 
 #include "controls/opencr/opencr_control.hpp"
@@ -389,7 +391,28 @@ bool Engine::start() {
   std::fprintf(stderr, "[krosc_ws] hardware: %s (opencr=%s lidar=%s camera=%s)\n",
                is_connected() ? "connected" : "waiting", opencr_ok ? "yes" : "no",
                lidar_ok ? "yes" : "no", camera_ok ? "yes" : "no");
+  publish_ai_info();
   return true;
+}
+
+void Engine::publish_ai_info() {
+  // AI 패널이 "어느 서버/모델로 배선됐는지" 바로 보여줄 수 있게 latched JSON.
+  std::ostringstream out;
+  out << "{\"llm\":{\"enabled\":" << (options_.enable_llm ? "true" : "false")
+      << ",\"url\":\"" << options_.llm_ollama_url << "\",\"model\":" 
+      << "\"" << options_.llm_model << "\"},"
+      << "\"vlm\":{\"enabled\":" << (options_.enable_vlm ? "true" : "false")
+      << ",\"url\":\"" << options_.vlm_url << "\",\"model\":\""
+      << options_.vlm_model << "\"},"
+      << "\"vla\":{\"enabled\":" << (options_.enable_vla ? "true" : "false")
+      << ",\"url\":\"" << options_.vla_url << "\",\"model\":\""
+      << options_.vla_model << "\"},"
+      << "\"grasp\":{\"enabled\":" << (options_.enable_grasp_detector ? "true" : "false")
+      << ",\"source\":\"camera/color+depth\"},"
+      << "\"services\":{\"command\":\"llm/command\",\"pick\":\"pick/command\","
+      << "\"nav\":\"nav/hide|nav/approach\",\"vlm\":\"vlm/query\",\"vla\":\"vla/command\"}}";
+  context_.topics().publish<krosc::msgs::String>(
+      "ai_info", krosc::msgs::String{out.str()}, krosc::QOS_LATCHED);
 }
 
 bool Engine::is_connected() const {

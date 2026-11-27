@@ -10,6 +10,18 @@ export function init(host) {
   const action = row(body, 'action');
   action.classList.add('nowrap');
 
+  const serverTitle = document.createElement('div');
+  serverTitle.className = 'muted';
+  serverTitle.textContent = 'SERVER / ROUTING';
+  serverTitle.style.marginTop = '4px';
+  body.append(serverTitle);
+  const source = row(body, 'source');
+  const route = row(body, 'route');
+  route.classList.add('nowrap');
+  const llmServer = row(body, 'llm srv');
+  const vlmServer = row(body, 'vlm srv');
+  const vlaServer = row(body, 'vla srv');
+
   const inputRow = document.createElement('div');
   inputRow.style.display = 'block';
   inputRow.style.margin = '6px 0 4px';
@@ -121,6 +133,42 @@ export function init(host) {
   history.append(log);
   body.append(history);
 
+  const routeTargets = {
+    pick: 'pick/command → D435 → MoveIt',
+    place: 'pick/command → MoveIt',
+    drive: 'cmd_vel_nav → twist_mux',
+    arm_preset: 'move_action',
+    dance: 'cmd_vel_nav / arm_joint_command',
+    buzzer: 'buzzer/melody',
+    hide: 'nav/hide',
+    approach: 'nav/approach',
+    vlm_query: 'vlm/query',
+    vla_pick: 'vla/command',
+    stop: 'emergency_stop',
+    unsupported: '-',
+  };
+  const routeText = (plan, src) => {
+    const origin = src === 'llm' ? 'LLM' : src === 'rule' ? 'rule' : '-';
+    const target = plan && plan.intent ? (routeTargets[plan.intent] || plan.intent) : '-';
+    return `${origin} → ${target}`;
+  };
+  const compactUrl = (url) => String(url || '-').replace(/^https?:\/\//, '');
+  const serverText = (entry) => {
+    if (!entry) return '-';
+    const suffix = entry.enabled === false ? ' (off)' : '';
+    return `${entry.model || '-'} @ ${compactUrl(entry.url)}${suffix}`;
+  };
+  host.onTopic('ai_info', (message) => {
+    let info;
+    try { info = JSON.parse(message.data); } catch { return; }
+    setLevel(llmServer, serverText(info.llm));
+    setLevel(vlmServer, serverText(info.vlm));
+    setLevel(vlaServer, serverText(info.vla));
+    llmServer.title = JSON.stringify(info.llm || {});
+    vlmServer.title = JSON.stringify(info.vlm || {});
+    vlaServer.title = JSON.stringify(info.vla || {});
+  });
+
   const stages = {
     thinking: '의도 파악 중…',
     plan: '의도 파악 완료',
@@ -144,6 +192,10 @@ export function init(host) {
                : event.stage === 'done' ? 'ok'
                  : event.stage === 'thinking' || event.stage === 'executing' ? 'warn' : '');
     if (event.plan) {
+      if (event.source) {
+        setLevel(source, event.source, event.source === 'llm' ? 'warn' : 'ok');
+      }
+      setLevel(route, routeText(event.plan, event.source));
       const parts = [event.plan.intent];
       if (event.plan.direction) parts.push(event.plan.direction);
       if (event.plan.meters !== undefined) parts.push(`${event.plan.meters} m`);

@@ -2527,7 +2527,9 @@ function draw3dOccupancyGrid(name, builder, alpha) {
     const wy = py * res;
     return { x: gx + cy * wx - sy * wy, y: gy + sy * wx + cy * wy };
   };
-  const tiles = name === 'map' ? 10 : 4;
+  // 4x4 타일은 카메라 근처에서 원근 왜곡이 커져 거대한 삼각형으로 보였다.
+  // 24x24로 잘게 나누고 네 모서리가 모두 카메라 앞에 있는 타일만 그린다.
+  const tiles = 24;
   const ratio = window.devicePixelRatio || 1;
   context3d.save();
   context3d.globalAlpha = alpha;
@@ -2545,10 +2547,20 @@ function draw3dOccupancyGrid(name, builder, alpha) {
       const a = world(px0, py0);
       const b = world(px1, py0);
       const c = world(px0, py1);
+      const d = world(px1, py1);
       const p0 = project3d(a.x, a.y, 0.008);
       const p1 = project3d(b.x, b.y, 0.008);
       const p2 = project3d(c.x, c.y, 0.008);
-      if (!p0 || !p1 || !p2) continue;
+      const p3 = project3d(d.x, d.y, 0.008);
+      if (!p0 || !p1 || !p2 || !p3) continue;
+      // 근접 평면을 스치는 타일은 affine 근사가 폭발한다.
+      if (Math.min(p0.depth, p1.depth, p2.depth, p3.depth) < 0.14) continue;
+      // 실제 원근 사각형의 네 번째 점과 affine 평행사변형의 차이가 크면 skip.
+      const ex = p0.x + (p1.x - p0.x) + (p2.x - p0.x);
+      const ey = p0.y + (p1.y - p0.y) + (p2.y - p0.y);
+      const span = Math.hypot(p1.x - p0.x, p1.y - p0.y) +
+                   Math.hypot(p2.x - p0.x, p2.y - p0.y);
+      if (Math.hypot(p3.x - ex, p3.y - ey) > Math.max(2.5, span * 0.22)) continue;
       const m00 = (p1.x - p0.x) / sw;
       const m10 = (p1.y - p0.y) / sw;
       const m01 = (p2.x - p0.x) / sh;
@@ -2561,6 +2573,56 @@ function draw3dOccupancyGrid(name, builder, alpha) {
     }
   }
   context3d.restore();
+}
+
+function draw3dGraspTarget() {
+  const path = topic('sim_graspable');
+  if (!path || !path.poses || path.poses.length === 0) return;
+  const pose = path.poses[0].pose;
+  if (!pose || !pose.position) return;
+  const frame = frameTransform(path.header.frame);
+  if (!frame) return;
+  const c = Math.cos(frame.yaw);
+  const s = Math.sin(frame.yaw);
+  const wx = frame.x + c * pose.position.x - s * pose.position.y;
+  const wy = frame.y + s * pose.position.x + c * pose.position.y;
+  const wz = pose.position.z;
+  const center = project3d(wx, wy, Math.max(0.008, wz));
+  if (!center) return;
+  const ring = [];
+  const r = 0.028;
+  for (let i = 0; i <= 24; ++i) {
+    const a = (i / 24) * Math.PI * 2;
+    const p = project3d(wx + Math.cos(a) * r, wy + Math.sin(a) * r,
+                        Math.max(0.008, wz));
+    if (!p) return;
+    ring.push(p);
+  }
+  context3d.beginPath();
+  context3d.moveTo(ring[0].x, ring[0].y);
+  for (const p of ring.slice(1)) context3d.lineTo(p.x, p.y);
+  context3d.closePath();
+  context3d.fillStyle = 'rgba(255, 220, 90, 0.18)';
+  context3d.fill();
+  context3d.strokeStyle = 'rgba(255, 220, 90, 0.95)';
+  context3d.lineWidth = 2;
+  context3d.stroke();
+  const base = project3d(wx, wy, 0.008);
+  if (base) {
+    context3d.strokeStyle = 'rgba(255, 220, 90, 0.55)';
+    context3d.lineWidth = 1;
+    context3d.beginPath();
+    context3d.moveTo(base.x, base.y);
+    context3d.lineTo(center.x, center.y);
+    context3d.stroke();
+  }
+  context3d.fillStyle = '#ffe178';
+  context3d.beginPath();
+  context3d.arc(center.x, center.y, 3, 0, Math.PI * 2);
+  context3d.fill();
+  context3d.fillStyle = '#ffe178';
+  context3d.font = '11px system-ui';
+  context3d.fillText('grasp', center.x + 6, center.y - 6);
 }
 
 function draw3d() {
@@ -2585,6 +2647,7 @@ function draw3d() {
   }
   if (state.settings.global_costmap) draw3dOccupancyGrid('global_costmap/costmap', costmapCanvas, 0.6);
   if (state.settings.local_costmap) draw3dOccupancyGrid('local_costmap/costmap', costmapCanvas, 0.7);
+  draw3dGraspTarget();
   draw3dAxes();
   draw3dTfAxes();
   draw3dLinkAxes();

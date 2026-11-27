@@ -150,6 +150,21 @@ krosc::msgs::String PickPlaceNode::handle_command(
     return krosc::msgs::String{
         R"({"accepted":false,"error":"action은 pick|place"})"};
   }
+  if (action == "pick") {
+    std::lock_guard<std::mutex> object_lock(object_mutex_);
+    if (!objects_seen_ || objects_.poses.empty()) {
+      return krosc::msgs::String{
+          R"({"accepted":false,"error":"sim_graspable 물체가 없다"})"};
+    }
+    const auto& position = objects_.poses.front().pose.position;
+    target_x_ = position.x;
+    target_y_ = position.y;
+    target_z_ = position.z;
+    have_target_ = true;
+    std::lock_guard<std::mutex> info_lock(info_mutex_);
+    target_width_ = object_width_;
+    target_color_ = object_color_;
+  }
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (pending_) {
@@ -294,14 +309,24 @@ bool PickPlaceNode::move_to(std::uint64_t id, const std::string& stage,
 
 bool PickPlaceNode::object_in_base(double& x, double& y, double& z, double& yaw,
                                    std::string& error) const {
-  krosc::msgs::Path path;
+  double target_x = 0.0;
+  double target_y = 0.0;
+  double target_z = 0.0;
   {
     std::lock_guard<std::mutex> lock(object_mutex_);
-    if (!objects_seen_ || objects_.poses.empty()) {
+    if (have_target_) {
+      target_x = target_x_;
+      target_y = target_y_;
+      target_z = target_z_;
+    } else if (objects_seen_ && !objects_.poses.empty()) {
+      const auto& position = objects_.poses.front().pose.position;
+      target_x = position.x;
+      target_y = position.y;
+      target_z = position.z;
+    } else {
       error = "sim_graspable 물체가 없다";
       return false;
     }
-    path = objects_;
   }
   double robot_x = 0.0;
   double robot_y = 0.0;
@@ -316,14 +341,13 @@ bool PickPlaceNode::object_in_base(double& x, double& y, double& z, double& yaw,
     robot_y = odom_y_;
     robot_yaw = odom_yaw_;
   }
-  const auto& pose = path.poses.front().pose;
-  const double dx = pose.position.x - robot_x;
-  const double dy = pose.position.y - robot_y;
+  const double dx = target_x - robot_x;
+  const double dy = target_y - robot_y;
   const double c = std::cos(robot_yaw);
   const double s = std::sin(robot_yaw);
   x = c * dx + s * dy;
   y = -s * dx + c * dy;
-  z = pose.position.z;
+  z = target_z;
   yaw = std::atan2(y, x);
   return true;
 }
@@ -331,6 +355,12 @@ bool PickPlaceNode::object_in_base(double& x, double& y, double& z, double& yaw,
 bool PickPlaceNode::object_odom(double& x, double& y, double& z,
                                 std::string& error) const {
   std::lock_guard<std::mutex> lock(object_mutex_);
+  if (have_target_) {
+    x = target_x_;
+    y = target_y_;
+    z = target_z_;
+    return true;
+  }
   if (!objects_seen_ || objects_.poses.empty()) {
     error = "sim_graspable 물체가 없다";
     return false;
@@ -538,7 +568,16 @@ bool PickPlaceNode::pick(std::uint64_t id, const std::string& color,
 
   double width = 0.0;
   std::string detected_color;
+  bool latched = false;
   {
+    std::lock_guard<std::mutex> object_lock(object_mutex_);
+    latched = have_target_;
+    if (latched) {
+      width = target_width_;
+      detected_color = target_color_;
+    }
+  }
+  if (!latched) {
     std::lock_guard<std::mutex> lock(info_mutex_);
     width = object_width_;
     detected_color = object_color_;

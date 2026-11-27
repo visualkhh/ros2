@@ -77,6 +77,14 @@ class PickPlaceNode final : public krosc::Node {
   mutable std::mutex object_mutex_;
   krosc::msgs::Path objects_;
   bool objects_seen_ = false;
+  // pick 명령을 받은 순간의 물체 pose를 고정한다. base가 가까워져 D435에서
+  // 퍽이 가려져도 이 좌표로 접근/파지를 계속한다.
+  bool have_target_ = false;
+  double target_x_ = 0.0;
+  double target_y_ = 0.0;
+  double target_z_ = 0.0;
+  double target_width_ = 0.0;
+  std::string target_color_;
 
   // 실기 D435 detector가 보내는 물체 크기. 없으면 기존 4cm 퍽 기본값을 쓴다.
   mutable std::mutex info_mutex_;
