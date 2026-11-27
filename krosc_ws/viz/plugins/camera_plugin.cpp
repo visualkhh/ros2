@@ -130,13 +130,23 @@ QImage CameraPlugin::depth_image(const krosc::msgs::Image& image) {
     for (int x = 0; x < width; ++x) {
       const std::uint16_t mm = static_cast<std::uint16_t>(row[x * 2]) |
                                (static_cast<std::uint16_t>(row[x * 2 + 1]) << 8);
-      // 0.2m(밝게) ~ 3.0m(어둡게)로 표시. 0은 invalid.
-      int value = 0;
+      // 웹과 같은 LUT: 0.2m(파랑) ~ 3.0m(빨강). 0은 invalid.
+      int red = 0;
+      int green = 0;
+      int blue = 0;
       if (mm > 0) {
         const double meters = static_cast<double>(mm) / 1000.0;
-        value = std::clamp(255 - static_cast<int>(meters / 3.0 * 220.0), 20, 255);
+        const double normalized =
+            std::clamp((meters - 0.2) / 2.8, 0.0, 1.0);
+        const auto channel = [normalized](double offset) {
+          return static_cast<int>(std::clamp(1.5 - std::abs(4.0 * normalized - offset),
+                                             0.0, 1.0) * 255.0);
+        };
+        red = channel(3.0);
+        green = channel(2.0);
+        blue = channel(1.0);
       }
-      result.setPixel(x, y, qRgb(value, value, value));
+      result.setPixel(x, y, qRgb(red, green, blue));
     }
   }
   return result;
