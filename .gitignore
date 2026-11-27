@@ -29,3 +29,9 @@ krosc_ws/tools/__pycache__/
 krosc_ws/tools/learning/__pycache__/
 krosc_ws/artifacts/models/vla/hf-cache/
 krosc_ws/artifacts/models/vlm/hf-cache/
+
+# krosc AI sidecar runtime
+krosc_ws/artifacts/logs/
+krosc_ws/artifacts/run/
+krosc_ws/artifacts/models/vla/hf-cache
+krosc_ws/artifacts/models/vlm/hf-cache
