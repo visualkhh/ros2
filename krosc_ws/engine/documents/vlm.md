@@ -19,7 +19,7 @@
   → llm_input: call_optional("vlm/query", {question})
     → vlm_node: 최신 camera/color/image_raw (rgb8 또는 jpeg)
       → POST http://127.0.0.1:8766/query
-        {image_b64, encoding, width, height, question}
+        {image_b64, encoding, width, height, question, context}
           → vlm_server: AutoProcessor + AutoModelForImageTextToText
             → answer
   → llm/status {answer}
@@ -31,6 +31,9 @@
 - `llm/status`의 `answer`로 AI 패널에 표시된다.
 
 ## 3. 모델
+
+`context`에는 `robot_context` JSON(TF/URDF 크기/라이다/카메라/팔/바퀴/배터리)이
+문자열로 포함된다. 질문에 답할 때 로봇의 현재 위치/자세/가시 범위를 함께 고려한다.
 
 ```text
 HuggingFaceTB/SmolVLM2-500M-Video-Instruct

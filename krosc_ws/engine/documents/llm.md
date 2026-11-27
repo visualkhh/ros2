@@ -241,12 +241,13 @@ odom 목표가 아니라 **시간 기반**이다.
 
 ## 11. 설정
 
-- Ollama URL: `EngineOptions::llm_ollama_url` (`http://127.0.0.1:11434`)
-- 모델: `gemma3:4b`
+- Ollama URL: `EngineOptions::llm_ollama_url` (기본 `http://127.0.0.1:11434`)
+- 모델: `gemma3:4b` (실기 예: `KROSC_OLLAMA_MODEL=qwen2.5:1.5b`)
+- mode: `llm`(기본, LLM-first) · `hybrid` · `rule`
 - timeout: 10초
 - `krosc_ws/engine/engine.cpp`에서 `LlmInput` 생성.
 - 원격 Ollama는 `KROSC_OLLAMA_URL=http://<server>:11434`로 덮어쓴다.
-  (90개 규칙은 Ollama 없이도 동작한다.)
+- LLM이 실패하거나 `unsupported`를 내면 90개 규칙으로 fallback한다.
 
 ## 12. 테스트
 
@@ -263,3 +264,26 @@ open http://localhost:8080
 ```
 
 `llm/status`, `pick/status`, `vla/status`, `nav/status`가 AI 패널의 `action`/`plan` 줄에 표시된다.
+
+## 13. 로봇 상태 컨텍스트 (robot_context)
+
+`AiContextNode`가 5Hz로 `robot_context` String(JSON)을 발행한다. 하드웨어를
+직접 제어하지 않고 `RobotStatus`의 diagnostics와 기존 센서/TF 토픽을 조합만 한다.
+
+| 필드 | 내용 | 출처 |
+|---|---|---|
+| `pose`, `velocity` | map/odom 기준 x, y, yaw, 선속도, 각속도 | TF, `odom` |
+| `robot.footprint`, `height` | 0.266 x 0.266 m, 0.149 m (base_scan 포함) | URDF 충돌 박스 |
+| `robot.arm_base`, `arm_reach` | base_link 기준 팔 베이스, 완전히 폈을 때 도달 거리 | URDF arm 체인 |
+| `tf.camera`, `tf.tcp` | base_link 기준 카메라/TCP 실시간 위치 | TF |
+| `lidar.front/left/right/rear` | 4방향 최근접 거리(m), 0이면 미검출 | `scan` |
+| `camera.color/depth`, `depth_min/median` | 해상도, age, 중앙 영역 depth 요약 | color/depth 토픽 |
+| `arm.joints`, `arm.gripper` | 4관절 rad, 그리퍼 m | `joint_states` |
+| `wheels`, `battery` | 바퀴 위치/속도, 전압/%, OpenCR 상태 | `joint_states`, `diagnostics` |
+
+- LLM 호출 시 user 메시지에 `"Robot state JSON: ..."`로 붙는다. LLM은 행동 전에
+  도달 가능성, 장애물, 센서 stale, 그리퍼 파지 여부를 확인하고 불가능하면
+  `unsupported`를 반환해야 한다.
+- VLA/VLM 요청 본문에도 `context` 문자열로 포함된다.
+- 웹/Qt AI 패널의 `ROBOT CONTEXT` 행(pose, size, lidar, arm, wheels, cam/depth)이
+  같은 스냅샷을 표시한다.

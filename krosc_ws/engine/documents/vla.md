@@ -25,7 +25,7 @@ LLM intent=vla_pick target="red block"
         odom                    (linear.x, angular.z)
         state = [v, w, j1, j2, j3, j4, gripper]   (7)
       → POST http://127.0.0.1:8765/plan
-          {image_b64, encoding, width, height, instruction, state}
+          {image_b64, encoding, width, height, instruction, state, context}
             → ColorPolicy.plan()
               → 92 x 7 actions (base v/w + 4 joint + gripper)
       → actions_flat 파싱
@@ -54,6 +54,9 @@ LLM intent=vla_pick target="red block"
 - stale observation/타임아웃은 error.
 
 ## 5. 모델
+
+`context`에는 `robot_context` JSON(TF/URDF 크기/라이다/카메라/팔/바퀴/배터리)이
+문자열로 포함된다. sidecar는 행동 전에 이 상태를 함께 고려해야 한다.
 
 ```text
 waffle-color-73.npz  (color trajectory head)
