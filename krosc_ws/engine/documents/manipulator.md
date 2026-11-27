@@ -49,9 +49,9 @@ pose.pose.position = {object->pose.x, object->pose.y,
 
 1. `object_odom()`: `sim_graspable`에서 퍽 중심 (odom).
 2. `approach()`:
-   - 거리 > 0.42 m → `navigate_to_puck()`: nav2 `NavigateToPose` goal을
+   - 거리 > 0.80 m → `navigate_to_puck()`: nav2 `NavigateToPose` goal을
      퍽 앞 `0.34 m` standoff로. **map + localization 필요.**
-   - 거리 ≤ 0.42 m → 로컬 전진/회전. 3초 정체 시 `approach stalled`.
+   - 거리 ≤ 0.80 m → 로컬 전진/회전. 3초 정체 시 `approach stalled`.
 3. `object_in_base()`: odom → `base_link`.
 4. 작업영역 검사: `0.12 < x < 0.40`, `|y| < 0.22`.
 5. `switch_arm()`: `controller_manager/switch_controller`로

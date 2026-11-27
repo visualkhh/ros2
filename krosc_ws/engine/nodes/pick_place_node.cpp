@@ -26,7 +26,7 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kOpenGrip = 0.019;   // 그리퍼 최대 개방
 constexpr double kPuckGrip = 0.008;   // 4cm 퍽 기본 close (검출 폭이 없을 때)
 constexpr double kGripperBaseGap = 0.0244;  // finger gap at grip=0
-constexpr double kMaxObjectWidth = 0.063;   // 최대 개방(약 6.2cm)보다 큰 물체는 거부
+constexpr double kMaxObjectWidth = 0.070;   // bbox 추정 오차를 감안한 상한 (개방 약 6.2cm)
 
 // 검출 폭에 맞춰 닫힘 위치를 계산한다. 물체보다 2mm 작게 목표를 두어
 // 살짝 조이는 힘이 걸리게 한다. 4cm 퍽이면 기존 8mm와 거의 같다.
@@ -368,8 +368,9 @@ bool PickPlaceNode::approach(std::uint64_t id, std::string& error) {
       ryaw = odom_yaw_;
     }
     (void)ryaw;
-    // 멀거나 벽이 사이에 있으면 nav2로 돌아간다. 직진 로컬 루프는 벽을 못 넘는다.
-    if (std::hypot(ox - rx, oy - ry) > 0.42) {
+    // 아주 먼 물체만 nav2로 보낸다. 0.45m 정도 앞 물체는 지도 없이
+    // 로컬 직진 approach로 충분하고, 실기에서 지도 미로드 상태에도 동작한다.
+    if (std::hypot(ox - rx, oy - ry) > 0.80) {
       if (!navigate_to_puck(id, error)) {
         return false;
       }

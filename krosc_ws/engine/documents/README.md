@@ -18,8 +18,8 @@
         ▼
 ③ pick_place
    sim_graspable(Path)에서 퍽 중심 (0.28, 0)
-   거리 > 0.42m? → nav2 NavigateToPose(standoff 0.34m)
-   거리 ≤ 0.42m? → 로컬 전진/회전
+   거리 > 0.80m? → nav2 NavigateToPose(standoff 0.34m)
+   거리 ≤ 0.80m? → 로컬 전진/회전
         │  MoveIt move_action
         ▼
 ④ MoveGroup
@@ -147,8 +147,8 @@ ROS 2처럼 namespace가 자동으로 붙지 않고, 노드 이름도 자동 pre
 
 1. `pick` → `pick/command` → `pick_place` 워커.
 2. `sim_graspable`(Path)에서 퍽 중심 pose를 읽는다.
-3. 0.42m보다 멀면 **nav2**로 퍽 앞 0.34m standoff까지 이동.
-4. 0.42m 이내면 로컬 접근(전진/회전, 3초 정체 감지).
+3. 0.80m보다 멀면 **nav2**로 퍽 앞 0.34m standoff까지 이동.
+4. 0.80m 이내면 로컬 접근(전진/회전, 3초 정체 감지).
 5. `controller_manager/switch_controller`로 `joint_trajectory_controller` 활성화(best-effort).
 6. MoveIt `move_action` joint-space 시퀀스:
    - approach `z = center + 0.13`, pitch 20°, gripper 19mm

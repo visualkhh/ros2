@@ -54,32 +54,47 @@ struct Candidate {
   cv::Mat mask;
 };
 
-cv::Mat make_mask(const cv::Mat& hsv, const std::string& color) {
+cv::Mat red_dominance_mask(const cv::Mat& bgr) {
+  // 어두운 빨강(원기둥 앞면/그늘)은 HSV V 임계값에서 끊기고 가장자리만 남는다.
+  // R이 G/B보다 확실히 큰 픽셀을 쓰면 흰 카드/회색 바닥을 빼면서 앞면을 살릴 수 있다.
+  std::vector<cv::Mat> channels;
+  cv::split(bgr, channels);
+  cv::Mat bright;
+  cv::Mat red_green;
+  cv::Mat red_blue;
+  cv::compare(channels[2], 35, bright, cv::CMP_GT);
+  cv::subtract(channels[2], channels[1], red_green);
+  cv::subtract(channels[2], channels[0], red_blue);
+  cv::compare(red_green, 12, red_green, cv::CMP_GT);
+  cv::compare(red_blue, 12, red_blue, cv::CMP_GT);
+  cv::bitwise_and(bright, red_green, bright);
+  cv::bitwise_and(bright, red_blue, bright);
+  return bright;
+}
+
+cv::Mat make_mask(const cv::Mat& hsv, const cv::Mat& bgr, const std::string& color) {
   cv::Mat mask;
   if (color == "red") {
-    cv::Mat low;
-    cv::Mat high;
-    cv::inRange(hsv, cv::Scalar(0, 80, 60), cv::Scalar(12, 255, 255), low);
-    cv::inRange(hsv, cv::Scalar(168, 80, 60), cv::Scalar(180, 255, 255), high);
-    cv::bitwise_or(low, high, mask);
+    mask = red_dominance_mask(bgr);
   } else if (color == "yellow") {
     cv::inRange(hsv, cv::Scalar(15, 80, 60), cv::Scalar(40, 255, 255), mask);
   } else if (color == "blue") {
     cv::inRange(hsv, cv::Scalar(90, 80, 60), cv::Scalar(130, 255, 255), mask);
   }
   if (!mask.empty()) {
-    const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
-    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
+    const cv::Mat open_kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+    const cv::Mat close_kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
+    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, open_kernel);
+    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, close_kernel);
   }
   return mask;
 }
 
-std::optional<Candidate> find_candidate(const cv::Mat& hsv) {
+std::optional<Candidate> find_candidate(const cv::Mat& hsv, const cv::Mat& bgr) {
   Candidate best;
   bool found = false;
   for (const char* color : {"red", "yellow", "blue"}) {
-    const cv::Mat mask = make_mask(hsv, color);
+    const cv::Mat mask = make_mask(hsv, bgr, color);
     if (mask.empty()) {
       continue;
     }
@@ -190,7 +205,7 @@ void GraspDetectorNode::detect() {
 
   cv::Mat hsv;
   cv::cvtColor(bgr, hsv, cv::COLOR_BGR2HSV);
-  const auto candidate = find_candidate(hsv);
+  const auto candidate = find_candidate(hsv, bgr);
   if (!candidate) {
     return;
   }
@@ -267,8 +282,12 @@ void GraspDetectorNode::detect() {
 
   krosc::msgs::Vector3 point{camera_x, camera_y, center_depth};
   try {
+    // 현재 시각은 odom TF 최신 시각보다 몇 ms 앞설 수 있다. 검출에 쓴
+    // color 프레임 stamp로 조회해 "history ... requested" 경고를 피한다.
+    const double tf_time =
+        color.header.stamp > 0.0 ? color.header.stamp : current - 0.05;
     const krosc::msgs::TransformStamped transform =
-        tf_buffer_.lookup_transform("odom", "camera_color_optical_frame", current);
+        tf_buffer_.lookup_transform("odom", "camera_color_optical_frame", tf_time);
     point = krosc::tfmath::apply(transform.transform, point);
   } catch (const std::exception& exception) {
     if (!warned_tf_) {
