@@ -1957,6 +1957,60 @@ function drawWaypoints2d() {
   }
 }
 
+// Map 뷰에서도 3D와 같은 URDF 형상을 위에서 본 footprint/링크로 그린다.
+// 기존에는 초록 화살표만 있어서 Qt Viz의 로봇 모델과 달라 보였다.
+function drawRobotModel2d() {
+  if (!state.settings.robot || !state.settings.urdf_visual) return;
+  const base = frameTransform('base_link');
+  if (!base) return;
+  const c = Math.cos(base.yaw);
+  const s = Math.sin(base.yaw);
+  const toScreen = (point) => worldToScreen(
+      base.x + c * point[0] - s * point[1],
+      base.y + s * point[0] + c * point[1]);
+  const primitives = urdfPrimitives(null, true);
+  for (const primitive of primitives) {
+    const arm = isArmLink(primitive.name);
+    const isBase = primitive.name === 'base_link';
+    const fill = isBase ? 'rgba(84, 209, 140, 0.30)'
+                        : arm ? 'rgba(150, 165, 185, 0.20)'
+                              : 'rgba(190, 170, 110, 0.22)';
+    const stroke = isBase ? '#54d18c' : '#b8c2d2';
+    if (primitive.type === 'box') {
+      // urdfPrimitives의 corners 순서: z가 +인 1,3,5,7이 위쪽 면이다.
+      const top = [1, 3, 7, 5].map((index) => toScreen(primitive.corners[index]));
+      context.beginPath();
+      context.moveTo(top[0].x, top[0].y);
+      for (const point of top.slice(1)) context.lineTo(point.x, point.y);
+      context.closePath();
+      context.fillStyle = fill;
+      context.fill();
+      context.strokeStyle = stroke;
+      context.lineWidth = 1;
+      context.stroke();
+    } else if (primitive.type === 'cylinder') {
+      const center = mat4Apply(primitive.transform, [0, 0, 0]);
+      const screen = toScreen(center);
+      context.beginPath();
+      context.arc(screen.x, screen.y, Math.max(1, primitive.radius * view.scale), 0, Math.PI * 2);
+      context.fillStyle = fill;
+      context.fill();
+      context.strokeStyle = stroke;
+      context.lineWidth = 1;
+      context.stroke();
+    } else if (primitive.type === 'sphere') {
+      const screen = toScreen(primitive.center);
+      context.beginPath();
+      context.arc(screen.x, screen.y, Math.max(1, primitive.radius * view.scale), 0, Math.PI * 2);
+      context.fillStyle = fill;
+      context.fill();
+      context.strokeStyle = stroke;
+      context.lineWidth = 1;
+      context.stroke();
+    }
+  }
+}
+
 function drawRobot() {
   if (!state.settings.robot) return;
   const pose = robotPose();
@@ -2506,7 +2560,47 @@ function draw3dMapPoints() {
   }
 }
 
-// 3D 바닥에 occupancy grid/costmap을 그린다. 타일별 affine으로 원근을 근사한다.
+// 3D 바닥에 occupancy grid/costmap을 그린다. 타일을 두 개의 삼각형으로
+// 나눠 각 삼각형에 정확한 affine 변환을 적용한다. 기존에는 타일 하나를
+// 평행사변형으로 근사해서 회전 시 타일이 벌어지거나 사라졌다.
+function draw3dTriangleTile(image, sx, sy, sw, sh, source, dest, ratio) {
+  const [s0, s1, s2] = source;
+  const [d0, d1, d2] = dest;
+  const den = (s1.x - s0.x) * (s2.y - s0.y) - (s2.x - s0.x) * (s1.y - s0.y);
+  if (Math.abs(den) < 1e-6) return;
+  const a = ((d1.x - d0.x) * (s2.y - s0.y) - (d2.x - d0.x) * (s1.y - s0.y)) / den;
+  const b = ((d1.y - d0.y) * (s2.y - s0.y) - (d2.y - d0.y) * (s1.y - s0.y)) / den;
+  const c = ((d2.x - d0.x) * (s1.x - s0.x) - (d1.x - d0.x) * (s2.x - s0.x)) / den;
+  const d = ((d2.y - d0.y) * (s1.x - s0.x) - (d1.y - d0.y) * (s2.x - s0.x)) / den;
+  const e = d0.x - a * s0.x - c * s0.y;
+  const f = d0.y - b * s0.x - d * s0.y;
+
+  // 인접 타일과 0.8px 겹쳐 anti-aliasing/반올림으로 생기는 검은 틈을 가린다.
+  const cx = (d0.x + d1.x + d2.x) / 3;
+  const cy = (d0.y + d1.y + d2.y) / 3;
+  const grow = (point) => {
+    const dx = point.x - cx;
+    const dy = point.y - cy;
+    const length = Math.hypot(dx, dy) || 1;
+    return { x: point.x + dx / length * 0.8, y: point.y + dy / length * 0.8 };
+  };
+  const g0 = grow(d0);
+  const g1 = grow(d1);
+  const g2 = grow(d2);
+
+  context3d.save();
+  context3d.beginPath();
+  context3d.moveTo(g0.x, g0.y);
+  context3d.lineTo(g1.x, g1.y);
+  context3d.lineTo(g2.x, g2.y);
+  context3d.closePath();
+  context3d.clip();
+  context3d.setTransform(a * ratio, b * ratio, c * ratio, d * ratio,
+                         e * ratio, f * ratio);
+  context3d.drawImage(image, sx, sy, sw, sh, sx, sy, sw, sh);
+  context3d.restore();
+}
+
 function draw3dOccupancyGrid(name, builder, alpha) {
   const grid = topic(name);
   if (!grid || !grid.width || !grid.height || !grid.resolution) return;
@@ -2527,8 +2621,6 @@ function draw3dOccupancyGrid(name, builder, alpha) {
     const wy = py * res;
     return { x: gx + cy * wx - sy * wy, y: gy + sy * wx + cy * wy };
   };
-  // 4x4 타일은 카메라 근처에서 원근 왜곡이 커져 거대한 삼각형으로 보였다.
-  // 24x24로 잘게 나누고 네 모서리가 모두 카메라 앞에 있는 타일만 그린다.
   const tiles = 24;
   const ratio = window.devicePixelRatio || 1;
   context3d.save();
@@ -2553,23 +2645,14 @@ function draw3dOccupancyGrid(name, builder, alpha) {
       const p2 = project3d(c.x, c.y, 0.008);
       const p3 = project3d(d.x, d.y, 0.008);
       if (!p0 || !p1 || !p2 || !p3) continue;
-      // 근접 평면을 스치는 타일은 affine 근사가 폭발한다.
-      if (Math.min(p0.depth, p1.depth, p2.depth, p3.depth) < 0.14) continue;
-      // 실제 원근 사각형의 네 번째 점과 affine 평행사변형의 차이가 크면 skip.
-      const ex = p0.x + (p1.x - p0.x) + (p2.x - p0.x);
-      const ey = p0.y + (p1.y - p0.y) + (p2.y - p0.y);
-      const span = Math.hypot(p1.x - p0.x, p1.y - p0.y) +
-                   Math.hypot(p2.x - p0.x, p2.y - p0.y);
-      if (Math.hypot(p3.x - ex, p3.y - ey) > Math.max(2.5, span * 0.22)) continue;
-      const m00 = (p1.x - p0.x) / sw;
-      const m10 = (p1.y - p0.y) / sw;
-      const m01 = (p2.x - p0.x) / sh;
-      const m11 = (p2.y - p0.y) / sh;
-      const m02 = p0.x - m00 * px0 - m01 * py0;
-      const m12 = p0.y - m10 * px0 - m11 * py0;
-      context3d.setTransform(m00 * ratio, m10 * ratio, m01 * ratio, m11 * ratio,
-                             m02 * ratio, m12 * ratio);
-      context3d.drawImage(image, px0, py0, sw, sh, px0, py0, sw, sh);
+      // 카메라 바로 앞을 스치는 타일은 원근이 폭발하므로 건너뛴다.
+      if (Math.min(p0.depth, p1.depth, p2.depth, p3.depth) < 0.12) continue;
+      const s00 = { x: px0, y: py0 };
+      const s10 = { x: px1, y: py0 };
+      const s01 = { x: px0, y: py1 };
+      const s11 = { x: px1, y: py1 };
+      draw3dTriangleTile(image, px0, py0, sw, sh, [s00, s10, s01], [p0, p1, p2], ratio);
+      draw3dTriangleTile(image, px0, py0, sw, sh, [s10, s11, s01], [p1, p3, p2], ratio);
     }
   }
   context3d.restore();
@@ -2813,6 +2896,7 @@ function render() {
   drawOdometry();
   drawGoal();
   drawWaypoints2d();
+  drawRobotModel2d();
   drawRobot();
   {
     const slam = state.latest.get('slam_status');
