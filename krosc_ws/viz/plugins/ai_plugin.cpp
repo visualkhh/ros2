@@ -265,6 +265,13 @@ void AiPlugin::initialize(krosc::viz::VizHost& host) {
       "llm/status", [state = state_](const krosc::msgs::String& message) {
         std::lock_guard<std::mutex> lock(state->mutex);
         state->llm_status = message.data;
+        // done 이벤트에는 plan/source/via가 없으므로 plan 이벤트를 따로 보관한다.
+        if (message.data.find("\"stage\":\"thinking\"") != std::string::npos) {
+          state->llm_plan.clear();
+        }
+        if (message.data.find("\"plan\":") != std::string::npos) {
+          state->llm_plan = message.data;
+        }
       });
   pick_subscription_ = host.model().node().subscribe<krosc::msgs::String>(
       "pick/status", [state = state_](const krosc::msgs::String& message) {
@@ -321,6 +328,7 @@ void AiPlugin::send_text(const QString& text) {
 void AiPlugin::update_ui() {
   std::string info_text;
   std::string status_text;
+  std::string plan_status_text;
   std::string pick_text;
   std::string vlm_text;
   std::string context_text;
@@ -328,6 +336,7 @@ void AiPlugin::update_ui() {
     std::lock_guard<std::mutex> lock(state_->mutex);
     info_text = state_->info;
     status_text = state_->llm_status;
+    plan_status_text = state_->llm_plan;
     pick_text = state_->pick_status;
     vlm_text = state_->vlm_status;
     context_text = state_->context;
@@ -356,18 +365,23 @@ void AiPlugin::update_ui() {
     command_->setStyleSheet(stage == "error" ? "color:#ff6b6b;"
                               : stage == "done" ? "color:#54d18c;"
                                                 : "color:#ffb36b;");
-    const QJsonValue plan_value = event.value("plan");
-    if (plan_value.isObject()) {
-      const QJsonObject plan = plan_value.toObject();
-      plan_->setText(plan_text(plan));
-      const QString source = event.value("source").toString();
-      source_->setText(source.isEmpty() ? "-" : source);
-      source_->setStyleSheet(source == "llm" || source == "llm+rule"
-                                 ? "color:#ffb36b;" : "color:#54d18c;");
-      route_->setText(route_text(plan, source));
-      const QString via = event.value("via").toString();
-      via_->setText(via.isEmpty() ? "-" : via);
-      via_->setStyleSheet(via.contains("rule") ? "color:#ffb36b;" : "color:#54d18c;");
+    const QJsonDocument plan_doc =
+        QJsonDocument::fromJson(QByteArray::fromStdString(plan_status_text));
+    if (plan_doc.isObject()) {
+      const QJsonObject plan_event = plan_doc.object();
+      const QJsonValue plan_value = plan_event.value("plan");
+      if (plan_value.isObject()) {
+        const QJsonObject plan = plan_value.toObject();
+        plan_->setText(plan_text(plan));
+        const QString source = plan_event.value("source").toString();
+        source_->setText(source.isEmpty() ? "-" : source);
+        source_->setStyleSheet(source == "llm" || source == "llm+rule"
+                                   ? "color:#ffb36b;" : "color:#54d18c;");
+        route_->setText(route_text(plan, source));
+        const QString via = plan_event.value("via").toString();
+        via_->setText(via.isEmpty() ? "-" : via);
+        via_->setStyleSheet(via.contains("rule") ? "color:#ffb36b;" : "color:#54d18c;");
+      }
     }
     const QString error = event.value("error").toString();
     if (!error.isEmpty()) {

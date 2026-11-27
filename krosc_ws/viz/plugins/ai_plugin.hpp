@@ -28,6 +28,7 @@ class AiPlugin final : public krosc::viz::VizPlugin {
     std::mutex mutex;
     std::string info;
     std::string llm_status;
+    std::string llm_plan;
     std::string pick_status;
     std::string vlm_status;
     std::string context;
