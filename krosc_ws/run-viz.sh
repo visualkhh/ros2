@@ -12,7 +12,7 @@ host="${KROSC_VIZ_HOST:-pak.local}"
 port="${KROSC_VIZ_PORT:-9000}"
 frame="${KROSC_VIZ_FIXED_FRAME:-map}"
 tab="${KROSC_VIZ_TAB:-map}"
-plugins="${KROSC_VIZ_PLUGINS:-project_panel,slam,navigation,moveit,rl_nav,opencr}"
+plugins="${KROSC_VIZ_PLUGINS:-project_panel,slam,navigation,moveit,rl_nav,opencr,camera}"
 
 "$here/build.sh" viz
 

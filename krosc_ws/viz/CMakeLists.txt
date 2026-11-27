@@ -8,6 +8,7 @@ add_library(krosc_ws_viz_plugins STATIC
   plugins/rl_nav_plugin.cpp
   plugins/opencr_plugin.cpp
   plugins/ai_plugin.cpp
+  plugins/camera_plugin.cpp
 )
 target_include_directories(krosc_ws_viz_plugins PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(krosc_ws_viz_plugins PUBLIC krosc::viz krosc::viz_plugins)

@@ -13,6 +13,7 @@
 
 #include "plugins/moveit_plugin.hpp"
 #include "plugins/ai_plugin.hpp"
+#include "plugins/camera_plugin.hpp"
 #include "plugins/opencr_plugin.hpp"
 #include "plugins/project_panel.hpp"
 #include "plugins/rl_nav_plugin.hpp"
@@ -77,6 +78,9 @@ int main(int argc, char** argv) {
   }
   if (selected("ai")) {
     registry.add("ai", [] { return std::make_unique<krosc_ws::viz::AiPlugin>(); });
+  }
+  if (selected("camera")) {
+    registry.add("camera", [] { return std::make_unique<krosc_ws::viz::CameraPlugin>(); });
   }
 
   // 원격 Viz도 별도 net::Client 대신 Krosc+PeerNetwork를 쓴다.
