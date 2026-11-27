@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# krosc AI sidecar(VLM 8766 / VLA 8765)를 PC에서 실행/정지한다.
+# krosc AI sidecar(LLM gateway 8767 / VLM 8766 / VLA 8765)를 PC에서 실행/정지한다.
+# 로봇(Pi)은 Ollama 11434가 아니라 LLM gateway 8767에 붙는다.
 # 로봇(Pi)은 이 PC의 LAN IP로 접속하므로 기본 바인딩은 0.0.0.0이다.
 #
 #   ./krosc_ws/tools/ai-sidecars.sh start
@@ -121,25 +122,30 @@ case "${1:-start}" in
     ensure_venv
     ensure_cache vlm
     ensure_cache vla
+    start_one llm llm_server.py 8767
     start_one vlm vlm_server.py 8766
     start_one vla vla_server.py 8765
+    wait_ready llm 8767
     wait_ready vlm 8766
     wait_ready vla 8765
     ip="$(lan_ip)"
     echo
     echo "로봇(Pi)에서 PC sidecar를 보게 하려면:"
+    echo "  export KROSC_OLLAMA_URL=http://${ip:-<PC-IP>}:8767"
     echo "  export KROSC_VLM_URL=http://${ip:-<PC-IP>}:8766/query"
     echo "  export KROSC_VLA_URL=http://${ip:-<PC-IP>}:8765/plan"
-    echo "방화벽(UFW)에서 8765/8766이 막혀 있으면:"
+    echo "방화벽(UFW)에서 8765/8766/8767이 막혀 있으면:"
     echo "  sudo ufw allow from 10.2.150.0/23 to any port 8765 proto tcp"
     echo "  sudo ufw allow from 10.2.150.0/23 to any port 8766 proto tcp"
+    echo "  sudo ufw allow from 10.2.150.0/23 to any port 8767 proto tcp"
     ;;
   stop)
+    stop_one llm
     stop_one vlm
     stop_one vla
     ;;
   status)
-    for item in "vlm 8766" "vla 8765"; do
+    for item in "llm 8767" "vlm 8766" "vla 8765"; do
       set -- $item
       if health "$2"; then
         echo "$1: ready (:$2)"

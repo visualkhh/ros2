@@ -95,6 +95,7 @@ QString server_text(const QJsonValue& value) {
   const QString mode = entry.value("mode").toString();
   const bool enabled = entry.value("enabled").toBool(true);
   const QString suffix = (mode.isEmpty() ? QString() : QString(" [%1]").arg(mode)) +
+                         (entry.value("image").toBool(false) ? QString(" [img]") : QString()) +
                          (enabled ? QString() : QString(" (off)"));
   return QString("%1 @ %2%3").arg(model.isEmpty() ? "-" : model,
                                    url.isEmpty() ? "-" : url, suffix);

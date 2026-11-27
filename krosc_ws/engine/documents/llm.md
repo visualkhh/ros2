@@ -239,17 +239,48 @@ odom 목표가 아니라 **시간 기반**이다.
 | nav 서비스 없음 | `stage:"error", error:"nav behavior 없음..."` |
 | stop | `vla/stop`, `pick/stop`, `nav/stop` + drive zero |
 
-## 11. 설정
+## 11. LLM gateway (`llm_server.py`)
 
-- Ollama URL: `EngineOptions::llm_ollama_url` (기본 `http://127.0.0.1:11434`)
-- 모델: `gemma3:12b` (실기 예: `KROSC_OLLAMA_MODEL=qwen2.5:1.5b`)
+Pi는 Ollama `:11434`에 직접 붙지 않고, PC의 `krosc_ws/tools/llm_server.py`에 붙는다.
+모델 선택은 gateway가 소유하므로 Pi는 모델 이름을 몰라도 된다. 나중에 RAG는
+`llm_server.py`의 `rag_context()`에서 system message로 주입한다.
+
+```text
+Pi LlmInput ── /api/chat ──► PC llm_server.py ── /api/chat ──► Ollama :11434
+                                   │
+                                   └─ rag_context()  (future RAG)
+```
+
+```bash
+# PC
+krosc_ws/tools/ai-sidecars.sh start
+# llm: ready (:8767)
+
+# Pi
+KROSC_OLLAMA_URL=http://10.2.150.129:8767 ./build/krosc_real
+# KROSC_OLLAMA_MODEL은 비워도 된다 (gateway가 gemma3:12b 선택)
+```
+
+UFW:
+
+```bash
+sudo ufw allow from 10.2.150.0/23 to any port 8767 proto tcp
+```
+
+`llm_server.py`는 `KROSC_LLM_MODEL`(기본 `gemma3:12b`)을 사용하고,
+`/api/tags`에는 gateway 모델만 노출한다. `KROSC_RAG_URL`은 향후 RAG 연동용이다.
+
+## 12. 설정
+
+- LLM URL: Pi는 `KROSC_OLLAMA_URL=http://<PC>:8767` (gateway)
+- 모델: gateway `llm_server.py`가 소유 (`KROSC_LLM_MODEL`, 기본 `gemma3:12b`);
+  Pi의 `KROSC_OLLAMA_MODEL`은 비워도 된다.
+- 이미지: `KROSC_LLM_IMAGE=1`(기본)이면 최신 color JPEG를 함께 보낸다.
 - mode: `llm`(기본, LLM-first) · `hybrid` · `rule`
-- timeout: 30초 (`KROSC_LLM_TIMEOUT`로 변경, gemma3:12b 첫 로딩 대비)
-- `krosc_ws/engine/engine.cpp`에서 `LlmInput` 생성.
-- 원격 Ollama는 `KROSC_OLLAMA_URL=http://<server>:11434`로 덮어쓴다.
+- timeout: 30초 (`KROSC_LLM_TIMEOUT`)
 - LLM이 실패하거나 `unsupported`를 내면 90개 규칙으로 fallback한다.
 
-## 12. 테스트
+## 13. 테스트
 
 ```bash
 # 90개 규칙
@@ -265,7 +296,7 @@ open http://localhost:8080
 
 `llm/status`, `pick/status`, `vla/status`, `nav/status`가 AI 패널의 `action`/`plan` 줄에 표시된다.
 
-## 13. 로봇 상태 컨텍스트 (robot_context)
+## 14. 로봇 상태 컨텍스트 (robot_context)
 
 `AiContextNode`가 5Hz로 `robot_context` String(JSON)을 발행한다. 하드웨어를
 직접 제어하지 않고 `RobotStatus`의 diagnostics와 기존 센서/TF 토픽을 조합만 한다.
@@ -288,7 +319,8 @@ open http://localhost:8080
 - LLM 호출 시 user 메시지에 `"Robot state JSON: ..."`로 붙는다. LLM은 행동 전에
   도달 가능성, 장애물, 센서 stale, 그리퍼 파지 여부를 확인하고 불가능하면
   `unsupported`를 반환해야 한다. LLM은 **텍스트 라우터**라 카메라 픽셀은 넣지 않고
-  카메라/depth 메타데이터만 넣는다. 실제 이미지가 필요한 질문은 `vlm_query`로 보낸다.
+  카메라/depth 메타데이터와 최신 color 이미지(`KROSC_LLM_IMAGE=1`, 기본)를 함께 넣는다.
+  이미지가 없는 카메라(rgb8 등)에서는 메타데이터만 넣는다.
 - VLM 요청은 `image_b64` + `question` + `context`, VLA 요청은 `image_b64` +
   `instruction` + `state` + `context`로 **실제 이미지와 상태를 함께** 보낸다.
 - 웹/Qt AI 패널의 `ROBOT CONTEXT` 행(pose, size, lidar, arm, wheels, cam/depth)이

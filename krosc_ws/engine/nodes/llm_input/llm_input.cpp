@@ -55,8 +55,9 @@ Convert the user's Korean or English request into exactly one intent.
 - approach: drive forward close to the visible wall or object ahead using the lidar. No arguments.
 - dance: entertainment motion. style = dance (default), spin (turn in place), wiggle (shake side to side), bow (greet), celebrate (success melody + dance), show (roam + arm wave + melody), wave (arm wave in place).
   Examples: "춤춰" -> dance style dance; "빙글빙글 돌아" -> spin; "흔들어" -> wiggle; "인사해" -> bow; "축하해" -> celebrate; "노래부르면서 춤춰" -> show; "손 흔들어" -> wave.
-- vlm_query: use this when the user asks what the camera sees, asks to describe/identify the scene, or asks any visual question. Put the question in question.
+- vlm_query: use ONLY when the user asks what the camera sees, asks to describe/identify the scene, or asks a visual question. Put the question in question.
   Examples: "지금 카메라에 뭐가 보여?" -> vlm_query; "앞에 뭐 있어?" -> vlm_query.
+  Do NOT use vlm_query for weather, math, general knowledge, battery, or robot internal status. Those are unsupported.
 - vla_pick: use the learned VLA policy when the user asks to pick/place a red or blue cube, asks for a VLA/learned policy, or asks for an AI/learned pick. Put the color/object in target.
 - pick: deterministic manipulator pick, normally for the yellow puck or known objects. Red/blue cube or "VLA" requests should use vla_pick.
 - unsupported: multiple actions, missing distance/preset, or anything else.
@@ -87,6 +88,25 @@ std::string number(double value) {
 
 std::string json_quoted(const std::string& value) {
   return "\"" + llm::escape_json(value) + "\"";
+}
+
+std::string base64_encode(const std::vector<std::uint8_t>& data) {
+  static constexpr char kTable[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string out;
+  out.reserve((data.size() + 2U) / 3U * 4U);
+  for (std::size_t index = 0; index < data.size(); index += 3U) {
+    const unsigned first = data[index];
+    const unsigned second = index + 1U < data.size() ? data[index + 1U] : 0U;
+    const unsigned third = index + 2U < data.size() ? data[index + 2U] : 0U;
+    out.push_back(kTable[first >> 2U]);
+    out.push_back(kTable[((first & 0x03U) << 4U) | (second >> 4U)]);
+    out.push_back(index + 1U < data.size()
+                      ? kTable[((second & 0x0FU) << 2U) | (third >> 6U)]
+                      : '=');
+    out.push_back(index + 2U < data.size() ? kTable[third & 0x3FU] : '=');
+  }
+  return out;
 }
 
 constexpr double kPi = 3.14159265358979323846;
@@ -147,20 +167,101 @@ void apply_direction_hint(const std::string& text, llm::Plan& plan) {
   }
 }
 
+// gemma3:12b가 intent만 맞고 필수 파라미터를 비워 보내는 경우를 보정한다.
+// 예: "팔 접어" -> intent=arm_preset, preset 누락.
+void apply_parameter_hints(const std::string& text, llm::Plan& plan,
+                           const std::optional<llm::Plan>& rule,
+                           std::string& source) {
+  const std::string lowered = lower(text);
+  const auto has = [&lowered](std::initializer_list<const char*> words) {
+    for (const char* word : words) {
+      if (lowered.find(word) != std::string::npos) {
+        return true;
+      }
+    }
+    return false;
+  };
+  if (plan.intent == "arm_preset") {
+    if (plan.preset != "home" && plan.preset != "stow") {
+      if (rule && rule->intent == "arm_preset" &&
+          (rule->preset == "home" || rule->preset == "stow")) {
+        plan = *rule;
+        source = "llm+rule";
+      } else if (has({"접", "숨", "fold", "stow", "내려", "집어넣"})) {
+        plan.preset = "stow";
+      } else if (has({"펴", "홈", "home", "기본", "원위치", "초기", "올려"})) {
+        plan.preset = "home";
+      }
+    }
+  } else if (plan.intent == "buzzer") {
+    if (plan.melody.empty()) {
+      if (has({"마리오", "mario", "죽을", "게임오버"})) {
+        plan.melody = "mario_death";
+      } else if (has({"성공", "축하", "success"})) {
+        plan.melody = "success";
+      } else if (has({"경고", "알람", "alarm"})) {
+        plan.melody = "alarm";
+      } else {
+        plan.melody = "beep";
+      }
+    }
+  } else if (plan.intent == "dance") {
+    if (plan.style.empty()) {
+      if (has({"빙글", "spin"})) plan.style = "spin";
+      else if (has({"흔들", "wiggle"})) plan.style = "wiggle";
+      else if (has({"인사", "절", "bow"})) plan.style = "bow";
+      else if (has({"축하", "celebrate"})) plan.style = "celebrate";
+      else if (has({"노래", "show"})) plan.style = "show";
+      else if (has({"손", "wave"})) plan.style = "wave";
+      else plan.style = "dance";
+    }
+  } else if (plan.intent == "vlm_query") {
+    if (plan.question.empty()) {
+      plan.question = text;
+    }
+  } else if (plan.intent == "vla_pick") {
+    if (plan.target.empty()) {
+      if (lowered.find("파") != std::string::npos ||
+          lowered.find("blue") != std::string::npos) {
+        plan.target = "blue cube";
+      } else {
+        plan.target = "red cube";
+      }
+    }
+  } else if (plan.intent == "place") {
+    if (plan.target.empty() &&
+        (lowered.find("몸") != std::string::npos ||
+         lowered.find("body") != std::string::npos)) {
+      plan.target = "body";
+    }
+  }
+}
+
 }  // namespace
 
 LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string model,
-                   double timeout_s, std::string mode)
+                   double timeout_s, std::string mode, std::string camera_topic,
+                   bool include_image)
     : Node(context, "llm_input"),
       client_(std::make_unique<OllamaClient>(std::move(ollama_url), std::move(model),
                                              timeout_s)),
       move_(std::make_unique<MoveClient>(context, krosc::msgs::moveit::MOVE_ACTION)),
-      mode_(std::move(mode)) {
+      mode_(std::move(mode)),
+      camera_topic_(std::move(camera_topic)),
+      include_image_(include_image) {
   context_subscription_ = subscribe<krosc::msgs::String>(
       "robot_context", [this](const krosc::msgs::String& message) {
         std::lock_guard<std::mutex> lock(context_mutex_);
         robot_context_ = message.data;
       }, krosc::QOS_DEFAULT);
+  if (include_image_) {
+    image_subscription_ = subscribe<krosc::msgs::Image>(
+        camera_topic_, [this](const krosc::msgs::Image& message) {
+          std::lock_guard<std::mutex> lock(image_mutex_);
+          image_ = message;
+          image_seen_ = true;
+        }, krosc::QOS_SENSOR_DATA);
+  }
   odom_subscription_ = subscribe<krosc::msgs::Odometry>(
       "odom", [this](const krosc::msgs::Odometry& message) {
         std::lock_guard<std::mutex> lock(odom_mutex_);
@@ -169,6 +270,27 @@ LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string 
         odom_yaw_ = krosc::tfmath::yaw_of(message.pose.pose.orientation);
         odom_seen_ = true;
       });
+  const auto bind_action_status = [this](const std::string& topic,
+                                         auto& subscription) {
+    subscription = subscribe<krosc::msgs::String>(
+        topic, [this, topic](const krosc::msgs::String& message) {
+          ActionStatus status;
+          status.id = static_cast<std::uint64_t>(
+              llm::number_field(message.data, "request_id").value_or(0.0));
+          status.stage = llm::string_field(message.data, "stage").value_or("");
+          status.json = message.data;
+          {
+            std::lock_guard<std::mutex> lock(action_mutex_);
+            auto& slot = action_status_[topic];
+            status.sequence = slot.sequence + 1;
+            slot = std::move(status);
+          }
+          action_cv_.notify_all();
+        }, krosc::QOS_DEFAULT);
+  };
+  bind_action_status("pick/status", pick_status_subscription_);
+  bind_action_status("vla/status", vla_status_subscription_);
+  bind_action_status("nav/status", nav_status_subscription_);
   drive_timer_ = create_timer(0.1, [this] { drive_tick(); });
   create_service<krosc::msgs::String, krosc::msgs::String>(
       "llm/command", [this](const krosc::msgs::String& request) {
@@ -180,6 +302,7 @@ LlmInput::LlmInput(krosc::Context& context, std::string ollama_url, std::string 
 
 LlmInput::~LlmInput() {
   stopping_.store(true);
+  cancel_active_action();
   queue_cv_.notify_all();
   if (worker_.joinable()) {
     worker_.join();
@@ -194,8 +317,14 @@ LlmInput::~LlmInput() {
   shutdown();
 }
 
+void LlmInput::cancel_active_action() {
+  action_cancel_.store(true);
+  action_cv_.notify_all();
+}
+
 void LlmInput::emergency_stop() {
   dance_cancel_.store(true);
+  cancel_active_action();
   stop_drive();
   for (const char* service : {"vla/stop", "pick/stop", "nav/stop"}) {
     try {
@@ -254,6 +383,7 @@ void LlmInput::worker_loop() {
 }
 
 void LlmInput::process(const Request& request) {
+  action_cancel_.store(false);
   publish_status(request.id, "thinking");
   const auto rule = llm::parse_command(request.text);
   llm::Plan plan;
@@ -275,7 +405,18 @@ void LlmInput::process(const Request& request) {
     const std::string user_text = robot_context.empty()
         ? request.text
         : "Robot state JSON: " + robot_context + "\nUser command: " + request.text;
-    const OllamaReply reply = client_->chat(kSystemPrompt, user_text, kSchema);
+    std::string image_b64;
+    if (include_image_) {
+      std::lock_guard<std::mutex> lock(image_mutex_);
+      if (image_seen_ &&
+          (image_.encoding == "jpeg" || image_.encoding == "jpg" ||
+           image_.encoding == "png") &&
+          !image_.data.empty()) {
+        image_b64 = base64_encode(image_.data);
+      }
+    }
+    const OllamaReply reply = client_->chat(kSystemPrompt, user_text, kSchema,
+                                            image_b64);
     if (reply.ok) {
       const auto parsed = llm::parse_plan(reply.content);
       if (parsed) {
@@ -287,6 +428,7 @@ void LlmInput::process(const Request& request) {
           plan = *parsed;
           source = "llm";
           apply_direction_hint(request.text, plan);
+          apply_parameter_hints(request.text, plan, rule, source);
         }
       } else if (rule) {
         plan = *rule;
@@ -408,10 +550,27 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
                      ",\"error\":" + json_quoted("pick node 없음: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":" + json_quoted(intent) +
-                                   ",\"target\":" +
-                                   json_quoted(intent == "place" ? place_target : color) +
-                                   ",\"result\":" + json_quoted(result));
+    const auto action_id = static_cast<std::uint64_t>(
+        llm::number_field(result, "request_id").value_or(0.0));
+    publish_status(id, "executing",
+                   ",\"tool\":" + json_quoted(intent) +
+                       ",\"target\":" +
+                       json_quoted(intent == "place" ? place_target : color) +
+                       ",\"action\":" + result);
+    const ActionResult outcome =
+        wait_action(id, intent, "pick/status", action_id, 120.0);
+    if (outcome.stage == "done") {
+      publish_status(id, "done", ",\"tool\":" + json_quoted(intent) +
+                                     ",\"target\":" +
+                                     json_quoted(intent == "place" ? place_target : color) +
+                                     ",\"result\":" + outcome.json);
+      return;
+    }
+    publish_status(id, "error",
+                   ",\"tool\":" + json_quoted(intent) +
+                       ",\"error\":" +
+                       json_quoted(outcome.detail.empty() ? outcome.stage : outcome.detail) +
+                       ",\"result\":" + outcome.json);
     return;
   }
   if (intent == "hide" || intent == "approach") {
@@ -423,8 +582,23 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
                      ",\"error\":" + json_quoted("nav behavior 없음: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":" + json_quoted(intent) +
-                                   ",\"result\":" + json_quoted(result));
+    const auto action_id = static_cast<std::uint64_t>(
+        llm::number_field(result, "request_id").value_or(0.0));
+    publish_status(id, "executing",
+                   ",\"tool\":" + json_quoted(intent) +
+                       ",\"action\":" + result);
+    const ActionResult outcome =
+        wait_action(id, intent, "nav/status", action_id, 120.0);
+    if (outcome.stage == "done") {
+      publish_status(id, "done", ",\"tool\":" + json_quoted(intent) +
+                                     ",\"result\":" + outcome.json);
+      return;
+    }
+    publish_status(id, "error",
+                   ",\"tool\":" + json_quoted(intent) +
+                       ",\"error\":" +
+                       json_quoted(outcome.detail.empty() ? outcome.stage : outcome.detail) +
+                       ",\"result\":" + outcome.json);
     return;
   }
   if (intent == "vlm_query") {
@@ -446,7 +620,21 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
       publish_status(id, "error", ",\"error\":" + json_quoted("VLA node 없음: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":\"vla_pick\",\"result\":" + json_quoted(result));
+    const auto action_id = static_cast<std::uint64_t>(
+        llm::number_field(result, "request_id").value_or(0.0));
+    publish_status(id, "executing",
+                   ",\"tool\":\"vla_pick\",\"action\":" + result);
+    const ActionResult outcome =
+        wait_action(id, "vla", "vla/status", action_id, 180.0);
+    if (outcome.stage == "done") {
+      publish_status(id, "done",
+                     ",\"tool\":\"vla_pick\",\"result\":" + outcome.json);
+      return;
+    }
+    publish_status(id, "error",
+                   ",\"tool\":\"vla_pick\",\"error\":" +
+                       json_quoted(outcome.detail.empty() ? outcome.stage : outcome.detail) +
+                       ",\"result\":" + outcome.json);
     return;
   }
   publish_status(id, "done", ",\"tool\":\"unsupported\"");
@@ -623,6 +811,13 @@ void LlmInput::drive_tick() {
   if (!drive_active_.load()) {
     return;
   }
+  const std::string safety = safety_stop_reason("drive");
+  if (!safety.empty()) {
+    stop_drive();
+    publish_status(drive_request_, "error",
+                   ",\"error\":" + json_quoted("안전 정지: " + safety));
+    return;
+  }
   if (now() - drive_started_ > drive_timeout_) {
     stop_drive();
     publish_status(drive_request_, "error",
@@ -784,6 +979,87 @@ std::string LlmInput::play_melody(const std::string& name, std::string& error) {
     error = exception.what();
     return {};
   }
+}
+
+std::string LlmInput::safety_stop_reason(const std::string& tool) const {
+  std::string context;
+  {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    context = robot_context_;
+  }
+  if (context.empty()) {
+    return {};
+  }
+  const auto battery = llm::number_field(context, "percent");
+  if (battery && *battery < 10.0) {
+    return "배터리 부족 (" + number(*battery) + "%)";
+  }
+  const auto front = llm::number_field(context, "front");
+  const bool moving = tool == "drive" || tool == "nav" || tool == "vla";
+  if (moving && front && *front > 0.0 && *front < 0.12) {
+    return "전방 장애물 (" + number(*front) + " m)";
+  }
+  return {};
+}
+
+LlmInput::ActionResult LlmInput::wait_action(std::uint64_t command_id,
+                                             const std::string& tool,
+                                             const std::string& topic,
+                                             std::uint64_t action_id,
+                                             double timeout_s) {
+  ActionResult result;
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(
+                            static_cast<long>(std::max(1.0, timeout_s) * 1000.0));
+  std::uint64_t last_sequence = 0;
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (action_cancel_.load()) {
+      result.stage = "cancelled";
+      return result;
+    }
+    const std::string safety = safety_stop_reason(tool);
+    if (!safety.empty()) {
+      emergency_stop();
+      result.stage = "safety";
+      result.detail = safety;
+      return result;
+    }
+    std::string stage;
+    std::string json;
+    std::uint64_t status_id = 0;
+    std::uint64_t sequence = 0;
+    {
+      std::lock_guard<std::mutex> lock(action_mutex_);
+      const auto found = action_status_.find(topic);
+      if (found != action_status_.end()) {
+        stage = found->second.stage;
+        json = found->second.json;
+        status_id = found->second.id;
+        sequence = found->second.sequence;
+      }
+    }
+    if (sequence > last_sequence) {
+      last_sequence = sequence;
+      if (action_id == 0 || status_id == action_id) {
+        result.stage = stage;
+        result.json = json;
+        if (stage == "done" || stage == "error" || stage == "cancelled") {
+          result.detail = llm::string_field(json, "error").value_or("");
+          return result;
+        }
+        publish_status(command_id, "executing",
+                       ",\"tool\":" + json_quoted(tool) +
+                           ",\"action_stage\":" + json_quoted(stage) +
+                           ",\"action\":" + json);
+      }
+    }
+    std::unique_lock<std::mutex> lock(action_mutex_);
+    action_cv_.wait_for(lock, std::chrono::milliseconds(100));
+  }
+  emergency_stop();
+  result.stage = "timeout";
+  result.detail = "동작 완료 대기 시간 초과";
+  return result;
 }
 
 std::string LlmInput::call_optional(const std::string& service,

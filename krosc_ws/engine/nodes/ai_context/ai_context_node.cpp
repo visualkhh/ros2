@@ -361,11 +361,15 @@ void AiContextNode::probe_servers() {
   llm.enabled = servers_.llm_enabled && !servers_.llm_url.empty();
   if (llm.enabled) {
     const HttpResponse response = http_get(tags_url(servers_.llm_url), 0.8);
-    const bool model_found = response.ok && !servers_.llm_model.empty() &&
-                             response.body.find(servers_.llm_model) != std::string::npos;
+    // 모델 선택은 llm_server.py가 소유한다. Pi가 모델을 모르면 연결만 확인한다.
+    const bool check_model = !servers_.llm_model.empty();
+    const bool model_found = response.ok &&
+                             (!check_model ||
+                              response.body.find(servers_.llm_model) != std::string::npos);
     llm.ok = model_found;
-    llm.detail = model_found ? servers_.llm_model
-                             : (response.ok ? "model not found" : health_detail(response));
+    llm.detail = model_found
+                     ? (check_model ? servers_.llm_model : health_detail(response))
+                     : (response.ok ? "model not found" : health_detail(response));
   } else {
     llm.detail = "disabled";
   }

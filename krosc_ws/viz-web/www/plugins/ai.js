@@ -176,7 +176,8 @@ export function init(host) {
     if (!entry) return '-';
     const suffix = entry.enabled === false ? ' (off)' : '';
     const mode = entry.mode ? ` [${entry.mode}]` : '';
-    return `${entry.model || '-'} @ ${compactUrl(entry.url)}${mode}${suffix}`;
+    const image = entry.image === true ? ' [img]' : '';
+    return `${entry.model || '-'} @ ${compactUrl(entry.url)}${mode}${image}${suffix}`;
   };
   let aiInfo = null;
   let aiHealth = null;

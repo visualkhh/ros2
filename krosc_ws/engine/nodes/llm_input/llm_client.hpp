@@ -18,7 +18,8 @@ class OllamaClient {
   OllamaClient(std::string base_url, std::string model, double timeout_s);
 
   OllamaReply chat(const std::string& system, const std::string& user,
-                   const std::string& format_schema) const;
+                   const std::string& format_schema,
+                   const std::string& image_b64 = {}) const;
 
  private:
   std::string base_url_;

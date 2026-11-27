@@ -336,6 +336,7 @@ int main(int argc, char** argv) {
       env_or("KROSC_OLLAMA_URL", engine_options.llm_ollama_url);
   engine_options.llm_model = env_or("KROSC_OLLAMA_MODEL", engine_options.llm_model);
   engine_options.llm_mode = env_or("KROSC_LLM_MODE", engine_options.llm_mode);
+  engine_options.llm_include_image = env_or("KROSC_LLM_IMAGE", "1") != "0";
   try {
     engine_options.llm_timeout = std::max(
         1.0, std::stod(env_or("KROSC_LLM_TIMEOUT", std::to_string(engine_options.llm_timeout))));

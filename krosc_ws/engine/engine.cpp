@@ -220,7 +220,8 @@ Engine::Engine(krosc::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
   if (options_.enable_llm) {
     llm_ = std::make_unique<LlmInput>(context_, options_.llm_ollama_url,
                                       options_.llm_model, options_.llm_timeout,
-                                      options_.llm_mode);
+                                      options_.llm_mode, options_.camera_color_topic,
+                                      options_.llm_include_image);
   }
   if (options_.enable_vla) {
     vla_ = std::make_unique<VlaNode>(context_, options_.vla_url,
@@ -522,9 +523,14 @@ bool Engine::start() {
 void Engine::publish_ai_info() {
   // AI 패널이 "어느 서버/모델로 배선됐는지" 바로 보여줄 수 있게 latched JSON.
   std::ostringstream out;
+  const std::string llm_model = options_.llm_model.empty()
+                                    ? "gateway"
+                                    : options_.llm_model;
   out << "{\"llm\":{\"enabled\":" << (options_.enable_llm ? "true" : "false")
       << ",\"url\":\"" << options_.llm_ollama_url << "\",\"model\":\""
-      << options_.llm_model << "\",\"mode\":\"" << options_.llm_mode << "\"},"
+      << llm_model << "\",\"mode\":\"" << options_.llm_mode
+      << "\",\"image\":" << (options_.llm_include_image ? "true" : "false")
+      << "},"
       << "\"vlm\":{\"enabled\":" << (options_.enable_vlm ? "true" : "false")
       << ",\"url\":\"" << options_.vlm_url << "\",\"model\":\""
       << options_.vlm_model << "\"},"

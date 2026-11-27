@@ -74,6 +74,8 @@ struct EngineOptions {
   // hybrid: Ollama 호출 + 알려진 규칙 명령은 규칙 결과 우선
   // rule: 규칙 우선, 규칙에 없을 때만 Ollama
   std::string llm_mode = "llm";
+  // LLM 라우터 프롬프트에도 최신 color 이미지를 포함할지.
+  bool llm_include_image = true;
   double llm_timeout = 30.0;
   bool enable_vla = true;
   bool enable_vlm = true;
