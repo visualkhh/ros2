@@ -343,8 +343,8 @@ bool PickPlaceNode::object_odom(double& x, double& y, double& z,
 }
 
 bool PickPlaceNode::approach(std::uint64_t id, std::string& error) {
-  // 팔 base(-0.092m)에서 0.30m 앞이면 3D 도달거리에 여유가 있다.
-  constexpr double kStandoff = 0.30;
+  // 팔 base(-0.092m)에서 0.28m 앞이면 3D 도달거리에 여유가 있다.
+  constexpr double kStandoff = 0.28;
   const auto started = std::chrono::steady_clock::now();
   auto last_progress = started;
   double last_range = std::numeric_limits<double>::infinity();
@@ -549,11 +549,14 @@ bool PickPlaceNode::pick(std::uint64_t id, const std::string& color,
     return false;
   }
   const double close_grip = width > 0.030 ? close_grip_for(width) : kPuckGrip;
-  logger().info("pick: color=%s detected=%s width=%.3f open=%.3f close=%.3f",
-                color.c_str(), detected_color.c_str(), width, kOpenGrip, close_grip);
+  logger().info("pick: color=%s detected=%s width=%.3f open=%.3f close=%.3f target=(%.3f, %.3f, %.3f)",
+                color.c_str(), detected_color.c_str(), width, kOpenGrip, close_grip,
+                x, y, z);
 
   const double center = z;
-  if (!move_to(id, "approach", x, y, center + 0.13, 20.0, kOpenGrip, error)) {
+  // 팔을 수평으로 뻗으면 IK가 부족하다. approach부터 아래로 굽힌 자세로
+  // 물체 위에 올리고, descend에서 45°로 내려 잡는다.
+  if (!move_to(id, "approach", x, y, center + 0.09, 35.0, kOpenGrip, error)) {
     return false;
   }
   if (!move_to(id, "descend", x, y, center + 0.015, 45.0, kOpenGrip, error)) {
@@ -562,7 +565,7 @@ bool PickPlaceNode::pick(std::uint64_t id, const std::string& color,
   if (!move_to(id, "close", x, y, center + 0.015, 45.0, close_grip, error)) {
     return false;
   }
-  if (!move_to(id, "lift", x, y, center + 0.16, 20.0, close_grip, error)) {
+  if (!move_to(id, "lift", x, y, center + 0.12, 20.0, close_grip, error)) {
     return false;
   }
   pick_x_ = x;

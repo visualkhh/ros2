@@ -210,6 +210,6 @@ camera/depth/image_rect_raw    ─┼→ HSV red/yellow/blue → 가장 큰 blob
   `close = clamp((width - 0.002 - 0.0244) / 2, 0.006, 0.019)`, `open = 0.019`.
 - `width > 0.063 m`면 그리퍼 최대 개방보다 크다고 보고 pick을 거부한다.
 - OpenCV가 없는 환경에서는 노드가 no-op으로 빌드된다.
-- 실기 local approach는 0.30m standoff까지 실제로 전진한다. 예전 0.32+0.04/0.12m
+- 실기 local approach는 0.28m standoff까지 실제로 전진한다. 예전 0.32+0.04/0.12m
   조건은 0.36m 앞 물체에서 제자리 회전만 하다 stall로 끝났다.
 - `grasp_info`/`sim_graspable`은 웹 Topics에도 표시된다.
