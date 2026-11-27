@@ -17,7 +17,7 @@ namespace krosc_ws {
 
 namespace {
 
-std::string quoted(const std::string& value) {
+std::string json_quoted(const std::string& value) {
   return "\"" + llm::escape_json(value) + "\"";
 }
 
@@ -76,9 +76,9 @@ krosc::msgs::String VlmNode::handle_query(const krosc::msgs::String& request) {
   }
   const std::string body =
       "{\"image_b64\":\"" + base64_encode(image.data) + "\",\"encoding\":" +
-      quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
+      json_quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
       ",\"height\":" + std::to_string(image.height) + ",\"question\":" +
-      quoted(question) + "}";
+      json_quoted(question) + "}";
   const HttpResponse response = http_post_json(url_, body, timeout_s_);
   if (!response.ok) {
     return krosc::msgs::String{"VLM 오류: " + response.error};

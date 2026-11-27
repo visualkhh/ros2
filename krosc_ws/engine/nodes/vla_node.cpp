@@ -44,7 +44,7 @@ std::string number(double value) {
   return buffer;
 }
 
-std::string quoted(const std::string& value) {
+std::string json_quoted(const std::string& value) {
   return "\"" + llm::escape_json(value) + "\"";
 }
 
@@ -252,7 +252,7 @@ void VlaNode::worker_loop() {
     std::string instruction;
     std::string error;
     if (!request_plan(id, target, actions, instruction, error)) {
-      publish_status(id, "error", ",\"error\":" + quoted(error));
+      publish_status(id, "error", ",\"error\":" + json_quoted(error));
       continue;
     }
     bool cancelled = false;
@@ -267,7 +267,7 @@ void VlaNode::worker_loop() {
     std::string switch_error;
     if (!switch_arm(true, switch_error)) {
       publish_status(id, "error",
-                     ",\"error\":" + quoted("controller switch: " + switch_error));
+                     ",\"error\":" + json_quoted("controller switch: " + switch_error));
       continue;
     }
     {
@@ -294,7 +294,7 @@ void VlaNode::worker_loop() {
     }
     publish_status(id, "executing",
                    ",\"steps\":" + std::to_string(actions.size()) +
-                       ",\"instruction\":" + quoted(instruction));
+                       ",\"instruction\":" + json_quoted(instruction));
   }
 }
 
@@ -358,7 +358,7 @@ void VlaNode::stop_motion() {
 void VlaNode::publish_status(std::uint64_t id, const std::string& stage,
                              const std::string& extra_json) {
   std::string json = "{\"request_id\":" + std::to_string(id) + ",\"stage\":" +
-                     quoted(stage);
+                     json_quoted(stage);
   if (!extra_json.empty()) {
     json += extra_json;
   }
@@ -418,9 +418,9 @@ bool VlaNode::request_plan(std::uint64_t, const std::string& target,
   state += "]";
   const std::string body =
       "{\"image_b64\":\"" + base64_encode(image.data) + "\",\"encoding\":" +
-      quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
+      json_quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
       ",\"height\":" + std::to_string(image.height) + ",\"instruction\":" +
-      quoted(instruction) + ",\"state\":" + state + "}";
+      json_quoted(instruction) + ",\"state\":" + state + "}";
 
   const HttpResponse response = http_post_json(url_, body, timeout_s_);
   if (!response.ok) {

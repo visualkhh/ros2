@@ -26,7 +26,7 @@ std::string number(double value) {
   return buffer;
 }
 
-std::string quoted(const std::string& value) {
+std::string json_quoted(const std::string& value) {
   return "\"" + llm::escape_json(value) + "\"";
 }
 
@@ -156,9 +156,9 @@ void NavBehaviorNode::worker_loop() {
     std::string error;
     const bool ok = action == "approach" ? run_approach(error) : run_hide(error);
     if (!ok) {
-      publish_status(id, "error", ",\"error\":" + quoted(error));
+      publish_status(id, "error", ",\"error\":" + json_quoted(error));
     } else {
-      publish_status(id, "done", ",\"action\":" + quoted(action));
+      publish_status(id, "done", ",\"action\":" + json_quoted(action));
     }
     active_id_.store(0);
   }
@@ -406,7 +406,7 @@ bool NavBehaviorNode::run_approach(std::string& error) {
 void NavBehaviorNode::publish_status(std::uint64_t id, const std::string& stage,
                                      const std::string& extra_json) {
   std::string json = "{\"request_id\":" + std::to_string(id) + ",\"stage\":" +
-                     quoted(stage);
+                     json_quoted(stage);
   if (!extra_json.empty()) {
     json += extra_json;
   }

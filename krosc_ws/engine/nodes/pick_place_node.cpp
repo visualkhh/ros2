@@ -32,7 +32,7 @@ std::string number(double value) {
   return buffer;
 }
 
-std::string quoted(const std::string& value) {
+std::string json_quoted(const std::string& value) {
   return "\"" + llm::escape_json(value) + "\"";
 }
 
@@ -165,18 +165,18 @@ void PickPlaceNode::worker_loop() {
     publish_status(id, "switching");
     if (!switch_arm(error)) {
       publish_status(id, "error",
-                     ",\"error\":" + quoted("controller switch: " + error));
+                     ",\"error\":" + json_quoted("controller switch: " + error));
       continue;
     }
     publish_status(id, "executing",
-                   ",\"action\":" + quoted(action) +
-                       ",\"target\":" + quoted(target));
+                   ",\"action\":" + json_quoted(action) +
+                       ",\"target\":" + json_quoted(target));
     const bool ok = action == "place" ? place(id, target, error) : pick(id, color, error);
     if (!ok) {
-      publish_status(id, "error", ",\"error\":" + quoted(error));
+      publish_status(id, "error", ",\"error\":" + json_quoted(error));
       continue;
     }
-    publish_status(id, "done", ",\"action\":" + quoted(action));
+    publish_status(id, "done", ",\"action\":" + json_quoted(action));
   }
 }
 
@@ -218,7 +218,7 @@ bool PickPlaceNode::move_to(std::uint64_t id, const std::string& stage,
         goal, [this, id, stage](const krosc::msgs::moveit::MoveGroupFeedback& feedback) {
           publish_status(id, stage,
                          ",\"progress\":" + number(feedback.progress) +
-                             ",\"state\":" + quoted(feedback.state));
+                             ",\"state\":" + json_quoted(feedback.state));
         });
     {
       std::lock_guard<std::mutex> lock(move_mutex_);
@@ -602,7 +602,7 @@ bool PickPlaceNode::place(std::uint64_t id, const std::string& target,
 void PickPlaceNode::publish_status(std::uint64_t id, const std::string& stage,
                                    const std::string& extra_json) {
   std::string json = "{\"request_id\":" + std::to_string(id) + ",\"stage\":" +
-                     quoted(stage);
+                     json_quoted(stage);
   if (!extra_json.empty()) {
     json += extra_json;
   }

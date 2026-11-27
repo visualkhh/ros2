@@ -81,7 +81,7 @@ std::string number(double value) {
   return buffer;
 }
 
-std::string quoted(const std::string& value) {
+std::string json_quoted(const std::string& value) {
   return "\"" + llm::escape_json(value) + "\"";
 }
 
@@ -253,19 +253,19 @@ void LlmInput::process(const Request& request) {
     source = "llm";
     const OllamaReply reply = client_->chat(kSystemPrompt, request.text, kSchema);
     if (!reply.ok) {
-      publish_status(request.id, "error", ",\"error\":" + quoted(reply.error));
+      publish_status(request.id, "error", ",\"error\":" + json_quoted(reply.error));
       return;
     }
     const auto parsed = llm::parse_plan(reply.content);
     if (!parsed) {
       publish_status(request.id, "error",
-                     ",\"error\":" + quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
+                     ",\"error\":" + json_quoted("모델 응답 파싱 실패: " + reply.content.substr(0, 160)));
       return;
     }
     plan = *parsed;
     apply_direction_hint(request.text, plan);
   }
-  std::string plan_json = "{\"intent\":" + quoted(plan.intent);
+  std::string plan_json = "{\"intent\":" + json_quoted(plan.intent);
   if (plan.meters != 0.0) {
     plan_json += ",\"meters\":" + number(plan.meters);
   }
@@ -273,26 +273,26 @@ void LlmInput::process(const Request& request) {
     plan_json += ",\"degrees\":" + number(plan.degrees);
   }
   if (!plan.direction.empty()) {
-    plan_json += ",\"direction\":" + quoted(plan.direction);
+    plan_json += ",\"direction\":" + json_quoted(plan.direction);
   }
   if (!plan.preset.empty()) {
-    plan_json += ",\"preset\":" + quoted(plan.preset);
+    plan_json += ",\"preset\":" + json_quoted(plan.preset);
   }
   if (!plan.melody.empty()) {
-    plan_json += ",\"melody\":" + quoted(plan.melody);
+    plan_json += ",\"melody\":" + json_quoted(plan.melody);
   }
   if (!plan.question.empty()) {
-    plan_json += ",\"question\":" + quoted(plan.question);
+    plan_json += ",\"question\":" + json_quoted(plan.question);
   }
   if (!plan.target.empty()) {
-    plan_json += ",\"target\":" + quoted(plan.target);
+    plan_json += ",\"target\":" + json_quoted(plan.target);
   }
   if (!plan.style.empty()) {
-    plan_json += ",\"style\":" + quoted(plan.style);
+    plan_json += ",\"style\":" + json_quoted(plan.style);
   }
   plan_json += "}";
   publish_status(request.id, "plan",
-                 ",\"source\":" + quoted(source) + ",\"plan\":" + plan_json);
+                 ",\"source\":" + json_quoted(source) + ",\"plan\":" + plan_json);
   dispatch(request.id, plan.intent, plan.meters, plan.degrees, plan.direction,
            plan.preset, plan.melody, plan.question, plan.target, plan.style);
 }
@@ -342,10 +342,10 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
     std::string error;
     (void)play_melody(name, error);
     if (!error.empty()) {
-      publish_status(id, "error", ",\"error\":" + quoted("버저 실패: " + error));
+      publish_status(id, "error", ",\"error\":" + json_quoted("버저 실패: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":\"buzzer\",\"melody\":" + quoted(name));
+    publish_status(id, "done", ",\"tool\":\"buzzer\",\"melody\":" + json_quoted(name));
     return;
   }
   if (intent == "pick" || intent == "place") {
@@ -357,21 +357,21 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
     const std::string color = intent == "pick"
                                   ? (target.empty() ? "yellow" : target)
                                   : "yellow";
-    const std::string payload = "{\"action\":" + quoted(intent) +
-                                ",\"color\":" + quoted(color) +
+    const std::string payload = "{\"action\":" + json_quoted(intent) +
+                                ",\"color\":" + json_quoted(color) +
                                 ",\"target\":" +
-                                quoted(intent == "place" ? place_target : color) + "}";
+                                json_quoted(intent == "place" ? place_target : color) + "}";
     std::string error;
     const std::string result = call_optional("pick/command", payload, error);
     if (!error.empty()) {
       publish_status(id, "error",
-                     ",\"error\":" + quoted("pick node 없음: " + error));
+                     ",\"error\":" + json_quoted("pick node 없음: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":" + quoted(intent) +
+    publish_status(id, "done", ",\"tool\":" + json_quoted(intent) +
                                    ",\"target\":" +
-                                   quoted(intent == "place" ? place_target : color) +
-                                   ",\"result\":" + quoted(result));
+                                   json_quoted(intent == "place" ? place_target : color) +
+                                   ",\"result\":" + json_quoted(result));
     return;
   }
   if (intent == "hide" || intent == "approach") {
@@ -380,33 +380,33 @@ void LlmInput::dispatch(std::uint64_t id, const std::string& intent, double mete
     const std::string result = call_optional(service, "{}", error);
     if (!error.empty()) {
       publish_status(id, "error",
-                     ",\"error\":" + quoted("nav behavior 없음: " + error));
+                     ",\"error\":" + json_quoted("nav behavior 없음: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":" + quoted(intent) +
-                                   ",\"result\":" + quoted(result));
+    publish_status(id, "done", ",\"tool\":" + json_quoted(intent) +
+                                   ",\"result\":" + json_quoted(result));
     return;
   }
   if (intent == "vlm_query") {
     std::string error;
-    const std::string payload = "{\"question\":" + quoted(question) + "}";
+    const std::string payload = "{\"question\":" + json_quoted(question) + "}";
     const std::string answer = call_optional("vlm/query", payload, error);
     if (!error.empty()) {
-      publish_status(id, "error", ",\"error\":" + quoted("VLM node 없음: " + error));
+      publish_status(id, "error", ",\"error\":" + json_quoted("VLM node 없음: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":\"vlm_query\",\"answer\":" + quoted(answer));
+    publish_status(id, "done", ",\"tool\":\"vlm_query\",\"answer\":" + json_quoted(answer));
     return;
   }
   if (intent == "vla_pick") {
     std::string error;
-    const std::string payload = "{\"target\":" + quoted(target) + "}";
+    const std::string payload = "{\"target\":" + json_quoted(target) + "}";
     const std::string result = call_optional("vla/command", payload, error);
     if (!error.empty()) {
-      publish_status(id, "error", ",\"error\":" + quoted("VLA node 없음: " + error));
+      publish_status(id, "error", ",\"error\":" + json_quoted("VLA node 없음: " + error));
       return;
     }
-    publish_status(id, "done", ",\"tool\":\"vla_pick\",\"result\":" + quoted(result));
+    publish_status(id, "done", ",\"tool\":\"vla_pick\",\"result\":" + json_quoted(result));
     return;
   }
   publish_status(id, "done", ",\"tool\":\"unsupported\"");
@@ -454,7 +454,7 @@ void LlmInput::dance(std::uint64_t id, const std::string& style) {
     duration = 3.0;
   }
   publish_status(id, "dancing",
-                 ",\"tool\":\"dance\",\"style\":" + quoted(style));
+                 ",\"tool\":\"dance\",\"style\":" + json_quoted(style));
   int step = 0;
   while (!dance_cancel_.load()) {
     const double elapsed =
@@ -514,7 +514,7 @@ void LlmInput::dance(std::uint64_t id, const std::string& style) {
     return;
   }
   publish_status(id, "done",
-                 ",\"tool\":\"dance\",\"style\":" + quoted(style) +
+                 ",\"tool\":\"dance\",\"style\":" + json_quoted(style) +
                      ",\"seconds\":" + number(duration));
 }
 
@@ -545,7 +545,7 @@ void LlmInput::start_drive(std::uint64_t id, double meters, double sign) {
   drive_active_.store(true);
   publish_status(id, "executing",
                  ",\"tool\":\"drive\",\"direction\":" +
-                     quoted(sign >= 0.0 ? "forward" : "backward") +
+                     json_quoted(sign >= 0.0 ? "forward" : "backward") +
                      ",\"meters\":" + number(meters));
 }
 
@@ -575,7 +575,7 @@ void LlmInput::start_turn(std::uint64_t id, const std::string& direction,
   drive_progress_time_ = drive_started_;
   drive_active_.store(true);
   publish_status(id, "executing",
-                 ",\"tool\":\"turn\",\"direction\":" + quoted(direction) +
+                 ",\"tool\":\"turn\",\"direction\":" + json_quoted(direction) +
                      ",\"degrees\":" + number(angle));
 }
 
@@ -691,14 +691,14 @@ void LlmInput::send_arm_preset(std::uint64_t id, const std::string& preset) {
         goal, [this, id](const krosc::msgs::moveit::MoveGroupFeedback& feedback) {
           publish_status(id, "moveit",
                          ",\"tool\":\"arm_preset\",\"progress\":" + number(feedback.progress) +
-                             ",\"state\":" + quoted(feedback.state));
+                             ",\"state\":" + json_quoted(feedback.state));
         });
     {
       std::lock_guard<std::mutex> lock(move_mutex_);
       move_goal_id_ = handle->goal_id();
     }
     publish_status(id, "executing",
-                   ",\"tool\":\"arm_preset\",\"preset\":" + quoted(preset));
+                   ",\"tool\":\"arm_preset\",\"preset\":" + json_quoted(preset));
     // MoveGroup 결과가 올 때까지 워커에서 기다린다. 도중에 정지 요청이 오면
     // handle_command의 fast-path가 goal을 취소하고, 여기서는 결과만 정리한다.
     const auto result = handle->result(60.0);
@@ -710,7 +710,7 @@ void LlmInput::send_arm_preset(std::uint64_t id, const std::string& preset) {
     }
     if (result.status == krosc::GoalStatus::Succeeded) {
       publish_status(id, "done",
-                     ",\"tool\":\"arm_preset\",\"preset\":" + quoted(preset));
+                     ",\"tool\":\"arm_preset\",\"preset\":" + json_quoted(preset));
       return;
     }
     std::string detail = "MoveIt 실패";
@@ -724,9 +724,9 @@ void LlmInput::send_arm_preset(std::uint64_t id, const std::string& preset) {
       } catch (const std::bad_any_cast&) {
       }
     }
-    publish_status(id, "error", ",\"error\":" + quoted(detail));
+    publish_status(id, "error", ",\"error\":" + json_quoted(detail));
   } catch (const std::exception& error) {
-    publish_status(id, "error", ",\"error\":" + quoted(error.what()));
+    publish_status(id, "error", ",\"error\":" + json_quoted(error.what()));
   }
 }
 
@@ -762,7 +762,7 @@ std::string LlmInput::call_optional(const std::string& service,
 void LlmInput::publish_status(std::uint64_t id, const std::string& stage,
                               const std::string& extra_json) {
   std::string json = "{\"request_id\":" + std::to_string(id) + ",\"stage\":" +
-                     quoted(stage);
+                     json_quoted(stage);
   if (!extra_json.empty()) {
     json += extra_json;
   }
