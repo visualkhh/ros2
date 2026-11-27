@@ -343,8 +343,8 @@ bool PickPlaceNode::object_odom(double& x, double& y, double& z,
 }
 
 bool PickPlaceNode::approach(std::uint64_t id, std::string& error) {
-  // 팔 base(-0.092m)에서 0.28m 앞이면 3D 도달거리에 여유가 있다.
-  constexpr double kStandoff = 0.28;
+  // 팔 base(-0.092m)에서 0.25m 앞이면 3D 도달거리에 여유가 있다.
+  constexpr double kStandoff = 0.25;
   const auto started = std::chrono::steady_clock::now();
   auto last_progress = started;
   double last_range = std::numeric_limits<double>::infinity();
@@ -404,14 +404,14 @@ bool PickPlaceNode::approach(std::uint64_t id, std::string& error) {
     const double dy = oy - ry;
     const double range = std::hypot(dx, dy);
     const double bearing = wrap_angle(std::atan2(dy, dx) - ryaw);
-    if (range <= kStandoff + 0.01) {
+    // IK plan_only로 확인한 도달 한계가 x≈0.25m다. dead zone 없이 정확히
+    // standoff에서 멈춘다.
+    if (range <= kStandoff) {
       break;
     }
     const double angular = std::clamp(1.6 * bearing, -1.0, 1.0);
-    // 0.32m standoff까지 실제로 전진한다. 예전 +0.12m 조건은 0.36m 물체에서
-    // 회전만 하다 stall로 끝났다.
     const double linear =
-        (std::abs(bearing) < 0.35 && range > kStandoff + 0.005) ? 0.10 : 0.0;
+        (std::abs(bearing) < 0.35 && range > kStandoff) ? 0.10 : 0.0;
     publish<krosc::msgs::Twist>(
         "cmd_vel_nav",
         krosc::msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}});
@@ -555,8 +555,8 @@ bool PickPlaceNode::pick(std::uint64_t id, const std::string& color,
 
   const double center = z;
   // 팔을 수평으로 뻗으면 IK가 부족하다. approach부터 아래로 굽힌 자세로
-  // 물체 위에 올리고, descend에서 45°로 내려 잡는다.
-  if (!move_to(id, "approach", x, y, center + 0.09, 35.0, kOpenGrip, error)) {
+  // 물체 바로 위(center+0.07)에 올리고, descend에서 45°로 내려 잡는다.
+  if (!move_to(id, "approach", x, y, center + 0.07, 35.0, kOpenGrip, error)) {
     return false;
   }
   if (!move_to(id, "descend", x, y, center + 0.015, 45.0, kOpenGrip, error)) {

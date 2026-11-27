@@ -285,7 +285,7 @@ void GraspDetectorNode::detect() {
   // 배경의 빨간 물체/케이블을 잡는 false positive를 막는다.
   // 그리퍼 최대 개방(약 6.2cm)에 가까운 후보는 pick이 거부하므로 아예
   // 발행하지 않고 마지막 valid 물체를 유지한다.
-  if (width > 0.072 || height > 0.300 || center_depth > 0.80) {
+  if (width > 0.072 || height > 0.300 || center_depth > 0.60) {
     return;
   }
   const double camera_x = (static_cast<double>(candidate->center.x) - c_cx) *
