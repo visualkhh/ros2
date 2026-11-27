@@ -167,7 +167,7 @@ export function init(host) {
     llmServer.title = JSON.stringify(info.llm || {});
     vlmServer.title = JSON.stringify(info.vlm || {});
     vlaServer.title = JSON.stringify(info.vla || {});
-  });
+  }, { kind: 2, qos: 'latched' });
 
   const stages = {
     thinking: '의도 파악 중…',

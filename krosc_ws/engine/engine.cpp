@@ -487,6 +487,8 @@ void Engine::log_status() {
     return;
   }
   last_status_ = now;
+  // latched만 보내면 gateway 재접속 후 브라우저가 못 받을 수 있다. 5초마다 갱신.
+  publish_ai_info();
   if (cartographer_) {
     std::printf("[krosc_ws] slam: mode=%s scans=%d rejected=%d localized=%s cells=%zu\n",
                 cartographer_->mode().c_str(), cartographer_->scans(), cartographer_->rejected(),
