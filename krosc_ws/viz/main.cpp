@@ -12,6 +12,7 @@
 #include "krosc/viz/viz_cli.hpp"
 
 #include "plugins/moveit_plugin.hpp"
+#include "plugins/ai_plugin.hpp"
 #include "plugins/opencr_plugin.hpp"
 #include "plugins/project_panel.hpp"
 #include "plugins/rl_nav_plugin.hpp"
@@ -34,7 +35,7 @@ int main(int argc, char** argv) {
   krosc::viz::VizCliDefaults defaults;
   defaults.fixed_frame = "map";
   defaults.tab = "3d";
-  defaults.plugins = "project_panel,slam,navigation,moveit,rl_nav,opencr";
+  defaults.plugins = "project_panel,slam,navigation,moveit,rl_nav,opencr,ai";
   defaults.usage_extra = "[--moveit|--no-moveit]";
 
   krosc::viz::VizOptions options;
@@ -73,6 +74,9 @@ int main(int argc, char** argv) {
   if (selected("rl_nav")) {
     registry.add("rl_nav", [] { return std::make_unique<krosc_ws::viz::RlNavPlugin>(); });
     registry.add("opencr", [] { return std::make_unique<krosc_ws::viz::OpencrPlugin>(); });
+  }
+  if (selected("ai")) {
+    registry.add("ai", [] { return std::make_unique<krosc_ws::viz::AiPlugin>(); });
   }
 
   // 원격 Viz도 별도 net::Client 대신 Krosc+PeerNetwork를 쓴다.
