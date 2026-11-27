@@ -232,7 +232,8 @@ void AiContextNode::update() {
     double pose_y = odom_y_;
     double pose_yaw = odom_yaw_;
     std::string frame = "odom";
-    bool tf_ok = false;
+    bool map_ok = false;
+    bool odom_ok = false;
     try {
       const auto transform = tf_buffer_.lookup_transform("map", "base_footprint",
                                                          current - 0.05);
@@ -241,9 +242,11 @@ void AiContextNode::update() {
         pose_y = transform.transform.translation.y;
         pose_yaw = yaw_of(transform.transform.rotation);
         frame = "map";
-        tf_ok = true;
+        map_ok = true;
       }
     } catch (const std::exception&) {
+    }
+    if (!map_ok) {
       try {
         const auto transform = tf_buffer_.lookup_transform("odom", "base_footprint",
                                                            current - 0.05);
@@ -251,7 +254,7 @@ void AiContextNode::update() {
         pose_y = transform.transform.translation.y;
         pose_yaw = yaw_of(transform.transform.rotation);
         frame = "odom";
-        tf_ok = true;
+        odom_ok = true;
       } catch (const std::exception&) {
       }
     }
@@ -289,7 +292,8 @@ void AiContextNode::update() {
         << "," << fixed(geometry_.arm_base[2], 3) << "],\"arm_reach\":"
         << fixed(geometry_.arm_reach, 3) << ",\"from_urdf\":"
         << (geometry_.from_urdf ? "true" : "false") << "}"
-        << ",\"tf\":{\"map_base\":" << (tf_ok ? "true" : "false")
+        << ",\"tf\":{\"map_base\":" << (map_ok ? "true" : "false")
+        << ",\"odom_base\":" << (odom_ok ? "true" : "false")
         << ",\"camera_link\":" << (camera_tf ? "true" : "false")
         << ",\"tcp_link\":" << (tcp_tf ? "true" : "false")
         << ",\"camera\":[" << fixed(camera_x) << "," << fixed(camera_y) << ","
