@@ -253,58 +253,74 @@ bool PickPlaceNode::move_to(std::uint64_t id, const std::string& stage,
   goal.cartesian = false;  // joint-space: 카메라/차체에 막히는 직선 계획을 피한다
   goal.plan_only = false;
   goal.grip = grip_m;
-  try {
-    const auto handle = move_->send_goal(
-        goal, [this, id, stage](const krosc::msgs::moveit::MoveGroupFeedback& feedback) {
-          publish_status(id, stage,
-                         ",\"progress\":" + number(feedback.progress) +
-                             ",\"state\":" + json_quoted(feedback.state));
-        });
-    {
-      std::lock_guard<std::mutex> lock(move_mutex_);
-      move_goal_id_ = handle->goal_id();
-    }
-    const auto result = handle->result(45.0);
-    {
-      std::lock_guard<std::mutex> lock(move_mutex_);
-      if (move_goal_id_ == handle->goal_id()) {
-        move_goal_id_.clear();
+
+  // controller 전환 직후 첫 goal이 거부되는 경우가 있다. controller를 다시
+  // 활성화하고 한 번만 재시도한다. (실기에서 approach/descend 첫 goal 거부)
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    try {
+      const auto handle = move_->send_goal(
+          goal, [this, id, stage](const krosc::msgs::moveit::MoveGroupFeedback& feedback) {
+            publish_status(id, stage,
+                           ",\"progress\":" + number(feedback.progress) +
+                               ",\"state\":" + json_quoted(feedback.state));
+          });
+      {
+        std::lock_guard<std::mutex> lock(move_mutex_);
+        move_goal_id_ = handle->goal_id();
       }
-    }
-    if (result.status == krosc::GoalStatus::Succeeded) {
+      const auto result = handle->result(45.0);
+      {
+        std::lock_guard<std::mutex> lock(move_mutex_);
+        if (move_goal_id_ == handle->goal_id()) {
+          move_goal_id_.clear();
+        }
+      }
+      if (result.status == krosc::GoalStatus::Succeeded) {
+        if (result.result.has_value()) {
+          try {
+            const auto* move_result =
+                std::any_cast<krosc::msgs::moveit::MoveGroupResult>(&result.result);
+            if (move_result != nullptr &&
+                move_result->error_code != krosc::msgs::moveit::MoveGroupResult::NONE) {
+              error = move_result->error_msg.empty() ? "MoveIt 계획/실행 실패"
+                                                     : move_result->error_msg;
+              return false;
+            }
+          } catch (const std::bad_any_cast&) {
+          }
+        }
+        return true;
+      }
       if (result.result.has_value()) {
         try {
           const auto* move_result =
               std::any_cast<krosc::msgs::moveit::MoveGroupResult>(&result.result);
-          if (move_result != nullptr &&
-              move_result->error_code != krosc::msgs::moveit::MoveGroupResult::NONE) {
-            error = move_result->error_msg.empty() ? "MoveIt 계획/실행 실패"
-                                                   : move_result->error_msg;
-            return false;
+          if (move_result != nullptr && !move_result->error_msg.empty()) {
+            error = move_result->error_msg;
           }
         } catch (const std::bad_any_cast&) {
         }
       }
-      return true;
-    }
-    if (result.result.has_value()) {
-      try {
-        const auto* move_result =
-            std::any_cast<krosc::msgs::moveit::MoveGroupResult>(&result.result);
-        if (move_result != nullptr && !move_result->error_msg.empty()) {
-          error = move_result->error_msg;
-        }
-      } catch (const std::bad_any_cast&) {
+      if (error.empty()) {
+        error = "MoveIt " + stage + " 실패";
       }
+      if (attempt == 0 && error.find("controller") != std::string::npos) {
+        error.clear();
+        std::string switch_error;
+        if (!switch_arm(switch_error)) {
+          error = "controller 재전환 실패: " + switch_error;
+          return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        continue;
+      }
+      return false;
+    } catch (const std::exception& exception) {
+      error = exception.what();
+      return false;
     }
-    if (error.empty()) {
-      error = "MoveIt " + stage + " 실패";
-    }
-    return false;
-  } catch (const std::exception& exception) {
-    error = exception.what();
-    return false;
   }
+  return false;
 }
 
 bool PickPlaceNode::object_in_base(double& x, double& y, double& z, double& yaw,
