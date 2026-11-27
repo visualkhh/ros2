@@ -275,6 +275,10 @@ void GraspDetectorNode::detect() {
       std::clamp(static_cast<double>(candidate->box.height) * surface_depth / c_fy,
                  0.012, 0.300);
   const double center_depth = surface_depth + width * 0.5;
+  // 배경의 빨간 물체/케이블을 잡는 false positive를 막는다.
+  if (width > 0.120 || height > 0.300 || center_depth > 0.80) {
+    return;
+  }
   const double camera_x = (static_cast<double>(candidate->center.x) - c_cx) *
                           center_depth / c_fx;
   const double camera_y = (static_cast<double>(candidate->center.y) - c_cy) *
@@ -285,7 +289,7 @@ void GraspDetectorNode::detect() {
     // 현재 시각은 odom TF 최신 시각보다 몇 ms 앞설 수 있다. 검출에 쓴
     // color 프레임 stamp로 조회해 "history ... requested" 경고를 피한다.
     const double tf_time =
-        color.header.stamp > 0.0 ? color.header.stamp : current - 0.05;
+        (color.header.stamp > 0.0 ? color.header.stamp : current) - 0.05;
     const krosc::msgs::TransformStamped transform =
         tf_buffer_.lookup_transform("odom", "camera_color_optical_frame", tf_time);
     point = krosc::tfmath::apply(transform.transform, point);

@@ -31,7 +31,9 @@ constexpr double kMaxObjectWidth = 0.070;   // bbox 추정 오차를 감안한 �
 // 검출 폭에 맞춰 닫힘 위치를 계산한다. 물체보다 2mm 작게 목표를 두어
 // 살짝 조이는 힘이 걸리게 한다. 4cm 퍽이면 기존 8mm와 거의 같다.
 double close_grip_for(double width) {
-  return std::clamp((width - 0.002 - kGripperBaseGap) / 2.0, 0.006, kOpenGrip);
+  // open(0.019)과 같은 값이 되면 그리퍼가 실제로 닫히지 않는다.
+  // 큰 물체도 최소 1.5mm는 조이도록 close 상한을 낮춘다.
+  return std::clamp((width - 0.002 - kGripperBaseGap) / 2.0, 0.006, 0.0175);
 }
 
 std::string number(double value) {
