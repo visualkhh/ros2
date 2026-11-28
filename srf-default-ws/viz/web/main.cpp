@@ -200,7 +200,7 @@ int main(int argc, char** argv) {
   // 코어 플러그인 + srf_default_ws 프로젝트 플러그인.
   srf::viz_web::VizWebPluginRegistry registry;
   srf::viz_web::register_core_web_plugins(registry,
-                                            {"slam", "navigation", "teleop", "diagnostics"});
+                                            {"slam", "navigation", "teleop", "diagnostics", "markers"});
   registry.add("opencr", "OpenCR", "/plugins/opencr.js");
   registry.add("moveit", "MoveIt", "/plugins/moveit.js");
   registry.add("rl_nav", "RL Nav", "/plugins/rl_nav.js");

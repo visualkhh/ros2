@@ -507,6 +507,91 @@ std::string RecyclingWorld::truth_json(double time) const {
   return out.str();
 }
 
+srf::msgs::OccupancyGrid RecyclingWorld::truth_map(double resolution) const {
+  srf::msgs::OccupancyGrid grid;
+  grid.header = srf::msgs::Header{0.0, "map"};
+  const double margin = 0.5;
+  grid.info.resolution = resolution;
+  grid.info.width = static_cast<std::uint32_t>(std::ceil((layout_.hall_x + 2 * margin) / resolution));
+  grid.info.height = static_cast<std::uint32_t>(std::ceil((layout_.hall_y + 2 * margin) / resolution));
+  grid.info.origin.position = {-margin, -margin, 0.0};
+  grid.info.origin.orientation.w = 1.0;
+  grid.data.assign(static_cast<std::size_t>(grid.info.width) * grid.info.height, -1);
+  for (std::uint32_t j = 0; j < grid.info.height; ++j) {
+    for (std::uint32_t i = 0; i < grid.info.width; ++i) {
+      const double x = -margin + (i + 0.5) * resolution, y = -margin + (j + 0.5) * resolution;
+      bool occupied = false;
+      for (const auto& w : walls()) {
+        if (std::abs(x - w.center_x) <= w.half_x && std::abs(y - w.center_y) <= w.half_y && w.height > 0.05) {
+          occupied = true;
+          break;
+        }
+      }
+      const bool inside = x > 0 && y > 0 && x < layout_.hall_x && y < layout_.hall_y;
+      grid.data[static_cast<std::size_t>(j) * grid.info.width + i] = occupied ? 100 : inside ? 0 : -1;
+    }
+  }
+  return grid;
+}
+
+srf::msgs::MapMarkers RecyclingWorld::default_markers() const {
+  using srf::msgs::MapMarker;
+  using srf::msgs::MapZone;
+  srf::msgs::MapMarkers m;
+  const auto marker = [&](const std::string& name, const std::string& kind, double x, double y, double z, double yaw,
+                          srf::msgs::Vector3 scale, std::vector<srf::msgs::KeyValue> properties) {
+    MapMarker item;
+    item.name = name;
+    item.kind = kind;
+    item.pose.position = {x, y, z};
+    item.pose.orientation = {0, 0, std::sin(yaw / 2), std::cos(yaw / 2)};
+    item.scale = scale;
+    item.properties = std::move(properties);
+    m.markers.push_back(item);
+  };
+  const auto rect = [&](const std::string& name, const std::string& kind, const Rect& r,
+                        std::vector<srf::msgs::KeyValue> properties) {
+    MapZone zone;
+    zone.name = name;
+    zone.kind = kind;
+    zone.polygon = {{r.min_x, r.min_y, 0}, {r.max_x, r.min_y, 0}, {r.max_x, r.max_y, 0}, {r.min_x, r.max_y, 0}};
+    zone.properties = std::move(properties);
+    m.zones.push_back(zone);
+  };
+  const auto& L = layout_;
+  marker("robot_home", "home", L.robot_start.x, L.robot_start.y, 0, L.robot_start.theta, {}, {{"role", "start"}});
+  const auto& w = L.work_area;
+  marker("work_mat", "pick", w.center_x(), w.center_y(), 0.002, 0, {w.max_x - w.min_x, w.max_y - w.min_y, 0},
+         {{"role", "supply_drop"}, {"surface", "rubber_mat"}});
+  marker("work_mat_approach", "waypoint", w.min_x - 0.30, w.center_y(), 0, 0, {}, {{"for", "work_mat"}});
+  for (const auto& bin : L.bins) {
+    const std::string c = category_name(bin.category);
+    marker("bin_" + c, "drop", bin.x, bin.y, bin.height, 0, {bin.inner_x, bin.inner_y, bin.height},
+           {{"category", c}, {"capacity", std::to_string(scene_.bin_capacity)}});
+    marker("bin_" + c + "_approach", "waypoint", bin.x - bin.inner_x / 2 - 0.30, bin.y, 0, 0, {}, {{"for", "bin_" + c}});
+  }
+  marker("operator_idle", "human", L.operator_idle.x, L.operator_idle.y, 0, 0, {}, {{"role", "cell_operator"}});
+  marker("supply_pickup", "human", L.supply_pickup.x, L.supply_pickup.y, 0, 0, {}, {{"role", "receiving"}});
+  rect("robot_cell", "info", L.robot_cell, {{"owner", "robot"}});
+  rect("work_area_slow", "speed", {w.min_x - 0.5, w.min_y - 0.5, w.max_x + 0.5, w.max_y + 0.5}, {{"speed_limit", "0.12"}});
+  rect("bins_slow", "speed", {L.bins.front().x - 0.7, L.bins.front().y - 0.5, L.bins.back().x + 0.3, L.bins.back().y + 0.5},
+       {{"speed_limit", "0.10"}});
+  rect("walkway", "keepout", {0.0, 7.2, L.hall_x, 8.2}, {{"reason", "보행자 통로"}});
+  rect("forklift_lane", "keepout", {0.0, 8.5, L.hall_x, 10.0}, {{"reason", "지게차 통로"}});
+  rect("operator_corner", "keepout", {L.operator_idle.x - 0.5, L.operator_idle.y - 0.5, L.operator_idle.x + 0.5,
+                                      L.operator_idle.y + 0.5}, {{"reason", "작업자 대기"}});
+  MapZone conveyor;  // 3D: 컨베이어 위 작업 공간
+  conveyor.name = "conveyor_space";
+  conveyor.kind = "info";
+  conveyor.shape = "box";
+  conveyor.pose.position = {13.0, 12.0, 1.2};
+  conveyor.pose.orientation.w = 1.0;
+  conveyor.size = {9.4, 0.8, 0.7};
+  conveyor.properties = {{"line", "sorting"}};
+  m.zones.push_back(conveyor);
+  return m;
+}
+
 void RecyclingWorld::add_render_instances(std::vector<render::Instance>& out) const {
   out.insert(out.end(), static_instances_.begin(), static_instances_.end());
   add_conveyor_render(out);

@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -20,6 +21,7 @@
 
 #include "srf/context.hpp"
 #include "srf/msgs.hpp"
+#include "srf/msgs/nav2_srv.hpp"
 #include "srf/node.hpp"
 #include "srf/qos.hpp"
 #include "srf/tf/math.hpp"
@@ -130,6 +132,7 @@ int main(int argc, char** argv) {
   std::uint32_t camera_height = 240;
   std::uint32_t seed = 42;
   std::string screenshot;  // 6초 뒤 창을 저장하고 끝낸다 (문서·확인용)
+  std::string map_name = "recycling_facility";  // 시작할 때 불러올 지도 (빈 문자열이면 안 불러옴)
   bool noisy = true;
   bool slam = false;
   bool arm = true;  // srf_recycling_ws 로봇은 매니퓰레이터/MoveIt 포함이 기본
@@ -169,6 +172,10 @@ int main(int argc, char** argv) {
       const std::string size = argv[++i];
       camera_width = static_cast<std::uint32_t>(std::stoul(size.substr(0, size.find('x'))));
       camera_height = static_cast<std::uint32_t>(std::stoul(size.substr(size.find('x') + 1)));
+    } else if (arg == "--map" && i + 1 < argc) {
+      map_name = argv[++i];
+    } else if (arg == "--no-map") {
+      map_name.clear();
     } else if (arg == "--screenshot" && i + 1 < argc) {
       screenshot = argv[++i];
     } else if (arg == "--seed" && i + 1 < argc) {
@@ -186,6 +193,7 @@ int main(int argc, char** argv) {
                    "         [--no-auto-supply] [--no-auto-empty] [--bin-capacity 5] [--supply-items 4]\n"
                    "  협동 작업: recycling/request 서비스 (String JSON {\"action\":\"supply\"} | {\"action\":\"empty\",\"bin\":\"can\"})\n"
                    "         [--camera 424x240] [--no-noise] [--slam] [--arm] [--screenshot PATH]\n"
+                   "         [--map recycling_facility | --no-map]   (지도 + 지도 마커·구역을 불러오고 시작 위치를 알려 준다)\n"
                    "  재배치: srf/recycling/reset 서비스 (String JSON {\"seed\":7,\"scene\":\"multi\",\"target\":\"can\",\"items\":5})\n"
                    "  진실값: recycling/truth 토픽 (String JSON, 2Hz)\n";
       return 0;
@@ -408,6 +416,37 @@ int main(int argc, char** argv) {
     std::cerr << "[srf_recycling_ws_sim] 로봇 시작 실패\n";
     simulator.stop();
     return 1;
+  }
+  // 선별장 지도 + 지도 마커·구역 (map_catalog가 markers.yaml도 같이 불러온다). --slam이면 지도를 새로 만든다.
+  if (!map_name.empty() && !slam) {
+    try {
+      const auto loaded = ui_node.call_service<srf::msgs::nav2::LoadMapRequest, srf::msgs::nav2::LoadMapResponse>(
+          "map_catalog/load_map", srf::msgs::nav2::LoadMapRequest{map_name});
+      if (loaded.result == srf::msgs::nav2::LoadMapResponse::RESULT_SUCCESS) {
+        // 시작 위치를 알려 준다 (2D Pose Estimate와 같다). 막 시작해 odom TF가 아직 없으면 cartographer가
+        // 버리므로 0.5초마다 몇 번 다시 보낸다 (같은 위치라 반복해도 무해).
+        const auto& start = world->layout().robot_start;
+        auto sends = std::make_shared<int>(0);
+        auto timer = std::make_shared<srf::Timer>();
+        *timer = ui_node.create_timer(0.5, [&ui_node, &context, start, sends, timer] {
+          srf::msgs::PoseWithCovarianceStamped initial;
+          initial.header = srf::msgs::Header{context.now(), "map"};
+          initial.pose.pose.position = {start.x, start.y, 0.0};
+          initial.pose.pose.orientation = srf::tfmath::from_yaw(start.theta);
+          ui_node.publish("initialpose", initial);
+          if (++*sends >= 6) {
+            timer->cancel();
+          }
+        });
+        std::printf("[srf_recycling_ws_sim] 지도 %s + 지도 마커 불러옴, 시작 위치 (%.2f, %.2f)\n", map_name.c_str(), start.x,
+                    start.y);
+      } else {
+        std::printf("[srf_recycling_ws_sim] 지도 %s를 불러오지 못했다 (%d) — srf_recycling_ws_snapshot --export-map으로 만든다\n",
+                    map_name.c_str(), loaded.result);
+      }
+    } catch (const std::exception& error) {
+      std::printf("[srf_recycling_ws_sim] 지도 불러오기 실패: %s\n", error.what());
+    }
   }
 
   std::printf("[srf_recycling_ws_sim] noise: body[%s] opencr[%s] lds[%s] camera[%s]\n",

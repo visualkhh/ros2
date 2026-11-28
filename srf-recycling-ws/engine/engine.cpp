@@ -20,9 +20,10 @@
 #include "srf/nodes/cartographer.hpp"
 #include "srf/nodes/collision_monitor.hpp"
 #include "srf/nodes/ekf.hpp"
-#include "srf/nodes/map_catalog.hpp"
-#include "srf/nodes/map_saver.hpp"
-#include "srf/nodes/map_server.hpp"
+#include "srf/nodes/map/map_catalog.hpp"
+#include "srf/nodes/map/map_saver.hpp"
+#include "srf/nodes/map/map_marker.hpp"
+#include "srf/nodes/map/map_server.hpp"
 #include "srf/nodes/moveit/move_group.hpp"
 #include "srf/nodes/nav2/behavior_server.hpp"
 #include "srf/nodes/nav2/bt_navigator.hpp"
@@ -360,6 +361,8 @@ Engine::Engine(srf::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
     map_saver_ = std::make_unique<srf::nodes::MapSaver>(
         context_, "map_saver",
         std::map<std::string, srf::ParamValue>{{"maps_directory", options_.maps_dir}});
+    // 지도 마커·구역: 지도 폴더의 markers.yaml을 map_catalog가 같이 불러오고 저장한다
+    map_marker_ = std::make_unique<srf::nodes::MapMarker>(context_, "map_marker");
     map_catalog_ = std::make_unique<srf::nodes::MapCatalog>(
         context_, "map_catalog",
         std::map<std::string, srf::ParamValue>{
@@ -374,7 +377,8 @@ Engine::Engine(srf::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
       std::map<std::string, srf::ParamValue>{
           {"global_frame", std::string("map")},
           {"robot_base_frame", std::string("base_footprint")},
-          {"plugins", std::vector<std::string>{"static_layer", "inflation_layer"}},
+          // keepout_filter·speed_filter: 지도 마커의 keepout·speed 구역 (Nav2 costmap filter 대응)
+          {"plugins", std::vector<std::string>{"static_layer", "keepout_filter", "inflation_layer", "speed_filter"}},
           {"resolution", 0.05},
           {"robot_radius", 0.22},
           {"inflation_radius", 0.55},
@@ -384,7 +388,7 @@ Engine::Engine(srf::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
       std::map<std::string, srf::ParamValue>{
           {"global_frame", std::string("odom")},
           {"robot_base_frame", std::string("base_footprint")},
-          {"plugins", std::vector<std::string>{"obstacle_layer", "inflation_layer"}},
+          {"plugins", std::vector<std::string>{"obstacle_layer", "keepout_filter", "inflation_layer"}},
           {"rolling_window", true},
           {"width", 3.0},
           {"height", 3.0},

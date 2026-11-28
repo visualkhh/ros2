@@ -19,6 +19,7 @@ namespace srf::nodes {
 class Cartographer;
 class Ekf;
 class MapCatalog;
+class MapMarker;
 class MapSaver;
 class MapServer;
 class RobotStatePublisher;
@@ -175,6 +176,7 @@ class Engine {
   std::unique_ptr<srf::nodes::Cartographer> cartographer_;
   std::unique_ptr<srf::nodes::MapServer> map_server_;
   std::unique_ptr<srf::nodes::MapSaver> map_saver_;
+  std::unique_ptr<srf::nodes::MapMarker> map_marker_;
   std::unique_ptr<srf::nodes::MapCatalog> map_catalog_;
   std::unique_ptr<srf::nodes::RobotStatePublisher> robot_state_;
 

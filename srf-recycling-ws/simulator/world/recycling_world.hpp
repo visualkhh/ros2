@@ -161,6 +161,11 @@ class RecyclingWorld final : public srf::simulator::World {
   // 렌더링용: 시설·움직이는 장비·물품·그림자 (로봇 제외).
   void add_render_instances(std::vector<render::Instance>& out) const;
 
+  // 시뮬레이터 진실 지도 (벽·설비를 resolution 칸으로) — SLAM 대신 연습용. 실물은 SLAM으로 만든다.
+  [[nodiscard]] srf::msgs::OccupancyGrid truth_map(double resolution = 0.05) const;
+  // 미션 배치에서 만든 기본 지도 마커·구역 (작업 위치·바구니·접근 자세·통로 keepout·감속 구역 …)
+  [[nodiscard]] srf::msgs::MapMarkers default_markers() const;
+
   // ---- 협동 작업 ----
   // 요청: 하역장에서 물품 공급 / 바구니 비우기. 이미 대기 중이거나 하고 있으면 false.
   bool request_supply();

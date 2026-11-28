@@ -12,6 +12,8 @@
 #include <string>
 
 #include "render/scene_renderer.hpp"
+#include "srf/nodes/map/map_io.hpp"
+#include "srf/nodes/map/map_marker.hpp"
 #include "world/recycling_world.hpp"
 
 using namespace srf_recycling_ws::sim;
@@ -51,6 +53,7 @@ int main(int argc, char** argv) {
   SceneConfig scene;
   double run_seconds = 0.0;   // 월드를 이만큼 돌린 뒤 찍는다 (작업자·지게차가 움직인다)
   std::string request;        // supply | empty:can|pet|paper — 시작할 때 셀 담당 작업자에게 맡긴다
+  std::string export_map;     // 진실 지도 + 기본 마커를 이 폴더에 (map.yaml, map.pgm, markers.yaml)
   std::string out_dir = "snapshot";
   std::string urdf = SRF_RECYCLING_WS_URDF_PATH;
   int width = 640, height = 480;
@@ -70,6 +73,7 @@ int main(int argc, char** argv) {
     else if (arg == "--out") out_dir = value();
     else if (arg == "--run") run_seconds = std::stod(value());
     else if (arg == "--request") request = value();
+    else if (arg == "--export-map") export_map = value();
     else if (arg == "--size") { const auto v = numbers(value()); width = static_cast<int>(v.at(0)); height = static_cast<int>(v.at(1)); }
     else if (arg == "--robot") { const auto v = numbers(value()); robot = {v.at(0), v.at(1), v.at(2)}; }
     else if (arg == "--arm") {
@@ -79,13 +83,19 @@ int main(int argc, char** argv) {
     } else {
       std::printf("usage: %s [--seed N] [--scene normal|multi|ambiguous|absent] [--target can|pet|paper]\n"
                   "          [--items N] [--distractors N] [--people 0-4] [--forklifts 0-1] [--out DIR]\n"
-                  "          [--run SEC] [--request supply|empty:can|pet|paper] [--size W,H] [--robot X,Y,YAW] [--arm J1,J2,J3,J4[,GRIP]]\n"
+                  "          [--run SEC] [--request supply|empty:can|pet|paper] [--export-map DIR] [--size W,H] [--robot X,Y,YAW] [--arm J1,J2,J3,J4[,GRIP]]\n"
                   "  --robot 기본: 작업 영역 중심에서 0.55 m 앞에서 작업 영역을 본다\n", argv[0]);
       return arg == "--help" || arg == "-h" ? 0 : 2;
     }
   }
   RecyclingWorld world;
   world.randomize(scene);
+  if (!export_map.empty()) {
+    srf::nodes::save_map(world.truth_map(), (std::filesystem::path(export_map) / "map").string());
+    srf::nodes::save_markers(world.default_markers(), (std::filesystem::path(export_map) / "markers.yaml").string());
+    std::printf("exported %s/{map.yaml,map.pgm,markers.yaml}\n", export_map.c_str());
+    return 0;
+  }
   if (request == "supply") {
     world.request_supply();
   } else if (request.rfind("empty:", 0) == 0) {

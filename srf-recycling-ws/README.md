@@ -52,6 +52,26 @@ SRF로 만드는 미션 워크스페이스. 로봇이 작업 영역의 캔·페�
 - 작업자는 앞에 로봇이 있으면 기다린다. 로봇도 작업자를 장애물로 보고 피해야 한다 (협동 안전)
 - 옵션: `--no-auto-supply`, `--no-auto-empty`, `--bin-capacity N`, `--supply-items N`. 진실값 JSON의 `cell`에 바구니 채움·작업자 상태·대기 작업·공급 횟수·수거 누계
 
+### 지도와 지도 마커 · 구역
+
+시뮬레이터는 시작할 때 `artifacts/maps/recycling_facility`(지도 + `markers.yaml`)를 불러오고 시작 위치를 알려 준다 (`--map NAME`, `--no-map`, `--slam`이면 새로 만든다). 이 지도는 **시뮬레이터 진실 지도**(벽·설비를 5 cm로) — 연습용이다. 실물은 SLAM으로 만든다.
+
+| 마커 | 뜻 |
+|---|---|
+| `robot_home` | 로봇 시작 위치 |
+| `work_mat`, `work_mat_approach` | 작업 매트, 로봇이 매트를 마주 보고 설 자리 |
+| `bin_can`·`bin_pet`·`bin_paper` (+ `_approach`) | 바구니 (properties: category, capacity), 그 앞에 설 자리 |
+| `operator_idle`, `supply_pickup` | 셀 담당 작업자 대기·하역장 집는 곳 |
+
+| 구역 | kind | 효과 |
+|---|---|---|
+| `walkway`, `forklift_lane`, `operator_corner` | keepout | 로봇이 계획·주행하지 않는다 (costmap keepout_filter) |
+| `work_area_slow` (≤0.12 m/s), `bins_slow` (≤0.10 m/s) | speed | 들어가면 controller가 속도를 줄인다 (speed_filter) |
+| `robot_cell` | info | 로봇 셀 영역 |
+| `conveyor_space` | info (3D box) | 컨베이어 위 작업 공간 |
+
+웹 Viz의 "지도 마커 · 구역" 패널에서 고치고 "지도에 저장"하면 `markers.yaml`에 쓴다. 배치를 바꿨으면 다시 만든다: `build-mac/srf_recycling_ws_snapshot --export-map artifacts/maps/recycling_facility`
+
 ### 미션 물품
 
 | 종류 | 변형 (라벨은 텍스처로 인쇄) |

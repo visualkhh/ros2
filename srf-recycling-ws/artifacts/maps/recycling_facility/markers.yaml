@@ -1,0 +1,117 @@
+# srf map markers (map_marker). 단위: m, rad. 자세 = position + orientation[x,y,z,w]
+markers:
+  - name: robot_home
+    kind: home
+    frame_id: map
+    position: [2.2, 3.9, 0]
+    orientation: [0, 0, 0, 1]
+    properties: {role: start}
+  - name: work_mat
+    kind: pick
+    frame_id: map
+    position: [4, 3.9, 0.002]
+    orientation: [0, 0, 0, 1]
+    scale: [0.8, 0.8, 0]
+    properties: {role: supply_drop, surface: rubber_mat}
+  - name: work_mat_approach
+    kind: waypoint
+    frame_id: map
+    position: [3.3, 3.9, 0]
+    orientation: [0, 0, 0, 1]
+    properties: {for: work_mat}
+  - name: bin_can
+    kind: drop
+    frame_id: map
+    position: [7.6, 2.9, 0.1]
+    orientation: [0, 0, 0, 1]
+    scale: [0.24, 0.24, 0.1]
+    properties: {category: can, capacity: 5}
+  - name: bin_can_approach
+    kind: waypoint
+    frame_id: map
+    position: [7.18, 2.9, 0]
+    orientation: [0, 0, 0, 1]
+    properties: {for: bin_can}
+  - name: bin_pet
+    kind: drop
+    frame_id: map
+    position: [7.6, 3.9, 0.1]
+    orientation: [0, 0, 0, 1]
+    scale: [0.24, 0.24, 0.1]
+    properties: {category: pet, capacity: 5}
+  - name: bin_pet_approach
+    kind: waypoint
+    frame_id: map
+    position: [7.18, 3.9, 0]
+    orientation: [0, 0, 0, 1]
+    properties: {for: bin_pet}
+  - name: bin_paper
+    kind: drop
+    frame_id: map
+    position: [7.6, 4.9, 0.1]
+    orientation: [0, 0, 0, 1]
+    scale: [0.24, 0.24, 0.1]
+    properties: {category: paper, capacity: 5}
+  - name: bin_paper_approach
+    kind: waypoint
+    frame_id: map
+    position: [7.18, 4.9, 0]
+    orientation: [0, 0, 0, 1]
+    properties: {for: bin_paper}
+  - name: operator_idle
+    kind: human
+    frame_id: map
+    position: [0.7, 5.5, 0]
+    orientation: [0, 0, 0, 1]
+    properties: {role: cell_operator}
+  - name: supply_pickup
+    kind: human
+    frame_id: map
+    position: [2.4, 10.3, 0]
+    orientation: [0, 0, 0, 1]
+    properties: {role: receiving}
+zones:
+  - name: robot_cell
+    kind: info
+    frame_id: map
+    shape: polygon
+    polygon: [[1, 1], [9, 1], [9, 6.8], [1, 6.8]]
+    properties: {owner: robot}
+  - name: work_area_slow
+    kind: speed
+    frame_id: map
+    shape: polygon
+    polygon: [[3.1, 3], [4.9, 3], [4.9, 4.8], [3.1, 4.8]]
+    properties: {speed_limit: 0.12}
+  - name: bins_slow
+    kind: speed
+    frame_id: map
+    shape: polygon
+    polygon: [[6.9, 2.4], [7.9, 2.4], [7.9, 5.4], [6.9, 5.4]]
+    properties: {speed_limit: 0.10}
+  - name: walkway
+    kind: keepout
+    frame_id: map
+    shape: polygon
+    polygon: [[0, 7.2], [24, 7.2], [24, 8.2], [0, 8.2]]
+    properties: {reason: 보행자 통로}
+  - name: forklift_lane
+    kind: keepout
+    frame_id: map
+    shape: polygon
+    polygon: [[0, 8.5], [24, 8.5], [24, 10], [0, 10]]
+    properties: {reason: 지게차 통로}
+  - name: operator_corner
+    kind: keepout
+    frame_id: map
+    shape: polygon
+    polygon: [[0.2, 5], [1.2, 5], [1.2, 6], [0.2, 6]]
+    properties: {reason: 작업자 대기}
+  - name: conveyor_space
+    kind: info
+    frame_id: map
+    shape: box
+    position: [13, 12, 1.2]
+    orientation: [0, 0, 0, 1]
+    size: [9.4, 0.8, 0.7]
+    properties: {line: sorting}
