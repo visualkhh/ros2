@@ -192,12 +192,19 @@ void WafflePiArm::tick(double time, double dt) {
 
   {
     std::lock_guard<std::mutex> lock(arm_mutex_);
+    auto& position = manual_ ? manual_position_ : controller_position_;
+    const auto& target = manual_ ? manual_target_ : controller_target_;
+    const auto before = position;
+    auto next = position;
     if (manual_) {
-      auto next = manual_position_;
-      step_towards(next, manual_target_, dt);
-      move_arm(manual_position_, next);
+      step_towards(next, target, dt);
     } else {
-      move_arm(controller_position_, controller_target_);
+      next = target;
+    }
+    move_arm(position, next);
+    for (std::size_t i = 0; i < 5; ++i) {
+      arm_velocity_[i] = (position[i] - before[i]) / dt;
+      arm_stalled_[i] = std::abs(next[i] - position[i]) > 1e-6;
     }
   }
   update_grasp();
@@ -281,7 +288,7 @@ void WafflePiArm::update_grasp() {
       payloads_.push_back(Payload{held_, local_x, local_y, 0.104,
                                   held_->pose.theta - pose.theta});
     } else {
-      held_->z = std::max(0.0, held_->z);
+      held_->z = std::max(0.0, held_->z);  // 그 높이에서 놓는다 → RecyclableItem::tick 이 떨어뜨리고 낙하를 판정
     }
     held_ = nullptr;
     return;
@@ -483,6 +490,15 @@ ArmStatus WafflePiArm::arm_status() const {
   std::lock_guard<std::mutex> lock(arm_mutex_);
   ArmStatus status;
   status.position = manual_ ? manual_position_ : controller_position_;
+  status.velocity = arm_velocity_;
+  // 전류(A) 근사: 대기 + 속도 비례, 충돌로 걸리면 정지 전류, 그리퍼가 물체를 쥐면 쥐는 전류.
+  // ponytail: 중력 토크·가속을 안 본다. 실물 Dynamixel 로그로 맞출 때 계수를 바꾼다.
+  for (std::size_t i = 0; i < 5; ++i) {
+    status.current[i] = arm_stalled_[i] ? 0.9 : 0.05 + std::abs(arm_velocity_[i]) * (i == 4 ? 4.0 : 0.15);
+  }
+  if (held_ != nullptr) {
+    status.current[4] = 0.45;
+  }
   status.present = true;
   return status;
 }
@@ -568,6 +584,18 @@ void WafflePiArm::move_arm(std::array<double, 5>& position, const std::array<dou
     std::fprintf(stderr, "[waffle_pi_arm] 팔 충돌로 멈춤: %s\n", by.c_str());
   }
   blocked_by_ = by;
+}
+
+void WafflePiArm::release_all() {
+  std::lock_guard<std::mutex> lock(arm_mutex_);
+  if (held_ != nullptr) {
+    held_->held = false;
+    held_ = nullptr;
+  }
+  for (auto& payload : payloads_) {
+    payload.object->on_robot = false;
+  }
+  payloads_.clear();
 }
 
 std::string WafflePiArm::arm_blocked_by() const {

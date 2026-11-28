@@ -56,6 +56,10 @@ class WafflePiArm final : public srf::simulator::SimulatorRobot {
   void set_arm_target(const std::array<double, 5>& target);            // 수동
   void set_controller_arm_target(const std::array<double, 5>& target); // SimulatorOpenCr write_arm
   [[nodiscard]] ArmStatus arm_status() const;
+  // 그리퍼가 물체를 쥐고 있나 (진실값: 시범 조교·채점용).
+  [[nodiscard]] bool holding() const { return held_ != nullptr; }
+  // 쥔 물체·상판 물체를 놓는다 (월드 물체를 지우기 전에 — randomize).
+  void release_all();
   // 마지막 tick에서 팔을 막은 충돌 ("link5↔camera_link, ..."), 안 막혔으면 빈 문자열.
   [[nodiscard]] std::string arm_blocked_by() const;
   [[nodiscard]] std::string noise_summary() const;
@@ -143,6 +147,8 @@ class WafflePiArm final : public srf::simulator::SimulatorRobot {
   std::unique_ptr<UrdfRobotVisualizer> visualizer_;
   std::unique_ptr<ArmCollision> collision_;
   std::string blocked_by_;
+  std::array<double, 5> arm_velocity_{};        // 마지막 tick 관절 속도 (rad/s, 그리퍼 m/s)
+  std::array<bool, 5> arm_stalled_{};           // 목표가 있는데 충돌로 못 움직인 관절
   mutable std::mutex arm_mutex_;
   bool manual_ = true;
   std::array<double, 5> manual_position_{};

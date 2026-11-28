@@ -5,7 +5,7 @@
 #
 #   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot+tools, PC: robot+tools+simulator+viz-web)
 #   ./build.sh robot           # srf_recycling_ws_real
-#   ./build.sh simulator       # srf_recycling_ws_simulator + snapshot + dataset (PC 전용, Qt)
+#   ./build.sh simulator       # srf_recycling_ws_simulator + snapshot + dataset + vla_demos (PC 전용, Qt)
 #   ./build.sh tests           # srf_core_tests + srf_simulator_tests + srf_bag_tests + srf_recycling_ws_tests (+ srf CLI)
 #   ./build.sh viz-web         # srf_recycling_ws_viz_web (PC 전용, 로봇 9000에 접속)
 #   ./build.sh tools           # srf 명령 (srf bag / srf topic) → $SRF_BUILD_DIR/tools/srf/srf
@@ -88,7 +88,7 @@ build_simulator() {
   require_qt
   echo "[build] srf_recycling_ws: srf_recycling_ws_simulator"
   configure_ws
-  cmake --build "$SRF_RECYCLING_WS_BUILD_DIR" -j"$jobs" --target srf_recycling_ws_simulator srf_recycling_ws_snapshot srf_recycling_ws_dataset
+  cmake --build "$SRF_RECYCLING_WS_BUILD_DIR" -j"$jobs" --target srf_recycling_ws_simulator srf_recycling_ws_snapshot srf_recycling_ws_dataset srf_recycling_ws_vla_demos
 }
 
 build_tests() {

@@ -235,6 +235,22 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
       SRF_RECYCLING_WS_MARKERS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps/recycling_facility/markers.yaml")
   endif()
 
+  # 헤드리스 VLA 시범 데이터: 조교가 진실값으로 바퀴·팔·그리퍼·부저를 움직이고 관측·행동을 기록
+  add_executable(srf_recycling_ws_vla_demos
+    simulator/tools/vla_demos.cpp
+    simulator/robot/waffle_pi_arm.cpp
+    simulator/robot/urdf_robot_visualizer.cpp
+    simulator/hardwares/opencr/simulator_opencr.cpp
+    simulator/hardwares/opencr/simulator_buzzer.cpp
+    simulator/hardwares/realsense/simulator_realsense.cpp)
+  target_include_directories(srf_recycling_ws_vla_demos PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/engine ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/simulator)
+  target_link_libraries(srf_recycling_ws_vla_demos PRIVATE srf::core srf::simulator srf::simulator_assets
+    srf_recycling_ws_sim_world Qt6::Gui)
+  target_compile_definitions(srf_recycling_ws_vla_demos PRIVATE
+    SRF_RECYCLING_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
+    SRF_RECYCLING_WS_SRDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/srdf/turtlebot3_manipulation.srdf")
+
   add_executable(srf_recycling_ws_simulator
     simulator/main.cpp
     simulator/hardwares/opencr/simulator_opencr.cpp
