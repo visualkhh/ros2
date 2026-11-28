@@ -16,7 +16,7 @@ SRF로 만드는 미션 워크스페이스. 로봇이 작업 영역의 캔·페�
 ./run-simulator.sh                                   # 정상 장면, 시드 42
 ./run-simulator.sh --seed 7 --scene multi --target can --items 5
 ./run-simulator.sh --scene ambiguous --camera 640x480 --no-noise
-./run-viz-tui.sh                                     # 다른 터미널: 토픽·로그·주행 (127.0.0.1:9000)
+./run-simulator-vizweb.sh                            # 시뮬레이터 + 웹 Viz (http://localhost:8080/)
 ```
 
 | 구성 | 값 (공통 맵 추첨 전 임시 배치, `RecyclingLayout`) |

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # srf + srf_recycling_ws 빌드 단일 진입점.
-# 실행 스크립트(run-simulator.sh/run-tests.sh/run-viz-tui.sh)는
+# 실행 스크립트(run-simulator.sh/run-simulator-vizweb.sh/run-viz-web.sh/run-tests.sh)는
 # 항상 이 스크립트를 먼저 호출해서 최신 바이너리를 보장한다.
 #
-#   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot+tools, PC: robot+tools+simulator)
+#   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot+tools, PC: robot+tools+simulator+viz-web)
 #   ./build.sh robot           # srf_recycling_ws_real
 #   ./build.sh simulator       # srf_recycling_ws_simulator + srf_recycling_ws_snapshot (PC 전용, Qt)
 #   ./build.sh tests           # srf_core_tests + srf_simulator_tests + srf_bag_tests + srf_recycling_ws_tests (+ srf CLI)
-#   ./build.sh viz-tui         # srf_viz_tui (터미널 Viz, Pi에서도 된다)
+#   ./build.sh viz-web         # srf_recycling_ws_viz_web (PC 전용, 로봇 9000에 접속)
 #   ./build.sh tools           # srf 명령 (srf bag / srf topic) → $SRF_BUILD_DIR/tools/srf/srf
 #
 # 환경변수:
@@ -115,14 +115,12 @@ build_tools() {
   echo "[build] srf 명령: $SRF_BUILD_DIR/tools/srf/srf  (PATH에 넣으려면: cmake --install $SRF_BUILD_DIR --prefix ~/.local)"
 }
 
-build_viz_tui() {
-  echo "[build] srf: srf_viz_tui (터미널)"
-  if is_arm; then
-    configure_srf -DSRF_BUILD_VIZ_TUI=ON -DSRF_BUILD_VIZ=OFF -DSRF_BUILD_EXAMPLES=OFF
-  else
-    configure_srf -DSRF_BUILD_VIZ_TUI=ON -DSRF_BUILD_EXAMPLES=OFF
-  fi
-  cmake --build "$SRF_BUILD_DIR" -j"$jobs" --target srf_viz_tui
+build_viz_web() {
+  require_pc viz-web
+  echo "[build] srf: srf_recycling_ws_viz_web"
+  configure_srf -DSRF_BUILD_VIZ_WEB=ON -DSRF_BUILD_EXAMPLES=OFF \
+                  -DSRF_VIZ_WEB_PROJECT_DIR="$here/viz/web"
+  cmake --build "$SRF_BUILD_DIR" -j"$jobs" --target srf_recycling_ws_viz_web
 }
 
 case "$target" in
@@ -135,15 +133,16 @@ case "$target" in
       build_robot
       build_tools
       build_simulator
+      build_viz_web
     fi
     ;;
   robot) build_robot ;;
   simulator) build_simulator ;;
   tests) build_tests ;;
-  viz-tui|viz_tui) build_viz_tui ;;
+  viz-web|viz_web) build_viz_web ;;
   tools) build_tools ;;
   *)
-    echo "usage: $0 [all|robot|simulator|tests|viz-tui|tools]" >&2
+    echo "usage: $0 [all|robot|simulator|tests|viz-web|tools]" >&2
     exit 2
     ;;
 esac
