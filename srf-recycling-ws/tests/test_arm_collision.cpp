@@ -84,3 +84,17 @@ SRF_TEST(arm_collision_simulated_arm_stops_before_camera) {
   CHECK((robot.arm_blocked_by().find("camera_link") != std::string::npos));
 }
 
+
+SRF_TEST(arm_collision_folded_presets_reach_target) {
+  // 접은 자세는 그리퍼 서보가 어깨에 일부러 살짝 기댄다 (SRDF link2-link5 User) → 끝까지 간다
+  for (const auto& preset : {srf_recycling_ws::sim::WafflePiArm::kStow, srf_recycling_ws::sim::WafflePiArm::kHome}) {
+    srf_recycling_ws::sim::WafflePiArm robot(false, 5, SRF_RECYCLING_WS_URDF_PATH, SRF_RECYCLING_WS_SRDF_PATH);
+    robot.set_arm_target(preset);
+    for (int step = 0; step < 400; ++step) {
+      robot.tick(step * 0.01, 0.01);
+    }
+    for (std::size_t i = 0; i < 5; ++i) {
+      CHECK_NEAR(preset[i], robot.arm_status().position[i], 1e-6);
+    }
+  }
+}

@@ -97,4 +97,6 @@
     <disable_collisions link1="wheel_left_link" link2="wheel_right_link" reason="Never"/>
     <disable_collisions link1="base_link" link2="d435_mount" reason="Adjacent"/>
     <disable_collisions link1="camera_link" link2="d435_mount" reason="Adjacent"/>
+    <!-- 접은 자세(Home·Stow)에서 그리퍼 서보가 어깨 브래킷에 일부러 살짝 기댄다 (실기 확인) -->
+    <disable_collisions link1="link2" link2="link5" reason="User"/>
 </robot>
