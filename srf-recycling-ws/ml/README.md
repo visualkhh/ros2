@@ -1,6 +1,6 @@
-# ml — 학습 기본 구조 (개념 단계)
+# ml — 학습 기본 구조
 
-> 상태: **설계만**. 아직 코드·데이터·모델 없음. 각 폴더 README가 방식과 계획을 적는다.
+> 상태: `vlm/`은 데이터 생성 → SmolVLM2 LoRA 학습 → 평가 → ONNX 까지 코드가 있다. `vla/`·`llm/`은 아직 설계만.
 > 전제: **GPU(CUDA) 없음, CPU만.** 모든 선택은 "CPU에서 학습 가능 + CPU에서 실시간 추론 가능"을 먼저 따진다.
 
 | 폴더 | 맡는 일 | 미션에서 |
@@ -31,7 +31,7 @@
 
 ```
 srf-recycling-ws/
-  simulator/tools/   데이터 공장 (snapshot, 앞으로 dataset 생성기) ← ml/scripts가 부른다
+  simulator/tools/   데이터 공장 (snapshot, dataset 생성기) ← ml/* 가 결과 파일을 읽는다
   ml/{vlm,vla,llm}/  데이터 정리·학습·평가·내보내기 (python, CPU)
   engine/nodes/      추론 노드 (C++), artifacts/models/의 모델을 읽는다
 ```

@@ -395,7 +395,8 @@ struct ScreenVertex {
 struct ScreenTriangle {
   ScreenVertex v[3];
   const Material* material;
-  float depth_key;  // 투명 정렬 (가장 먼 z)
+  float depth_key;
+  int id;  // 투명 정렬 (가장 먼 z)
   int min_y, max_y;
 };
 
@@ -449,7 +450,7 @@ std::array<float, 4> shade(const ScreenTriangle& tri, float w0, float w1, float 
 }
 
 void raster_band(const std::vector<ScreenTriangle>& tris, int y_begin, int y_end, int width, std::vector<float>& zbuf,
-                 std::vector<float>& color, const ShadeContext& ctx, bool transparent) {
+                 std::vector<float>& color, std::vector<std::int32_t>* ids, const ShadeContext& ctx, bool transparent) {
   for (const auto& tri : tris) {
     if (tri.max_y < y_begin || tri.min_y >= y_end) {
       continue;
@@ -493,6 +494,7 @@ void raster_band(const std::vector<ScreenTriangle>& tris, int y_begin, int y_end
             continue;  // 잘라낸 부분 (알파 테스트)
           }
           zbuf[index] = z;
+          if (ids != nullptr) (*ids)[index] = tri.id;
           dst[0] = rgba[0];
           dst[1] = rgba[1];
           dst[2] = rgba[2];
@@ -503,6 +505,7 @@ void raster_band(const std::vector<ScreenTriangle>& tris, int y_begin, int y_end
           dst[2] *= k;
         } else {
           const float alpha = rgba[3];
+          if (ids != nullptr && alpha >= 0.25F && tri.id >= 0) (*ids)[index] = tri.id;  // 투명 물체도 보이면 번호
           dst[0] = dst[0] * (1 - alpha) + rgba[0] * alpha;
           dst[1] = dst[1] * (1 - alpha) + rgba[1] * alpha;
           dst[2] = dst[2] * (1 - alpha) + rgba[2] * alpha;
@@ -528,6 +531,8 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
   const std::size_t pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
   std::vector<float> zbuf(pixels, std::numeric_limits<float>::infinity());
   std::vector<float> color(pixels * 3);
+  std::vector<std::int32_t> id_buffer(options.ids ? pixels : 0, -1);
+  std::vector<std::int32_t>* ids = options.ids ? &id_buffer : nullptr;
   for (std::size_t i = 0; i < pixels; ++i) {
     // 배경: 위로 갈수록 살짝 밝게
     const float t = 1.0F - static_cast<float>(i / static_cast<std::size_t>(width)) / static_cast<float>(height);
@@ -633,7 +638,7 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
         far_z = std::max(far_z, static_cast<float>(q.p.z));
       }
       for (int i = 1; i + 1 < count; ++i) {
-        ScreenTriangle tri{{sv[0], sv[i], sv[i + 1]}, &instance.material, far_z, 0, 0};
+        ScreenTriangle tri{{sv[0], sv[i], sv[i + 1]}, &instance.material, far_z, instance.id, 0, 0};
         const float min_y = std::min({tri.v[0].y, tri.v[1].y, tri.v[2].y});
         const float max_y = std::max({tri.v[0].y, tri.v[1].y, tri.v[2].y});
         if (max_y < 0 || min_y >= static_cast<float>(height)) {
@@ -653,7 +658,7 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
   const auto run = [&](bool is_transparent) {
     const auto& list = is_transparent ? transparent : opaque;
     if (threads == 1) {
-      raster_band(list, 0, height, width, zbuf, color, ctx, is_transparent);
+      raster_band(list, 0, height, width, zbuf, color, ids, ctx, is_transparent);
       return;
     }
     std::vector<std::thread> workers;
@@ -663,7 +668,9 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
       if (y0 >= y1) {
         break;
       }
-      workers.emplace_back([&, y0, y1] { raster_band(list, y0, y1, width, zbuf, color, ctx, is_transparent); });
+      workers.emplace_back([&, y0, y1] {
+        raster_band(list, y0, y1, width, zbuf, color, ids, ctx, is_transparent);
+      });
     }
     for (auto& worker : workers) {
       worker.join();
@@ -678,6 +685,7 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
   const std::size_t out_pixels = static_cast<std::size_t>(frame.width) * static_cast<std::size_t>(frame.height);
   frame.rgb.resize(out_pixels * 3);
   frame.depth_mm.assign(out_pixels, 0);
+  frame.ids.assign(options.ids ? out_pixels : 0, -1);
   std::mt19937 rng(options.seed);
   std::normal_distribution<float> noise(0.0F, options.noise);
   const float inv = 1.0F / static_cast<float>(ss * ss);
@@ -685,6 +693,8 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
     for (int x = 0; x < frame.width; ++x) {
       float sum[3] = {0, 0, 0};
       float zmin = std::numeric_limits<float>::infinity();
+      std::int32_t id_near = -1;
+      std::int32_t id_any = -1;  // 깊이가 없는 투명 물체만 있을 때
       for (int dy = 0; dy < ss; ++dy) {
         for (int dx = 0; dx < ss; ++dx) {
           const std::size_t i = static_cast<std::size_t>(y * ss + dy) * static_cast<std::size_t>(width) +
@@ -692,7 +702,11 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
           sum[0] += color[i * 3];
           sum[1] += color[i * 3 + 1];
           sum[2] += color[i * 3 + 2];
-          zmin = std::min(zmin, zbuf[i]);
+          if (zbuf[i] < zmin) {
+            zmin = zbuf[i];
+            if (ids != nullptr) id_near = id_buffer[i];  // 블록에서 가장 가까운 것
+          }
+          if (ids != nullptr && id_any < 0) id_any = id_buffer[i];
         }
       }
       const float nx = (static_cast<float>(x) + 0.5F) / static_cast<float>(frame.width) - 0.5F;
@@ -707,6 +721,7 @@ void render(const Camera& base_camera, const std::vector<Instance>& instances, c
       if (std::isfinite(zmin) && zmin < camera.far) {
         frame.depth_mm[o] = static_cast<std::uint16_t>(std::min(65535.0F, zmin * 1000.0F));
       }
+      if (ids != nullptr) frame.ids[o] = id_near >= 0 ? id_near : id_any;
     }
   }
 }

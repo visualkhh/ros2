@@ -123,6 +123,14 @@ std::optional<std::pair<double, double>> find_deck_free(
 }  // namespace
 
 int main(int argc, char** argv) {
+  // --headless: 창 없이 돈다 (서버·CI·데이터 생성). 시뮬레이션·카메라·네트워크·토픽은 그대로라 viz web으로 본다.
+  bool headless = false;
+  for (int i = 1; i < argc; ++i) {
+    headless = headless || std::string(argv[i]) == "--headless";
+  }
+  if (headless) {
+    qputenv("QT_QPA_PLATFORM", "offscreen");
+  }
   QApplication application(argc, argv);
 
   int port = 9000;
@@ -186,13 +194,15 @@ int main(int argc, char** argv) {
       slam = true;
     } else if (arg == "--arm") {
       arm = true;
+    } else if (arg == "--headless") {
+      // 위에서 이미 처리
     } else if (arg == "-h" || arg == "--help") {
       std::cout << "usage: srf_recycling_ws_simulator [--port 9000] [--duration SEC] [--seed N]\n"
                    "         [--scene normal|multi|ambiguous|absent] [--target can|pet|paper] [--items N]\n"
                    "         [--distractors N] [--people 0-4] [--forklifts 0-1]\n"
                    "         [--no-auto-supply] [--no-auto-empty] [--bin-capacity 5] [--supply-items 4]\n"
                    "  협동 작업: recycling/request 서비스 (String JSON {\"action\":\"supply\"} | {\"action\":\"empty\",\"bin\":\"can\"})\n"
-                   "         [--camera 424x240] [--no-noise] [--slam] [--arm] [--screenshot PATH]\n"
+                   "         [--camera 424x240] [--no-noise] [--slam] [--arm] [--screenshot PATH] [--headless]\n"
                    "         [--map recycling_facility | --no-map]   (지도 + 지도 마커·구역을 불러오고 시작 위치를 알려 준다)\n"
                    "  재배치: srf/recycling/reset 서비스 (String JSON {\"seed\":7,\"scene\":\"multi\",\"target\":\"can\",\"items\":5})\n"
                    "  진실값: recycling/truth 토픽 (String JSON, 2Hz)\n";
@@ -407,10 +417,12 @@ int main(int argc, char** argv) {
       shared_cell);
   srf_recycling_ws::sim::RecyclingWindow window(shared_scene, simulator.snapshots(), ui_node, "cmd_vel_teleop",
                                                 {cell_panel, camera_panel, arm_panel});
-  window.show();
-  window.raise();
-  window.activateWindow();
-  window.view().setFocus();
+  if (!headless) {
+    window.show();
+    window.raise();
+    window.activateWindow();
+    window.view().setFocus();
+  }
   simulator.start();
   if (!engine.start()) {
     std::cerr << "[srf_recycling_ws_sim] 로봇 시작 실패\n";

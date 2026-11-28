@@ -35,3 +35,7 @@ srf-default-ws/artifacts/logs/
 srf-default-ws/artifacts/run/
 srf-default-ws/artifacts/models/vla/hf-cache
 srf-default-ws/artifacts/models/vlm/hf-cache
+
+# srf-recycling-ws 학습 산출물 (모델 캐시·데이터셋·체크포인트)
+srf-recycling-ws/artifacts/models/
+srf-recycling-ws/artifacts/datasets/

@@ -110,7 +110,7 @@ SRF로 만드는 미션 워크스페이스. 로봇이 작업 영역의 캔·페�
 |---|---|---|
 | ![](documents/images/truth_view.png) | ![](documents/images/camera_reach.png) | ![](documents/images/cell.png) |
 
-진실 화면: 드래그 회전 · 오른쪽 드래그 이동 · 휠 줌 · W/A/S/D 주행(`cmd_vel_teleop`) · Q/Z 속도 · F 따라가기 · L 라이다 · C 전경. `--screenshot PATH`면 6초 뒤 창을 저장하고 끝낸다.
+진실 화면: 드래그 회전 · 오른쪽 드래그 이동 · 휠 줌 · W/A/S/D 주행(`cmd_vel_teleop`) · Q/Z 속도 · F 따라가기 · L 라이다 · C 전경. `--screenshot PATH`면 6초 뒤 창을 저장하고 끝낸다. `--headless`면 창 없이 돈다 (시뮬레이션·카메라·네트워크·토픽은 그대로 → viz web으로 본다).
 
 ### 진실값과 재배치
 
@@ -134,7 +134,7 @@ build-mac/srf_recycling_ws_snapshot --seed 7 --target can --distractors 1 --out 
 
 ## 머신러닝 (설계)
 
-`ml/` — CPU만 쓰는 전제로 방식만 적어 두었다 (코드 없음). 시뮬레이터는 데이터 출처 중 하나라 워크스페이스 최상위에 둔다 (시뮬레이터 내부가 아니라 스냅샷·데이터셋 도구, bag, 토픽으로 쓴다):
+`ml/` — CPU만 쓴다. `ml/vlm`은 `srf_recycling_ws_dataset`(헤드리스 라벨 데이터 생성기)로 SmolVLM2를 미세조정해 ONNX로 낸다. 시뮬레이터는 데이터 출처 중 하나라 워크스페이스 최상위에 둔다 (시뮬레이터 내부가 아니라 스냅샷·데이터셋 도구, bag, 토픽으로 쓴다):
 [전체](ml/README.md) · [vlm](ml/vlm/README.md) (물품 선택·보류) · [vla](ml/vla/README.md) (접근·집기·놓기) · [llm](ml/llm/README.md) (intent 설계, 제공자 비교 방법)
 
 ## 빌드·테스트

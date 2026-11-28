@@ -91,7 +91,7 @@ void RecyclableItem::add_render(std::vector<render::Instance>& out, double time)
   (void)time;
   const Pose pose_world = world_pose();
   for (const auto& part : parts) {
-    out.push_back({part.mesh, pose_world * part.offset, part.material});
+    out.push_back({part.mesh, pose_world * part.offset, part.material, id});  // id: 학습 데이터 물체 번호
   }
 }
 

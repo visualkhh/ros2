@@ -101,6 +101,7 @@ struct Instance {
   std::shared_ptr<const Mesh> mesh;
   Pose pose;  // world_from_mesh
   Material material;
+  int id = -1;  // 물체 번호 (RenderOptions::ids면 Frame::ids에 픽셀마다 남는다, -1 = 배경·시설)
 };
 
 // 기본 도형 (원점 중심; 원기둥·원뿔대는 z축 방향). UV: 상자 면마다 0..1, 원기둥 옆면 u=각도·v=위→아래.
@@ -138,6 +139,7 @@ struct Frame {
   int height = 0;
   std::vector<std::uint8_t> rgb;        // width*height*3
   std::vector<std::uint16_t> depth_mm;  // width*height, 0 = 없음
+  std::vector<std::int32_t> ids;        // width*height, Instance::id (RenderOptions::ids일 때만)
 };
 
 struct Lighting {
@@ -156,6 +158,7 @@ struct RenderOptions {
   float noise = 0.0F;    // 센서 잡음 (0..1 표준편차)
   float vignette = 0.12F;
   std::uint32_t seed = 1;
+  bool ids = false;      // 물체 번호 버퍼 (학습 데이터: 보이는 상자·가림 비율)
 };
 
 // instances를 camera로 그린다. 같은 Frame을 다시 쓰면 할당을 재사용한다.

@@ -1,0 +1,11 @@
+# srf-default-ws/tools/vla-venv 와 같은 torch/transformers (vlm_server.py 가 쓰는 조합)
+torch==2.15.0
+torchvision
+transformers==5.10.4
+num2words
+peft
+pillow
+numpy
+onnx
+onnxruntime
+onnxscript
