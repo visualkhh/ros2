@@ -1,0 +1,190 @@
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="turtlebot3_manipulation_system" params="name prefix use_sim:=^|false use_fake_hardware:=^|false fake_sensor_commands:=^|false">
+    <xacro:unless value="${use_sim}">
+      <ros2_control name="${name}" type="system">
+        <hardware>
+          <xacro:if value="${use_fake_hardware}">
+            <plugin>mock_components/GenericSystem</plugin>
+            <param name="calculate_dynamics">true</param>
+            <param name="mock_sensor_commands">${fake_sensor_commands}</param>
+            <param name="state_following_offset">0.0</param>
+          </xacro:if>
+          <xacro:unless value="${use_fake_hardware}">
+            <plugin>turtlebot3_manipulation_hardware/TurtleBot3ManipulationSystemHardware</plugin>
+            <param name="opencr_id">200</param>
+            <param name="opencr_usb_port">$(arg opencr_port)</param>
+            <param name="opencr_baud_rate">1000000</param>
+            <param name="dxl_joints_profile_acceleration">100</param>
+            <param name="dxl_joints_profile_velocity">500</param>
+            <param name="dxl_gripper_profile_acceleration">20</param>
+            <param name="dxl_gripper_profile_velocity">200</param>
+          </xacro:unless>
+        </hardware>
+        <xacro:wheel_interfaces prefix="${prefix}"/>
+        <sensor name="imu">
+          <state_interface name="orientation.x">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="orientation.y">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="orientation.z">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="orientation.w">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="angular_velocity.x">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="angular_velocity.y">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="angular_velocity.z">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="linear_acceleration.x">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="linear_acceleration.y">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="linear_acceleration.z">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+        </sensor>
+        <sensor name="battery">
+          <state_interface name="voltage">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="percentage">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="design_capacity">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="present">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+        </sensor>
+        <xacro:arm_interfaces prefix="${prefix}"/>
+        <joint name="${prefix}gripper_right_joint">
+          <state_interface name="position">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+          <state_interface name="velocity">
+            <param name="initial_value">0.0</param>
+          </state_interface>
+        </joint>
+      </ros2_control>
+    </xacro:unless>
+    <xacro:if value="${use_sim}">
+      <ros2_control name="IsaacWheel" type="system">
+        <hardware>
+          <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+          <param name="joint_commands_topic">/isaac/wheel_commands</param>
+          <param name="joint_states_topic">/isaac/joint_states</param>
+          <param name="trigger_joint_command_threshold">-1</param>
+        </hardware>
+        <xacro:wheel_interfaces prefix="${prefix}"/>
+      </ros2_control>
+      <ros2_control name="IsaacArm" type="system">
+        <hardware>
+          <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+          <param name="joint_commands_topic">/isaac/arm_commands</param>
+          <param name="joint_states_topic">/isaac/joint_states</param>
+          <param name="trigger_joint_command_threshold">-1</param>
+        </hardware>
+        <xacro:arm_interfaces prefix="${prefix}"/>
+      </ros2_control>
+    </xacro:if>
+  </xacro:macro>
+  <xacro:macro name="wheel_interfaces" params="prefix">
+    <joint name="${prefix}wheel_left_joint">
+      <command_interface name="velocity">
+        <param name="min">-24.5</param>
+        <param name="max">24.5</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="${prefix}wheel_right_joint">
+      <command_interface name="velocity">
+        <param name="min">-24.5</param>
+        <param name="max">24.5</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+  </xacro:macro>
+  <xacro:macro name="arm_interfaces" params="prefix">
+    <joint name="${prefix}joint1">
+      <command_interface name="position">
+        <param name="min">${-pi*0.9}</param>
+        <param name="max">${pi*0.9}</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="${prefix}joint2">
+      <command_interface name="position">
+        <param name="min">${-pi*0.57}</param>
+        <param name="max">${pi*0.5}</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="${prefix}joint3">
+      <command_interface name="position">
+        <param name="min">${-pi*0.3}</param>
+        <param name="max">${pi*0.44}</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="${prefix}joint4">
+      <command_interface name="position">
+        <param name="min">${-pi*0.57}</param>
+        <param name="max">${pi*0.65}</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="${prefix}gripper_left_joint">
+      <command_interface name="position">
+        <param name="min">-0.010</param>
+        <param name="max">0.019</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+  </xacro:macro>
+</robot>
