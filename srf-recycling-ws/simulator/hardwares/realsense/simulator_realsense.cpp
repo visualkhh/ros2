@@ -57,18 +57,18 @@ void SimulatorRealSense::render(double time) {
     for (const auto& wall : world->walls()) {
       instances_.push_back({render::make_box(wall.half_x * 2, wall.half_y * 2, wall.height),
                             render::Pose::translation(wall.center_x, wall.center_y, wall.height / 2),
-                            {0.85F, 0.84F, 0.80F}});
+                            render::solid({0.85F, 0.84F, 0.80F})});
     }
     instances_.push_back({render::make_box(20.0, 20.0, 0.01), render::Pose::translation(0, 0, -0.005),
-                          {0.66F, 0.66F, 0.68F}});
+                          render::solid({0.66F, 0.66F, 0.68F})});
     for (const auto& object : world->objects()) {
       if (object.get() == &robot_ || object->radius <= 0.0 || object->height <= 0.0) {
         continue;
       }
       instances_.push_back({render::make_cylinder(object->radius, object->height),
                             render::Pose::translation(object->pose.x, object->pose.y, object->z + object->height / 2),
-                            {static_cast<float>(object->color[0]), static_cast<float>(object->color[1]),
-                             static_cast<float>(object->color[2])}});
+                            render::solid({static_cast<float>(object->color[0]), static_cast<float>(object->color[1]),
+                                           static_cast<float>(object->color[2])})});
     }
   }
   // 로봇 자신(URDF 메시): 팔·그리퍼가 카메라에 보인다.
@@ -80,7 +80,12 @@ void SimulatorRealSense::render(double time) {
   camera.height = static_cast<int>(height_);
   camera.set_fov(kHorizontalFov);
   camera.world_from_optical = robot_mesh_->link_pose("camera_color_optical_frame", robot_.pose, joints);
-  render::render(camera, instances_, lighting_, frame_);
+  render::RenderOptions options;
+  options.supersample = 2;  // 계단 없이 (실제 센서 영상처럼)
+  options.threads = 4;
+  options.noise = noisy_ ? 0.008F : 0.0F;
+  options.seed = static_cast<std::uint32_t>(frames_ + 1);
+  render::render(camera, instances_, lighting_, frame_, options);
 
   RealSenseImage color;
   color.width = width_;

@@ -43,6 +43,8 @@ class SimulatorRealSense final : public RealSenseCamera {
   [[nodiscard]] std::optional<RealSenseImage> snapshot_color() const;
   [[nodiscard]] std::optional<RealSenseImage> snapshot_depth() const;
   [[nodiscard]] std::string noise_summary() const;
+  // 진실 화면이 같은 로봇 메시를 쓴다 (한 번만 읽는다).
+  [[nodiscard]] const render::RobotMesh& robot_mesh() const { return *robot_mesh_; }
 
  private:
   void render(double time);

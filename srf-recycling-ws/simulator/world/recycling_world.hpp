@@ -78,7 +78,7 @@ class RecyclableItem final : public srf::simulator::WorldObject {
   struct Part {
     std::shared_ptr<const render::Mesh> mesh;
     render::Pose offset;  // 물품 기준 (아래면 중심이 원점, 서 있는 자세)
-    render::Color color;
+    render::Material material;
   };
 
   int id = 0;

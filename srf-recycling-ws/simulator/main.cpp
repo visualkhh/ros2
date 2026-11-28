@@ -26,7 +26,6 @@
 #include "srf/simulator/runner.hpp"
 #include "srf/simulator/simulator.hpp"
 #include "srf/simulator/snapshot.hpp"
-#include "srf/simulator/simulator_window.hpp"
 #include "srf/time/time.hpp"
 
 #include "panels/arm_panel.hpp"
@@ -37,6 +36,7 @@
 #include "hardwares/opencr/simulator_opencr.hpp"
 #include "hardwares/realsense/simulator_realsense.hpp"
 #include "world/recycling_world.hpp"
+#include "view/recycling_view.hpp"
 
 #ifndef SRF_RECYCLING_WS_URDF_PATH
 #define SRF_RECYCLING_WS_URDF_PATH "engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
@@ -128,6 +128,7 @@ int main(int argc, char** argv) {
   std::uint32_t camera_width = 424;
   std::uint32_t camera_height = 240;
   std::uint32_t seed = 42;
+  std::string screenshot;  // 6초 뒤 창을 저장하고 끝낸다 (문서·확인용)
   bool noisy = true;
   bool slam = false;
   bool arm = true;  // srf_recycling_ws 로봇은 매니퓰레이터/MoveIt 포함이 기본
@@ -153,6 +154,8 @@ int main(int argc, char** argv) {
       const std::string size = argv[++i];
       camera_width = static_cast<std::uint32_t>(std::stoul(size.substr(0, size.find('x'))));
       camera_height = static_cast<std::uint32_t>(std::stoul(size.substr(size.find('x') + 1)));
+    } else if (arg == "--screenshot" && i + 1 < argc) {
+      screenshot = argv[++i];
     } else if (arg == "--seed" && i + 1 < argc) {
       seed = static_cast<std::uint32_t>(std::stoul(argv[++i]));
     } else if (arg == "--no-noise") {
@@ -164,7 +167,7 @@ int main(int argc, char** argv) {
     } else if (arg == "-h" || arg == "--help") {
       std::cout << "usage: srf_recycling_ws_simulator [--port 9000] [--duration SEC] [--seed N]\n"
                    "         [--scene normal|multi|ambiguous|absent] [--target can|pet|paper] [--items N]\n"
-                   "         [--camera 424x240] [--no-noise] [--slam] [--arm]\n"
+                   "         [--camera 424x240] [--no-noise] [--slam] [--arm] [--screenshot PATH]\n"
                    "  재배치: srf/recycling/reset 서비스 (String JSON {\"seed\":7,\"scene\":\"multi\",\"target\":\"can\",\"items\":5})\n"
                    "  진실값: recycling/truth 토픽 (String JSON, 2Hz)\n";
       return 0;
@@ -309,25 +312,21 @@ int main(int argc, char** argv) {
       });
   auto* arm_panel = new srf_recycling_ws::sim::ArmPanel(*robot_model);
   auto* camera_panel = new srf_recycling_ws::sim::CameraPanel(camera);
-  srf::simulator::SimulatorWindow window(world->walls(), simulator.snapshots(), ui_node,
-                                     "cmd_vel_teleop", {camera_panel, arm_panel});
-  // Alt+드래그: 화면에서 퍽을 집어 바닥으로 옮긴다. 월드는 시뮬레이션 스레드만 만진다.
-  window.view().set_move_object_handler([&simulator](int id, double x, double y, double z) {
-    simulator.runner().post([id, x, y, z](srf::simulator::World& current) {
-      auto& objects = current.objects();
-      if (id < 0 || static_cast<std::size_t>(id) >= objects.size()) {
-        return;
-      }
-      auto& object = objects[static_cast<std::size_t>(id)];
-      if (!object || object->held || object->on_robot) {
-        return;
-      }
-      object->pose.x = x;
-      object->pose.y = y;
-      object->z = std::clamp(z, 0.0, 1.0);
-      object->velocity = {0.0, 0.0};
-    });
+  // 진실 화면: 카메라와 같은 렌더러로 같은 장면을 그린다. 장면은 시뮬레이션 스레드가 30Hz로 복사해 둔다.
+  srf_recycling_ws::sim::SharedScene shared_scene;
+  simulator.runner().add_listener([&shared_scene, &camera, robot_model](srf::simulator::World& current) {
+    if (current.time() < shared_scene.next_time) {
+      return;
+    }
+    shared_scene.next_time = current.time() + 1.0 / 30.0;
+    std::vector<srf_recycling_ws::sim::render::Instance> instances;
+    static_cast<srf_recycling_ws::sim::RecyclingWorld&>(current).add_render_instances(instances);
+    camera.robot_mesh().add_instances(robot_model->pose, robot_model->joint_positions(), instances);
+    std::lock_guard<std::mutex> lock(shared_scene.mutex);
+    shared_scene.instances = std::move(instances);
   });
+  srf_recycling_ws::sim::RecyclingWindow window(shared_scene, simulator.snapshots(), ui_node, "cmd_vel_teleop",
+                                                {camera_panel, arm_panel});
   window.show();
   window.raise();
   window.activateWindow();
@@ -381,6 +380,12 @@ int main(int argc, char** argv) {
       }
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (!screenshot.empty() &&
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count() >= 6.0) {
+      window.grab().save(QString::fromStdString(screenshot));
+      std::printf("[srf_recycling_ws_sim] screenshot → %s\n", screenshot.c_str());
+      break;
+    }
     if (duration > 0.0 &&
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count() >=
             duration) {

@@ -19,6 +19,10 @@ using render::Pose;
 
 Pose up(double z) { return Pose::translation(0, 0, z); }
 
+render::Material paint(Color color, float specular = 0.05F, float shininess = 24.0F) {
+  return render::solid(color, specular, shininess);
+}
+
 std::string fixed(double value, int digits) {
   char text[32];
   std::snprintf(text, sizeof(text), "%.*f", digits, value);
@@ -38,10 +42,10 @@ void make_can(RecyclableItem& item, std::mt19937& rng) {
   item.variant = std::string("can/") + label.first;
   const double r = item.diameter / 2;
   const Color silver{0.78F, 0.79F, 0.82F};
-  item.parts.push_back({render::make_cylinder(r * 0.93, 0.008), up(0.004), silver});         // 바닥 테
-  item.parts.push_back({render::make_cylinder(r, 0.084), up(0.050), label.second});           // 몸통 라벨
-  item.parts.push_back({render::make_frustum(r, r * 0.88, 0.008), up(0.096), silver});        // 어깨
-  item.parts.push_back({render::make_cylinder(r * 0.86, 0.002), up(0.0995), silver});         // 뚜껑
+  item.parts.push_back({render::make_cylinder(r * 0.93, 0.008), up(0.004), paint(silver)});         // 바닥 테
+  item.parts.push_back({render::make_cylinder(r, 0.084), up(0.050), paint(label.second)});           // 몸통 라벨
+  item.parts.push_back({render::make_frustum(r, r * 0.88, 0.008), up(0.096), paint(silver)});        // 어깨
+  item.parts.push_back({render::make_cylinder(r * 0.86, 0.002), up(0.0995), paint(silver)});         // 뚜껑
 }
 
 void make_bottle(RecyclableItem& item, std::mt19937& rng) {
@@ -55,12 +59,12 @@ void make_bottle(RecyclableItem& item, std::mt19937& rng) {
   item.variant = std::string("bottle/") + cap.first;
   const double r = item.diameter / 2;
   const Color plastic{0.80F, 0.90F, 0.94F};  // 투명 페트 (반투명은 표현하지 않는다)
-  item.parts.push_back({render::make_cylinder(r, 0.110), up(0.055), plastic});
+  item.parts.push_back({render::make_cylinder(r, 0.110), up(0.055), paint(plastic)});
   item.parts.push_back({render::make_cylinder(r * 1.01, 0.045),
-                        up(0.060), kLabels[std::uniform_int_distribution<std::size_t>(0, 2)(rng)]});  // 라벨
-  item.parts.push_back({render::make_frustum(r, 0.012, 0.035), up(0.1275), plastic});              // 어깨
-  item.parts.push_back({render::make_cylinder(0.012, 0.012), up(0.151), plastic});                 // 목
-  item.parts.push_back({render::make_cylinder(0.0145, 0.013), up(0.1635), cap.second});            // 뚜껑
+                        up(0.060), paint(kLabels[std::uniform_int_distribution<std::size_t>(0, 2)(rng)])});  // 라벨
+  item.parts.push_back({render::make_frustum(r, 0.012, 0.035), up(0.1275), paint(plastic)});              // 어깨
+  item.parts.push_back({render::make_cylinder(0.012, 0.012), up(0.151), paint(plastic)});                 // 목
+  item.parts.push_back({render::make_cylinder(0.0145, 0.013), up(0.1635), paint(cap.second)});            // 뚜껑
 }
 
 void make_carton(RecyclableItem& item, std::mt19937& rng) {
@@ -72,9 +76,9 @@ void make_carton(RecyclableItem& item, std::mt19937& rng) {
   item.length = 0.095;
   item.variant = std::string("carton/") + band.first;
   const Color white{0.94F, 0.94F, 0.92F};
-  item.parts.push_back({render::make_box(0.055, 0.055, 0.075), up(0.0375), white});
-  item.parts.push_back({render::make_box(0.0555, 0.0555, 0.030), up(0.040), band.second});  // 띠
-  item.parts.push_back({render::make_box(0.055, 0.012, 0.020), up(0.085), white});          // 박공 지붕 (단순화)
+  item.parts.push_back({render::make_box(0.055, 0.055, 0.075), up(0.0375), paint(white)});
+  item.parts.push_back({render::make_box(0.0555, 0.0555, 0.030), up(0.040), paint(band.second)});  // 띠
+  item.parts.push_back({render::make_box(0.055, 0.012, 0.020), up(0.085), paint(white)});          // 박공 지붕 (단순화)
 }
 
 void make_paper_ball(RecyclableItem& item, std::mt19937& rng) {
@@ -85,8 +89,7 @@ void make_paper_ball(RecyclableItem& item, std::mt19937& rng) {
   item.diameter = 0.060;
   item.length = 0.055;
   item.variant = std::string("paper_ball/") + paper.first;
-  item.parts.push_back({render::make_lumpy_sphere(0.029, 0.28, static_cast<std::uint32_t>(rng())), up(0.028),
-                        paper.second});
+  item.parts.push_back({render::make_lumpy_sphere(0.029, 0.28, static_cast<std::uint32_t>(rng())), up(0.028), paint(paper.second)});
 }
 
 // 모호 장면용: 플라스틱 뚜껑이 달린 종이컵 (복합 재질 → 분류 불확실).
@@ -96,9 +99,9 @@ void make_cup(RecyclableItem& item, std::mt19937& rng) {
   item.diameter = 0.070;
   item.length = 0.090;
   item.variant = "cup/paper_with_lid";
-  item.parts.push_back({render::make_frustum(0.024, 0.033, 0.080), up(0.040), {0.95F, 0.95F, 0.93F}});
-  item.parts.push_back({render::make_frustum(0.030, 0.032, 0.030), up(0.045), {0.55F, 0.38F, 0.22F}});  // 슬리브
-  item.parts.push_back({render::make_frustum(0.035, 0.028, 0.010), up(0.085), {0.85F, 0.88F, 0.90F}});  // 뚜껑
+  item.parts.push_back({render::make_frustum(0.024, 0.033, 0.080), up(0.040), paint({0.95F, 0.95F, 0.93F})});
+  item.parts.push_back({render::make_frustum(0.030, 0.032, 0.030), up(0.045), paint({0.55F, 0.38F, 0.22F})});  // 슬리브
+  item.parts.push_back({render::make_frustum(0.035, 0.028, 0.010), up(0.085), paint({0.85F, 0.88F, 0.90F})});  // 뚜껑
 }
 
 void shape_item(RecyclableItem& item, std::mt19937& rng) {
@@ -114,7 +117,7 @@ void shape_item(RecyclableItem& item, std::mt19937& rng) {
 
 void add_box(std::vector<render::Instance>& out, double cx, double cy, double cz, double sx, double sy, double sz,
              Color color) {
-  out.push_back({render::make_box(sx, sy, sz), Pose::translation(cx, cy, cz), color});
+  out.push_back({render::make_box(sx, sy, sz), Pose::translation(cx, cy, cz), paint(color)});
 }
 
 }  // namespace
@@ -312,9 +315,8 @@ void RecyclingWorld::randomize(const SceneConfig& config) {
     item->movable = true;
     item->graspable = true;
     item->sides = item->shape == Shape::Carton ? 4 : 24;
-    item->color = {item->parts.size() > 1 ? item->parts[1].color[0] : item->parts[0].color[0],
-                   item->parts.size() > 1 ? item->parts[1].color[1] : item->parts[0].color[1],
-                   item->parts.size() > 1 ? item->parts[1].color[2] : item->parts[0].color[2]};
+    const auto& main_color = item->parts[item->parts.size() > 1 ? 1 : 0].material.color;
+    item->color = {main_color[0], main_color[1], main_color[2]};
     srf::msgs::Pose2D pose;
     bool ok = false;
     for (int attempt = 0; attempt < 400 && !ok; ++attempt) {
@@ -401,7 +403,7 @@ void RecyclingWorld::add_render_instances(std::vector<render::Instance>& out) co
   for (const auto* item : items()) {
     const Pose pose = item->world_pose();
     for (const auto& part : item->parts) {
-      out.push_back({part.mesh, pose * part.offset, part.color});
+      out.push_back({part.mesh, pose * part.offset, part.material});
     }
   }
 }
