@@ -61,7 +61,8 @@ def svg_chart(title, points, color, y_label, height=220, width=640):
             f"<text x='{left}' y='{top + 10}' class='unit'>{html.escape(y_label)}</text></svg></div>")
 
 
-def write_report(run, title=None):
+def write_report(run, title=None, labels=None):
+    labels = {"decision": "검증 판단 정답률 (select/hold)", "speed": "속도 (초/샘플)"} | (labels or {})
     run = Path(run)
     rows = read(run)
     num = lambda r, k: float(r[k]) if r.get(k) not in (None, "") else None  # noqa: E731
@@ -101,9 +102,9 @@ pre{{background:var(--card);border:1px solid var(--line);border-radius:10px;padd
 <div class="grid2">
 {svg_chart('학습 손실 (누적 평균)', loss, '#2563eb', 'loss')}
 {svg_chart('검증 손실 (에폭마다)', val_loss, '#dc2626', 'val loss')}
-{svg_chart('검증 판단 정답률 (select/hold)', val_dec, '#16a34a', '0~1')}
+{svg_chart(labels['decision'], val_dec, '#16a34a', '0~1')}
 {svg_chart('학습률', lr, '#9333ea', 'lr')}
-{svg_chart('속도', speed, '#ea580c', '초/샘플')}
+{svg_chart(labels['speed'], speed, '#ea580c', '초')}
 </div>
 <h3>설정</h3><pre>{html.escape(config)}</pre>
 <p class="muted">x축 = 에폭 (1.5 = 2번째 에폭 절반). 원본 값: metrics.csv</p>

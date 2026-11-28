@@ -1,6 +1,7 @@
 # ml/vla — 영상 + 지시 + 로봇 상태 → 로봇의 모든 움직임
 
-> 상태: **시범 데이터 생성기 완료** (`srf_recycling_ws_vla_demos`). 학습은 VLM(v1) 학습이 끝난 뒤.
+> 상태: 시범 데이터 생성기(`srf_recycling_ws_vla_demos`) + 학습 코드(`ml/vla/*.py`) 완료, 작은 데이터로 끝까지 확인. 본 학습은 VLM v1 이 끝난 뒤.
+> 개념·결정 이유·진행 기록: [VLA.md](VLA.md)
 
 ## 목표에서 정한 것
 
@@ -74,6 +75,24 @@ DIR/episodes/000001_pick/rgb/000.jpg ...   관측 영상
 `action` = v·w·joints[4]·gripper·buzzer, `truth` = target_xyz(진실)·holding·blocked(충돌)·person_min·robot 자세.
 
 현재 확인: 깨끗한 회차 16/16, 잡음 회차 24/24 성공 (pick·place 모두, 낙하 없음). 약 6 MB/회.
+
+## 학습 (Python, CPU — venv 는 `ml/vlm/.venv` 를 같이 쓴다)
+
+```
+data.py         상태 29개·행동 8개 벡터, 물리 범위 정규화, 행동 청크(8 스텝)
+features.py     얼린 VLM 으로 스텝마다 장면 이해 벡터(576) + 깊이 격자(768) → 회차마다 features.npz
+train.py        행동 헤드 학습, 회차 단위 검증 분할, metrics.csv/report.html, head.pt
+evaluate.py     오프라인: v·ω·관절·그리퍼 오차, 그리퍼/부저 일치, 단계별 오차
+export_onnx.py  vla_head.onnx (물리 단위 출력) + vla_head.json (순서·정규화)
+```
+
+```bash
+P=ml/vlm/.venv/bin/python; D=artifacts/datasets/vla; R=artifacts/models/vla/runs/v1
+$P ml/vla/features.py $D --vlm artifacts/models/vlm/runs/v1/merged
+$P ml/vla/train.py $D --out $R && open $R/report.html
+$P ml/vla/evaluate.py $D --head $R/head.pt
+$P ml/vla/export_onnx.py --head $R/head.pt --out artifacts/models/vla/onnx/v1
+```
 
 ## 다음
 
