@@ -165,6 +165,12 @@ struct RenderOptions {
 void render(const Camera& camera, const std::vector<Instance>& instances, const Lighting& lighting, Frame& frame,
             const RenderOptions& options = {});
 
+// URDF FK: base_footprint(뿌리)를 base(2D 자세)에 두고 모든 링크의 월드 자세 (렌더·충돌이 같이 쓴다).
+[[nodiscard]] std::map<std::string, Pose> forward_kinematics(const srf::UrdfRobot& robot, const srf::msgs::Pose2D& base,
+                                                             const std::map<std::string, double>& joints);
+// URDF 안의 메시 경로(package://, file://, 상대경로) → 파일 경로.
+[[nodiscard]] std::string resolve_mesh_path(const std::string& urdf_dir, const std::string& filename);
+
 // URDF 로봇의 시각 메시. 메시 파일은 한 번만 읽고, 관절값마다 링크 자세만 다시 계산한다.
 class RobotMesh {
  public:
@@ -187,10 +193,6 @@ class RobotMesh {
     std::shared_ptr<const Mesh> mesh;
     Material material;
   };
-
-  [[nodiscard]] std::map<std::string, Pose> forward(const srf::msgs::Pose2D& base,
-                                                    const std::map<std::string, double>& joints) const;
-  [[nodiscard]] std::string resolve(const std::string& filename) const;
 
   srf::UrdfRobot robot_;
   std::string urdf_dir_;

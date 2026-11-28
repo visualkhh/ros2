@@ -112,6 +112,8 @@ SRF로 만드는 미션 워크스페이스. 로봇이 작업 영역의 캔·페�
 
 진실 화면: 드래그 회전 · 오른쪽 드래그 이동 · 휠 줌 · W/A/S/D 주행(`cmd_vel_teleop`) · Q/Z 속도 · F 따라가기 · L 라이다 · C 전경. `--screenshot PATH`면 6초 뒤 창을 저장하고 끝낸다. `--headless`면 창 없이 돈다 (시뮬레이션·카메라·네트워크·토픽은 그대로 → viz web으로 본다).
 
+팔 충돌: URDF `<collision>`(실제 부품 STL 메시)로 팔이 차체·LDS·RealSense·D435 마운트·바닥에 닿는지 매 tick 검사하고, 새로 닿는 관절은 그 자리에서 멈춘다 (실기 서보가 걸리는 것처럼, 수동·MoveIt 궤적 모두). 검사하지 않는 쌍(이웃 링크 등)은 MoveIt과 같이 SRDF `disable_collisions`를 따른다 — `engine/description/turtlebot3_manipulation_description/srdf/turtlebot3_manipulation.srdf`. 막히면 `[waffle_pi_arm] 팔 충돌로 멈춤: link5↔camera_link` 로그.
+
 ### 진실값과 재배치
 
 - `recycling/truth` (String JSON, 2 Hz): 물품마다 `category`, `variant`, 위치, `lying`, `state`(`work_area`·`held`·`bin`·`floor`·`on_robot`), `bin`, `correct`, `bin_error_mm`(바구니 중심과의 거리), `dropped`, `releases` + `summary`

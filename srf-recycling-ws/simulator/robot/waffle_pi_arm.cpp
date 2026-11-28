@@ -5,12 +5,16 @@
 #include <cstdio>
 #include <fstream>
 #include <limits>
+#include <map>
+#include <set>
+#include <string>
 #include <sstream>
 #include <utility>
 #include <vector>
 
 #include "srf/tf/math.hpp"
 
+#include "robot/arm_collision.hpp"
 #include "robot/urdf_robot_visualizer.hpp"
 
 namespace srf_recycling_ws::sim {
@@ -89,7 +93,7 @@ Mat34 rotate_z(double angle) {
 }  // namespace
 
 WafflePiArm::WafflePiArm(bool noisy, std::optional<std::uint32_t> seed,
-                         std::string urdf_path)
+                         std::string urdf_path, std::string srdf_path)
     : noisy_(noisy), rng_(seed ? *seed : std::random_device{}()) {
   radius = kBodyRadius;
   height = kBodyHeight;
@@ -111,6 +115,13 @@ WafflePiArm::WafflePiArm(bool noisy, std::optional<std::uint32_t> seed,
     visualizer_ = std::make_unique<UrdfRobotVisualizer>(buffer.str());
   } catch (const std::exception& error) {
     std::fprintf(stderr, "[waffle_pi_arm] URDF visual 파싱 실패: %s\n", error.what());
+  }
+  if (!srdf_path.empty()) {
+    try {
+      collision_ = std::make_unique<ArmCollision>(urdf_path, srdf_path);
+    } catch (const std::exception& error) {
+      std::fprintf(stderr, "[waffle_pi_arm] 충돌 모델을 만들지 못했다 (충돌 없이 돈다): %s\n", error.what());
+    }
   }
 }
 
@@ -182,9 +193,11 @@ void WafflePiArm::tick(double time, double dt) {
   {
     std::lock_guard<std::mutex> lock(arm_mutex_);
     if (manual_) {
-      step_towards(manual_position_, manual_target_, dt);
+      auto next = manual_position_;
+      step_towards(next, manual_target_, dt);
+      move_arm(manual_position_, next);
     } else {
-      controller_position_ = controller_target_;
+      move_arm(controller_position_, controller_target_);
     }
   }
   update_grasp();
@@ -483,6 +496,83 @@ std::string WafflePiArm::noise_summary() const {
                 "wheel slip sigma=%.3f m/s scale=%+.1f%%/%+.1f%% (physical)",
                 left_slip_.sigma, left_slip_.scale * 100.0, right_slip_.scale * 100.0);
   return buffer;
+}
+
+namespace {
+
+std::map<std::string, double> arm_joints(const std::array<double, 5>& q) {
+  return {{"joint1", q[0]}, {"joint2", q[1]}, {"joint3", q[2]}, {"joint4", q[3]},
+          {"gripper_left_joint", q[4]}, {"gripper_right_joint", q[4]}};
+}
+
+std::set<std::string> contact_set(const std::vector<ArmCollision::Contact>& contacts) {
+  std::set<std::string> result;
+  for (const auto& contact : contacts) {
+    result.insert(contact.a + "↔" + contact.b);
+  }
+  return result;
+}
+
+}  // namespace
+
+void WafflePiArm::move_arm(std::array<double, 5>& position, const std::array<double, 5>& next) {
+  if (!collision_) {
+    position = next;
+    return;
+  }
+  // 이미 닿아 있던 쌍(시작 자세·접은 자세)은 허용하고, 새로 닿는 쌍이 생기는 자세로는 가지 않는다.
+  // ponytail: 이미 닿은 쌍 안에서 더 파고드는 것은 못 막는다 (침투 깊이를 안 잰다).
+  const auto allowed = contact_set(collision_->contacts(arm_joints(position)));
+  std::vector<ArmCollision::Contact> blocking;
+  const auto free = [&](const std::array<double, 5>& q) {
+    std::vector<ArmCollision::Contact> fresh;
+    for (const auto& contact : collision_->contacts(arm_joints(q))) {
+      if (allowed.count(contact.a + "↔" + contact.b) == 0) {
+        fresh.push_back(contact);
+      }
+    }
+    if (fresh.empty()) {
+      return true;
+    }
+    blocking = std::move(fresh);
+    return false;
+  };
+  // 한 번에 크게 움직이면 얇은 부품을 뚫고 지나가므로 관절 0.02 rad(그리퍼 2 mm)씩 나눠 본다.
+  int steps = 1;
+  for (std::size_t i = 0; i < 5; ++i) {
+    steps = std::max(steps, static_cast<int>(std::ceil(std::abs(next[i] - position[i]) / (i == 4 ? 0.002 : 0.02))));
+  }
+  bool blocked = false;
+  const auto start = position;
+  for (int k = 1; k <= steps; ++k) {
+    std::array<double, 5> candidate{};
+    for (std::size_t i = 0; i < 5; ++i) {
+      candidate[i] = start[i] + (next[i] - start[i]) * k / steps;
+    }
+    if (free(candidate)) {
+      position = candidate;
+      continue;
+    }
+    // 막힌 관절만 멈추고 나머지는 계속 (실기에서도 닿은 서보만 걸린다)
+    blocked = true;
+    for (std::size_t i = 0; i < 5; ++i) {
+      auto one = position;
+      one[i] = candidate[i];
+      if (one[i] != position[i] && free(one)) {
+        position = one;
+      }
+    }
+  }
+  const std::string by = blocked ? to_string(blocking) : std::string{};
+  if (by != blocked_by_ && !by.empty()) {
+    std::fprintf(stderr, "[waffle_pi_arm] 팔 충돌로 멈춤: %s\n", by.c_str());
+  }
+  blocked_by_ = by;
+}
+
+std::string WafflePiArm::arm_blocked_by() const {
+  std::lock_guard<std::mutex> lock(arm_mutex_);
+  return blocked_by_;
 }
 
 void WafflePiArm::step_towards(std::array<double, 5>& position,

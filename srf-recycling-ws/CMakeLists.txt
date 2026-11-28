@@ -165,6 +165,7 @@ if(SRF_RECYCLING_WS_REALSENSE_FOUND)
 endif()
 target_compile_definitions(srf_recycling_ws_real PRIVATE
   SRF_RECYCLING_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
+    SRF_RECYCLING_WS_SRDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/srdf/turtlebot3_manipulation.srdf"
   SRF_RECYCLING_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"
   SRF_RECYCLING_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models"
 )
@@ -208,6 +209,7 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
   add_library(srf_recycling_ws_sim_world STATIC
     simulator/render/scene_renderer.cpp
     simulator/render/textures.cpp
+    simulator/robot/arm_collision.cpp
     simulator/world/recycling_world.cpp
     simulator/world/items.cpp
     simulator/world/facility.cpp
@@ -222,12 +224,14 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     add_executable(srf_recycling_ws_snapshot simulator/tools/snapshot.cpp)
     target_link_libraries(srf_recycling_ws_snapshot PRIVATE srf_recycling_ws_sim_world Qt6::Gui)
     target_compile_definitions(srf_recycling_ws_snapshot PRIVATE
-      SRF_RECYCLING_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf")
+      SRF_RECYCLING_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
+    SRF_RECYCLING_WS_SRDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/srdf/turtlebot3_manipulation.srdf")
     # 헤드리스 학습 데이터 생성기 (VLM): 이미지 + 물품·지도 마커·구역 정답
     add_executable(srf_recycling_ws_dataset simulator/tools/dataset.cpp)
     target_link_libraries(srf_recycling_ws_dataset PRIVATE srf_recycling_ws_sim_world Qt6::Gui)
     target_compile_definitions(srf_recycling_ws_dataset PRIVATE
       SRF_RECYCLING_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
+    SRF_RECYCLING_WS_SRDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/srdf/turtlebot3_manipulation.srdf"
       SRF_RECYCLING_WS_MARKERS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps/recycling_facility/markers.yaml")
   endif()
 
@@ -284,6 +288,7 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
   endif()
   target_compile_definitions(srf_recycling_ws_simulator PRIVATE
     SRF_RECYCLING_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
+    SRF_RECYCLING_WS_SRDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/srdf/turtlebot3_manipulation.srdf"
     SRF_RECYCLING_WS_MAPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/maps"
     SRF_RECYCLING_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models")
   target_compile_options(srf_recycling_ws_simulator PRIVATE -Wall -Wextra -Wpedantic)
@@ -339,6 +344,7 @@ if(SRF_RECYCLING_WS_BUILD_TESTS)
       tests/test_sim_robot.cpp
       tests/test_sim_realsense.cpp
       tests/test_recycling_world.cpp
+      tests/test_arm_collision.cpp
       simulator/robot/waffle_pi_arm.cpp
       simulator/robot/urdf_robot_visualizer.cpp
       simulator/hardwares/realsense/simulator_realsense.cpp)
@@ -347,6 +353,7 @@ if(SRF_RECYCLING_WS_BUILD_TESTS)
   endif()
   target_compile_definitions(srf_recycling_ws_tests PRIVATE
     SRF_RECYCLING_WS_URDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
+    SRF_RECYCLING_WS_SRDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/engine/description/turtlebot3_manipulation_description/srdf/turtlebot3_manipulation.srdf"
     SRF_RECYCLING_WS_MODELS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/artifacts/models")
   if(SRF_RECYCLING_WS_RL_NAV_FOUND)
     target_include_directories(srf_recycling_ws_tests PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})

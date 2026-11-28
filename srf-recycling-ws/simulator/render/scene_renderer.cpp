@@ -747,7 +747,7 @@ RobotMesh::RobotMesh(const std::string& urdf_path) {
           const std::string key = g.filename + "@" + std::to_string(g.scale[0]);
           auto& cached = cache[key];
           if (!cached) {
-            cached = load_stl(resolve(g.filename), g.scale);
+            cached = load_stl(resolve_mesh_path(urdf_dir_, g.filename), g.scale);
           }
           mesh = cached;
           break;
@@ -770,7 +770,7 @@ RobotMesh::RobotMesh(const std::string& urdf_path) {
   }
 }
 
-std::string RobotMesh::resolve(const std::string& filename) const {
+std::string resolve_mesh_path(const std::string& urdf_dir, const std::string& filename) {
   // package://<패키지>/<경로> → URDF가 <패키지>/urdf/ 안에 있으면 그 위, 아니면 형제 폴더 <패키지>.
   constexpr std::string_view kPackage = "package://";
   constexpr std::string_view kFile = "file://";
@@ -778,27 +778,27 @@ std::string RobotMesh::resolve(const std::string& filename) const {
     return filename.substr(kFile.size());
   }
   if (filename.rfind(kPackage, 0) != 0) {
-    return (std::filesystem::path(urdf_dir_) / filename).string();
+    return (std::filesystem::path(urdf_dir) / filename).string();
   }
   const std::string rest = filename.substr(kPackage.size());
   const std::size_t slash = rest.find('/');
   const std::string package = rest.substr(0, slash);
   const std::string relative = slash == std::string::npos ? std::string{} : rest.substr(slash + 1);
-  const std::filesystem::path package_root = std::filesystem::path(urdf_dir_).parent_path();
+  const std::filesystem::path package_root = std::filesystem::path(urdf_dir).parent_path();
   if (package_root.filename() == package) {
     return (package_root / relative).string();
   }
   return (package_root.parent_path() / package / relative).string();
 }
 
-std::map<std::string, Pose> RobotMesh::forward(const srf::msgs::Pose2D& base,
-                                               const std::map<std::string, double>& joints) const {
+std::map<std::string, Pose> forward_kinematics(const srf::UrdfRobot& robot, const srf::msgs::Pose2D& base,
+                                               const std::map<std::string, double>& joints) {
   std::map<std::string, Pose> poses;
-  poses[robot_.root] = Pose::translation(base.x, base.y, 0.0) * Pose::yaw(base.theta);
+  poses[robot.root] = Pose::translation(base.x, base.y, 0.0) * Pose::yaw(base.theta);
   bool progressed = true;
   while (progressed) {
     progressed = false;
-    for (const auto& joint : robot_.joints) {
+    for (const auto& joint : robot.joints) {
       if (poses.count(joint.child) != 0 || poses.count(joint.parent) == 0) {
         continue;
       }
@@ -819,7 +819,7 @@ std::map<std::string, Pose> RobotMesh::forward(const srf::msgs::Pose2D& base,
 
 void RobotMesh::add_instances(const srf::msgs::Pose2D& base, const std::map<std::string, double>& joints,
                               std::vector<Instance>& out) const {
-  const auto poses = forward(base, joints);
+  const auto poses = forward_kinematics(robot_, base, joints);
   for (const auto& visual : visuals_) {
     if (std::find(hidden_.begin(), hidden_.end(), visual.link) != hidden_.end()) {
       continue;
@@ -833,7 +833,7 @@ void RobotMesh::add_instances(const srf::msgs::Pose2D& base, const std::map<std:
 
 Pose RobotMesh::link_pose(const std::string& link, const srf::msgs::Pose2D& base,
                           const std::map<std::string, double>& joints) const {
-  const auto poses = forward(base, joints);
+  const auto poses = forward_kinematics(robot_, base, joints);
   const auto found = poses.find(link);
   if (found == poses.end()) {
     throw std::runtime_error("URDF에 링크가 없다: " + link);

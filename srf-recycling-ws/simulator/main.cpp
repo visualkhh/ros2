@@ -236,7 +236,8 @@ int main(int argc, char** argv) {
   scene.seed = seed;
   auto world = std::make_unique<srf_recycling_ws::sim::RecyclingWorld>();
   world->randomize(scene);
-  auto robot_holder = std::make_unique<srf_recycling_ws::sim::WafflePiArm>(noisy, seed, SRF_RECYCLING_WS_URDF_PATH);
+  auto robot_holder = std::make_unique<srf_recycling_ws::sim::WafflePiArm>(noisy, seed, SRF_RECYCLING_WS_URDF_PATH,
+                                                                           SRF_RECYCLING_WS_SRDF_PATH);
   auto* robot_model = static_cast<srf_recycling_ws::sim::WafflePiArm*>(
       world->add(std::move(robot_holder), world->layout().robot_start));
   // MoveIt이 기본 제어자다. 패널에서 슬라이더를 움직이면 수동으로 전환된다.

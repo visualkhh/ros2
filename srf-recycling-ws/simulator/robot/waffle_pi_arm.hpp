@@ -19,13 +19,15 @@
 namespace srf_recycling_ws::sim {
 
 class UrdfRobotVisualizer;
+class ArmCollision;
 
 // srf_recycling_ws 실기 모델: TurtleBot3 Waffle Pi 차동 구동 + OpenMANIPULATOR-X 4DOF/gripper.
 // generic 시뮬레이터 로봇(TurtleBot)을 상속하지 않고 SimulatorRobot을 직접 구현한다.
 class WafflePiArm final : public srf::simulator::SimulatorRobot {
  public:
+  // srdf_path까지 주면 팔 충돌(자기 몸·카메라 마운트·바닥)을 검사해 닿는 관절은 멈춘다 (실기 서보처럼).
   explicit WafflePiArm(bool noisy = false, std::optional<std::uint32_t> seed = std::nullopt,
-                       std::string urdf_path = {});
+                       std::string urdf_path = {}, std::string srdf_path = {});
   ~WafflePiArm() override;
 
   [[nodiscard]] std::string kind() const override { return "waffle_pi_arm"; }
@@ -54,6 +56,8 @@ class WafflePiArm final : public srf::simulator::SimulatorRobot {
   void set_arm_target(const std::array<double, 5>& target);            // 수동
   void set_controller_arm_target(const std::array<double, 5>& target); // SimulatorOpenCr write_arm
   [[nodiscard]] ArmStatus arm_status() const;
+  // 마지막 tick에서 팔을 막은 충돌 ("link5↔camera_link, ..."), 안 막혔으면 빈 문자열.
+  [[nodiscard]] std::string arm_blocked_by() const;
   [[nodiscard]] std::string noise_summary() const;
 
   static constexpr std::array<double, 5> kHome{0.5, -1.75, 1.35, 0.8, 0.0};
@@ -106,6 +110,8 @@ class WafflePiArm final : public srf::simulator::SimulatorRobot {
   void update_payload();
   static void step_towards(std::array<double, 5>& position,
                            const std::array<double, 5>& target, double dt);
+  // position → next 로 옮기되 새로 닿는 자세는 건너뛴다 (arm_mutex_ 잡은 채로).
+  void move_arm(std::array<double, 5>& position, const std::array<double, 5>& next);
 
   mutable std::mutex command_mutex_;
   mutable std::mutex state_mutex_;
@@ -135,6 +141,8 @@ class WafflePiArm final : public srf::simulator::SimulatorRobot {
   srf::msgs::Pose2D truth_scan_pose_;
 
   std::unique_ptr<UrdfRobotVisualizer> visualizer_;
+  std::unique_ptr<ArmCollision> collision_;
+  std::string blocked_by_;
   mutable std::mutex arm_mutex_;
   bool manual_ = true;
   std::array<double, 5> manual_position_{};
