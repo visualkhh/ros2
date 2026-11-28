@@ -204,12 +204,17 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     endif()
   endif()
 
-  # 재활용 미션 월드 + 3D 카메라 렌더러 (Qt 없음: 시뮬레이터·테스트·스냅샷 도구가 같이 쓴다)
+  # 재활용 선별장 월드 + 3D 카메라 렌더러 (시뮬레이터·테스트·스냅샷 도구가 같이 쓴다)
   add_library(srf_recycling_ws_sim_world STATIC
     simulator/render/scene_renderer.cpp
-    simulator/world/recycling_world.cpp)
+    simulator/render/textures.cpp
+    simulator/world/recycling_world.cpp
+    simulator/world/items.cpp
+    simulator/world/facility.cpp
+    simulator/world/agents.cpp)
   target_include_directories(srf_recycling_ws_sim_world PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/simulator)
-  target_link_libraries(srf_recycling_ws_sim_world PUBLIC srf::core srf::simulator)
+  # 텍스처 생성에 QImage/QPainter를 쓴다 (렌더러 자체는 Qt를 모른다)
+  target_link_libraries(srf_recycling_ws_sim_world PUBLIC srf::core srf::simulator Qt6::Gui)
   target_compile_options(srf_recycling_ws_sim_world PRIVATE -Wall -Wextra -Wpedantic)
 
   # 헤드리스 스냅샷: 시드·장면 → 카메라 RGB/깊이, 전경, 진실 JSON

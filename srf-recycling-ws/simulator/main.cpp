@@ -150,6 +150,12 @@ int main(int argc, char** argv) {
       scene.target = srf_recycling_ws::sim::parse_category(argv[++i]);
     } else if (arg == "--items" && i + 1 < argc) {
       scene.items = std::stoi(argv[++i]);
+    } else if (arg == "--distractors" && i + 1 < argc) {
+      scene.distractors = std::stoi(argv[++i]);
+    } else if (arg == "--people" && i + 1 < argc) {
+      scene.people = std::stoi(argv[++i]);
+    } else if (arg == "--forklifts" && i + 1 < argc) {
+      scene.forklifts = std::stoi(argv[++i]);
     } else if (arg == "--camera" && i + 1 < argc) {
       const std::string size = argv[++i];
       camera_width = static_cast<std::uint32_t>(std::stoul(size.substr(0, size.find('x'))));
@@ -167,6 +173,7 @@ int main(int argc, char** argv) {
     } else if (arg == "-h" || arg == "--help") {
       std::cout << "usage: srf_recycling_ws_simulator [--port 9000] [--duration SEC] [--seed N]\n"
                    "         [--scene normal|multi|ambiguous|absent] [--target can|pet|paper] [--items N]\n"
+                   "         [--distractors N] [--people 0-4] [--forklifts 0-1]\n"
                    "         [--camera 424x240] [--no-noise] [--slam] [--arm] [--screenshot PATH]\n"
                    "  재배치: srf/recycling/reset 서비스 (String JSON {\"seed\":7,\"scene\":\"multi\",\"target\":\"can\",\"items\":5})\n"
                    "  진실값: recycling/truth 토픽 (String JSON, 2Hz)\n";
@@ -293,6 +300,9 @@ int main(int argc, char** argv) {
           if (const auto v = field("scene"); !v.empty()) config.scene = srf_recycling_ws::sim::parse_scene(v).value_or(config.scene);
           if (const auto v = field("target"); !v.empty()) config.target = srf_recycling_ws::sim::parse_category(v);
           if (const auto v = field("items"); !v.empty()) config.items = std::stoi(v);
+          if (const auto v = field("distractors"); !v.empty()) config.distractors = std::stoi(v);
+          if (const auto v = field("people"); !v.empty()) config.people = std::stoi(v);
+          if (const auto v = field("forklifts"); !v.empty()) config.forklifts = std::stoi(v);
           recycling.randomize(config);
           truth.next_time = 0.0;  // 다음 스텝에 진실값을 다시 만든다
         });

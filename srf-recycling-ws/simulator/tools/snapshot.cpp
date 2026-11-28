@@ -1,6 +1,7 @@
 // 헤드리스 장면 스냅샷: 시드·장면으로 월드를 만들고 로봇 카메라 영상(RGB·깊이), 위에서 본 영상, 진실 JSON을 저장한다.
 //   srf_recycling_ws_snapshot --seed 7 --scene normal --target can --out /tmp/snap
 //   (로봇 자세·팔 관절을 바꿔 여러 장을 만들면 VLM/VLA 데이터로도 쓴다)
+#include <QGuiApplication>
 #include <QImage>
 
 #include <cmath>
@@ -29,24 +30,6 @@ std::vector<double> numbers(const std::string& text) {
   return out;
 }
 
-// 눈 위치에서 목표를 보는 광학 프레임 (+z 앞, +x 오른쪽, +y 아래).
-render::Pose look_at(render::Vec3 eye, render::Vec3 target) {
-  auto norm = [](render::Vec3 v) {
-    const double n = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-    return render::Vec3{v.x / n, v.y / n, v.z / n};
-  };
-  auto cross = [](render::Vec3 a, render::Vec3 b) {
-    return render::Vec3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
-  };
-  const render::Vec3 z = norm({target.x - eye.x, target.y - eye.y, target.z - eye.z});
-  const render::Vec3 x = norm(cross(z, {0, 0, 1}));  // 오른쪽 (위쪽 벡터 = 월드 +z)
-  const render::Vec3 y = cross(z, x);                // 아래
-  render::Pose pose;
-  pose.r = {{{x.x, y.x, z.x}, {x.y, y.y, z.y}, {x.z, y.z, z.z}}};
-  pose.t = eye;
-  return pose;
-}
-
 void save_rgb(const render::Frame& frame, const std::string& path) {
   QImage image(frame.rgb.data(), frame.width, frame.height, frame.width * 3, QImage::Format_RGB888);
   image.save(QString::fromStdString(path));
@@ -61,6 +44,10 @@ void save_depth(const render::Frame& frame, const std::string& path) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
+    qputenv("QT_QPA_PLATFORM", "offscreen");  // 화면 없이 (라벨 글씨용 폰트만 쓴다)
+  }
+  QGuiApplication application(argc, argv);
   SceneConfig scene;
   std::string out_dir = "snapshot";
   std::string urdf = SRF_RECYCLING_WS_URDF_PATH;
@@ -75,6 +62,9 @@ int main(int argc, char** argv) {
     else if (arg == "--scene") scene.scene = parse_scene(value()).value_or(Scene::Normal);
     else if (arg == "--target") scene.target = parse_category(value());
     else if (arg == "--items") scene.items = std::stoi(value());
+    else if (arg == "--distractors") scene.distractors = std::stoi(value());
+    else if (arg == "--people") scene.people = std::stoi(value());
+    else if (arg == "--forklifts") scene.forklifts = std::stoi(value());
     else if (arg == "--out") out_dir = value();
     else if (arg == "--size") { const auto v = numbers(value()); width = static_cast<int>(v.at(0)); height = static_cast<int>(v.at(1)); }
     else if (arg == "--robot") { const auto v = numbers(value()); robot = {v.at(0), v.at(1), v.at(2)}; }
@@ -84,7 +74,7 @@ int main(int argc, char** argv) {
       if (v.size() > 4) joints["gripper_left_joint"] = joints["gripper_right_joint"] = v[4];
     } else {
       std::printf("usage: %s [--seed N] [--scene normal|multi|ambiguous|absent] [--target can|pet|paper]\n"
-                  "          [--items N] [--out DIR] [--size W,H] [--robot X,Y,YAW] [--arm J1,J2,J3,J4[,GRIP]]\n"
+                  "          [--items N] [--distractors N] [--people 0-4] [--forklifts 0-1] [--out DIR] [--size W,H] [--robot X,Y,YAW] [--arm J1,J2,J3,J4[,GRIP]]\n"
                   "  --robot 기본: 작업 영역 중심에서 0.55 m 앞에서 작업 영역을 본다\n", argv[0]);
       return arg == "--help" || arg == "-h" ? 0 : 2;
     }
@@ -111,23 +101,29 @@ int main(int argc, char** argv) {
   camera.set_fov(kHorizontalFov);
   camera.world_from_optical = robot_mesh.link_pose("camera_color_optical_frame", robot, joints);
   render::Frame frame;
-  render::render(camera, instances, lighting, frame);
+  render::RenderOptions options;
+  options.threads = 8;
+  render::render(camera, instances, lighting, frame, options);
   save_rgb(frame, out_dir + "/color.png");
   save_depth(frame, out_dir + "/depth.png");
 
-  // 2) 위에서 본 전경 (디버그·보고용)
-  render::Camera overview = camera;
-  overview.width = 960;
-  overview.height = 640;
-  overview.set_fov(60.0 * kPi / 180.0);
+  // 2) 홀 전경, 3) 사람 눈높이에서 본 로봇 셀 (디버그·보고용)
   const auto& layout = world.layout();
-  overview.world_from_optical = look_at({layout.room_x / 2, -1.2, 2.6}, {layout.room_x / 2, layout.room_y / 2, 0.0});
-  render::Frame top;
-  render::render(overview, instances, lighting, top);
-  save_rgb(top, out_dir + "/overview.png");
+  const auto save_view = [&](const std::string& file, render::Vec3 eye, render::Vec3 target, double fov) {
+    render::Camera view;
+    view.width = 1280;
+    view.height = 720;
+    view.set_fov(fov * kPi / 180.0);
+    view.world_from_optical = render::Pose::scale_free_look(eye, target);
+    render::Frame image;
+    render::render(view, instances, lighting, image, options);
+    save_rgb(image, out_dir + "/" + file);
+  };
+  save_view("overview.png", {layout.hall_x / 2, -0.8, 17.0}, {layout.hall_x / 2, layout.hall_y / 2 - 0.3, 0.0}, 72);
+  save_view("cell.png", {robot.x - 1.6, robot.y - 1.8, 1.6}, {layout.bins[1].x - 1.5, layout.bins[1].y, 0.2}, 70);
 
   std::ofstream(out_dir + "/truth.json") << world.truth_json(0.0) << "\n";
-  std::printf("saved %s/{color.png,depth.png,overview.png,truth.json}  robot=%.2f,%.2f,%.2f  triangles=%zu\n",
+  std::printf("saved %s/{color.png,depth.png,overview.png,cell.png,truth.json}  robot=%.2f,%.2f,%.2f  triangles=%zu\n",
               out_dir.c_str(), robot.x, robot.y, robot.theta, robot_mesh.triangle_count());
   return 0;
 }

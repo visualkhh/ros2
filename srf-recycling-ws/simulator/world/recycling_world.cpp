@@ -6,6 +6,8 @@
 #include <random>
 #include <sstream>
 
+#include "render/textures.hpp"
+
 namespace srf_recycling_ws::sim {
 
 namespace {
@@ -14,14 +16,9 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kGravity = 9.81;
 constexpr double kDropHeight = 0.03;  // 수거함 밖에서 이보다 높이서 떨어지면 낙하
 
-using render::Color;
 using render::Pose;
 
 Pose up(double z) { return Pose::translation(0, 0, z); }
-
-render::Material paint(Color color, float specular = 0.05F, float shininess = 24.0F) {
-  return render::solid(color, specular, shininess);
-}
 
 std::string fixed(double value, int digits) {
   char text[32];
@@ -29,95 +26,12 @@ std::string fixed(double value, int digits) {
   return text;
 }
 
-// ---- 물품 모양 (아래면 중심이 원점, +z 위) ----
-
-void make_can(RecyclableItem& item, std::mt19937& rng) {
-  static const std::array<std::pair<const char*, Color>, 4> kLabels{{
-      {"red", {0.80F, 0.10F, 0.12F}}, {"blue", {0.12F, 0.30F, 0.75F}},
-      {"green", {0.10F, 0.55F, 0.25F}}, {"black", {0.12F, 0.12F, 0.14F}}}};
-  const auto& label = kLabels[std::uniform_int_distribution<std::size_t>(0, kLabels.size() - 1)(rng)];
-  item.shape = Shape::Can;
-  item.diameter = 0.053;
-  item.length = 0.100;
-  item.variant = std::string("can/") + label.first;
-  const double r = item.diameter / 2;
-  const Color silver{0.78F, 0.79F, 0.82F};
-  item.parts.push_back({render::make_cylinder(r * 0.93, 0.008), up(0.004), paint(silver)});         // 바닥 테
-  item.parts.push_back({render::make_cylinder(r, 0.084), up(0.050), paint(label.second)});           // 몸통 라벨
-  item.parts.push_back({render::make_frustum(r, r * 0.88, 0.008), up(0.096), paint(silver)});        // 어깨
-  item.parts.push_back({render::make_cylinder(r * 0.86, 0.002), up(0.0995), paint(silver)});         // 뚜껑
-}
-
-void make_bottle(RecyclableItem& item, std::mt19937& rng) {
-  static const std::array<std::pair<const char*, Color>, 3> kCaps{{
-      {"white", {0.95F, 0.95F, 0.95F}}, {"blue", {0.15F, 0.35F, 0.85F}}, {"red", {0.85F, 0.15F, 0.15F}}}};
-  static const std::array<Color, 3> kLabels{{{0.20F, 0.60F, 0.85F}, {0.95F, 0.80F, 0.15F}, {0.30F, 0.70F, 0.35F}}};
-  const auto& cap = kCaps[std::uniform_int_distribution<std::size_t>(0, kCaps.size() - 1)(rng)];
-  item.shape = Shape::Bottle;
-  item.diameter = 0.056;
-  item.length = 0.170;
-  item.variant = std::string("bottle/") + cap.first;
-  const double r = item.diameter / 2;
-  const Color plastic{0.80F, 0.90F, 0.94F};  // 투명 페트 (반투명은 표현하지 않는다)
-  item.parts.push_back({render::make_cylinder(r, 0.110), up(0.055), paint(plastic)});
-  item.parts.push_back({render::make_cylinder(r * 1.01, 0.045),
-                        up(0.060), paint(kLabels[std::uniform_int_distribution<std::size_t>(0, 2)(rng)])});  // 라벨
-  item.parts.push_back({render::make_frustum(r, 0.012, 0.035), up(0.1275), paint(plastic)});              // 어깨
-  item.parts.push_back({render::make_cylinder(0.012, 0.012), up(0.151), paint(plastic)});                 // 목
-  item.parts.push_back({render::make_cylinder(0.0145, 0.013), up(0.1635), paint(cap.second)});            // 뚜껑
-}
-
-void make_carton(RecyclableItem& item, std::mt19937& rng) {
-  static const std::array<std::pair<const char*, Color>, 3> kBands{{
-      {"milk", {0.20F, 0.45F, 0.85F}}, {"juice", {0.95F, 0.55F, 0.10F}}, {"plain", {0.85F, 0.80F, 0.70F}}}};
-  const auto& band = kBands[std::uniform_int_distribution<std::size_t>(0, kBands.size() - 1)(rng)];
-  item.shape = Shape::Carton;
-  item.diameter = 0.055;  // 한 변
-  item.length = 0.095;
-  item.variant = std::string("carton/") + band.first;
-  const Color white{0.94F, 0.94F, 0.92F};
-  item.parts.push_back({render::make_box(0.055, 0.055, 0.075), up(0.0375), paint(white)});
-  item.parts.push_back({render::make_box(0.0555, 0.0555, 0.030), up(0.040), paint(band.second)});  // 띠
-  item.parts.push_back({render::make_box(0.055, 0.012, 0.020), up(0.085), paint(white)});          // 박공 지붕 (단순화)
-}
-
-void make_paper_ball(RecyclableItem& item, std::mt19937& rng) {
-  static const std::array<std::pair<const char*, Color>, 3> kPapers{{
-      {"white", {0.93F, 0.93F, 0.90F}}, {"news", {0.72F, 0.72F, 0.70F}}, {"kraft", {0.70F, 0.56F, 0.38F}}}};
-  const auto& paper = kPapers[std::uniform_int_distribution<std::size_t>(0, kPapers.size() - 1)(rng)];
-  item.shape = Shape::PaperBall;
-  item.diameter = 0.060;
-  item.length = 0.055;
-  item.variant = std::string("paper_ball/") + paper.first;
-  item.parts.push_back({render::make_lumpy_sphere(0.029, 0.28, static_cast<std::uint32_t>(rng())), up(0.028), paint(paper.second)});
-}
-
-// 모호 장면용: 플라스틱 뚜껑이 달린 종이컵 (복합 재질 → 분류 불확실).
-void make_cup(RecyclableItem& item, std::mt19937& rng) {
-  (void)rng;
-  item.shape = Shape::Cup;
-  item.diameter = 0.070;
-  item.length = 0.090;
-  item.variant = "cup/paper_with_lid";
-  item.parts.push_back({render::make_frustum(0.024, 0.033, 0.080), up(0.040), paint({0.95F, 0.95F, 0.93F})});
-  item.parts.push_back({render::make_frustum(0.030, 0.032, 0.030), up(0.045), paint({0.55F, 0.38F, 0.22F})});  // 슬리브
-  item.parts.push_back({render::make_frustum(0.035, 0.028, 0.010), up(0.085), paint({0.85F, 0.88F, 0.90F})});  // 뚜껑
-}
-
-void shape_item(RecyclableItem& item, std::mt19937& rng) {
-  switch (item.category) {
-    case Category::Can: make_can(item, rng); break;
-    case Category::Pet: make_bottle(item, rng); break;
-    case Category::Paper:
-      std::bernoulli_distribution(0.5)(rng) ? make_carton(item, rng) : make_paper_ball(item, rng);
-      break;
-    case Category::Unknown: make_cup(item, rng); break;
-  }
-}
-
-void add_box(std::vector<render::Instance>& out, double cx, double cy, double cz, double sx, double sy, double sz,
-             Color color) {
-  out.push_back({render::make_box(sx, sy, sz), Pose::translation(cx, cy, cz), paint(color)});
+render::Material shadow_material(float strength) {
+  render::Material m;
+  m.texture = textures::get("shadow_blob");
+  m.blend = render::Blend::Multiply;
+  m.opacity = strength;
+  return m;
 }
 
 }  // namespace
@@ -128,12 +42,13 @@ const char* category_name(Category category) {
     case Category::Pet: return "pet";
     case Category::Paper: return "paper";
     case Category::Unknown: return "unknown";
+    case Category::Other: return "other";
   }
   return "unknown";
 }
 
 std::optional<Category> parse_category(const std::string& text) {
-  for (const auto c : {Category::Can, Category::Pet, Category::Paper, Category::Unknown}) {
+  for (const auto c : {Category::Can, Category::Pet, Category::Paper, Category::Unknown, Category::Other}) {
     if (text == category_name(c)) {
       return c;
     }
@@ -171,6 +86,14 @@ render::Pose RecyclableItem::world_pose() const {
   return base * up(diameter / 2) * Pose::axis_angle({0, 1, 0}, kPi / 2) * up(-length / 2);
 }
 
+void RecyclableItem::add_render(std::vector<render::Instance>& out, double time) const {
+  (void)time;
+  const Pose pose_world = world_pose();
+  for (const auto& part : parts) {
+    out.push_back({part.mesh, pose_world * part.offset, part.material});
+  }
+}
+
 void RecyclableItem::tick(double time, double dt) {
   (void)time;
   if (held || on_robot) {
@@ -186,8 +109,7 @@ void RecyclableItem::tick(double time, double dt) {
   if (z <= 0.0) {
     return;
   }
-  // 떨어진다 (자유낙하). 바닥(수거함 안도 바닥 높이)에 닿으면 낙하 여부를 판정한다.
-  fall_speed += kGravity * dt;
+  fall_speed += kGravity * dt;  // 자유낙하. 바닥(바구니 안도 바닥 높이)에 닿으면 낙하 여부를 판정한다.
   z = std::max(0.0, z - fall_speed * dt);
   if (z == 0.0) {
     fall_speed = 0.0;
@@ -201,37 +123,13 @@ void RecyclableItem::tick(double time, double dt) {
 
 // ---- 월드 ----
 
-RecyclingWorld::RecyclingWorld(RecyclingLayout layout) : layout_(std::move(layout)) { build_static(); }
-
-void RecyclingWorld::build_static() {
-  const double t = 0.05;  // 벽 두께
-  const double rx = layout_.room_x, ry = layout_.room_y, h = layout_.wall_height;
-  // 방 벽 (충돌·라이다)
-  add_wall({rx / 2, -t / 2, rx / 2 + t, t / 2, h});
-  add_wall({rx / 2, ry + t / 2, rx / 2 + t, t / 2, h});
-  add_wall({-t / 2, ry / 2, t / 2, ry / 2, h});
-  add_wall({rx + t / 2, ry / 2, t / 2, ry / 2, h});
-  const Color wall_color{0.90F, 0.88F, 0.84F};
-  add_box(static_instances_, rx / 2, -t / 2, h / 2, rx + 2 * t, t, h, wall_color);
-  add_box(static_instances_, rx / 2, ry + t / 2, h / 2, rx + 2 * t, t, h, wall_color);
-  add_box(static_instances_, -t / 2, ry / 2, h / 2, t, ry, h, wall_color);
-  add_box(static_instances_, rx + t / 2, ry / 2, h / 2, t, ry, h, wall_color);
-  // 바닥 타일 (0.5 m 바둑판: 영상에서 거리감)
-  const double tile = 0.5;
-  for (int i = 0; i * tile < rx; ++i) {
-    for (int j = 0; j * tile < ry; ++j) {
-      const double sx = std::min(tile, rx - i * tile), sy = std::min(tile, ry - j * tile);
-      const float shade = (i + j) % 2 == 0 ? 0.70F : 0.64F;
-      add_box(static_instances_, i * tile + sx / 2, j * tile + sy / 2, -0.005, sx, sy, 0.01, {shade, shade, shade * 1.02F});
-    }
-  }
-  // 작업 영역 매트
-  const auto& w = layout_.work_area;
-  add_box(static_instances_, w.center_x(), w.center_y(), 0.0005, w.max_x - w.min_x, w.max_y - w.min_y, 0.001,
-          {0.82F, 0.76F, 0.60F});
-  // 수거함: 벽 4개 (충돌·라이다) + 바닥판
+RecyclingWorld::RecyclingWorld(RecyclingLayout layout) : layout_(std::move(layout)) {
+  build_facility();
+  // 미션 수거 바구니: 벽 4개(충돌·라이다) + 라벨 텍스처 + 바닥
   for (const auto& bin : layout_.bins) {
     const double hx = bin.inner_x / 2, hy = bin.inner_y / 2, wt = bin.wall;
+    render::Material outside = render::solid({1, 1, 1}, 0.15F, 30);
+    outside.texture = textures::get(bin.texture);
     const std::array<srf::simulator::Wall, 4> walls{{
         {bin.x, bin.y - hy - wt / 2, hx + wt, wt / 2, bin.height},
         {bin.x, bin.y + hy + wt / 2, hx + wt, wt / 2, bin.height},
@@ -240,11 +138,20 @@ void RecyclingWorld::build_static() {
     }};
     for (const auto& wall : walls) {
       add_wall(wall);
-      add_box(static_instances_, wall.center_x, wall.center_y, wall.height / 2, wall.half_x * 2, wall.half_y * 2,
-              wall.height, bin.color);
+      add_box(wall.center_x, wall.center_y, wall.height / 2, wall.half_x * 2, wall.half_y * 2, wall.height, outside);
     }
-    const Color floor{bin.color[0] * 0.6F, bin.color[1] * 0.6F, bin.color[2] * 0.6F};
-    add_box(static_instances_, bin.x, bin.y, 0.001, bin.inner_x, bin.inner_y, 0.002, floor);
+    const render::Color dark{bin.color[0] * 0.55F, bin.color[1] * 0.55F, bin.color[2] * 0.55F};
+    add_box(bin.x, bin.y, 0.003, bin.inner_x, bin.inner_y, 0.006, render::solid(dark));
+    add_static({render::make_quad(bin.inner_x * 1.9, bin.inner_y * 1.9), Pose::translation(bin.x, bin.y, 0.0035),
+                shadow_material(0.35F)});
+  }
+}
+
+void RecyclingWorld::add_box(double cx, double cy, double cz, double sx, double sy, double sz,
+                             const render::Material& material, bool collide) {
+  add_static({render::make_box(sx, sy, sz), Pose::translation(cx, cy, cz), material});
+  if (collide) {
+    add_wall({cx, cy, sx / 2, sy / 2, cz + sz / 2});
   }
 }
 
@@ -252,7 +159,10 @@ void RecyclingWorld::randomize(const SceneConfig& config) {
   scene_ = config;
   auto& all = objects();
   all.erase(std::remove_if(all.begin(), all.end(),
-                           [](const auto& object) { return object && object->kind() == "recyclable"; }),
+                           [](const auto& object) {
+                             return object && (object->kind() == "recyclable" || object->kind() == "worker" ||
+                                               object->kind() == "forklift");
+                           }),
             all.end());
   std::mt19937 rng(config.seed);
 
@@ -293,9 +203,12 @@ void RecyclingWorld::randomize(const SceneConfig& config) {
       }
       break;
   }
+  for (int i = 0; i < config.distractors && !(config.scene == Scene::Absent && !config.target); ++i) {
+    list.push_back(Category::Other);
+  }
   std::shuffle(list.begin(), list.end(), rng);
 
-  // 2) 작업 영역 안 임의 위치·방향 (겹치지 않게)
+  // 2) 작업 매트 안 임의 위치·방향 (겹치지 않게)
   std::uniform_real_distribution<double> unit(0.0, 1.0);
   const auto& area = layout_.work_area;
   std::vector<std::pair<double, double>> placed;
@@ -305,16 +218,15 @@ void RecyclingWorld::randomize(const SceneConfig& config) {
     auto item = std::make_unique<RecyclableItem>();
     item->id = next_id++;
     item->category = category;
-    shape_item(*item, rng);
-    const bool can_lie = item->shape == Shape::Can || item->shape == Shape::Bottle;
-    item->lying = can_lie && unit(rng) < config.lying_ratio;
-    item->radius = item->lying ? item->length / 2 : item->diameter / 2;
+    build_item(*item, rng);
+    item->lying = item->can_lie && unit(rng) < config.lying_ratio;
+    item->radius = item->lying ? item->length / 2 : item->diameter / 2 * std::sqrt(2.0) * 0.85;
     item->height = item->lying ? item->diameter : item->length;
     item->mass = 0.05;
     item->friction = 0.5;
     item->movable = true;
     item->graspable = true;
-    item->sides = item->shape == Shape::Carton ? 4 : 24;
+    item->sides = 24;
     const auto& main_color = item->parts[item->parts.size() > 1 ? 1 : 0].material.color;
     item->color = {main_color[0], main_color[1], main_color[2]};
     srf::msgs::Pose2D pose;
@@ -332,13 +244,14 @@ void RecyclingWorld::randomize(const SceneConfig& config) {
       }
     }
     if (!ok) {
-      std::fprintf(stderr, "[recycling] 물품 %d를 놓을 자리가 없다 (작업 영역이 좁다)\n", item->id);
+      std::fprintf(stderr, "[recycling] 물품 %d를 놓을 자리가 없다 (작업 매트가 좁다)\n", item->id);
       continue;
     }
     placed.emplace_back(pose.x, pose.y);
     radii.push_back(item->radius);
     add(std::move(item), pose);
   }
+  spawn_agents(config);
 }
 
 std::vector<const RecyclableItem*> RecyclingWorld::items() const {
@@ -372,8 +285,8 @@ std::string RecyclingWorld::truth_json(double time) const {
   bool first = true;
   for (const auto* item : items()) {
     const BinSpec* bin = bin_containing(*item);
-    std::string state = item->held ? "held" : item->on_robot ? "on_robot" : bin ? "bin"
-                        : layout_.work_area.contains(item->pose.x, item->pose.y) ? "work_area" : "floor";
+    const std::string state = item->held ? "held" : item->on_robot ? "on_robot" : bin ? "bin"
+                              : layout_.work_area.contains(item->pose.x, item->pose.y) ? "work_area" : "floor";
     if (bin) {
       (bin->category == item->category ? correct : wrong) += 1;
     } else if (item->held || item->on_robot) {
@@ -400,10 +313,17 @@ std::string RecyclingWorld::truth_json(double time) const {
 
 void RecyclingWorld::add_render_instances(std::vector<render::Instance>& out) const {
   out.insert(out.end(), static_instances_.begin(), static_instances_.end());
-  for (const auto* item : items()) {
-    const Pose pose = item->world_pose();
-    for (const auto& part : item->parts) {
-      out.push_back({part.mesh, pose * part.offset, part.material});
+  add_conveyor_render(out);
+  for (const auto& object : objects()) {
+    if (const auto* visual = dynamic_cast<const VisualObject*>(object.get())) {
+      visual->add_render(out, time());
+    }
+    // 접지 그림자 (바닥에 있는 것만)
+    if (object->radius > 0.0 && object->z < 0.3 && !object->held) {
+      const double s = object->radius * (object->kind() == "worker" ? 2.6 : 2.2);
+      const Pose pose = Pose::translation(object->pose.x, object->pose.y, 0.0045) * Pose::yaw(object->pose.theta);
+      out.push_back({render::make_quad(s, s * (object->kind() == "forklift" ? 0.6 : 1.0)), pose,
+                     shadow_material(object->kind() == "recyclable" ? 0.45F : 0.55F)});
     }
   }
 }

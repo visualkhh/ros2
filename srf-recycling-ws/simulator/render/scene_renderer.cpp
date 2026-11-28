@@ -120,14 +120,15 @@ std::array<float, 4> Texture::sample(float u, float v) const {
     y = ((y % height) + height) % height;
     return &rgba[(static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)) * 4];
   };
-  const float* a = at(x0, y0);
-  const float* b = at(x0 + 1, y0);
-  const float* c = at(x0, y0 + 1);
-  const float* d = at(x0 + 1, y0 + 1);
+  const std::uint8_t* a = at(x0, y0);
+  const std::uint8_t* b = at(x0 + 1, y0);
+  const std::uint8_t* c = at(x0, y0 + 1);
+  const std::uint8_t* d = at(x0 + 1, y0 + 1);
   std::array<float, 4> out{};
+  constexpr float k = 1.0F / 255.0F;
   for (int i = 0; i < 4; ++i) {
     out[static_cast<std::size_t>(i)] =
-        (a[i] * (1 - tx) + b[i] * tx) * (1 - ty) + (c[i] * (1 - tx) + d[i] * tx) * ty;
+        ((a[i] * (1 - tx) + b[i] * tx) * (1 - ty) + (c[i] * (1 - tx) + d[i] * tx) * ty) * k;
   }
   return out;
 }

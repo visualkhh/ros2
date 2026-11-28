@@ -148,3 +148,68 @@ SRF_TEST(recycling_camera_sees_items_and_bins) {
   CHECK(near_pixels > 160 * 120 / 10);
   CHECK(robot.triangle_count() > 100000);  // URDF 메시를 다 읽었다
 }
+
+SRF_TEST(recycling_distractors_and_agents) {
+  RecyclingWorld world;
+  SceneConfig config;
+  config.items = 3;
+  config.distractors = 2;
+  config.seed = 4;
+  world.randomize(config);
+  CHECK_EQ(2, count_of(world, Category::Other));
+  CHECK_EQ(5u, world.items().size());
+
+  // 걷는 작업자 4 + 컨베이어 작업자 3 + 지게차 1
+  int workers = 0, forklifts = 0;
+  for (const auto& object : world.objects()) {
+    workers += object->kind() == "worker" ? 1 : 0;
+    forklifts += object->kind() == "forklift" ? 1 : 0;
+  }
+  CHECK_EQ(7, workers);
+  CHECK_EQ(1, forklifts);
+
+  // 움직인다 (10초)
+  std::vector<std::pair<double, double>> before;
+  for (const auto& object : world.objects()) before.emplace_back(object->pose.x, object->pose.y);
+  for (int i = 0; i < 1000; ++i) world.step(0.01);
+  int moved = 0;
+  for (std::size_t i = 0; i < world.objects().size(); ++i) {
+    const auto& o = world.objects()[i];
+    if ((o->kind() == "worker" || o->kind() == "forklift") &&
+        std::hypot(o->pose.x - before[i].first, o->pose.y - before[i].second) > 1.0) {
+      ++moved;
+    }
+  }
+  CHECK(moved >= 4);  // 걷는 작업자들과 지게차
+
+  config.people = 0;
+  config.forklifts = 0;
+  world.randomize(config);
+  workers = 0;
+  for (const auto& object : world.objects()) workers += object->kind() == "worker" ? 1 : 0;
+  CHECK_EQ(3, workers);  // 컨베이어 작업자만
+}
+
+SRF_TEST(recycling_worker_waits_for_robot) {
+  // 통로를 걷는 작업자 앞에 로봇(같은 kind의 물체)을 세우면 멈춘다
+  class FakeRobot final : public srf::simulator::WorldObject {
+   public:
+    [[nodiscard]] std::string kind() const override { return "waffle_pi_arm"; }
+  };
+  RecyclingWorld world;
+  SceneConfig config;
+  config.people = 1;  // 보행자 통로 왕복 (0.8,7.7) → (23,7.7)
+  config.forklifts = 0;
+  world.randomize(config);
+  srf::simulator::WorldObject* walker = nullptr;
+  for (const auto& object : world.objects()) {
+    if (object->kind() == "worker" && object->pose.y > 7.5 && object->pose.x < 1.0) walker = object.get();
+  }
+  CHECK(walker != nullptr);
+  auto robot = std::make_unique<FakeRobot>();
+  robot->radius = 0.2;
+  world.add(std::move(robot), srf::msgs::Pose2D{3.0, 7.7, 0.0});
+  for (int i = 0; i < 800; ++i) world.step(0.01);
+  CHECK(walker->pose.x < 3.0 - 0.2 - 0.25);  // 로봇 앞에서 기다린다
+  CHECK(walker->pose.x > 1.5);               // 출발은 했다
+}

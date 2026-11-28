@@ -62,9 +62,9 @@ class RecyclingView final : public QWidget {
   render::Frame frame_;
   render::Lighting lighting_;
 
-  double yaw_ = -2.2;     // 카메라가 대상을 보는 방위 (라디안)
+  double yaw_ = 0.35;     // 카메라가 대상을 보는 방위 (라디안, 0 = 로봇 뒤에서 +x를 본다)
   double pitch_ = 0.55;   // 내려다보는 각
-  double distance_ = 2.2;
+  double distance_ = 2.6;
   render::Vec3 target_{0, 0, 0.15};
   bool follow_ = true;
   bool show_scan_ = true;

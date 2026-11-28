@@ -54,11 +54,11 @@ struct Pose {
 
 using Color = std::array<float, 3>;  // 0..1
 
-// RGBA 텍스처 (0..1). 좌표는 반복(wrap)된다. v=0이 이미지 위쪽.
+// RGBA 텍스처 (8비트 저장, 샘플은 0..1). 좌표는 반복(wrap)된다. v=0이 이미지 위쪽.
 struct Texture {
   int width = 0;
   int height = 0;
-  std::vector<float> rgba;
+  std::vector<std::uint8_t> rgba;
   [[nodiscard]] std::array<float, 4> sample(float u, float v) const;  // 쌍선형
 };
 

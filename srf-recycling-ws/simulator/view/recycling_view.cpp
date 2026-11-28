@@ -46,9 +46,9 @@ QString RecyclingView::help_text() {
 }
 
 void RecyclingView::reset_camera() {
-  yaw_ = -2.2;
+  yaw_ = 0.35;
   pitch_ = 0.55;
-  distance_ = 2.2;
+  distance_ = 2.6;
   follow_ = true;
   update();
 }
