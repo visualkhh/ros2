@@ -6,6 +6,7 @@ SmolVLM2(기본 256M)를 **시뮬레이터가 자동으로 만든 라벨 데이�
 srf_recycling_ws_dataset ──▶ images/*.png + labels.jsonl   (헤드리스 렌더, 물체 ID 버퍼로 정답 자동)
           vqa.py         ──▶ 질문·답 jsonl                 (그 이미지에 실제로 보이는 것으로 정답)
           train.py       ──▶ RUN/adapter, RUN/merged       (LoRA, 답 토큰에만 손실)
+                         ──▶ RUN/metrics.csv, report.html (손실·검증 손실·판단 정답률·학습률·속도, 진행 중 갱신)
           evaluate.py    ──▶ 유형별 최초 판단 정답률 · bbox IoU · 회차 기록
           export_onnx.py ──▶ vision_encoder / embed_tokens / decoder_model_merged .onnx
 ```
@@ -43,7 +44,8 @@ ml/vlm/.venv/bin/python ml/vlm/vqa.py $D/val   --out $D/val.jsonl   --seed 2
 
 # 2) 학습 → 3) 평가 → 4) ONNX (+ torch 와 같은 답인지 확인) → 5) ONNX 로 다시 평가
 R=artifacts/models/vlm/runs/v1
-ml/vlm/.venv/bin/python ml/vlm/train.py --data $D/train.jsonl --out $R --epochs 2
+ml/vlm/.venv/bin/python ml/vlm/train.py --data $D/train.jsonl --val $D/val.jsonl --out $R --epochs 2
+open $R/report.html   # 학습 보고서 (YOLO results 처럼, 30초마다 새로 고침)
 ml/vlm/.venv/bin/python ml/vlm/evaluate.py --data $D/val.jsonl --model $R/merged --records $R/eval.jsonl
 ml/vlm/.venv/bin/python ml/vlm/export_onnx.py --model $R/merged --out artifacts/models/vlm/onnx/v1 --check $D/val/images/000001.png
 ml/vlm/.venv/bin/python ml/vlm/evaluate.py --data $D/val.jsonl --onnx artifacts/models/vlm/onnx/v1
