@@ -23,6 +23,19 @@
 새 영상 ───▶ vlm/기하: 바구니 안인가 → 성공·실패·미확인
 ```
 
+## 위치: 왜 워크스페이스 최상위 `ml/`인가
+
+- ML은 시뮬레이터 전용이 아니다: 실물 사진 수집·실물 평가·로봇/PC 추론까지 다룬다. 시뮬레이터는 **데이터 출처 하나**.
+- 시뮬레이터는 공개된 입구로만 쓴다 — `simulator/tools/`의 스냅샷·데이터셋 도구(렌더러·월드 내부가 필요한 것은 거기), `srf bag` 기록, 토픽(`camera/*`, `recycling/truth`, `map_markers`). `ml/`이 시뮬레이터 코드를 직접 링크하지 않는다.
+- 추론 노드(`engine/nodes/vlm`, `vla`, `llm_input`)는 엔진에 있다. `ml/`은 모델을 **만드는** 쪽 (데이터 → 학습 → 평가 → `artifacts/models/`로 내보내기).
+
+```
+srf-recycling-ws/
+  simulator/tools/   데이터 공장 (snapshot, 앞으로 dataset 생성기) ← ml/scripts가 부른다
+  ml/{vlm,vla,llm}/  데이터 정리·학습·평가·내보내기 (python, CPU)
+  engine/nodes/      추론 노드 (C++), artifacts/models/의 모델을 읽는다
+```
+
 ## 공통 원칙
 
 - **CPU 친화**: 작은 모델(수백만~수억 파라미터), 양자화(int8/Q4), ONNX/GGUF로 내보내 CPU 런타임에서 돌린다. 엔진은 이미 **onnxruntime(CPU)** 를 쓴다 (`engine/ml/onnx_policy.cpp`, RL 주행) → 같은 런타임을 우선 쓴다.

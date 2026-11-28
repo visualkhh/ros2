@@ -134,8 +134,8 @@ build-mac/srf_recycling_ws_snapshot --seed 7 --target can --distractors 1 --out 
 
 ## 머신러닝 (설계)
 
-`simulator/ml/` — CPU만 쓰는 전제로 방식만 적어 두었다 (코드 없음):
-[전체](simulator/ml/README.md) · [vlm](simulator/ml/vlm/README.md) (물품 선택·보류) · [vla](simulator/ml/vla/README.md) (접근·집기·놓기) · [llm](simulator/ml/llm/README.md) (intent 설계, 제공자 비교 방법)
+`ml/` — CPU만 쓰는 전제로 방식만 적어 두었다 (코드 없음). 시뮬레이터는 데이터 출처 중 하나라 워크스페이스 최상위에 둔다 (시뮬레이터 내부가 아니라 스냅샷·데이터셋 도구, bag, 토픽으로 쓴다):
+[전체](ml/README.md) · [vlm](ml/vlm/README.md) (물품 선택·보류) · [vla](ml/vla/README.md) (접근·집기·놓기) · [llm](ml/llm/README.md) (intent 설계, 제공자 비교 방법)
 
 ## 빌드·테스트
 
