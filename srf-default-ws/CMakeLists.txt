@@ -114,6 +114,15 @@ target_include_directories(srf_default_ws_real PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/engine
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(srf_default_ws_real PRIVATE srf::core)
+
+# ROS 2 브리지 (선택). ROS 2 환경(source /opt/ros/<distro>/setup.bash)에서만 켠다.
+option(SRF_DEFAULT_WS_WITH_ROS2 "srf_default_ws_real에 ROS 2 브리지를 넣는다 (--ros2로 켬)" OFF)
+if(SRF_DEFAULT_WS_WITH_ROS2)
+  add_subdirectory(../srf/bridges/ros2 ros2_bridge_build)
+  target_link_libraries(srf_default_ws_real PRIVATE srf::ros2_bridge)
+  target_compile_definitions(srf_default_ws_real PRIVATE SRF_DEFAULT_WS_WITH_ROS2=1)
+  message(STATUS "srf_default_ws: ROS 2 브리지 포함 (--ros2로 켠다)")
+endif()
 if(OpenCV_FOUND)
   target_include_directories(srf_default_ws_real PRIVATE ${OpenCV_INCLUDE_DIRS})
   target_link_libraries(srf_default_ws_real PRIVATE ${OpenCV_LIBS})

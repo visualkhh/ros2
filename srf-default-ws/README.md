@@ -473,6 +473,23 @@ Viz의 **MoveIt** 도킹 패널/탭은 `srf-default-ws/viz/plugins/moveit_plugin
   `--executor-threads` (환경 변수 `SRF_DEFAULT_WS_SCAN_TOPIC`, `SRF_DEFAULT_WS_IMU_TOPIC`, `SRF_DEFAULT_WS_EXECUTOR_THREADS`)
 - 로봇 main은 `Context::executor_threads`를 기본 10으로 켠다 (라이브러리 기본은 0=inline)
 
+### ROS 2와 잇기 (선택)
+
+ROS 2가 있는 환경에서 브리지를 넣어 빌드하면, 로봇 프로세스 안에서 SRF 토픽을 ROS 2로 내보낸다
+(`../srf/bridges/ros2`). 기본 빌드에는 ROS가 필요 없다.
+
+```bash
+source /opt/ros/lyrical/setup.bash
+cmake -S srf-default-ws -B srf-default-ws/build -DSRF_DEFAULT_WS_WITH_ROS2=ON
+cmake --build srf-default-ws/build --target srf_default_ws_real -j
+./srf-default-ws/build/srf_default_ws_real --ros2 --ros2-namespace /pak   # 또는 SRF_DEFAULT_WS_ROS2=1
+```
+
+- 내보내는 토픽: `tf`, `tf_static`(양방향), `scan`, `odom`, `imu`, `joint_states`, `map` → `/pak/...`
+- ROS `/pak/cmd_vel`은 SRF `cmd_vel_teleop`으로 들어간다. 이 로봇의 SRF `cmd_vel`은 collision_monitor를
+  거친 최종 출력이라, ROS 명령도 twist_mux·velocity_smoother·collision_monitor를 거치게 한다.
+- 로봇은 ROS 없이 두고 PC에서만 이으려면 `srf_ros2_bridge_node --robot <pi-ip>:9000`을 쓴다.
+
 - 그룹: `base_link` → `end_effector_link`, 관절 `joint1`~`joint4`
 - 목표: TCP `x,y,z` + 접근 `pitch` (4축이라 full 6D는 불가)
 - `Plan`: IK → joint-space 또는 Cartesian 궤적 → 관절 한계/속도 검사

@@ -23,6 +23,9 @@
 #include <vector>
 
 #include "srf/context.hpp"
+#ifdef SRF_DEFAULT_WS_WITH_ROS2
+#include "srf/bridges/ros2/ros2_bridge.hpp"
+#endif
 #include "srf/msgs.hpp"
 #include "srf/nodes/moveit/move_group.hpp"
 #include "srf/qos.hpp"
@@ -128,8 +131,11 @@ void usage() {
                "                  [--camera-width PX] [--camera-height PX] [--camera-fps N]\n"
                "                  [--camera-quality N] [--camera-color-decimation N] [--camera-depth-decimation N]\n"
                "                  [--executor-threads N]\n"
-               "                  [--no-lidar] [--no-camera] [--slam]\n"
+               "                  [--no-lidar] [--no-camera] [--slam] [--ros2] [--ros2-namespace NS]\n"
                "  --slam: SLAM(mapping)을 켠다 (없으면 idle). 원격 viz는 --fixed-frame map\n"
+               "  --ros2: ROS 2 브리지를 프로세스 안에서 켠다 (SRF_DEFAULT_WS_WITH_ROS2=ON 빌드만).\n"
+               "          ROS /cmd_vel은 cmd_vel_teleop으로 들어가 twist_mux·collision_monitor를 거친다\n"
+               "  --ros2-namespace: ROS 2 쪽 토픽 접두어 (예: /pak → /pak/scan)\n"
                "  --camera-rate: color Image 발행 주기 (기본 5Hz)\n"
                "  --camera-depth-rate: depth Image 발행 주기 (기본 2Hz)\n"
                "  --camera-width/height: D435 stream 크기 (기본 640x480@15)\n"
@@ -161,6 +167,8 @@ int main(int argc, char** argv) {
   bool enable_lidar = true;
   bool enable_camera = env_or("SRF_DEFAULT_WS_CAMERA", "1") != "0";
   bool slam = false;
+  bool enable_ros2 = env_or("SRF_DEFAULT_WS_ROS2", "0") != "0";
+  std::string ros2_namespace = env_or("SRF_DEFAULT_WS_ROS2_NAMESPACE", "");
   std::string scan_topic = env_or("SRF_DEFAULT_WS_SCAN_TOPIC", "scan");
   std::string imu_topic = env_or("SRF_DEFAULT_WS_IMU_TOPIC", "imu");
   std::string camera_serial = env_or("SRF_DEFAULT_WS_CAMERA_SERIAL", "");
@@ -229,6 +237,10 @@ int main(int argc, char** argv) {
       enable_lidar = false;
     } else if (argument == "--no-camera") {
       enable_camera = false;
+    } else if (argument == "--ros2") {
+      enable_ros2 = true;
+    } else if (argument == "--ros2-namespace" && i + 1 < argc) {
+      ros2_namespace = argv[++i];
     } else if (argument == "--slam") {
       slam = true;
     } else if (argument == "-h" || argument == "--help") {
@@ -264,6 +276,30 @@ int main(int argc, char** argv) {
     options.network.receive_remap["cmd_vel"] = "cmd_vel_teleop";
   }
   srf::Context context(options);
+
+  // ROS 2 브리지: 노드(Engine)보다 먼저 시작해 생성 중 latched 토픽(map, tf_static)도 넘긴다.
+#ifdef SRF_DEFAULT_WS_WITH_ROS2
+  std::unique_ptr<srf::ros2::Ros2Bridge> ros2_bridge;
+  if (enable_ros2) {
+    srf::ros2::Ros2BridgeOptions bridge_options;
+    bridge_options.ros_namespace = ros2_namespace;
+    for (auto& route : bridge_options.topics) {
+      if (route.topic == "cmd_vel") {
+        // 이 로봇의 SRF cmd_vel은 collision_monitor를 거친 최종 출력이다. ROS 명령은 teleop 입력으로 받는다.
+        route.ros_topic = ros2_namespace + "/cmd_vel";
+        route.topic = "cmd_vel_teleop";
+      }
+    }
+    ros2_bridge = std::make_unique<srf::ros2::Ros2Bridge>(std::move(bridge_options));
+    ros2_bridge->start(context);
+    std::printf("[srf_default_ws] ROS 2 bridge: on (namespace '%s')\n", ros2_namespace.c_str());
+  }
+#else
+  if (enable_ros2) {
+    std::cerr << "[srf_default_ws] --ros2: ROS 2 브리지 없이 빌드됨 (SRF_DEFAULT_WS_WITH_ROS2=ON으로 빌드)\n";
+    return 2;
+  }
+#endif
 
   if (const auto* peer = context.peer_network()) {
     const int port = static_cast<int>(peer->port());
@@ -392,6 +428,11 @@ int main(int argc, char** argv) {
 
   std::printf("[srf_default_ws] 정지 중...\n");
   std::fflush(stdout);
+#ifdef SRF_DEFAULT_WS_WITH_ROS2
+  if (ros2_bridge) {
+    ros2_bridge->shutdown();  // 노드보다 먼저 멈춘다
+  }
+#endif
   engine.stop();
   context.shutdown();
   std::printf("[srf_default_ws] 종료\n");
