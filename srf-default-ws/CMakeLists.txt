@@ -115,6 +115,10 @@ target_include_directories(srf_default_ws_real PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(srf_default_ws_real PRIVATE srf::core)
 
+# bag 녹화 (--record PATH). srf::bag은 엔진에만 의존한다.
+add_subdirectory(../srf/bag bag_build)
+target_link_libraries(srf_default_ws_real PRIVATE srf::bag)
+
 # ROS 2 브리지 (선택). ROS 2 환경(source /opt/ros/<distro>/setup.bash)에서만 켠다.
 option(SRF_DEFAULT_WS_WITH_ROS2 "srf_default_ws_real에 ROS 2 브리지를 넣는다 (--ros2로 켬)" OFF)
 if(SRF_DEFAULT_WS_WITH_ROS2)

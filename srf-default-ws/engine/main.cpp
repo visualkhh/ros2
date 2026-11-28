@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "srf/bag/recorder.hpp"
 #include "srf/context.hpp"
 #ifdef SRF_DEFAULT_WS_WITH_ROS2
 #include "srf/bridges/ros2/ros2_bridge.hpp"
@@ -136,6 +137,7 @@ void usage() {
                "  --ros2: ROS 2 브리지를 프로세스 안에서 켠다 (SRF_DEFAULT_WS_WITH_ROS2=ON 빌드만).\n"
                "          ROS /cmd_vel은 cmd_vel_teleop으로 들어가 twist_mux·collision_monitor를 거친다\n"
                "  --ros2-namespace: ROS 2 쪽 토픽 접두어 (예: /pak → /pak/scan)\n"
+               "  --record PATH: 로봇 프로세스 안에서 모든 토픽을 MCAP 파일에 녹화 (srf bag info/play로 본다)\n"
                "  --camera-rate: color Image 발행 주기 (기본 5Hz)\n"
                "  --camera-depth-rate: depth Image 발행 주기 (기본 2Hz)\n"
                "  --camera-width/height: D435 stream 크기 (기본 640x480@15)\n"
@@ -168,6 +170,7 @@ int main(int argc, char** argv) {
   bool enable_camera = env_or("SRF_DEFAULT_WS_CAMERA", "1") != "0";
   bool slam = false;
   bool enable_ros2 = env_or("SRF_DEFAULT_WS_ROS2", "0") != "0";
+  std::string record_path;
   std::string ros2_namespace = env_or("SRF_DEFAULT_WS_ROS2_NAMESPACE", "");
   std::string scan_topic = env_or("SRF_DEFAULT_WS_SCAN_TOPIC", "scan");
   std::string imu_topic = env_or("SRF_DEFAULT_WS_IMU_TOPIC", "imu");
@@ -237,6 +240,8 @@ int main(int argc, char** argv) {
       enable_lidar = false;
     } else if (argument == "--no-camera") {
       enable_camera = false;
+    } else if (argument == "--record" && i + 1 < argc) {
+      record_path = argv[++i];
     } else if (argument == "--ros2") {
       enable_ros2 = true;
     } else if (argument == "--ros2-namespace" && i + 1 < argc) {
@@ -276,6 +281,15 @@ int main(int argc, char** argv) {
     options.network.receive_remap["cmd_vel"] = "cmd_vel_teleop";
   }
   srf::Context context(options);
+
+  // bag 녹화: 노드(Engine)보다 먼저 시작해 생성 중 latched 토픽도 담는다.
+  std::unique_ptr<srf::bag::Recorder> recorder;
+  if (!record_path.empty()) {
+    srf::bag::RecorderOptions record_options;
+    record_options.path = record_path;
+    recorder = std::make_unique<srf::bag::Recorder>(std::move(record_options));
+    recorder->start(context);
+  }
 
   // ROS 2 브리지: 노드(Engine)보다 먼저 시작해 생성 중 latched 토픽(map, tf_static)도 넘긴다.
 #ifdef SRF_DEFAULT_WS_WITH_ROS2
@@ -434,6 +448,9 @@ int main(int argc, char** argv) {
   }
 #endif
   engine.stop();
+  if (recorder) {
+    recorder->shutdown();  // 쌓인 것을 다 쓰고 파일을 닫는다
+  }
   context.shutdown();
   std::printf("[srf_default_ws] 종료\n");
   return 0;

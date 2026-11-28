@@ -6,7 +6,7 @@
 #   ./build.sh                 # 현재 머신에 맞는 전체 (Pi: robot, PC: robot+simulator+viz+viz-web)
 #   ./build.sh robot           # srf_default_ws_real
 #   ./build.sh simulator       # srf_default_ws_simulator (PC 전용, Qt)
-#   ./build.sh tests           # srf_core_tests + srf_simulator_tests + srf_default_ws_tests
+#   ./build.sh tests           # srf_core_tests + srf_simulator_tests + srf_bag_tests + srf_default_ws_tests (+ srf CLI)
 #   ./build.sh viz             # srf_default_ws_viz_app (PC 전용, Qt6)
 #   ./build.sh viz-web         # srf_default_ws_viz_web (PC 전용, 로봇 9000에 접속)
 #
@@ -98,7 +98,7 @@ build_tests() {
   else
     configure_srf -DSRF_BUILD_TESTS=ON
   fi
-  cmake --build "$SRF_BUILD_DIR" -j"$jobs" --target srf_core_tests srf_simulator_tests
+  cmake --build "$SRF_BUILD_DIR" -j"$jobs" --target srf_core_tests srf_simulator_tests srf_bag_tests srf_cli
   echo "[build] srf_default_ws: tests"
   configure_ws
   cmake --build "$SRF_DEFAULT_WS_BUILD_DIR" -j"$jobs" --target srf_default_ws_tests
