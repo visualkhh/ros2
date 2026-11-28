@@ -8,6 +8,8 @@
 //   진실 판정: 물품마다 어디 있는지(작업 영역·들림·어느 바구니·바닥), 낙하 기록.
 #include <array>
 #include <cstdint>
+#include <deque>
+#include <map>
 #include <optional>
 #include <random>
 #include <string>
@@ -65,6 +67,13 @@ struct RecyclingLayout {
       {Category::Pet, 7.6, 3.9, 0.24, 0.24, 0.10, 0.012, "crate_pet", {0.16F, 0.40F, 0.80F}},
       {Category::Paper, 7.6, 4.9, 0.24, 0.24, 0.10, 0.012, "crate_paper", {0.18F, 0.58F, 0.28F}},
   };
+  // 셀 담당 작업자 동선
+  srf::msgs::Pose2D operator_idle{0.7, 5.5, 0.0};  // 대기 (셀 북서쪽 구석, 로봇 동선 밖)
+  srf::msgs::Pose2D supply_pickup{2.4, 10.3, 0.0};   // 하역장 마대 앞 (마대 벽에서 몸 반지름 이상 떨어져야 한다)
+  srf::msgs::Pose2D mat_drop{4.0, 4.75, 0.0};      // 매트 북쪽 가장자리 (여기서 붓는다)
+  // 종류별 대형 수거함 앞 (바구니를 비우는 곳)
+  std::map<Category, srf::msgs::Pose2D> wheelie_drop{
+      {Category::Pet, {11.6, 2.05, 0.0}}, {Category::Paper, {12.95, 2.05, 0.0}}, {Category::Can, {14.3, 2.05, 0.0}}};
 };
 
 struct SceneConfig {
@@ -76,7 +85,26 @@ struct SceneConfig {
   int distractors = 0;             // 비대상 물품(유리병·비닐·스티로폼) 수
   int people = 4;                  // 걷는 작업자 (0~4). 컨베이어 작업자는 항상 있다
   int forklifts = 1;               // 0~1
+  // 협동 작업 (셀 담당 작업자)
+  bool auto_supply = true;         // 매트가 비면(물품이 있다가 다 치워지면) 하역장에서 새로 가져온다
+  bool auto_empty = true;          // 바구니가 차면 비운다
+  int supply_items = 4;            // 한 번에 가져오는 물품 수 (+ distractors 비율대로 비대상)
+  int bin_capacity = 5;            // 바구니가 "꽉 참"이 되는 개수
 };
+
+// 셀 담당 작업자가 경로의 지점에서 하는 일. 월드가 스텝 뒤(update)에 처리한다.
+enum class CellAction { None, PickSupply, DumpSupply, CollectBin, DumpWheelie, Done };
+enum class Carry { None, ToteFull, ToteEmpty, Crate };
+
+struct Waypoint {
+  double x = 0.0;
+  double y = 0.0;
+  double pause = 0.0;
+  CellAction action = CellAction::None;
+  Category bin = Category::Can;
+};
+
+class Worker;  // agents.hpp
 
 // 그려지는 월드 물체 (물품·작업자·지게차).
 class VisualObject : public srf::simulator::WorldObject {
@@ -133,6 +161,30 @@ class RecyclingWorld final : public srf::simulator::World {
   // 렌더링용: 시설·움직이는 장비·물품·그림자 (로봇 제외).
   void add_render_instances(std::vector<render::Instance>& out) const;
 
+  // ---- 협동 작업 ----
+  // 요청: 하역장에서 물품 공급 / 바구니 비우기. 이미 대기 중이거나 하고 있으면 false.
+  bool request_supply();
+  bool request_empty(Category bin);
+  void set_auto(bool supply, bool empty) {
+    scene_.auto_supply = supply;
+    scene_.auto_empty = empty;
+  }
+  // 스텝마다 부른다 (시뮬레이션 스레드, World::step 뒤): 작업자 동작 처리, 자동 요청, 다음 작업 배정.
+  void update();
+  struct BinStatus {
+    Category category = Category::Can;
+    int count = 0;
+    int capacity = 0;
+    bool full = false;
+    bool requested = false;  // 비우기 대기·진행 중
+  };
+  [[nodiscard]] std::vector<BinStatus> bin_status() const;
+  [[nodiscard]] std::string cell_state() const { return cell_state_; }  // 셀 담당 작업자가 하는 일
+  [[nodiscard]] int supplies() const { return supplies_; }
+  [[nodiscard]] const std::map<Category, int>& collected() const { return collected_; }
+  // 셀 담당 작업자가 지점에 도착했을 때 부른다 (step 도중이라 물체 목록은 update에서 바꾼다).
+  void queue_action(CellAction action, Category bin) { pending_.emplace_back(action, bin); }
+
   // 시설 만들기에서 쓴다 (facility.cpp)
   void add_static(const render::Instance& instance) { static_instances_.push_back(instance); }
   void add_box(double cx, double cy, double cz, double sx, double sy, double sz, const render::Material& material,
@@ -142,6 +194,25 @@ class RecyclingWorld final : public srf::simulator::World {
   void build_facility();                                                // facility.cpp
   void add_conveyor_render(std::vector<render::Instance>& out) const;  // facility.cpp
   void spawn_agents(const SceneConfig& config);                         // agents.cpp
+  void place_items(const std::vector<Category>& list, std::mt19937& rng);
+  [[nodiscard]] int count_in(const BinSpec& bin) const;
+  [[nodiscard]] bool mat_has_items() const;
+  void start_next_job();
+
+  struct Job {
+    bool supply = true;
+    Category bin = Category::Can;
+  };
+  std::deque<Job> jobs_;
+  std::optional<Job> current_job_;
+  std::vector<std::pair<CellAction, Category>> pending_;
+  Worker* operator_ = nullptr;
+  std::string cell_state_ = "대기";
+  bool mat_had_items_ = false;
+  int supplies_ = 0;
+  int next_item_id_ = 1;
+  std::map<Category, int> collected_;
+  std::mt19937 supply_rng_;
 
   RecyclingLayout layout_;
   SceneConfig scene_;

@@ -96,6 +96,13 @@ void RecyclingWorld::build_facility() {
   for (const auto& [y, name] : crate_signs) {
     quad(0.9, 0.22, facing(8.59, y, 0.55, kPi), tex(name));
   }
+  // 작업자 호출 패널 (버튼 = 진실 화면의 "작업 셀" 패널, recycling/request 서비스)
+  add_box(8.57, 5.55, 0.95, 0.06, 0.32, 0.42, render::solid({0.85F, 0.85F, 0.82F}, 0.3F, 40));
+  quad(0.3, 0.1, facing(8.535, 5.55, 1.1, kPi), tex(sign_name("작업자 호출", "#37474f", "#ffffff")));
+  for (int i = 0; i < 3; ++i) {
+    add_static({render::make_cylinder(0.025, 0.02, 16), Pose::translation(8.535, 5.45 + i * 0.1, 0.9) * Pose::axis_angle({0, 1, 0}, kPi / 2),
+                render::solid(i == 0 ? Color{0.85F, 0.15F, 0.12F} : i == 1 ? Color{0.15F, 0.4F, 0.85F} : Color{0.15F, 0.6F, 0.25F}, 0.5F, 60)});
+  }
   for (const double x : {1.0, 3.5, 6.0, 8.6}) {  // 셀 북쪽 볼라드
     add_static({render::make_cylinder(0.055, 0.9), Pose::translation(x, cell.max_y, 0.45), tex("steel_yellow", 1, 1, {1, 1, 1}, 0.4F, 50)});
     add_static({render::make_cylinder(0.057, 0.08), Pose::translation(x, cell.max_y, 0.7), render::solid({0.1F, 0.1F, 0.1F})});
@@ -219,7 +226,7 @@ void RecyclingWorld::build_facility() {
   add_box(18.3, 6.9, 0.55, 1.1, 1.1, 1.1, tex("bale_pet", 1, 1), true);  // 막 나온 베일
 
   // ---- 대형 수거함 구역 (남쪽 가운데) ----
-  const std::array<std::string, 4> wheelies{"wheelie_blue", "wheelie_green", "wheelie_yellow", "wheelie_gray"};
+  const std::array<std::string, 4> wheelies{"wheelie_blue", "wheelie_paper", "wheelie_yellow", "wheelie_gray"};  // 페트·종이·캔·일반 (셀 바구니를 여기에 비운다)
   for (int i = 0; i < 4; ++i) {
     const double x = 11.6 + i * 1.35, y = 1.0;
     add_box(x, y, 0.6, 1.1, 1.0, 1.1, tex(wheelies[static_cast<std::size_t>(i)], 1, 1, {1, 1, 1}, 0.15F, 30), true);

@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "render/textures.hpp"
+#include "world/agents.hpp"
 
 namespace srf_recycling_ws::sim {
 
@@ -207,19 +208,37 @@ void RecyclingWorld::randomize(const SceneConfig& config) {
     list.push_back(Category::Other);
   }
   std::shuffle(list.begin(), list.end(), rng);
+  next_item_id_ = 1;
+  place_items(list, rng);
+  jobs_.clear();
+  current_job_.reset();
+  pending_.clear();
+  cell_state_ = "대기";
+  mat_had_items_ = mat_has_items();
+  supplies_ = 0;
+  collected_.clear();
+  supply_rng_.seed(config.seed * 7919U + 13U);
+  spawn_agents(config);
+}
 
-  // 2) 작업 매트 안 임의 위치·방향 (겹치지 않게)
+void RecyclingWorld::place_items(const std::vector<Category>& list, std::mt19937& rng) {
+  // 작업 매트 안 임의 위치·방향 (이미 있는 물품·서로 겹치지 않게)
   std::uniform_real_distribution<double> unit(0.0, 1.0);
   const auto& area = layout_.work_area;
   std::vector<std::pair<double, double>> placed;
   std::vector<double> radii;
-  int next_id = 1;
+  for (const auto* item : items()) {
+    if (area.contains(item->pose.x, item->pose.y) && !item->held) {
+      placed.emplace_back(item->pose.x, item->pose.y);
+      radii.push_back(item->radius);
+    }
+  }
   for (const Category category : list) {
     auto item = std::make_unique<RecyclableItem>();
-    item->id = next_id++;
+    item->id = next_item_id_++;
     item->category = category;
     build_item(*item, rng);
-    item->lying = item->can_lie && unit(rng) < config.lying_ratio;
+    item->lying = item->can_lie && unit(rng) < scene_.lying_ratio;
     item->radius = item->lying ? item->length / 2 : item->diameter / 2 * std::sqrt(2.0) * 0.85;
     item->height = item->lying ? item->diameter : item->length;
     item->mass = 0.05;
@@ -251,7 +270,167 @@ void RecyclingWorld::randomize(const SceneConfig& config) {
     radii.push_back(item->radius);
     add(std::move(item), pose);
   }
-  spawn_agents(config);
+}
+
+// ---- 협동 작업 ----
+
+int RecyclingWorld::count_in(const BinSpec& bin) const {
+  int n = 0;
+  for (const auto* item : items()) {
+    n += bin_containing(*item) == &bin ? 1 : 0;
+  }
+  return n;
+}
+
+bool RecyclingWorld::mat_has_items() const {
+  for (const auto* item : items()) {
+    if (!item->held && layout_.work_area.contains(item->pose.x, item->pose.y)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool RecyclingWorld::request_supply() {
+  if ((current_job_ && current_job_->supply) ||
+      std::any_of(jobs_.begin(), jobs_.end(), [](const Job& job) { return job.supply; })) {
+    return false;
+  }
+  jobs_.push_back({true, Category::Can});
+  return true;
+}
+
+bool RecyclingWorld::request_empty(Category bin) {
+  const auto same = [bin](const Job& job) { return !job.supply && job.bin == bin; };
+  if ((current_job_ && same(*current_job_)) || std::any_of(jobs_.begin(), jobs_.end(), same)) {
+    return false;
+  }
+  if (std::none_of(layout_.bins.begin(), layout_.bins.end(), [bin](const BinSpec& b) { return b.category == bin; })) {
+    return false;
+  }
+  jobs_.push_back({false, bin});
+  return true;
+}
+
+std::vector<RecyclingWorld::BinStatus> RecyclingWorld::bin_status() const {
+  std::vector<BinStatus> out;
+  for (const auto& bin : layout_.bins) {
+    BinStatus status;
+    status.category = bin.category;
+    status.count = count_in(bin);
+    status.capacity = scene_.bin_capacity;
+    status.full = status.count >= scene_.bin_capacity;
+    const auto same = [&](const Job& job) { return !job.supply && job.bin == bin.category; };
+    status.requested = (current_job_ && same(*current_job_)) || std::any_of(jobs_.begin(), jobs_.end(), same);
+    out.push_back(status);
+  }
+  return out;
+}
+
+void RecyclingWorld::start_next_job() {
+  if (operator_ == nullptr || current_job_ || jobs_.empty() || !operator_->idle()) {
+    return;
+  }
+  current_job_ = jobs_.front();
+  jobs_.pop_front();
+  const auto& L = layout_;
+  const auto& idle = L.operator_idle;
+  std::vector<Waypoint> route;
+  if (current_job_->supply) {
+    // 하역장 마대에서 토트에 담아 → 매트에 붓고 → 돌아온다
+    operator_->carry_color = {0.2F, 0.45F, 0.85F};
+    route = {{2.0, 6.5, 0.0}, {2.2, 7.7, 0.0},
+             {L.supply_pickup.x, L.supply_pickup.y, 2.5, CellAction::PickSupply},
+             {2.2, 7.7, 0.0}, {L.mat_drop.x, 6.5, 0.0},
+             {L.mat_drop.x, L.mat_drop.y, 2.5, CellAction::DumpSupply},
+             {L.mat_drop.x, 6.5, 0.0}, {2.0, 6.5, 0.0}, {idle.x, idle.y, 0.5, CellAction::Done}};
+    cell_state_ = "공급: 하역장으로";
+  } else {
+    // 바구니 앞에서 비워 → 종류별 대형 수거함에 붓고 → 돌아온다
+    const BinSpec* bin = nullptr;
+    for (const auto& b : L.bins) {
+      if (b.category == current_job_->bin) bin = &b;
+    }
+    const auto drop = L.wheelie_drop.count(bin->category) ? L.wheelie_drop.at(bin->category) : srf::msgs::Pose2D{15.65, 2.05, 0};
+    operator_->carry_color = bin->color;
+    const double front_x = bin->x - bin->inner_x / 2 - 0.45;
+    route = {{2.0, 6.5, 0.0}, {front_x - 0.4, 6.4, 0.0},
+             {front_x, bin->y, 2.5, CellAction::CollectBin, bin->category},
+             {front_x, 1.6, 0.0}, {9.6, 1.6, 0.0},
+             {drop.x, drop.y, 2.5, CellAction::DumpWheelie, bin->category},
+             {9.6, 1.6, 0.0}, {front_x, 1.6, 0.0}, {front_x - 0.4, 6.4, 0.0}, {2.0, 6.5, 0.0},
+             {idle.x, idle.y, 0.5, CellAction::Done}};
+    cell_state_ = std::string("비우기(") + category_name(bin->category) + "): 바구니로";
+  }
+  operator_->route = std::move(route);
+  operator_->next = 0;
+}
+
+void RecyclingWorld::update() {
+  // 1) 작업자가 지점에서 한 일 (step 밖이라 물체를 더하고 지워도 안전하다)
+  for (const auto& [action, bin] : pending_) {
+    switch (action) {
+      case CellAction::PickSupply: cell_state_ = "공급: 매트로 운반"; break;
+      case CellAction::DumpSupply: {
+        std::vector<Category> list;
+        const std::array<Category, 3> kinds{Category::Can, Category::Pet, Category::Paper};
+        for (int i = 0; i < scene_.supply_items; ++i) {
+          list.push_back(kinds[std::uniform_int_distribution<std::size_t>(0, 2)(supply_rng_)]);
+        }
+        for (int i = 0; i < scene_.distractors; ++i) {
+          list.push_back(Category::Other);
+        }
+        place_items(list, supply_rng_);
+        ++supplies_;
+        mat_had_items_ = true;
+        cell_state_ = "공급: 돌아가는 중";
+        break;
+      }
+      case CellAction::CollectBin: {
+        const BinSpec* spec = nullptr;
+        for (const auto& b : layout_.bins) {
+          if (b.category == bin) spec = &b;
+        }
+        auto& all = objects();
+        all.erase(std::remove_if(all.begin(), all.end(),
+                                 [&](const auto& object) {
+                                   const auto* item = dynamic_cast<const RecyclableItem*>(object.get());
+                                   if (item == nullptr || spec == nullptr || bin_containing(*item) != spec) {
+                                     return false;
+                                   }
+                                   ++collected_[item->category];
+                                   return true;
+                                 }),
+                  all.end());
+        cell_state_ = std::string("비우기(") + category_name(bin) + "): 대형 수거함으로";
+        break;
+      }
+      case CellAction::DumpWheelie: cell_state_ = std::string("비우기(") + category_name(bin) + "): 돌아가는 중"; break;
+      case CellAction::Done:
+        current_job_.reset();
+        cell_state_ = "대기";
+        break;
+      case CellAction::None: break;
+    }
+  }
+  pending_.clear();
+
+  // 2) 자동 요청: 바구니가 차면 비우기, 매트가 (물품이 있다가) 비면 공급
+  if (scene_.auto_empty) {
+    for (const auto& status : bin_status()) {
+      if (status.full && !status.requested) {
+        request_empty(status.category);
+      }
+    }
+  }
+  const bool has = mat_has_items();
+  if (scene_.auto_supply && mat_had_items_ && !has) {
+    request_supply();  // 있다가 비는 순간 한 번 (처음부터 빈 '부재' 장면은 공급하지 않는다)
+  }
+  mat_had_items_ = has;
+
+  // 3) 다음 작업
+  start_next_job();
 }
 
 std::vector<const RecyclableItem*> RecyclingWorld::items() const {
@@ -307,13 +486,45 @@ std::string RecyclingWorld::truth_json(double time) const {
     first = false;
   }
   out << "],\"summary\":{\"total\":" << items().size() << ",\"correct\":" << correct << ",\"wrong\":" << wrong
-      << ",\"dropped\":" << dropped << ",\"held\":" << held << ",\"remaining\":" << remaining << "}}";
+      << ",\"dropped\":" << dropped << ",\"held\":" << held << ",\"remaining\":" << remaining << "}";
+  // 협동 작업 상태: 바구니 채움, 셀 담당 작업자, 대기 작업, 수거 누계
+  out << ",\"cell\":{\"operator\":\"" << cell_state_ << "\",\"queue\":" << jobs_.size() + (current_job_ ? 1 : 0)
+      << ",\"supplies\":" << supplies_ << ",\"bins\":[";
+  bool first_bin = true;
+  for (const auto& status : bin_status()) {
+    out << (first_bin ? "" : ",") << "{\"bin\":\"" << category_name(status.category) << "\",\"count\":" << status.count
+        << ",\"capacity\":" << status.capacity << ",\"full\":" << (status.full ? "true" : "false")
+        << ",\"requested\":" << (status.requested ? "true" : "false") << "}";
+    first_bin = false;
+  }
+  out << "],\"collected\":{";
+  bool first_kind = true;
+  for (const auto& [category, n] : collected_) {
+    out << (first_kind ? "" : ",") << "\"" << category_name(category) << "\":" << n;
+    first_kind = false;
+  }
+  out << "}}}";
   return out.str();
 }
 
 void RecyclingWorld::add_render_instances(std::vector<render::Instance>& out) const {
   out.insert(out.end(), static_instances_.begin(), static_instances_.end());
   add_conveyor_render(out);
+  // 바구니 상태 램프 (칸막이): 초록 여유 · 주황 하나 남음 · 빨강 꽉 참 · 파랑 깜빡임 = 작업자가 비우러 옴
+  static const auto lamp = render::make_cylinder(0.035, 0.03, 20);
+  const auto status = bin_status();
+  for (std::size_t i = 0; i < status.size() && i < layout_.bins.size(); ++i) {
+    const auto& st = status[i];
+    render::Color color = st.full ? render::Color{0.95F, 0.12F, 0.1F}
+                          : st.count >= st.capacity - 1 ? render::Color{1.0F, 0.6F, 0.05F}
+                                                        : render::Color{0.15F, 0.85F, 0.25F};
+    if (st.requested && std::fmod(time(), 1.0) < 0.5) {
+      color = {0.2F, 0.5F, 1.0F};
+    }
+    render::Material light = render::solid(color);
+    light.emissive = 0.95F;
+    out.push_back({lamp, Pose::translation(8.585, layout_.bins[i].y + 0.3, 0.55) * Pose::axis_angle({0, 1, 0}, kPi / 2), light});
+  }
   for (const auto& object : objects()) {
     if (const auto* visual = dynamic_cast<const VisualObject*>(object.get())) {
       visual->add_render(out, time());

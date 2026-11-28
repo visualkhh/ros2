@@ -35,6 +35,23 @@ SRF로 만드는 미션 워크스페이스. 로봇이 작업 영역의 캔·페�
 - 지게차 (`--forklifts`): 하역장 ↔ 적재장 왕복, 끝에서 포크를 올리고 내림, 앞에 사람·로봇이 있으면 멈춤.
 - 컨베이어 위 물품, 컨베이어 작업자.
 
+### 협동 작업 — 셀 담당 작업자 (파란 안전모)
+
+로봇 혼자가 아니라 사람과 같이 일하는 셀이다. 셀 북서쪽 구석(0.7, 5.5)에 대기하던 작업자가:
+
+| 일 | 언제 | 하는 것 |
+|---|---|---|
+| **공급** | 매트가 (물품이 있다가) 비면 자동, 또는 요청 | 하역장 마대에서 토트에 담아 → 매트 북쪽에서 붓는다 (`--supply-items`개 + 비대상 `--distractors`개) → 돌아온다 |
+| **비우기** | 바구니가 `--bin-capacity`(기본 5)개가 되면 자동, 또는 요청 | 바구니 앞에서 비워 → 종류별 대형 수거함(페트·종이·캔)에 붓고 → 돌아온다 |
+
+![작업자가 매트에 물품을 붓고 돌아간다](documents/images/cell_supply.png)
+
+- 칸막이 램프: 초록 여유 · 주황 하나 남음 · 빨강 꽉 참 · **파랑 깜빡임 = 작업자가 비우러 옴**. 칸막이 끝에 작업자 호출 패널
+- 진실 화면 오른쪽 **작업 셀 패널**: 공급 요청 · 캔/페트/종이 비우기 버튼, 자동 공급·비우기 켜고 끄기, 바구니 채움, 작업자 상태, 수거 누계
+- 서비스 `recycling/request` (String JSON): `{"action":"supply"}`, `{"action":"empty","bin":"can"}` — LLM·로봇 작업 관리자가 부른다 (실물에서는 작업자 호출 알림이 된다)
+- 작업자는 앞에 로봇이 있으면 기다린다. 로봇도 작업자를 장애물로 보고 피해야 한다 (협동 안전)
+- 옵션: `--no-auto-supply`, `--no-auto-empty`, `--bin-capacity N`, `--supply-items N`. 진실값 JSON의 `cell`에 바구니 채움·작업자 상태·대기 작업·공급 횟수·수거 누계
+
 ### 미션 물품
 
 | 종류 | 변형 (라벨은 텍스처로 인쇄) |
@@ -89,10 +106,16 @@ SRF로 만드는 미션 워크스페이스. 로봇이 작업 영역의 캔·페�
 ./build.sh simulator
 build-mac/srf_recycling_ws_snapshot --seed 7 --target can --distractors 1 --out /tmp/snap \
     [--robot X,Y,YAW] [--arm J1,J2,J3,J4,GRIP] [--size 640,480] [--people N] [--forklifts N]
+#   [--run SEC] [--request supply|empty:can]   (시간을 돌려 작업자·지게차가 움직인 뒤 찍는다)
 # → color.png, depth.png(16bit mm), overview.png(홀 전경), cell.png(사람 눈높이), truth.json
 ```
 
 로봇 자세·팔 관절·시드를 바꿔 여러 장을 만들면 VLM/VLA 데이터로도 쓸 수 있다.
+
+## 머신러닝 (설계)
+
+`simulator/ml/` — CPU만 쓰는 전제로 방식만 적어 두었다 (코드 없음):
+[전체](simulator/ml/README.md) · [vlm](simulator/ml/vlm/README.md) (물품 선택·보류) · [vla](simulator/ml/vla/README.md) (접근·집기·놓기) · [llm](simulator/ml/llm/README.md) (intent 설계, 제공자 비교 방법)
 
 ## 빌드·테스트
 

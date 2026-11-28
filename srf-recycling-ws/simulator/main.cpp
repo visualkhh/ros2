@@ -37,6 +37,7 @@
 #include "hardwares/realsense/simulator_realsense.hpp"
 #include "world/recycling_world.hpp"
 #include "view/recycling_view.hpp"
+#include "panels/cell_panel.hpp"
 
 #ifndef SRF_RECYCLING_WS_URDF_PATH
 #define SRF_RECYCLING_WS_URDF_PATH "engine/description/turtlebot3_manipulation_description/urdf/turtlebot3_manipulation.urdf"
@@ -156,6 +157,14 @@ int main(int argc, char** argv) {
       scene.people = std::stoi(argv[++i]);
     } else if (arg == "--forklifts" && i + 1 < argc) {
       scene.forklifts = std::stoi(argv[++i]);
+    } else if (arg == "--no-auto-supply") {
+      scene.auto_supply = false;
+    } else if (arg == "--no-auto-empty") {
+      scene.auto_empty = false;
+    } else if (arg == "--bin-capacity" && i + 1 < argc) {
+      scene.bin_capacity = std::stoi(argv[++i]);
+    } else if (arg == "--supply-items" && i + 1 < argc) {
+      scene.supply_items = std::stoi(argv[++i]);
     } else if (arg == "--camera" && i + 1 < argc) {
       const std::string size = argv[++i];
       camera_width = static_cast<std::uint32_t>(std::stoul(size.substr(0, size.find('x'))));
@@ -174,6 +183,8 @@ int main(int argc, char** argv) {
       std::cout << "usage: srf_recycling_ws_simulator [--port 9000] [--duration SEC] [--seed N]\n"
                    "         [--scene normal|multi|ambiguous|absent] [--target can|pet|paper] [--items N]\n"
                    "         [--distractors N] [--people 0-4] [--forklifts 0-1]\n"
+                   "         [--no-auto-supply] [--no-auto-empty] [--bin-capacity 5] [--supply-items 4]\n"
+                   "  협동 작업: recycling/request 서비스 (String JSON {\"action\":\"supply\"} | {\"action\":\"empty\",\"bin\":\"can\"})\n"
                    "         [--camera 424x240] [--no-noise] [--slam] [--arm] [--screenshot PATH]\n"
                    "  재배치: srf/recycling/reset 서비스 (String JSON {\"seed\":7,\"scene\":\"multi\",\"target\":\"can\",\"items\":5})\n"
                    "  진실값: recycling/truth 토픽 (String JSON, 2Hz)\n";
@@ -259,6 +270,48 @@ int main(int argc, char** argv) {
           deck_free.valid.store(false);
         }
       });
+  // 협동 작업: 스텝마다 셀 담당 작업자 동작·자동 요청 처리, 패널용 상태 복사 (0.2초마다).
+  srf_recycling_ws::sim::SharedCell shared_cell;
+  double cell_next = 0.0;
+  simulator.runner().add_listener([&shared_cell, &cell_next](srf::simulator::World& current) {
+    auto& recycling = static_cast<srf_recycling_ws::sim::RecyclingWorld&>(current);
+    recycling.update();
+    if (current.time() < cell_next) {
+      return;
+    }
+    cell_next = current.time() + 0.2;
+    srf_recycling_ws::sim::CellSnapshot snapshot;
+    snapshot.bins = recycling.bin_status();
+    snapshot.state = recycling.cell_state();
+    snapshot.supplies = recycling.supplies();
+    snapshot.collected = recycling.collected();
+    snapshot.auto_supply = recycling.scene().auto_supply;
+    snapshot.auto_empty = recycling.scene().auto_empty;
+    std::lock_guard<std::mutex> lock(shared_cell.mutex);
+    shared_cell.snapshot = std::move(snapshot);
+  });
+  ui_node.create_service<srf::msgs::String, srf::msgs::String>(
+      "recycling/request", [&simulator](const srf::msgs::String& request) {
+        // {"action":"supply"} | {"action":"empty","bin":"can|pet|paper"} — 셀 담당 작업자에게 일을 맡긴다
+        const auto& text = request.data;
+        const bool supply = text.find("\"supply\"") != std::string::npos;
+        std::optional<srf_recycling_ws::sim::Category> bin;
+        for (const char* name : {"can", "pet", "paper"}) {
+          if (text.find(std::string("\"bin\":\"") + name + "\"") != std::string::npos ||
+              text.find(std::string("\"bin\": \"") + name + "\"") != std::string::npos) {
+            bin = srf_recycling_ws::sim::parse_category(name);
+          }
+        }
+        if (!supply && !bin) {
+          return srf::msgs::String{R"json({"ok":false,"error":"action은 supply 또는 empty(+bin: can|pet|paper)"})json"};
+        }
+        simulator.runner().post([supply, bin](srf::simulator::World& current) {
+          auto& recycling = static_cast<srf_recycling_ws::sim::RecyclingWorld&>(current);
+          supply ? recycling.request_supply() : recycling.request_empty(*bin);
+        });
+        return srf::msgs::String{R"({"ok":true})"};
+      });
+
   // 재활용 월드: 진실값(0.5초마다)과 재배치 서비스.
   TruthCache truth;
   simulator.runner().add_listener([&truth, &context](srf::simulator::World& current) {
@@ -303,6 +356,8 @@ int main(int argc, char** argv) {
           if (const auto v = field("distractors"); !v.empty()) config.distractors = std::stoi(v);
           if (const auto v = field("people"); !v.empty()) config.people = std::stoi(v);
           if (const auto v = field("forklifts"); !v.empty()) config.forklifts = std::stoi(v);
+          if (const auto v = field("bin_capacity"); !v.empty()) config.bin_capacity = std::stoi(v);
+          if (const auto v = field("supply_items"); !v.empty()) config.supply_items = std::stoi(v);
           recycling.randomize(config);
           truth.next_time = 0.0;  // 다음 스텝에 진실값을 다시 만든다
         });
@@ -335,8 +390,15 @@ int main(int argc, char** argv) {
     std::lock_guard<std::mutex> lock(shared_scene.mutex);
     shared_scene.instances = std::move(instances);
   });
+  auto* cell_panel = new srf_recycling_ws::sim::CellPanel(
+      [&simulator](std::function<void(srf_recycling_ws::sim::RecyclingWorld&)> work) {
+        simulator.runner().post([work = std::move(work)](srf::simulator::World& current) {
+          work(static_cast<srf_recycling_ws::sim::RecyclingWorld&>(current));
+        });
+      },
+      shared_cell);
   srf_recycling_ws::sim::RecyclingWindow window(shared_scene, simulator.snapshots(), ui_node, "cmd_vel_teleop",
-                                                {camera_panel, arm_panel});
+                                                {cell_panel, camera_panel, arm_panel});
   window.show();
   window.raise();
   window.activateWindow();

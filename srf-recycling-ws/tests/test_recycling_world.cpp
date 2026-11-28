@@ -159,13 +159,13 @@ SRF_TEST(recycling_distractors_and_agents) {
   CHECK_EQ(2, count_of(world, Category::Other));
   CHECK_EQ(5u, world.items().size());
 
-  // 걷는 작업자 4 + 컨베이어 작업자 3 + 지게차 1
+  // 걷는 작업자 4 + 컨베이어 작업자 3 + 셀 담당 1 + 지게차 1
   int workers = 0, forklifts = 0;
   for (const auto& object : world.objects()) {
     workers += object->kind() == "worker" ? 1 : 0;
     forklifts += object->kind() == "forklift" ? 1 : 0;
   }
-  CHECK_EQ(7, workers);
+  CHECK_EQ(8, workers);  // + 셀 담당 작업자
   CHECK_EQ(1, forklifts);
 
   // 움직인다 (10초)
@@ -187,7 +187,7 @@ SRF_TEST(recycling_distractors_and_agents) {
   world.randomize(config);
   workers = 0;
   for (const auto& object : world.objects()) workers += object->kind() == "worker" ? 1 : 0;
-  CHECK_EQ(3, workers);  // 컨베이어 작업자만
+  CHECK_EQ(4, workers);  // 컨베이어 작업자 + 셀 담당 작업자
 }
 
 SRF_TEST(recycling_worker_waits_for_robot) {
@@ -212,4 +212,91 @@ SRF_TEST(recycling_worker_waits_for_robot) {
   for (int i = 0; i < 800; ++i) world.step(0.01);
   CHECK(walker->pose.x < 3.0 - 0.2 - 0.25);  // 로봇 앞에서 기다린다
   CHECK(walker->pose.x > 1.5);               // 출발은 했다
+}
+
+namespace {
+void run(RecyclingWorld& world, double seconds) {
+  for (int i = 0; i < static_cast<int>(seconds / 0.01); ++i) {
+    world.step(0.01);
+    world.update();
+  }
+}
+int on_mat(const RecyclingWorld& world) {
+  int n = 0;
+  for (const auto* item : world.items()) {
+    n += world.layout().work_area.contains(item->pose.x, item->pose.y) ? 1 : 0;
+  }
+  return n;
+}
+}  // namespace
+
+SRF_TEST(recycling_operator_supplies_from_receiving) {
+  RecyclingWorld world;
+  SceneConfig config;
+  config.scene = Scene::Absent;  // 대상 지정 없음 → 빈 매트로 시작 (자동 공급은 안 한다)
+  config.people = 0;
+  config.forklifts = 0;
+  config.supply_items = 4;
+  world.randomize(config);
+  run(world, 2.0);
+  CHECK_EQ(0, on_mat(world));
+  CHECK(world.cell_state() == "대기");
+  CHECK(world.request_supply());
+  CHECK(!world.request_supply());  // 이미 맡았다
+  run(world, 60.0);
+  CHECK_EQ(4, on_mat(world));       // 하역장에서 가져와 매트에 부었다
+  CHECK_EQ(1, world.supplies());
+  CHECK(world.cell_state() == "대기");  // 돌아왔다
+}
+
+SRF_TEST(recycling_operator_empties_full_bin) {
+  RecyclingWorld world;
+  SceneConfig config;
+  config.scene = Scene::Normal;
+  config.items = 3;
+  config.people = 0;
+  config.forklifts = 0;
+  config.bin_capacity = 2;
+  config.auto_supply = false;
+  world.randomize(config);
+  const BinSpec& can_bin = world.layout().bins[0];
+  int moved = 0;
+  for (auto& object : world.objects()) {  // 물품 둘을 캔 바구니에 (오분류여도 비운다)
+    if (auto* item = dynamic_cast<RecyclableItem*>(object.get()); item != nullptr && moved < 2) {
+      item->pose.x = can_bin.x + (moved == 0 ? -0.05 : 0.05);
+      item->pose.y = can_bin.y;
+      ++moved;
+    }
+  }
+  run(world, 0.5);
+  CHECK(world.bin_status()[0].full);
+  CHECK(world.bin_status()[0].requested);  // 자동 비우기 요청
+  run(world, 80.0);
+  CHECK_EQ(0, world.bin_status()[0].count);
+  int collected = 0;
+  for (const auto& [c, n] : world.collected()) collected += n;
+  CHECK_EQ(2, collected);
+  CHECK(world.cell_state() == "대기");
+  CHECK(world.truth_json(0).find("\"cell\":{") != std::string::npos);
+}
+
+SRF_TEST(recycling_auto_supply_when_mat_cleared) {
+  RecyclingWorld world;
+  SceneConfig config;
+  config.items = 2;
+  config.people = 0;
+  config.forklifts = 0;
+  config.supply_items = 3;
+  config.bin_capacity = 10;
+  world.randomize(config);
+  run(world, 0.5);
+  for (auto& object : world.objects()) {  // 로봇이 다 치웠다고 치고 매트 밖으로
+    if (auto* item = dynamic_cast<RecyclableItem*>(object.get())) {
+      item->pose.x = world.layout().bins[1].x;
+      item->pose.y = world.layout().bins[1].y;
+    }
+  }
+  run(world, 60.0);
+  CHECK_EQ(3, on_mat(world));
+  CHECK_EQ(1, world.supplies());
 }

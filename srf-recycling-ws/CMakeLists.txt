@@ -235,6 +235,7 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     simulator/panels/arm_panel.cpp
     simulator/panels/camera_panel.cpp
     simulator/view/recycling_view.cpp
+    simulator/panels/cell_panel.cpp
     engine/engine.cpp
     engine/nodes/robot_status/robot_status.cpp
     engine/nodes/llm_input/llm_input.cpp

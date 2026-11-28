@@ -641,6 +641,7 @@ QImage make(const std::string& name) {
       {"crate_paper", [](std::uint32_t s) { return crate(QColor(45, 150, 70), "종이류\nPAPER", s); }},
       {"wheelie_blue", [](std::uint32_t s) { return wheelie(QColor(40, 90, 170), "플라스틱", s); }},
       {"wheelie_green", [](std::uint32_t s) { return wheelie(QColor(40, 130, 60), "유리병", s); }},
+      {"wheelie_paper", [](std::uint32_t s) { return wheelie(QColor(150, 105, 60), "종이류", s); }},
       {"wheelie_yellow", [](std::uint32_t s) { return wheelie(QColor(220, 175, 30), "캔·고철", s); }},
       {"wheelie_gray", [](std::uint32_t s) { return wheelie(QColor(110, 115, 120), "일반쓰레기", s); }},
       {"cage_mesh", [](std::uint32_t) { return cage_mesh(); }},

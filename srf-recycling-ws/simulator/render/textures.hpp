@@ -16,7 +16,7 @@ namespace srf_recycling_ws::sim::textures {
 // 재질: concrete, epoxy_gray, epoxy_green, wall_panel, steel_brushed, aluminum, rubber_belt, pallet_wood,
 //       cardboard, rubber_mat, hazard_stripe, walkway, jumbo_bag, rollup_door, bale_cardboard, bale_pet,
 //       bale_can, hi_vis_vest, denim, shirt_blue, shirt_gray, forklift_yellow, glass, shadow_blob,
-//       crate_can, crate_pet, crate_paper, wheelie_blue, wheelie_green, wheelie_yellow, wheelie_gray,
+//       crate_can, crate_pet, crate_paper, wheelie_blue, wheelie_green, wheelie_paper, wheelie_yellow, wheelie_gray,
 //       cage_mesh, newspaper, kraft, styrofoam, vinyl
 // 라벨(물품): label/can/<brand>, label/pet/<brand>, label/milk, label/cup, label/tetra, label/box
 // 표지판: sign/<글씨>/<배경 #rrggbb>/<글씨 #rrggbb>   (예: sign/로봇 분리수거 구역/#1e5aa8/#ffffff)
