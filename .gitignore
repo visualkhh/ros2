@@ -24,14 +24,14 @@ build-*/
 
 # Playwright MCP artifacts
 .playwright-mcp/
-krosc_ws/tools/vla-venv/
-krosc_ws/tools/__pycache__/
-krosc_ws/tools/learning/__pycache__/
-krosc_ws/artifacts/models/vla/hf-cache/
-krosc_ws/artifacts/models/vlm/hf-cache/
+srf-default-ws/tools/vla-venv/
+srf-default-ws/tools/__pycache__/
+srf-default-ws/tools/learning/__pycache__/
+srf-default-ws/artifacts/models/vla/hf-cache/
+srf-default-ws/artifacts/models/vlm/hf-cache/
 
-# krosc AI sidecar runtime
-krosc_ws/artifacts/logs/
-krosc_ws/artifacts/run/
-krosc_ws/artifacts/models/vla/hf-cache
-krosc_ws/artifacts/models/vlm/hf-cache
+# srf AI sidecar runtime
+srf-default-ws/artifacts/logs/
+srf-default-ws/artifacts/run/
+srf-default-ws/artifacts/models/vla/hf-cache
+srf-default-ws/artifacts/models/vlm/hf-cache

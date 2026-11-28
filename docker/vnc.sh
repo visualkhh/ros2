@@ -5,4 +5,4 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 echo "noVNC: http://localhost:6080/vnc.html?autoconnect=1&resize=scale"
-exec docker compose -f "$here/docker-compose.yml" up krosc-vnc
+exec docker compose -f "$here/docker-compose.yml" up srf-vnc

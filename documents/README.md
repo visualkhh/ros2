@@ -5,7 +5,7 @@ TurtleBot3 Waffle Pi 개조 로봇 (Raspberry Pi 4 · Ubuntu 26.04 · ROS 2 Lyri
 | 폴더 | 내용 | 시작 문서 |
 |---|---|---|
 | [raspberry/](raspberry/) | **로봇 Pi(`pak`)** — 설치·설정 내역 요약, 처음부터 세팅 순서, SD카드·SSH·udev | [raspberry/README.md](raspberry/README.md) |
-| [realsense-D435/](realsense-D435/) | Intel RealSense D435 — Pi USB 3.2·`/dev/video*`·`video` 그룹 · ROS 2 드라이버 확인 · `krosc_ws` Hardware/Sensor · 웹 Camera | [realsense-D435/README.md](realsense-D435/README.md) |
+| [realsense-D435/](realsense-D435/) | Intel RealSense D435 — Pi USB 3.2·`/dev/video*`·`video` 그룹 · ROS 2 드라이버 확인 · `srf-default-ws` Hardware/Sensor · 웹 Camera | [realsense-D435/README.md](realsense-D435/README.md) |
 | [ros/lyrical/](ros/lyrical/) | ROS 2 Lyrical 설치 (Pi 기준, PC 추가분) · 프로젝트 패키지 · `ros2_ws` 빌드 | [lyrical-setup-ubuntu26.04.md](ros/lyrical/lyrical-setup-ubuntu26.04.md) |
 | [opencr/](opencr/) | OpenCR 펌웨어 툴체인·컴파일·업로드 (arm64 Pi에서) | [opencr-setup-ubuntu26.04.md](opencr/opencr-setup-ubuntu26.04.md) |
 | [manipulator/](manipulator/) | 팔 — 기준 문서 [ROBOTIS TurtleBot3 Manipulation](https://docs.robotis.com/docs/systems/turtlebot3/manipulation/) · 연결 · 할 일 | [manipulator/README.md](manipulator/README.md) |

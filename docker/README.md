@@ -1,6 +1,6 @@
 # docker
 
-`krosc`(C++ kros)를 빌드/테스트하고, **리눅스 안의 Qt sim+viz 창을 맥 브라우저로 보기 위한** Ubuntu 26.04 컨테이너.
+`srf`(C++ kros)를 빌드/테스트하고, **리눅스 안의 Qt sim+viz 창을 맥 브라우저로 보기 위한** Ubuntu 26.04 컨테이너.
 
 - GCC 15 / G++ 15, CMake 4, Ninja
 - Qt6 Core/Gui/Widgets (QPA offscreen, xcb)
@@ -16,7 +16,7 @@
 ./docker/build.sh
 ```
 
-`docker/docker-compose.yml`의 `krosc`/`krosc-vnc` 서비스가 `krosc:ubuntu-26.04` 이미지를 만든다.
+`docker/docker-compose.yml`의 `srf`/`srf-vnc` 서비스가 `srf:ubuntu-26.04` 이미지를 만든다.
 
 ## 2. 컴파일 + 테스트 (화면 없이)
 
@@ -25,7 +25,7 @@
 ./docker/compile.sh RelWithDebInfo --clean
 ```
 
-내부에서 실행하는 것 (`/workspace/krosc`):
+내부에서 실행하는 것 (`/workspace/srf`):
 
 ```bash
 cmake -S . -B build -G Ninja \
@@ -34,11 +34,11 @@ cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 ```
 
-테스트: `krosc_core_tests` 54개 + `krosc_simulator_tests` 3개 = 57개. `krosc_ws`는 별도 빌드/테스트(9개)를 가진다.
+테스트: `srf_core_tests` 54개 + `srf_simulator_tests` 3개 = 57개. `srf-default-ws`는 별도 빌드/테스트(9개)를 가진다.
 
 ## 3. 웹 Viz (브라우저)
 
-로봇 앱 + `krosc_ws_viz_web`(HTTP/WebSocket)을 한 컨테이너에서 띄운다.
+로봇 앱 + `srf_default_ws_viz_web`(HTTP/WebSocket)을 한 컨테이너에서 띄운다.
 
 ```bash
 # ros2/ 에서
@@ -51,14 +51,14 @@ ctest --test-dir build --output-on-failure
 http://localhost:8080/
 ```
 
-- `krosc_ws_viz_web`은 로봇(`krosc_real`)에 `PeerNetwork`로 붙어 필요한 토픽만 구독하고,
+- `srf_default_ws_viz_web`은 로봇(`srf_default_ws_real`)에 `PeerNetwork`로 붙어 필요한 토픽만 구독하고,
   `4바이트 길이 + 본문` 프레임을 WebSocket 바이너리로 브라우저에 넘긴다 (토픽은 JSON 변환 없음).
   로봇 TCP를 그대로 중계하는 게 아니라 토픽/서비스 단위로 discover/subscribe 한다.
 - 명령(지도/파라미터/MoveIt goal)은 WebSocket **텍스트 JSON RPC**로 보내고, 게이트웨이가
   로컬/원격 서비스와 `move_action` 액션으로 바꾼다.
-- 웹 플러그인은 `krosc_ws/viz-web/main.cpp`의 `VizWebPluginRegistry`에 추가한다. 게이트웨이가
-  `/plugins.json`을 동적으로 만들고, JS 모듈은 `krosc_ws/viz-web/www/plugins/*.js`에 둔다.
-  코어 JS는 `krosc/viz-web/www/plugins/*.js`에서 함께 서빙된다.
+- 웹 플러그인은 `srf-default-ws/viz-web/main.cpp`의 `VizWebPluginRegistry`에 추가한다. 게이트웨이가
+  `/plugins.json`을 동적으로 만들고, JS 모듈은 `srf-default-ws/viz-web/www/plugins/*.js`에 둔다.
+  코어 JS는 `srf/viz-web/www/plugins/*.js`에서 함께 서빙된다.
 - 지도/상태/모델 목록처럼 늦게 붙은 브라우저에 필요한 토픽은 게이트웨이가 최신 프레임을
   캐시했다가 새 WebSocket 클라이언트에 보낸다.
 - RL은 Docker에 ONNX Runtime이 없어 `no-ort` + RPP fallback으로 표시된다.
@@ -77,7 +77,7 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 ```
 
 - 컨테이너 안에서 `Xvfb :99` → `openbox` → `x11vnc` → `websockify(noVNC)`를 띄우고,
-  그 X 디스플레이 위에서 `krosc_simulator`가 **SimWindow(진실)** 와 **VizWindow(토픽)** 두 창을 연다.
+  그 X 디스플레이 위에서 `srf_simulator`가 **SimWindow(진실)** 와 **VizWindow(토픽)** 두 창을 연다.
 - 맥은 WebSocket(6080)으로 화면만 받는다. 시뮬레이션/토픽/데이터는 전부 리눅스 컨테이너 안에 있다.
 - 왼쪽 sim 창에서 `W/A/S/D`로 직접 몰거나, 오른쪽 viz 창에서 조종하면 된다.
 - `Ctrl+C`로 끝내면 컨테이너도 정리된다.
@@ -85,8 +85,8 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 VNC 데스크톱 스크린샷을 남기려면 (컨테이너가 떠 있는 동안):
 
 ```bash
-docker compose -f docker/docker-compose.yml exec -T krosc-vnc \
-  scrot -o /workspace/krosc/docs/vnc.png
+docker compose -f docker/docker-compose.yml exec -T srf-vnc \
+  scrot -o /workspace/srf/docs/vnc.png
 ```
 
 > 보안: noVNC는 로컬 개발용으로 비밀번호 없이(`-nopw`) 띄운다. `6080`을 외부에 공개하지 마라.
@@ -102,10 +102,10 @@ XQuartz를 설치하고 TCP 접속을 허용한 뒤, 컨테이너에 `DISPLAY=ho
 화면을 보며 조종하는 가장 간단한 방법은 Docker를 쓰지 않고 로컬에서 빌드하는 것이다.
 
 ```bash
-cd krosc
+cd srf
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build -j
-./build/simulator/krosc_simulator
+./build/simulator/srf_simulator
 ```
 
 ## 셸
@@ -113,5 +113,5 @@ cmake --build build -j
 ```bash
 # ros2/ 에서
 ./docker/shell.sh
-# inside: /workspace/krosc
+# inside: /workspace/srf
 ```

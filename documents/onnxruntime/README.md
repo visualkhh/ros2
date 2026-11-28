@@ -1,6 +1,6 @@
 # ONNX Runtime GPU / CPU (RL Nav)
 
-`krosc_ws`의 RL 주행 제어기는 ONNX Runtime으로 `policy.onnx`를 추론한다.
+`srf-default-ws`의 RL 주행 제어기는 ONNX Runtime으로 `policy.onnx`를 추론한다.
 런타임이 GPU provider를 제공하면 CUDA를 쓰고, 없거나 초기화에 실패하면 CPU로
 자동 fallback한다. 이 문서는 PC에서 **CUDA provider를 설치하고 검증하는 방법**과
 실패 시 동작·소스 위치를 정리한다.
@@ -11,8 +11,8 @@
 - ONNX Runtime: **1.26.0 GPU** (NuGet `Microsoft.ML.OnnxRuntime.Gpu.Linux`)
 - 설치 위치: `/home/pank/opt/onnxruntime-gpu/1.26.0/`
 - CUDA/cuDNN: Isaac Sim에 포함된 CUDA 12.8 / cuDNN 9 라이브러리를 symlink로 사용
-- `krosc_ws` 빌드 캐시:
-  - `KROSC_WS_ONNXRUNTIME_ROOT=/home/pank/opt/onnxruntime-gpu/1.26.0`
+- `srf-default-ws` 빌드 캐시:
+  - `SRF_DEFAULT_WS_ONNXRUNTIME_ROOT=/home/pank/opt/onnxruntime-gpu/1.26.0`
   - `ONNXRUNTIME_LIBRARY=/home/pank/opt/onnxruntime-gpu/1.26.0/lib/libonnxruntime.so`
 
 ```text
@@ -84,38 +84,38 @@ root=~/opt/onnxruntime-gpu/1.26.0
 
 ### 4. 빌드
 
-`krosc_ws/build.sh`는 `~/opt/onnxruntime-gpu/1.26.0`이 있으면 자동으로
-`KROSC_WS_ONNXRUNTIME_ROOT`와 `ONNXRUNTIME_ROOT`를 잡는다.
-다른 경로를 쓰려면 `KROSC_WS_ONNXRUNTIME_ROOT` 환경변수로 지정한다.
+`srf-default-ws/build.sh`는 `~/opt/onnxruntime-gpu/1.26.0`이 있으면 자동으로
+`SRF_DEFAULT_WS_ONNXRUNTIME_ROOT`와 `ONNXRUNTIME_ROOT`를 잡는다.
+다른 경로를 쓰려면 `SRF_DEFAULT_WS_ONNXRUNTIME_ROOT` 환경변수로 지정한다.
 
 ```bash
 # GPU 런타임 자동 감지
-./krosc_ws/build.sh simulator
-./krosc_ws/build.sh robot
-./krosc_ws/build.sh tests
+./srf-default-ws/build.sh simulator
+./srf-default-ws/build.sh robot
+./srf-default-ws/build.sh tests
 ```
 
 강제로 CPU vendor를 쓰려면:
 
 ```bash
-KROSC_WS_ONNXRUNTIME_ROOT=/opt/ros/lyrical/opt/onnxruntime_vendor \
-  ./krosc_ws/build.sh simulator
+SRF_DEFAULT_WS_ONNXRUNTIME_ROOT=/opt/ros/lyrical/opt/onnxruntime_vendor \
+  ./srf-default-ws/build.sh simulator
 ```
 
 ### 5. 검증
 
 ```bash
-ldd krosc_ws/build/krosc_ws_simulator | grep onnxruntime
+ldd srf-default-ws/build/srf_default_ws_simulator | grep onnxruntime
 # libonnxruntime.so.1 => /home/pank/opt/onnxruntime-gpu/1.26.0/lib/libonnxruntime.so.1
 
-readelf -d krosc_ws/build/krosc_ws_simulator | grep -E 'RPATH|RUNPATH'
+readelf -d srf-default-ws/build/srf_default_ws_simulator | grep -E 'RPATH|RUNPATH'
 # RPATH /home/pank/opt/onnxruntime-gpu/1.26.0/lib
 ```
 
 시뮬레이터를 띄우고 viz-web의 **RL Nav** 탭에서 확인한다.
 
 ```bash
-./krosc_ws/run-simulator-vizweb.sh
+./srf-default-ws/run-simulator-vizweb.sh
 ```
 
 정상 GPU라면:
@@ -132,7 +132,7 @@ CPU fallback이면 `provider`가 `CPUExecutionProvider`로 표시된다.
 
 ### Provider 선택과 fallback
 
-[`krosc_ws/engine/ml/onnx_policy.cpp`](../../krosc_ws/engine/ml/onnx_policy.cpp)
+[`srf-default-ws/engine/ml/onnx_policy.cpp`](../../srf-default-ws/engine/ml/onnx_policy.cpp)
 
 우선순위:
 
@@ -151,7 +151,7 @@ CUDAExecutionProvider → CoreMLExecutionProvider → CPUExecutionProvider
 
 ### RL 상태/fallback
 
-[`krosc_ws/engine/nodes/rl_nav_controller.cpp`](../../krosc_ws/engine/nodes/rl_nav_controller.cpp)
+[`srf-default-ws/engine/nodes/rl_nav_controller.cpp`](../../srf-default-ws/engine/nodes/rl_nav_controller.cpp)
 
 - 모델이 없거나 로드 실패 시 RPP fallback으로 주행한다.
 - `FollowPath.enable=false`면 RL은 OFF 상태이고, 웹에서 RL ON으로 켤 수 있다.
@@ -160,7 +160,7 @@ CUDAExecutionProvider → CoreMLExecutionProvider → CPUExecutionProvider
 
 ### 웹 UI
 
-[`krosc_ws/viz-web/www/plugins/rl_nav.js`](../../krosc_ws/viz-web/www/plugins/rl_nav.js)
+[`srf-default-ws/viz-web/www/plugins/rl_nav.js`](../../srf-default-ws/viz-web/www/plugins/rl_nav.js)
 
 - RL Nav 탭에서 provider/runtime/policy/fallback/model을 표시한다.
 - `Reload`는 `rl_nav_controller/reload` 서비스를 호출한다.
@@ -168,28 +168,28 @@ CUDAExecutionProvider → CoreMLExecutionProvider → CPUExecutionProvider
 
 ### 빌드 설정
 
-- [`krosc_ws/CMakeLists.txt`](../../krosc_ws/CMakeLists.txt)
-  - `KROSC_WS_ONNXRUNTIME_ROOT` 기본값 자동 감지
+- [`srf-default-ws/CMakeLists.txt`](../../srf-default-ws/CMakeLists.txt)
+  - `SRF_DEFAULT_WS_ONNXRUNTIME_ROOT` 기본값 자동 감지
   - `ONNXRUNTIME_INCLUDE_DIR`, `ONNXRUNTIME_LIBRARY` 탐색
   - GPU 라이브러리 사용 시 `--disable-new-dtags`로 DT_RPATH를 사용
     (시스템 `/opt/ros`의 CPU `libonnxruntime.so.1`보다 우선시키기 위함)
-- [`krosc_ws/build.sh`](../../krosc_ws/build.sh)
+- [`srf-default-ws/build.sh`](../../srf-default-ws/build.sh)
   - `~/opt/onnxruntime-gpu/1.26.0` 또는 `ONNXRUNTIME_ROOT` 자동 사용
   - CMake 캐시의 이전 include/library 경로를 `-U`로 갱신
 
 ## 실제 예제 (_ws)
 
-- 모델: [`krosc_ws/artifacts/models/rl_nav_controller/rl_maze/policy.onnx`](../../krosc_ws/artifacts/models/rl_nav_controller/rl_maze/policy.onnx)
+- 모델: [`srf-default-ws/artifacts/models/rl_nav_controller/rl_maze/policy.onnx`](../../srf-default-ws/artifacts/models/rl_nav_controller/rl_maze/policy.onnx)
 - 모델 목록: `rl_maze`, `rl_maze_beebot_night1`, `rl_maze_beebot_path10`, `rl_maze_beebot_path500`
 - 시뮬레이터:
   ```bash
-  ./krosc_ws/run-simulator-vizweb.sh
+  ./srf-default-ws/run-simulator-vizweb.sh
   # http://localhost:8080/ → RL Nav 탭
   ```
 - 실기:
   ```bash
-  ./krosc_ws/run.sh
-  ./krosc_ws/run-viz-web.sh
+  ./srf-default-ws/run.sh
+  ./srf-default-ws/run-viz-web.sh
   ```
 
 ## 문제 해결

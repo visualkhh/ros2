@@ -13,3 +13,7 @@
 	path = ros2_ws/src/m-explore-ros2
 	url = https://github.com/visualkhh/m-explore-ros2.git
 	branch = lyrical-compat
+[submodule "srf"]
+	path = srf
+	url = git@github.com:dooboostore-develop/srf.git
+	branch = main

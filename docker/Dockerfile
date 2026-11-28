@@ -44,6 +44,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 실제 창이 필요하면 docker run -e QT_QPA_PLATFORM=xcb ... + X 포워딩을 쓴다.
 ENV QT_QPA_PLATFORM=offscreen
 
-WORKDIR /workspace/krosc
+WORKDIR /workspace/srf
 
 CMD ["/bin/bash"]

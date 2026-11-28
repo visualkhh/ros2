@@ -1,7 +1,7 @@
 # RealSense D435 — Raspberry Pi 연결 · 확인
 
 로봇 Pi(`pak@pak.local`)에 연결한 **Intel RealSense D435**를 ROS 2 Lyrical로 확인하고,
-`krosc_ws`의 **Hardware + Sensor** 구조로 연동하는 방법을 정리한다.
+`srf-default-ws`의 **Hardware + Sensor** 구조로 연동하는 방법을 정리한다.
 
 - 측정일: 2026-11-26
 - 대상: Raspberry Pi 4 (`pak`, Ubuntu 26.04 / kernel 7.0.0-1024-raspi)
@@ -122,7 +122,7 @@ v4l2-ctl --list-devices
 
 ## 4. librealsense2 standalone 설치 (ROS 없이)
 
-`krosc_ws`는 ROS를 쓰지 않는다. `librealsense2`는 Intel의 독립 라이브러리이므로
+`srf-default-ws`는 ROS를 쓰지 않는다. `librealsense2`는 Intel의 독립 라이브러리이므로
 ROS 패키지(`ros-lyrical-librealsense2`)와 무관하게 `/usr/local`에 설치할 수 있다.
 
 ### 4.1 패키지가 있으면
@@ -169,7 +169,7 @@ sudo cmake --install build
 sudo ldconfig
 ```
 
-`BUILD_ROSBAG2`는 librealsense의 rosbag 재생 기능이라 `krosc_ws`에는 필요 없다.
+`BUILD_ROSBAG2`는 librealsense의 rosbag 재생 기능이라 `srf-default-ws`에는 필요 없다.
 빌드 시간을 줄이려면 위처럼 끈다.
 
 udev 규칙:
@@ -193,17 +193,17 @@ ls -l /dev/bus/usb/002/002   # udev 적용 후 crw-rw-rw- root plugdev
 ```
 
 `2.58.4`가 나오면 된다. `rs-enumerate-devices`는 `-DBUILD_EXAMPLES=ON`일 때
-빌드되거나 별도 `librealsense2-utils` 패키지가 필요하다. krosc에는 필수가 아니다.
+빌드되거나 별도 `librealsense2-utils` 패키지가 필요하다. SRF에는 필수가 아니다.
 
-### 4.3 krosc_ws가 찾게 하기
+### 4.3 srf-default-ws가 찾게 하기
 
 - `/usr/local`에 설치하면 CMake가 자동으로 찾는다 (`/usr/local`은 기본 prefix).
 - 다른 prefix면:
 
 ```bash
-KROSC_WS_REALSENSE_ROOT=/opt/librealsense ./krosc_ws/build.sh robot
+SRF_DEFAULT_WS_REALSENSE_ROOT=/opt/librealsense ./srf-default-ws/build.sh robot
 # 또는
-cmake -S krosc_ws -B krosc_ws/build -DKROSC_WS_REALSENSE_ROOT=/opt/librealsense
+cmake -S srf-default-ws -B srf-default-ws/build -DSRF_DEFAULT_WS_REALSENSE_ROOT=/opt/librealsense
 ```
 
 - `CMAKE_PREFIX_PATH`/`PKG_CONFIG_PATH`로 지정해도 된다.
@@ -212,15 +212,15 @@ cmake -S krosc_ws -B krosc_ws/build -DKROSC_WS_REALSENSE_ROOT=/opt/librealsense
 빌드 로그:
 
 ```text
--- krosc_ws: RealSense D435 활성 (librealsense2 + libjpeg)
+-- srf_default_ws: RealSense D435 활성 (librealsense2 + libjpeg)
 ```
 
-## 5. `krosc_ws` 연동 구조
+## 5. `srf-default-ws` 연동 구조
 
-> 3장의 `ros2 launch`는 **장치 자체를 확인하는 용도**다. `krosc_ws`는 ROS 노드를 쓰지 않고,
+> 3장의 `ros2 launch`는 **장치 자체를 확인하는 용도**다. `srf-default-ws`는 ROS 노드를 쓰지 않고,
 > `librealsense2`만 직접 링크한다. CMake는 ROS 경로를 하드코딩하지 않는다.
 
-ROS 노드(`realsense2_camera_node`)를 쓰지 않고, 같은 카메라를 `krosc_ws` 엔진에 직접 붙인다.
+ROS 노드(`realsense2_camera_node`)를 쓰지 않고, 같은 카메라를 `srf-default-ws` 엔진에 직접 붙인다.
 역할은 기존 OpenCR/LDS-03과 같다.
 
 ```text
@@ -235,56 +235,56 @@ engine/main.cpp
 
 | 파일 | 역할 |
 |---|---|
-| `krosc_ws/engine/hardwares/realsense/realsense_device.hpp/.cpp` | librealsense2 pipeline, 최신 color/depth 프레임 보관, color JPEG 인코딩 |
-| `krosc_ws/engine/sensors/realsense/realsense_sensor.hpp/.cpp` | `Image` 토픽 발행, 발행 주기/깊이 주기, diagnostics |
-| `krosc_ws/engine/engine.hpp/.cpp` | Hardware 주입 → SensorManager 등록 |
-| `krosc_ws/engine/main.cpp` | `--camera-*` 옵션, 장치 생성/주입 |
-| `krosc_ws/viz-web/www/plugins/camera.js` | 웹 Viz의 **Camera** 탭 (color/depth) |
+| `srf-default-ws/engine/hardwares/realsense/realsense_device.hpp/.cpp` | librealsense2 pipeline, 최신 color/depth 프레임 보관, color JPEG 인코딩 |
+| `srf-default-ws/engine/sensors/realsense/realsense_sensor.hpp/.cpp` | `Image` 토픽 발행, 발행 주기/깊이 주기, diagnostics |
+| `srf-default-ws/engine/engine.hpp/.cpp` | Hardware 주입 → SensorManager 등록 |
+| `srf-default-ws/engine/main.cpp` | `--camera-*` 옵션, 장치 생성/주입 |
+| `srf-default-ws/viz-web/www/plugins/camera.js` | 웹 Viz의 **Camera** 탭 (color/depth) |
 
 ### 빌드
 
 `librealsense2`와 `libjpeg`가 있으면 자동으로 포함된다. 없으면 카메라 없이 빌드된다.
 
 ```bash
-./krosc_ws/build.sh robot
+./srf-default-ws/build.sh robot
 # configure 로그에 아래가 보이면 RealSense 포함:
-#   -- krosc_ws: RealSense D435 활성 (librealsense2 + libjpeg)
+#   -- srf_default_ws: RealSense D435 활성 (librealsense2 + libjpeg)
 
 # standalone prefix를 직접 지정할 때
-KROSC_WS_REALSENSE_ROOT=/usr/local ./krosc_ws/build.sh robot
+SRF_DEFAULT_WS_REALSENSE_ROOT=/usr/local ./srf-default-ws/build.sh robot
 ```
 
 CMake는 `find_package(realsense2)` → `pkg-config realsense2` 순으로 찾는다.
 ROS 패키지 경로(`/opt/ros/...`)를 자동으로 뒤지지 않는다.
 Pi의 현재 `librealsense2`는 ROS 패키지로 설치되어 있으므로, ROS 없이 쓰려면
-standalone으로 설치하거나 `KROSC_WS_REALSENSE_ROOT`/`PKG_CONFIG_PATH`를 직접 지정한다.
+standalone으로 설치하거나 `SRF_DEFAULT_WS_REALSENSE_ROOT`/`PKG_CONFIG_PATH`를 직접 지정한다.
 
-Pi에서는 `krosc_real`만 빌드한다. Qt Viz/시뮬레이터/viz-web은 PC 전용이다.
+Pi에서는 `srf_default_ws_real`만 빌드한다. Qt Viz/시뮬레이터/viz-web은 PC 전용이다.
 
 ### 실행
 
 ```bash
 # 기본: 카메라 자동 사용 (color 320x240 5Hz, depth 160x120 2Hz)
-./krosc_ws/run.sh
+./srf-default-ws/run.sh
 
 # 카메라 끄기
-./krosc_ws/run.sh --no-camera
+./srf-default-ws/run.sh --no-camera
 
 # 여러 대 중 특정 시리얼 선택
-./krosc_ws/run.sh --camera-serial 261822074109
+./srf-default-ws/run.sh --camera-serial 261822074109
 
 # 발행 주기 조정
-./krosc_ws/run.sh --camera-rate 15 --camera-depth-rate 5
+./srf-default-ws/run.sh --camera-rate 15 --camera-depth-rate 5
 ```
 
 환경변수:
 
 | 변수 | 기본 | 의미 |
 |---|---|---|
-| `KROSC_CAMERA` | `1` | `0`이면 카메라 비활성 |
-| `KROSC_CAMERA_SERIAL` | (빈 값) | 특정 D435 시리얼 |
-| `KROSC_CAMERA_RATE` | `10` | color Image 발행 Hz |
-| `KROSC_CAMERA_DEPTH_RATE` | `5` | depth Image 발행 Hz |
+| `SRF_DEFAULT_WS_CAMERA` | `1` | `0`이면 카메라 비활성 |
+| `SRF_DEFAULT_WS_CAMERA_SERIAL` | (빈 값) | 특정 D435 시리얼 |
+| `SRF_DEFAULT_WS_CAMERA_RATE` | `10` | color Image 발행 Hz |
+| `SRF_DEFAULT_WS_CAMERA_DEPTH_RATE` | `5` | depth Image 발행 Hz |
 
 ### 토픽/메시지
 
@@ -295,7 +295,7 @@ Pi에서는 `krosc_real`만 빌드한다. Qt Viz/시뮬레이터/viz-web은 PC �
 
 실기는 color 5Hz / depth 2Hz, 시뮬레이터도 color 5Hz(렌더)/depth 2Hz(발행)다.
 
-`krosc::msgs::Image` 필드:
+`srf::msgs::Image` 필드:
 
 ```text
 header(stamp, frame_id), width, height, encoding, step, data
@@ -309,7 +309,7 @@ depth는 color에 정렬(align)하지 않은 **depth 센서 시점**이다. 필�
 PC에서:
 
 ```bash
-./krosc_ws/run-viz-web.sh
+./srf-default-ws/run-viz-web.sh
 # http://localhost:8080/  → Camera 탭
 ```
 
@@ -330,7 +330,7 @@ PC에서 Qt 시뮬레이터를 띄우면 오른쪽에 **REALSENSE D435 (SIM)** �
 같은 `Engine`/`RealSenseSensor`를 타므로 웹 Viz의 Camera 탭도 동시에 볼 수 있다.
 
 ```bash
-./krosc_ws/run-simulator-vizweb.sh
+./srf-default-ws/run-simulator-vizweb.sh
 # Qt 창: REALSENSE D435 (SIM) color/depth
 # 웹:   http://localhost:8080/ → Camera
 ```
@@ -376,9 +376,9 @@ lsusb -t | grep -A2 8086
 ### 프레임이 안 보임
 
 ```bash
-# krosc 실행 로그
-./krosc_ws/run.sh
-# [krosc_ws] RealSense: ... serial=... color=640x480@30 depth=640x480@30
+# SRF 실행 로그
+./srf-default-ws/run.sh
+# [srf_default_ws] RealSense: ... serial=... color=640x480@30 depth=640x480@30
 
 # 웹
 # Camera 탭 상단이 "연결"인지, fps가 0인지 확인

@@ -28,4 +28,4 @@ command="cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=$build_type -DCMAKE_CXX
 if [ "$clean" -eq 1 ]; then
   command="rm -rf build && $command"
 fi
-docker compose -f "$here/docker-compose.yml" run --rm krosc bash -lc "$command"
+docker compose -f "$here/docker-compose.yml" run --rm srf bash -lc "$command"
