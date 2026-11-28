@@ -46,7 +46,7 @@ std::unique_ptr<krosc::Context> make_listener(const std::string& name) {
 std::unique_ptr<krosc::Context> make_client(const std::string& name, std::uint16_t port) {
   krosc::Context::Options options;
   options.network.name = name;
-  options.network.peers = {"127.0.0.1:" + std::to_string(port)};
+  options.network.servers = {"127.0.0.1:" + std::to_string(port)};
   options.network.rpc_timeout_sec = 3.0;
   return std::make_unique<krosc::Context>(options);
 }
@@ -105,6 +105,7 @@ void bench_latency() {
   print_latency("topic roundtrip", std::move(samples));
 }
 
+// 처리량은 손실 없이 재야 하므로 KEEP_ALL (기본 KEEP_LAST 10이면 몰아 보낸 앞부분이 버려진다).
 void bench_throughput() {
   auto server_holder = make_listener("bench_bulk_server");
   krosc::Context& server = *server_holder;
@@ -118,7 +119,7 @@ void bench_throughput() {
   const std::string payload(1024, 'x');
   server.topics().subscribe<krosc::msgs::String>(
       "bulk", [&](const krosc::msgs::String&) { received.fetch_add(1); },
-      krosc::QOS_DEFAULT);
+      krosc::QOS_KEEP_ALL);
 
   constexpr std::uint64_t kTotal = 5000;
   constexpr std::uint64_t kBatch = 256;
@@ -127,7 +128,7 @@ void bench_throughput() {
   for (std::uint64_t sent = 0; sent < kTotal; sent += kBatch) {
     const std::uint64_t end = std::min(kTotal, sent + kBatch);
     for (std::uint64_t i = sent; i < end; ++i) {
-      client.topics().publish("bulk", krosc::msgs::String{payload}, krosc::QOS_DEFAULT);
+      client.topics().publish("bulk", krosc::msgs::String{payload}, krosc::QOS_KEEP_ALL);
     }
     const auto deadline = Clock::now() + std::chrono::seconds(3);
     while (received.load() < end && Clock::now() < deadline) {
@@ -153,7 +154,7 @@ void bench_fanout(int clients_count) {
     clients.push_back(make_client("bench_fanout_" + std::to_string(i), port));
     clients.back()->topics().subscribe<krosc::msgs::String>(
         "fanout", [&, i](const krosc::msgs::String&) { received[static_cast<std::size_t>(i)].fetch_add(1); },
-        krosc::QOS_DEFAULT);
+        krosc::QOS_KEEP_ALL);
   }
   for (auto& client : clients) {
     wait_connected(*client);
@@ -168,7 +169,7 @@ void bench_fanout(int clients_count) {
     const std::uint64_t end = std::min(kTotal, sent + kBatch);
     for (std::uint64_t i = sent; i < end; ++i) {
       server.topics().publish("fanout", krosc::msgs::String{std::to_string(i)},
-                              krosc::QOS_DEFAULT);
+                              krosc::QOS_KEEP_ALL);
     }
     const auto deadline = Clock::now() + std::chrono::seconds(3);
     for (;;) {

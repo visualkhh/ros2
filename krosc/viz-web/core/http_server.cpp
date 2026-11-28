@@ -23,7 +23,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "krosc/net/net.hpp"
+#include "krosc/net/net_protocol.hpp"
 #include "krosc/viz_web/websocket.hpp"
 
 #ifndef MSG_NOSIGNAL

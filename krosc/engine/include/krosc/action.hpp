@@ -212,7 +212,8 @@ class ActionServer {
   }
 
   void publish(const ActionEvent& event) {
-    context_.topics().publish(name_ + "/_action/event", event);
+    // 상태/결과가 이 토픽 하나로 온다. ROS는 결과를 서비스로 받아 잃지 않으므로 여기도 KEEP_ALL.
+    context_.topics().publish(name_ + "/_action/event", event, QOS_KEEP_ALL);
   }
 
   Context& context_;
@@ -239,7 +240,7 @@ class ActionClient {
 
   ActionClient(Context& context, std::string name) : context_(context), name_(std::move(name)) {
     event_subscription_ = context_.topics().template subscribe<ActionEvent>(
-        name_ + "/_action/event", [this](const ActionEvent& event) { on_event(event); });
+        name_ + "/_action/event", [this](const ActionEvent& event) { on_event(event); }, QOS_KEEP_ALL);
   }
 
   ~ActionClient() { shutdown(); }

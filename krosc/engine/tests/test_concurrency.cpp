@@ -195,3 +195,98 @@ KROSC_TEST(concurrency_nav2_stack_executor_10) {
   CHECK(wait_until([&] { return global.costmap() != nullptr; }, 1.0));
   context.shutdown();
 }
+
+namespace {
+
+// 콜백 안에 머무는 동안 같은 노드의 다른 콜백이 들어오는지 센다.
+struct Overlap {
+  std::atomic<int> inside{0};
+  std::atomic<int> peak{0};
+  std::atomic<int> calls{0};
+  void enter() {
+    const int now = inside.fetch_add(1) + 1;
+    int previous = peak.load();
+    while (now > previous && !peak.compare_exchange_weak(previous, now)) {
+    }
+    std::this_thread::sleep_for(std::chrono::microseconds(200));
+    inside.fetch_sub(1);
+    calls.fetch_add(1);
+  }
+};
+
+}  // namespace
+
+KROSC_TEST(strand_node_callbacks_never_overlap_but_nodes_run_in_parallel) {
+  krosc::Context::Options options;
+  options.executor_threads = 4;
+  krosc::Context context(options);
+  krosc::Node node_a(context, "strand_a");
+  krosc::Node node_b(context, "strand_b");
+  Overlap a;
+  Overlap b;
+  Overlap both;  // 두 노드를 합쳐 동시에 몇 개가 돌았는지
+  const auto track = [&both](Overlap& own) {
+    const int now = both.inside.fetch_add(1) + 1;
+    int previous = both.peak.load();
+    while (now > previous && !both.peak.compare_exchange_weak(previous, now)) {
+    }
+    own.enter();
+    both.inside.fetch_sub(1);
+  };
+  // 노드마다 서로 다른 토픽 구독 2개 + 타이머 1개: 기본(MutuallyExclusive)이면 한 줄로 돈다.
+  node_a.subscribe<int>("a1", [&](const int&) { track(a); }, krosc::QOS_KEEP_ALL);
+  node_a.subscribe<int>("a2", [&](const int&) { track(a); }, krosc::QOS_KEEP_ALL);
+  node_a.create_timer(0.001, [&] { track(a); });
+  node_b.subscribe<int>("b1", [&](const int&) { track(b); }, krosc::QOS_KEEP_ALL);
+  node_b.subscribe<int>("b2", [&](const int&) { track(b); }, krosc::QOS_KEEP_ALL);
+  krosc::Node publisher(context, "strand_pub");
+  for (int i = 0; i < 100; ++i) {
+    publisher.publish<int>("a1", i, krosc::QOS_KEEP_ALL);
+    publisher.publish<int>("a2", i, krosc::QOS_KEEP_ALL);
+    publisher.publish<int>("b1", i, krosc::QOS_KEEP_ALL);
+    publisher.publish<int>("b2", i, krosc::QOS_KEEP_ALL);
+  }
+  context.executor().join();
+  CHECK_EQ(1, a.peak.load());
+  CHECK_EQ(1, b.peak.load());
+  CHECK(a.calls.load() >= 200);
+  CHECK_EQ(200, b.calls.load());
+  CHECK(both.peak.load() >= 2);  // 다른 노드끼리는 같은 워커 풀에서 동시에 돈다
+  context.shutdown();
+}
+
+KROSC_TEST(strand_reentrant_group_can_overlap) {
+  krosc::Context::Options options;
+  options.executor_threads = 4;
+  krosc::Context context(options);
+  krosc::Node node(context, "reentrant");
+  Overlap overlap;
+  node.subscribe<int>("r1", [&](const int&) { overlap.enter(); }, krosc::QOS_KEEP_ALL, krosc::CallbackGroup::Reentrant);
+  node.subscribe<int>("r2", [&](const int&) { overlap.enter(); }, krosc::QOS_KEEP_ALL, krosc::CallbackGroup::Reentrant);
+  for (int i = 0; i < 100; ++i) {
+    node.publish<int>("r1", i);
+    node.publish<int>("r2", i);
+  }
+  context.executor().join();
+  CHECK_EQ(200, overlap.calls.load());
+  CHECK(overlap.peak.load() >= 2);
+  context.shutdown();
+}
+
+KROSC_TEST(strand_inline_publish_to_self_runs_after_current_callback) {
+  // inline 실행기: 콜백 안에서 자기 노드로 발행해도 재진입하지 않고, 지금 콜백이 끝난 뒤 이어서 돈다.
+  krosc::Context context;
+  krosc::Node node(context, "inline_strand");
+  std::vector<std::string> order;
+  node.subscribe<int>("first", [&](const int&) {
+    order.push_back("first:begin");
+    node.publish<int>("second", 1);
+    order.push_back("first:end");
+  });
+  node.subscribe<int>("second", [&](const int&) { order.push_back("second"); });
+  node.publish<int>("first", 1);
+  CHECK_EQ(3u, order.size());
+  CHECK_EQ(std::string("first:begin"), order[0]);
+  CHECK_EQ(std::string("first:end"), order[1]);
+  CHECK_EQ(std::string("second"), order[2]);
+}

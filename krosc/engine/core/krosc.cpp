@@ -11,9 +11,11 @@ namespace {
 
 Context::Options network_options(std::vector<std::string> peers, std::uint16_t port) {
   Context::Options options;
-  options.network.peers = std::move(peers);
+  options.network.servers = std::move(peers);
   options.network.port = port;
-  options.network.listen = port != 0;
+  if (port != 0) {
+    options.network.host = "0.0.0.0";
+  }
   return options;
 }
 

@@ -25,12 +25,14 @@ namespace krosc {
 namespace detail {
 
 struct TopicState;
+struct ChannelBase;
 
 // 구독 하나. 큐와 콜백은 이 객체가 들고, 스레드/스케줄은 Executor가 맡는다.
 // 같은 구독의 메시지는 drain 작업 하나로만 처리되어 순서가 유지된다 (구독마다 스레드를 만들지 않는다).
 class SubscriptionBase : public std::enable_shared_from_this<SubscriptionBase> {
  public:
-  SubscriptionBase(std::string topic, QoS qos, Executor& executor, std::weak_ptr<TopicState> state);
+  SubscriptionBase(std::string topic, QoS qos, Executor& executor, std::shared_ptr<Strand> strand,
+                   std::weak_ptr<TopicState> state, std::weak_ptr<ChannelBase> channel);
   virtual ~SubscriptionBase() = default;
   SubscriptionBase(const SubscriptionBase&) = delete;
   SubscriptionBase& operator=(const SubscriptionBase&) = delete;
@@ -40,7 +42,7 @@ class SubscriptionBase : public std::enable_shared_from_this<SubscriptionBase> {
   [[nodiscard]] std::uint64_t delivered() const { return delivered_.load(std::memory_order_relaxed); }
   [[nodiscard]] bool closed() const { return closed_.load(std::memory_order_acquire); }
 
-  virtual void push_void(const std::shared_ptr<const void>& message) = 0;
+  virtual void push(const std::shared_ptr<const void>& message) = 0;
   virtual void drain() = 0;  // Executor가 부르는 큐 비우기 (같은 구독 안에서 순서 보장)
 
   void start();
@@ -48,15 +50,17 @@ class SubscriptionBase : public std::enable_shared_from_this<SubscriptionBase> {
   void close();
 
  protected:
-  virtual void enqueue_void(const std::shared_ptr<const void>& message) = 0;
   virtual void clear_queue_locked() = 0;
 
   void schedule();
+  void post_drain();  // strand가 있으면 그 줄로, 없으면 Executor로 drain을 올린다
 
   const std::string topic_;
   const QoS qos_;
   Executor& executor_;
+  std::shared_ptr<Strand> strand_;  // Node의 직렬 줄 (없으면 구독 단위로만 직렬)
   std::weak_ptr<TopicState> state_;
+  std::weak_ptr<ChannelBase> channel_;  // cancel()이 이 채널의 구독 목록에서만 자신을 뺀다
   mutable std::mutex mutex_;
   bool scheduled_ = false;
   bool paused_ = true;
@@ -68,17 +72,13 @@ class SubscriptionBase : public std::enable_shared_from_this<SubscriptionBase> {
 template <class T>
 class SubscriptionImpl final : public SubscriptionBase {
  public:
-  SubscriptionImpl(std::string topic, QoS qos, Executor& executor, std::weak_ptr<TopicState> state,
+  SubscriptionImpl(std::string topic, QoS qos, Executor& executor, std::shared_ptr<Strand> strand,
+                   std::weak_ptr<TopicState> state, std::weak_ptr<ChannelBase> channel,
                    std::function<void(const T&)> callback)
-      : SubscriptionBase(std::move(topic), qos, executor, std::move(state)), callback_(std::move(callback)) {}
+      : SubscriptionBase(std::move(topic), qos, executor, std::move(strand), std::move(state), std::move(channel)),
+        callback_(std::move(callback)) {}
 
-  void push_void(const std::shared_ptr<const void>& message) override {
-    auto typed = std::shared_ptr<const T>(message, static_cast<const T*>(message.get()));
-    enqueue_void(typed);
-  }
-
- protected:
-  void enqueue_void(const std::shared_ptr<const void>& message) override {
+  void push(const std::shared_ptr<const void>& message) override {
     auto typed = std::shared_ptr<const T>(message, static_cast<const T*>(message.get()));
     bool post = false;
     {
@@ -94,12 +94,9 @@ class SubscriptionImpl final : public SubscriptionBase {
       }
     }
     if (post) {
-      auto self = shared_from_this();
-      executor_.post([self = std::move(self)] { self->drain(); });
+      post_drain();
     }
   }
-
-  void clear_queue_locked() override { queue_.clear(); }
 
   void drain() override {
     for (;;) {
@@ -123,6 +120,9 @@ class SubscriptionImpl final : public SubscriptionBase {
       delivered_.fetch_add(1, std::memory_order_relaxed);
     }
   }
+
+ protected:
+  void clear_queue_locked() override { queue_.clear(); }
 
  private:
   void trim_locked() {
@@ -168,7 +168,65 @@ struct TopicState {
   bool stopping = false;
 };
 
+// 발행 본체. 채널을 이미 찾은 상태에서 부른다 (Publisher는 이름 조회 없이 바로 온다).
+// lock은 잡힌 채로 들어오고, 구독자 큐에 넣기 전에 풀린다.
+template <class T>
+void publish_locked(TopicState& state, std::unique_lock<std::mutex>& lock, Channel<T>& channel,
+                    const std::string& topic, const std::shared_ptr<const T>& message, QoS qos) {
+  channel.messages.fetch_add(1, std::memory_order_relaxed);
+  if (qos.latched()) {
+    const std::size_t depth = qos.depth.value_or(1);
+    channel.history.push_back(message);
+    while (channel.history.size() > depth) {
+      channel.history.pop_front();
+    }
+  }
+  const std::shared_ptr<const SubscriberList> subscribers = channel.subscribers;
+  PublishHook publish_hook = state.publish_hook;
+  lock.unlock();
+  for (const auto& subscriber : *subscribers) {
+    subscriber->push(message);
+  }
+  if (publish_hook) {
+    publish_hook(topic, std::type_index(typeid(T)), std::shared_ptr<const void>(message), qos);
+  }
+}
+
 }  // namespace detail
+
+// 발행 손잡이 (rclcpp::Publisher). 만들 때 채널을 한 번 찾아 두고, publish마다 이름 해시/맵 조회를
+// 하지 않는다. 타입이 다른 채널이면 만들 때 예외가 난다. 복사해도 같은 채널을 가리킨다.
+template <class T>
+class Publisher {
+ public:
+  Publisher() = default;
+  Publisher(std::shared_ptr<detail::TopicState> state, std::shared_ptr<detail::Channel<T>> channel, std::string topic,
+            QoS qos)
+      : state_(std::move(state)), channel_(std::move(channel)), topic_(std::move(topic)), qos_(qos) {}
+
+  void publish(T message) const { publish(std::make_shared<const T>(std::move(message))); }
+
+  void publish(std::shared_ptr<const T> message) const {
+    if (!message || !state_) {
+      return;
+    }
+    std::unique_lock<std::mutex> lock(state_->mutex);
+    if (state_->stopping) {
+      return;
+    }
+    detail::publish_locked<T>(*state_, lock, *channel_, topic_, message, qos_);
+  }
+
+  [[nodiscard]] bool valid() const { return state_ != nullptr; }
+  [[nodiscard]] const std::string& topic() const { return topic_; }
+  [[nodiscard]] QoS qos() const { return qos_; }
+
+ private:
+  std::shared_ptr<detail::TopicState> state_;
+  std::shared_ptr<detail::Channel<T>> channel_;
+  std::string topic_;
+  QoS qos_{};
+};
 
 // 구독 손잡이. cancel()로 명시적으로 끊는다. Node가 만든 구독은 Node가 소멸할 때 정리한다.
 template <class T>
@@ -204,8 +262,10 @@ class TopicRegistry {
   TopicRegistry(const TopicRegistry&) = delete;
   TopicRegistry& operator=(const TopicRegistry&) = delete;
 
+  // strand: 콜백을 올릴 직렬 줄. Node::subscribe가 자기 줄을 넘긴다. 없으면 구독 단위로만 순서를 지킨다.
   template <class T>
-  Subscription<T> subscribe(const std::string& topic, std::function<void(const T&)> callback, QoS qos = QOS_DEFAULT) {
+  Subscription<T> subscribe(const std::string& topic, std::function<void(const T&)> callback, QoS qos = QOS_DEFAULT,
+                            std::shared_ptr<Strand> strand = nullptr) {
     auto state = state_;
     std::shared_ptr<detail::SubscriptionImpl<T>> impl;
     detail::SubscriptionHook subscription_hook;
@@ -215,7 +275,8 @@ class TopicRegistry {
         throw std::runtime_error("TopicRegistry가 종료됐다");
       }
       auto channel = get_or_create_channel_locked<T>(state, topic);
-      impl = std::make_shared<detail::SubscriptionImpl<T>>(topic, qos, executor_, state, std::move(callback));
+      impl = std::make_shared<detail::SubscriptionImpl<T>>(topic, qos, executor_, std::move(strand), state, channel,
+                                                           std::move(callback));
       {
         auto subscribers = std::make_shared<detail::SubscriberList>(*channel->subscribers);
         subscribers->push_back(impl);
@@ -225,7 +286,7 @@ class TopicRegistry {
         const std::size_t depth = qos.depth.value_or(1);
         const std::size_t begin = channel->history.size() > depth ? channel->history.size() - depth : 0;
         for (std::size_t i = begin; i < channel->history.size(); ++i) {
-          impl->push_void(channel->history[i]);  // paused 상태라 큐에만 쌓인다
+          impl->push(channel->history[i]);  // paused 상태라 큐에만 쌓인다
         }
       }
       subscription_hook = state->subscription_hook;
@@ -247,33 +308,21 @@ class TopicRegistry {
     if (!message) {
       return;
     }
-    auto state = state_;
-    std::shared_ptr<const detail::SubscriberList> subscribers;
-    detail::PublishHook publish_hook;
-    {
-      std::lock_guard<std::mutex> lock(state->mutex);
-      if (state->stopping) {
-        return;
-      }
-      auto channel = get_or_create_channel_locked<T>(state, topic);
-      channel->messages.fetch_add(1, std::memory_order_relaxed);
-      if (qos.latched()) {
-        const std::size_t depth = qos.depth.value_or(1);
-        channel->history.push_back(message);
-        while (channel->history.size() > depth) {
-          channel->history.pop_front();
-        }
-      }
-      subscribers = channel->subscribers;
-      publish_hook = state->publish_hook;
+    std::unique_lock<std::mutex> lock(state_->mutex);
+    if (state_->stopping) {
+      return;
     }
-    for (const auto& subscriber : *subscribers) {
-      subscriber->push_void(message);
+    auto channel = get_or_create_channel_locked<T>(state_, topic);
+    detail::publish_locked<T>(*state_, lock, *channel, topic, message, qos);
+  }
+
+  template <class T>
+  Publisher<T> create_publisher(const std::string& topic, QoS qos = QOS_DEFAULT) {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    if (state_->stopping) {
+      throw std::runtime_error("TopicRegistry가 종료됐다");
     }
-    if (publish_hook) {
-      publish_hook(topic, std::type_index(typeid(T)),
-                   std::shared_ptr<const void>(message), qos);
-    }
+    return Publisher<T>(state_, get_or_create_channel_locked<T>(state_, topic), topic, qos);
   }
 
   void set_publish_hook(detail::PublishHook hook) {

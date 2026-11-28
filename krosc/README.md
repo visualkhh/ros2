@@ -62,7 +62,7 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 # krosc_ws 워크스페이스에서는 프로젝트 플러그인이 붙은 krosc_ws_viz_web을 쓴다 (run-viz-web.sh)
 ```
 
-- Viz/VizWeb은 자기 `Context`/`net::Client`를 만들지 않는다. app main이 `Krosc`를 만들고
+- Viz/VizWeb은 자기 `Context`나 별도 TCP 클라이언트를 만들지 않는다. app main이 `Krosc`를 만들고
   `Krosc::context()`를 넘긴다. 원격 연결은 `PeerNetwork`가 토픽/서비스/액션/파라미터
   RPC 단위로 처리한다.
 - 웹 게이트웨이의 브라우저 프레임 ↔ 토픽 브리지는 `krosc/viz-web/core/context_link.cpp`에 있다.
@@ -354,6 +354,31 @@ KROSC_STRESS=1 KROSC_TEST_FILTER=concurrency ./build/engine/krosc_core_tests
 
 현재 Mac loopback 기준: 토픽 RTT p50 ~0.11ms, 1KiB payload ~80k msg/s,
 3 peer fanout ~114k deliveries/s, RPC p50 ~0.06ms. Pi에서는 별도 측정이 필요하다.
+
+## 실행 모델 (노드별 직렬 줄)
+
+- 스레드는 `Executor` 워커 풀 하나뿐이다 (`executor_threads`, 0이면 inline). 노드마다 스레드를 만들지 않는다.
+- 각 `Node`는 `Strand`(큐 + 실행 중 플래그) 하나를 가진다. 그 노드의 구독/타이머 콜백은 이 줄을 거쳐
+  공용 풀에 한 번에 하나만 올라가므로 **한 노드 안에서는 동시에 돌지 않는다** (노드 멤버에 락 불필요).
+  다른 노드끼리는 같은 풀에서 병렬로 돈다. ROS 2의 기본 MutuallyExclusive callback group과 같다.
+- 병렬이 필요한 콜백만 `subscribe(..., qos, CallbackGroup::Reentrant)` / `create_timer(..., Reentrant)`.
+  `TransformListener`는 Reentrant다 (콜백 안의 TF lookup(timeout)이 자기 TF 갱신을 기다리지 않게).
+- inline 모드에서 콜백 안에서 자기 노드로 발행하면 재진입하지 않고, 지금 콜백이 끝난 뒤 이어서 돈다.
+- 서비스 핸들러와 액션 execute는 줄 밖에서 돈다 (호출한 스레드 / 액션 워커). 이들과 콜백이 같은
+  멤버를 만지면 여전히 락이 필요하다.
+
+## 토픽 QoS와 PeerNetwork
+
+- 기본값은 ROS 2와 같다: `QOS_DEFAULT` = KEEP_LAST 10, `QOS_SENSOR_DATA` = 5, `QOS_PARAMETER_EVENTS` = 1000,
+  `QOS_TF` = 100. 버리면 안 되는 곳은 `QOS_KEEP_ALL` (액션 이벤트가 이것을 쓴다).
+- 피어 토픽 프레임은 발행자 QoS(`[u16 depth][u8 durability]`)를 메시지 앞에 싣는다. 받는 쪽은 토픽 이름으로
+  QoS를 추측하지 않고 그 값으로 다시 발행한다.
+- 보내기 큐는 토픽마다 발행자 depth만큼만 둔다 (KEEP_LAST). depth 1인 명령은 최신 하나만 나가고,
+  `tf`(100)는 여러 broadcaster의 프레임이 서로 덮어쓰지 않는다. TransientLocal 토픽은 depth만큼 캐시해
+  늦게 붙은 피어에게 다시 보낸다 (`tf_static` 고정 변환 전부).
+- 메시지 타입 지원은 `engine/core/net/topic_codec.cpp`의 표 한 줄이다 (`find_topic_type`). 피어와
+  웹 게이트웨이는 이 표만 본다. `Kind` 숫자는 브라우저(`www/app.js`)와 같은 전송용 타입 ID다.
+- 자주 발행하는 토픽은 `node.create_publisher<T>(topic, qos)` 손잡이를 쓴다 (발행마다 이름 조회가 없다).
 
 ## RPC (PeerNetwork)
 

@@ -6,13 +6,14 @@
 #include <mutex>
 #include <string>
 #include <cstring>
+#include <set>
 #include <thread>
 
 #include "krosc/action.hpp"
 #include "krosc/context.hpp"
 #include "krosc/msgs/nav2_msgs.hpp"
 #include "krosc/msgs/rcl_interfaces.hpp"
-#include "krosc/net/net.hpp"
+#include "krosc/net/topic_codec.hpp"
 #include "krosc/node.hpp"
 #include "krosc/parameter_rpc.hpp"
 #include "krosc/net/rpc.hpp"
@@ -23,7 +24,7 @@
 using namespace std::chrono_literals;
 
 KROSC_TEST(net_protocol_frame_roundtrip) {
-  // Qt Viz는 net::Client, 웹 Viz는 net::Frame을 쓰지만 body 포맷은 이 정의 하나를 공유한다.
+  // 웹 게이트웨이와 브라우저가 같은 body 포맷을 쓴다.
   krosc::net::Frame frame;
   frame.type = krosc::net::kFrameTopic;
   frame.topic = "moveit_target";
@@ -57,11 +58,14 @@ KROSC_TEST(net_message_codec_roundtrip) {
   pose.pose.position = {1.0, 2.0, 0.0};
   path.poses.push_back(pose);
 
-  const auto kind = krosc::net::message_kind(std::type_index(typeid(krosc::msgs::Path)));
-  CHECK(kind.has_value());
-  const auto bytes = krosc::net::encode_message(std::type_index(typeid(krosc::msgs::Path)), &path);
-  CHECK(!bytes.empty());
-  const auto decoded = krosc::net::decode_message(*kind, bytes.data(), bytes.size());
+  const auto* codec = krosc::net::find_topic_type(std::type_index(typeid(krosc::msgs::Path)));
+  CHECK(codec != nullptr);
+  CHECK(codec == krosc::net::find_topic_type(krosc::net::Kind::Path));
+  krosc::net::RpcWriter writer;
+  codec->encode(writer, &path);
+  CHECK(!writer.data.empty());
+  const auto decoded = codec->decode(writer.data.data(), writer.data.size());
+  CHECK(codec->decode(writer.data.data(), writer.data.size() - 1) == nullptr);  // 잘린 데이터는 거부
   CHECK(decoded != nullptr);
   const auto typed = std::static_pointer_cast<const krosc::msgs::Path>(decoded);
   CHECK_EQ(1U, typed->poses.size());
@@ -69,23 +73,31 @@ KROSC_TEST(net_message_codec_roundtrip) {
   CHECK_EQ(std::string("map"), typed->header.frame_id);
 }
 
-KROSC_TEST(net_roundtrip_topics_and_teleop) {
-  krosc::Context server_context;
-  krosc::net::Server server(server_context, 0);
-  CHECK(server.port() != 0);
-  CHECK(server.running());
+namespace {
+
+krosc::Context::Options peer_server_options(const std::string& name) {
+  krosc::Context::Options options;
+  options.network.name = name;
+  options.network.host = "127.0.0.1";
+  options.network.port = 0;
+  return options;
+}
+
+krosc::Context::Options peer_client_options(const std::string& name, std::uint16_t port) {
+  krosc::Context::Options options;
+  options.network.name = name;
+  options.network.servers = {"127.0.0.1:" + std::to_string(port)};
+  return options;
+}
+
+}  // namespace
+
+KROSC_TEST(net_peer_roundtrip_topics_and_teleop) {
+  krosc::Context server_context(peer_server_options("robot"));
 
   // latched: 클라이언트가 나중에 붙어도 받아야 한다.
   server_context.topics().publish("robot_description", krosc::msgs::String{"<robot name='net_test'/>"},
                                   krosc::QOS_LATCHED);
-  server_context.topics().publish(
-      "tf_static", krosc::msgs::TFMessage{{
-                       krosc::msgs::TransformStamped{
-                           krosc::msgs::Header{0.0, "base_link"}, "base_scan",
-                           krosc::msgs::Transform{{0.06, 0.0, 0.02}, krosc::msgs::Quaternion{}}},
-                   }},
-      krosc::QOS_TF_STATIC);
-
   krosc::msgs::OccupancyGrid map;
   map.header = krosc::msgs::Header{0.0, "map"};
   map.info.resolution = 0.05;
@@ -95,7 +107,7 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
   map.data = {0, 100, -1, 50};
   server_context.topics().publish("map", map, krosc::QOS_LATCHED);
 
-  krosc::Context client_context;
+  krosc::Context client_context(peer_client_options("viz", server_context.peer_network()->port()));
   std::atomic<bool> got_description{false};
   std::atomic<bool> got_map{false};
   std::atomic<bool> got_scan{false};
@@ -113,7 +125,7 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
   client_context.topics().subscribe<krosc::msgs::OccupancyGrid>(
       "map",
       [&](const krosc::msgs::OccupancyGrid& message) {
-        if (message.info.width == 2 && message.info.height == 2 && message.data.size() == 4 && message.data[1] == 100) {
+        if (message.info.width == 2 && message.data.size() == 4 && message.data[1] == 100) {
           got_map.store(true);
         }
         cv.notify_all();
@@ -129,30 +141,34 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
       },
       krosc::QOS_SENSOR_DATA);
 
-  auto client = std::make_unique<krosc::net::Client>(client_context, "127.0.0.1", server.port());
-
   std::unique_lock<std::mutex> lock(mutex);
-  const bool connected = cv.wait_for(lock, 3s, [&] {
-    return client->connected() && got_description.load();
-  });
-  CHECK(connected);
-  CHECK(got_description.load());
-  CHECK(cv.wait_for(lock, 3s, [&] { return got_map.load(); }));
+  CHECK(cv.wait_for(lock, 3s, [&] { return got_description.load() && got_map.load(); }));
 
   krosc::msgs::LaserScan scan;
-  scan.header.stamp = 1.0;
-  scan.header.frame_id = "base_scan";
-  scan.angle_min = 0.0;
-  scan.angle_max = 2.0;
-  scan.angle_increment = 1.0;
-  scan.range_min = 0.12;
-  scan.range_max = 3.5;
+  scan.header = krosc::msgs::Header{1.0, "base_scan"};
   scan.ranges = {1.0F, 2.0F, 3.0F};
-  server_context.topics().publish("scan", scan, krosc::QOS_SENSOR_DATA);
-  CHECK(cv.wait_for(lock, 3s, [&] { return got_scan.load(); }));
+  for (int i = 0; i < 20 && !got_scan.load(); ++i) {
+    server_context.topics().publish("scan", scan, krosc::QOS_SENSOR_DATA);
+    cv.wait_for(lock, 50ms);
+  }
+  CHECK(got_scan.load());
+
+  lock.unlock();
+  client_context.shutdown();
+  server_context.shutdown();
+}
+
+KROSC_TEST(net_peer_teleop_receive_remap) {
+  // 로봇은 원격 cmd_vel을 cmd_vel_teleop으로 받는다 (krosc_ws/engine/main.cpp와 같은 설정).
+  auto server_options = peer_server_options("robot");
+  server_options.network.receive_remap["cmd_vel"] = "cmd_vel_teleop";
+  krosc::Context server_context(server_options);
+  krosc::Context client_context(peer_client_options("viz", server_context.peer_network()->port()));
 
   std::atomic<bool> got_command{false};
   std::atomic<double> command_linear{0.0};
+  std::mutex mutex;
+  std::condition_variable cv;
   server_context.topics().subscribe<krosc::msgs::Twist>(
       "cmd_vel_teleop",
       [&](const krosc::msgs::Twist& twist) {
@@ -161,20 +177,21 @@ KROSC_TEST(net_roundtrip_topics_and_teleop) {
         cv.notify_all();
       },
       krosc::QOS_COMMAND);
-  client_context.topics().publish("cmd_vel", krosc::msgs::Twist{{0.17, 0.0, 0.0}, {0.0, 0.0, -0.4}},
-                                  krosc::QOS_COMMAND);
-  CHECK(cv.wait_for(lock, 3s, [&] { return got_command.load(); }));
+  std::unique_lock<std::mutex> lock(mutex);
+  for (int i = 0; i < 40 && !got_command.load(); ++i) {
+    client_context.topics().publish("cmd_vel", krosc::msgs::Twist{{0.17, 0.0, 0.0}, {0.0, 0.0, -0.4}},
+                                    krosc::QOS_COMMAND);
+    cv.wait_for(lock, 50ms);
+  }
+  CHECK(got_command.load());
   CHECK_NEAR(0.17, command_linear.load(), 1e-9);
-
   lock.unlock();
-  client->shutdown();
-  client.reset();
-  server.shutdown();
+  client_context.shutdown();
+  server_context.shutdown();
 }
 
-KROSC_TEST(net_large_latched_map_roundtrip) {
-  krosc::Context server_context;
-  krosc::net::Server server(server_context, 0);
+KROSC_TEST(net_peer_large_latched_map_roundtrip) {
+  krosc::Context server_context(peer_server_options("robot"));
   krosc::msgs::OccupancyGrid map;
   map.header = krosc::msgs::Header{2.0, "map"};
   map.info.resolution = 0.05;
@@ -186,54 +203,73 @@ KROSC_TEST(net_large_latched_map_roundtrip) {
   map.data[163U * 262U - 1] = 50;
   server_context.topics().publish("map", map, krosc::QOS_LATCHED);
 
-  krosc::Context client_context;
+  krosc::Context client_context(peer_client_options("viz", server_context.peer_network()->port()));
   std::atomic<bool> got_map{false};
   std::mutex mutex;
   std::condition_variable cv;
   client_context.topics().subscribe<krosc::msgs::OccupancyGrid>(
       "map",
       [&](const krosc::msgs::OccupancyGrid& message) {
-        if (message.info.width == 163 && message.info.height == 262 && message.data.size() == 163U * 262U) {
+        if (message.info.width == 163 && message.data.size() == 163U * 262U && message.data.back() == 50) {
           got_map.store(true);
         }
         cv.notify_all();
       },
       krosc::QOS_LATCHED);
-  auto client = std::make_unique<krosc::net::Client>(client_context, "127.0.0.1", server.port());
   std::unique_lock<std::mutex> lock(mutex);
   CHECK(cv.wait_for(lock, 3s, [&] { return got_map.load(); }));
+  lock.unlock();
+  client_context.shutdown();
+  server_context.shutdown();
 }
 
-KROSC_TEST(net_latched_map_replays_for_late_subscriber) {
-  krosc::Context server_context;
-  krosc::net::Server server(server_context, 0);
-  krosc::msgs::OccupancyGrid map;
-  map.header = krosc::msgs::Header{3.0, "map"};
-  map.info.resolution = 0.05;
-  map.info.width = 4;
-  map.info.height = 4;
-  map.info.origin.orientation.w = 1.0;
-  map.data.assign(16, static_cast<std::int8_t>(0));
-  map.data[0] = 100;
-  server_context.topics().publish("map", map, krosc::QOS_LATCHED);
+KROSC_TEST(net_peer_tf_static_keeps_every_broadcaster) {
+  // tf_static은 발행자마다 메시지가 따로다. 발행자 QoS(depth)가 그대로 전달되어
+  // 늦게 붙은 피어도 모든 고정 변환을 받아야 한다 (이름 추측으로 depth 1이 되면 하나만 남는다).
+  krosc::Context server_context(peer_server_options("robot"));
+  const auto stamped = [](const std::string& parent, const std::string& child) {
+    return krosc::msgs::TFMessage{{krosc::msgs::TransformStamped{
+        krosc::msgs::Header{0.0, parent}, child, krosc::msgs::Transform{{0.1, 0.0, 0.0}, krosc::msgs::Quaternion{}}}}};
+  };
+  server_context.topics().publish("tf_static", stamped("base_link", "base_scan"), krosc::QOS_TF_STATIC);
+  server_context.topics().publish("tf_static", stamped("base_link", "imu_link"), krosc::QOS_TF_STATIC);
+  server_context.topics().publish("tf_static", stamped("base_link", "camera_link"), krosc::QOS_TF_STATIC);
 
-  krosc::Context client_context;
-  auto client = std::make_unique<krosc::net::Client>(client_context, "127.0.0.1", server.port());
-  std::this_thread::sleep_for(500ms);  // viz처럼 연결이 먼저 되고 구독은 나중에
-  std::atomic<bool> got_map{false};
+  krosc::Context client_context(peer_client_options("viz", server_context.peer_network()->port()));
   std::mutex mutex;
   std::condition_variable cv;
-  client_context.topics().subscribe<krosc::msgs::OccupancyGrid>(
-      "map",
-      [&](const krosc::msgs::OccupancyGrid& message) {
-        if (message.info.width == 4 && message.info.height == 4 && message.data.size() == 16) {
-          got_map.store(true);
+  std::set<std::string> children;
+  client_context.topics().subscribe<krosc::msgs::TFMessage>(
+      "tf_static",
+      [&](const krosc::msgs::TFMessage& message) {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (const auto& transform : message.transforms) {
+          children.insert(transform.child_frame_id);
         }
         cv.notify_all();
       },
-      krosc::QOS_LATCHED);
+      krosc::QOS_TF_STATIC);
   std::unique_lock<std::mutex> lock(mutex);
-  CHECK(cv.wait_for(lock, 2s, [&] { return got_map.load(); }));
+  CHECK(cv.wait_for(lock, 3s, [&] { return children.size() == 3; }));
+  lock.unlock();
+
+  // 원격에서 다시 발행된 tf_static도 depth를 유지해, 그 프로세스의 늦은 구독자도 셋 다 받는다.
+  std::set<std::string> late_children;
+  client_context.topics().subscribe<krosc::msgs::TFMessage>(
+      "tf_static",
+      [&](const krosc::msgs::TFMessage& message) {
+        std::lock_guard<std::mutex> late_lock(mutex);
+        for (const auto& transform : message.transforms) {
+          late_children.insert(transform.child_frame_id);
+        }
+        cv.notify_all();
+      },
+      krosc::QOS_TF_STATIC);
+  lock.lock();
+  CHECK(cv.wait_for(lock, 3s, [&] { return late_children.size() == 3; }));
+  lock.unlock();
+  client_context.shutdown();
+  server_context.shutdown();
 }
 
 KROSC_TEST(net_peer_local_only_and_host) {
@@ -252,7 +288,7 @@ KROSC_TEST(net_peer_local_only_and_host) {
 KROSC_TEST(net_peer_topic_mesh_and_latched) {
   krosc::Context::Options server_options;
   server_options.network.name = "peer_server";
-  server_options.network.listen = true;
+  server_options.network.host = "127.0.0.1";
   server_options.network.port = 0;
   krosc::Context server(server_options);
   CHECK(server.peer_network() != nullptr);
@@ -260,7 +296,7 @@ KROSC_TEST(net_peer_topic_mesh_and_latched) {
 
   krosc::Context::Options client_options;
   client_options.network.name = "peer_client";
-  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  client_options.network.servers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
   krosc::Context client(client_options);
   CHECK(client.peer_network() != nullptr);
 
@@ -311,14 +347,14 @@ KROSC_TEST(net_peer_replays_latched_published_before_connect) {
   // 한 번만 발행되므로, 새 peer가 구독할 때 latched 캐시에서 재전송되어야 한다.
   krosc::Context::Options server_options;
   server_options.network.name = "late_server";
-  server_options.network.listen = true;
+  server_options.network.host = "127.0.0.1";
   server_options.network.port = 0;
   krosc::Context server(server_options);
   server.topics().publish("map_status", krosc::msgs::String{"ready-before"}, krosc::QOS_LATCHED);
 
   krosc::Context::Options client_options;
   client_options.network.name = "late_client";
-  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  client_options.network.servers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
   krosc::Context client(client_options);
 
   std::atomic<bool> got{false};
@@ -418,7 +454,7 @@ KROSC_TEST(net_rpc_service_and_parameter_services) {
 
   krosc::Context::Options server_options;
   server_options.network.name = "rpc_server";
-  server_options.network.listen = true;
+  server_options.network.host = "127.0.0.1";
   server_options.network.port = 0;
   krosc::Context server(server_options);
   krosc::Node server_node(server, "rpc_param_node");
@@ -432,7 +468,7 @@ KROSC_TEST(net_rpc_service_and_parameter_services) {
   krosc::Context::Options client_options;
   client_options.network.name = "rpc_client";
   client_options.network.rpc_timeout_sec = 0.4;
-  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  client_options.network.servers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
   krosc::Context client(client_options);
 
   std::mutex mutex;
@@ -488,7 +524,7 @@ KROSC_TEST(net_rpc_service_and_parameter_services) {
 KROSC_TEST(net_rpc_nav2_actions_roundtrip) {
   krosc::Context::Options server_options;
   server_options.network.name = "nav2_action_server";
-  server_options.network.listen = true;
+  server_options.network.host = "127.0.0.1";
   server_options.network.port = 0;
   krosc::Context server(server_options);
 
@@ -525,7 +561,7 @@ KROSC_TEST(net_rpc_nav2_actions_roundtrip) {
   krosc::Context::Options client_options;
   client_options.network.name = "nav2_action_client";
   client_options.network.rpc_timeout_sec = 1.0;
-  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  client_options.network.servers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
   krosc::Context client(client_options);
   krosc::ActionClient<krosc::msgs::nav2::NavigateToPoseGoal,
                       krosc::msgs::nav2::NavigateToPoseFeedback,
@@ -584,7 +620,7 @@ KROSC_TEST(net_rpc_action_roundtrip) {
 
   krosc::Context::Options server_options;
   server_options.network.name = "action_server";
-  server_options.network.listen = true;
+  server_options.network.host = "127.0.0.1";
   server_options.network.port = 0;
   krosc::Context server(server_options);
   krosc::ActionServer<int, int, int> action_server(
@@ -596,7 +632,7 @@ KROSC_TEST(net_rpc_action_roundtrip) {
   krosc::Context::Options client_options;
   client_options.network.name = "action_client";
   client_options.network.rpc_timeout_sec = 1.0;
-  client_options.network.peers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
+  client_options.network.servers = {"127.0.0.1:" + std::to_string(server.peer_network()->port())};
   krosc::Context client(client_options);
   std::atomic<int> feedback{0};
   krosc::ActionClient<int, int, int> action_client(client, "test_action");

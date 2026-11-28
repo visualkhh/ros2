@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/net/net.hpp"
+#include "krosc/net/topic_codec.hpp"
 #include "krosc/qos.hpp"
 
 namespace krosc::viz_web {

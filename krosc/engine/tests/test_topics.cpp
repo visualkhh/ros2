@@ -120,3 +120,36 @@ KROSC_TEST(publish_after_shutdown_is_dropped) {
   context->shutdown();
   CHECK_NOTHROW(node->publish("late", 1));
 }
+
+KROSC_TEST(topic_publisher_handle) {
+  krosc::Context context;
+  krosc::Node node(context, "publisher");
+  std::vector<std::string> received;
+  node.subscribe<krosc::msgs::String>("chat", [&](const krosc::msgs::String& message) { received.push_back(message.data); });
+  auto publisher = node.create_publisher<krosc::msgs::String>("chat");
+  CHECK(publisher.valid());
+  publisher.publish(krosc::msgs::String{"a"});
+  node.publish("chat", krosc::msgs::String{"b"});  // 이름으로 발행해도 같은 채널
+  CHECK_EQ(2u, received.size());
+  CHECK_EQ(std::string("a"), received[0]);
+  // 타입이 다른 채널이면 만들 때 바로 실패한다.
+  CHECK_THROWS_AS(node.create_publisher<int>("chat"), std::runtime_error);
+  // latched 발행자는 나중 구독자에게도 전달된다.
+  auto latched = node.create_publisher<krosc::msgs::String>("config", krosc::QOS_LATCHED);
+  latched.publish(krosc::msgs::String{"late"});
+  std::string late;
+  node.subscribe<krosc::msgs::String>("config", [&](const krosc::msgs::String& message) { late = message.data; },
+                                      krosc::QOS_LATCHED);
+  CHECK_EQ(std::string("late"), late);
+  context.shutdown();
+  publisher.publish(krosc::msgs::String{"after shutdown"});  // 종료 뒤 발행은 조용히 무시
+  CHECK_EQ(2u, received.size());
+}
+
+KROSC_TEST(topic_default_qos_matches_ros2) {
+  CHECK(krosc::QOS_DEFAULT.depth.has_value());
+  CHECK_EQ(10u, *krosc::QOS_DEFAULT.depth);
+  CHECK_EQ(5u, *krosc::QOS_SENSOR_DATA.depth);
+  CHECK_EQ(1000u, *krosc::QOS_PARAMETER_EVENTS.depth);
+  CHECK(!krosc::QOS_KEEP_ALL.depth.has_value());
+}

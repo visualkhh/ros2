@@ -26,9 +26,10 @@
 #include <vector>
 
 #include "krosc/context.hpp"
-#include "krosc/net/net.hpp"
+#include "krosc/net/topic_codec.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/net/rpc.hpp"
+#include "krosc/net/rpc_codec.hpp"
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
@@ -38,7 +39,10 @@ namespace krosc::net {
 
 namespace {
 
-constexpr std::uint8_t kPeerTopicLatched = 3;  // kFrameTopic(1)의 latched 변형
+// 피어 토픽 프레임. payload = [u16 depth (0 = KEEP_ALL)][u8 durability][메시지].
+// 발행자의 QoS를 그대로 실어 보내, 받는 쪽이 토픽 이름으로 QoS를 추측하지 않게 한다.
+constexpr std::uint8_t kPeerTopic = 3;
+constexpr std::size_t kQosHeaderSize = 3;
 constexpr std::uint8_t kPeerControl = 4;
 constexpr std::size_t kMaxQueue = 512;
 
@@ -149,32 +153,26 @@ std::string join_lines(const std::vector<std::string>& lines) {
   return out;
 }
 
-QoS qos_for_remote_topic(const std::string& topic, bool latched) {
-  if (latched) {
-    return QOS_LATCHED;
-  }
-  if (topic == "tf") {
-    return QOS_TF;
-  }
-  if (topic == "scan" || topic == "imu" || topic == "odom" || topic == "odometry/filtered" ||
-      topic == "local_plan") {
-    return QOS_SENSOR_DATA;
-  }
-  if (topic == "cmd_vel" || topic == "cmd_vel_teleop") {
-    return QOS_COMMAND;
-  }
-  return QOS_DEFAULT;
+void write_qos(RpcWriter& writer, QoS qos) {
+  const std::size_t depth = qos.depth.value_or(0);
+  writer.u16(static_cast<std::uint16_t>(depth > 0xFFFFu ? 0xFFFFu : depth));
+  writer.u8(qos.latched() ? 1U : 0U);
 }
 
-// 표시용 고주기 토픽은 큐에 같은 토픽이 있으면 최신 프레임으로 교체한다.
-// (이벤트/명령/제어 프레임은 절대 합치지 않는다.)
-// tf_static은 발행자별로 별도 프레임이라 큐에서도 합치면 map→odom이 사라진다.
-bool latest_only_topic(const std::string& topic) {
-  return topic == "tf" || topic == "joint_states" || topic == "odom" ||
-         topic == "odometry/filtered" || topic == "scan" || topic == "imu" ||
-         topic == "diagnostics" || topic == "local_plan" || topic == "moveit_state" ||
-         topic == "moveit_status" || topic == "arm_status" || topic == "slam_status" ||
-         topic == "goal_status" || topic == "collision_status" || topic == "rl_nav_status";
+QoS read_qos(const Frame& frame) {
+  RpcReader reader(frame.payload);
+  const std::uint16_t depth = reader.u16();
+  const bool latched = reader.u8() != 0;
+  return QoS{depth == 0 ? std::nullopt : std::optional<std::size_t>(depth),
+             latched ? Durability::TransientLocal : Durability::Volatile};
+}
+
+// 보내기 큐에 같은 토픽을 몇 개까지 둘지 = 발행자 depth (KEEP_LAST). 0이면 제한 없음.
+std::size_t queue_keep(const Frame& frame) {
+  if (frame.type != kPeerTopic || frame.payload.size() < kQosHeaderSize) {
+    return 0;
+  }
+  return static_cast<std::size_t>(frame.payload[0]) | (static_cast<std::size_t>(frame.payload[1]) << 8);
 }
 
 }  // namespace
@@ -228,10 +226,10 @@ struct PeerNetwork::Impl {
   std::mutex subscriptions_mutex;
   std::vector<std::string> subscriptions;
   std::mutex latched_mutex;
-  // tf_static은 발행자마다 별도 메시지라 하나만 저장하면 map→odom 또는 URDF 고정
-  // 관절 중 하나가 사라진다. 다른 래치 토픽은 최신 하나만 유지한다.
-  using LatchedEntry = std::pair<Kind, std::vector<std::uint8_t>>;
-  std::map<std::string, std::vector<LatchedEntry>> latched;
+  // TransientLocal 토픽의 마지막 프레임들 (발행자 depth만큼). 나중에 구독한 피어에게 다시 보낸다.
+  // tf_static처럼 발행자마다 메시지가 따로인 토픽도 depth 안에서 모두 남는다.
+  std::map<std::string, std::deque<std::shared_ptr<const Frame>>> latched;
+  std::set<std::string> missing_codecs;  // 코덱 없는 타입 경고는 한 번만
   std::set<std::string> remote_topics;
   std::mutex active_mutex;
   std::condition_variable active_cv;
@@ -306,7 +304,7 @@ struct PeerNetwork::Impl {
       sockaddr_in address{};
       address.sin_family = AF_INET;
       address.sin_addr.s_addr = htonl(INADDR_ANY);
-      const std::string bind_address = options.effective_bind_address();
+      const std::string bind_address = options.host;
       if (!bind_address.empty() && bind_address != "0.0.0.0" && bind_address != "*") {
         if (::inet_pton(AF_INET, bind_address.c_str(), &address.sin_addr) != 1) {
           ::close(listen_fd);
@@ -334,7 +332,7 @@ struct PeerNetwork::Impl {
       accept_thread = std::thread([this] { accept_loop(); });
     }
 
-    for (const auto& peer : options.all_servers()) {
+    for (const auto& peer : options.servers) {
       connect_threads.emplace_back([this, peer] { connect_loop(peer); });
     }
     reaper_thread = std::thread([this] { reap_loop(); });
@@ -864,6 +862,7 @@ struct PeerNetwork::Impl {
     }
     std::vector<std::shared_ptr<Peer>> targets;
     targets.reserve(snapshot.size());
+    bool requested = false;  // 원격이 이 토픽을 명시적으로 구독했는지 (코덱 경고용)
     for (const auto& peer : snapshot) {
       if (!peer || !peer->alive.load()) {
         continue;
@@ -874,44 +873,47 @@ struct PeerNetwork::Impl {
       bool subscribed = true;
       {
         std::lock_guard<std::mutex> lock(peer->subscription_mutex);
-        subscribed = !peer->discovered || peer->subscriptions.count(topic) != 0;
+        const bool explicit_subscription = peer->subscriptions.count(topic) != 0;
+        requested = requested || explicit_subscription;
+        subscribed = !peer->discovered || explicit_subscription;
       }
       if (subscribed) {
         targets.push_back(peer);
       }
     }
-    if (peer_debug() && topic.rfind("camera/", 0) == 0) {
-      std::fprintf(stderr, "[peer] publish %s targets=%zu peers=%zu\n", topic.c_str(),
-                   targets.size(), snapshot.size());
-    }
     if (targets.empty() && !is_latched) {
       return;
     }
-    const auto kind = message_kind(type);
-    if (!kind) {
+    const TopicType* codec = find_topic_type(type);
+    if (codec == nullptr) {
+      if (!requested) {
+        return;
+      }
+      std::lock_guard<std::mutex> lock(latched_mutex);
+      if (missing_codecs.insert(topic).second) {
+        std::fprintf(stderr, "[krosc] PeerNetwork: '%s' 타입(%s)에 토픽 코덱이 없어 원격으로 보내지 않는다\n",
+                     topic.c_str(), type.name());
+      }
       return;
     }
     Frame frame;
-    frame.type = is_latched ? kPeerTopicLatched : kFrameTopic;
+    frame.type = kPeerTopic;
     frame.topic = topic;
-    frame.kind = *kind;
-    frame.payload = encode_message(type, message.get());
+    frame.kind = codec->kind;
+    RpcWriter writer;
+    write_qos(writer, qos);
+    codec->encode(writer, message.get());
+    frame.payload = std::move(writer.data);
+    auto shared = std::make_shared<const Frame>(std::move(frame));
     if (is_latched) {
+      const std::size_t keep = qos.depth.value_or(kMaxQueue);
       std::lock_guard<std::mutex> lock(latched_mutex);
       auto& entries = latched[topic];
-      if (topic == "tf_static") {
-        if (entries.size() >= 64) {
-          entries.erase(entries.begin());
-        }
-        entries.push_back({*kind, frame.payload});
-      } else {
-        entries.assign(1, {*kind, frame.payload});
+      entries.push_back(shared);
+      while (entries.size() > keep) {
+        entries.pop_front();
       }
     }
-    if (targets.empty()) {
-      return;
-    }
-    auto shared = std::make_shared<const Frame>(std::move(frame));
     for (const auto& peer : targets) {
       peer->send(shared);
     }
@@ -966,7 +968,7 @@ struct PeerNetwork::Impl {
         return;
       }
       ReceiveGuard guard(&peer, frame.topic);
-      context.topics().publish<ActionEvent>(frame.topic, *event, QOS_DEFAULT);
+      context.topics().publish<ActionEvent>(frame.topic, *event, QOS_KEEP_ALL);
       return;
     }
     if (frame.type == kPeerControl) {
@@ -1020,21 +1022,21 @@ struct PeerNetwork::Impl {
             continue;
           }
           for (const auto& entry : found->second) {
-            Frame reply;
-            reply.type = kPeerTopicLatched;
-            reply.topic = topic;
-            reply.kind = entry.first;
-            reply.payload = entry.second;
-            peer.send(reply);
+            peer.send(entry);
           }
         }
       }
       return;
     }
-    if (frame.type != kFrameTopic && frame.type != kPeerTopicLatched) {
+    if (frame.type != kPeerTopic || frame.payload.size() < kQosHeaderSize) {
       return;
     }
-    const auto message = decode_message(frame.kind, frame.payload.data(), frame.payload.size());
+    const TopicType* codec = find_topic_type(frame.kind);
+    if (codec == nullptr) {
+      return;
+    }
+    const auto message =
+        codec->decode(frame.payload.data() + kQosHeaderSize, frame.payload.size() - kQosHeaderSize);
     if (!message) {
       return;
     }
@@ -1043,76 +1045,8 @@ struct PeerNetwork::Impl {
         remapped != options.receive_remap.end()) {
       topic = remapped->second;
     }
-    const QoS qos = qos_for_remote_topic(topic, frame.type == kPeerTopicLatched);
     ReceiveGuard guard(&peer, topic);
-    switch (frame.kind) {
-      case Kind::Twist:
-        context.topics().publish<msgs::Twist>(
-            topic, std::static_pointer_cast<const msgs::Twist>(message), qos);
-        break;
-      case Kind::String:
-        context.topics().publish<msgs::String>(
-            topic, std::static_pointer_cast<const msgs::String>(message), qos);
-        break;
-      case Kind::TF:
-        context.topics().publish<msgs::TFMessage>(
-            topic, std::static_pointer_cast<const msgs::TFMessage>(message), qos);
-        break;
-      case Kind::Scan:
-        context.topics().publish<msgs::LaserScan>(
-            topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
-        break;
-      case Kind::Image:
-        context.topics().publish<msgs::Image>(
-            topic, std::static_pointer_cast<const msgs::Image>(message), qos);
-        break;
-      case Kind::Imu:
-        context.topics().publish<msgs::Imu>(
-            topic, std::static_pointer_cast<const msgs::Imu>(message), qos);
-        break;
-      case Kind::Odometry:
-        context.topics().publish<msgs::Odometry>(
-            topic, std::static_pointer_cast<const msgs::Odometry>(message), qos);
-        break;
-      case Kind::JointState:
-        context.topics().publish<msgs::JointState>(
-            topic, std::static_pointer_cast<const msgs::JointState>(message), qos);
-        break;
-      case Kind::Grid:
-        context.topics().publish<msgs::OccupancyGrid>(
-            topic, std::static_pointer_cast<const msgs::OccupancyGrid>(message), qos);
-        break;
-      case Kind::Path:
-        context.topics().publish<msgs::Path>(
-            topic, std::static_pointer_cast<const msgs::Path>(message), qos);
-        break;
-      case Kind::Diagnostics:
-        context.topics().publish<msgs::DiagnosticArray>(
-            topic, std::static_pointer_cast<const msgs::DiagnosticArray>(message), qos);
-        break;
-      case Kind::Log:
-        context.topics().publish<msgs::Log>(
-            topic, std::static_pointer_cast<const msgs::Log>(message), qos);
-        break;
-      case Kind::Pose:
-        context.topics().publish<msgs::PoseStamped>(
-            topic, std::static_pointer_cast<const msgs::PoseStamped>(message), qos);
-        break;
-      case Kind::PoseCov:
-        context.topics().publish<msgs::PoseWithCovarianceStamped>(
-            topic, std::static_pointer_cast<const msgs::PoseWithCovarianceStamped>(message), qos);
-        break;
-      case Kind::Bool:
-        context.topics().publish<msgs::Bool>(
-            topic, std::static_pointer_cast<const msgs::Bool>(message), qos);
-        break;
-      case Kind::Empty:
-        context.topics().publish<msgs::Empty>(
-            topic, std::static_pointer_cast<const msgs::Empty>(message), qos);
-        break;
-      default:
-        break;
-    }
+    codec->publish(context.topics(), topic, message, read_qos(frame));
   }
 };
 
@@ -1144,15 +1078,17 @@ void Peer::send(std::shared_ptr<const Frame> frame) {
     if (!alive.load()) {
       return;
     }
-    const bool data_frame = frame->type == kFrameTopic || frame->type == kPeerTopicLatched;
-    if (data_frame && latest_only_topic(frame->topic)) {
-      for (auto it = queue.rbegin(); it != queue.rend(); ++it) {
-        if ((*it)->topic == frame->topic &&
-            ((*it)->type == kFrameTopic || (*it)->type == kPeerTopicLatched)) {
-          *it = std::move(frame);  // 아직 안 나간 같은 토픽 프레임을 최신 값으로 교체
-          queue_cv.notify_one();
-          return;
+    // KEEP_LAST: 아직 안 나간 같은 토픽 프레임이 발행자 depth만큼 있으면 가장 오래된 것을 버린다.
+    if (const std::size_t keep = queue_keep(*frame); keep > 0) {
+      std::size_t same = 0;
+      auto oldest = queue.end();
+      for (auto it = queue.begin(); it != queue.end(); ++it) {
+        if ((*it)->type == kPeerTopic && (*it)->topic == frame->topic && same++ == 0) {
+          oldest = it;
         }
+      }
+      if (same >= keep) {
+        queue.erase(oldest);
       }
     }
     if (queue.size() >= kMaxQueue) {

@@ -8,7 +8,7 @@
 #include "hardwares/lds03/lds03_device.hpp"
 #include "hardwares/opencr/opencr_protocol.hpp"
 #include "krosc/msgs.hpp"
-#include "krosc/net/net.hpp"
+#include "krosc/net/topic_codec.hpp"
 
 #include "test_framework.hpp"
 
@@ -116,14 +116,14 @@ KROSC_TEST(image_message_roundtrip) {
   image.step = 0;
   image.data = {0xFF, 0xD8, 0x01, 0x02, 0x03, 0xFF, 0xD9};
 
-  const auto kind = krosc::net::message_kind(typeid(krosc::msgs::Image));
-  CHECK(kind.has_value());
-  CHECK_EQ(static_cast<int>(krosc::net::Kind::Image), static_cast<int>(*kind));
+  const auto* codec = krosc::net::find_topic_type(typeid(krosc::msgs::Image));
+  CHECK(codec != nullptr);
+  CHECK_EQ(static_cast<int>(krosc::net::Kind::Image), static_cast<int>(codec->kind));
 
-  const auto payload = krosc::net::encode_message(typeid(krosc::msgs::Image), &image);
-  CHECK(!payload.empty());
-  const auto decoded =
-      krosc::net::decode_message(krosc::net::Kind::Image, payload.data(), payload.size());
+  krosc::net::RpcWriter writer;
+  codec->encode(writer, &image);
+  CHECK(!writer.data.empty());
+  const auto decoded = codec->decode(writer.data.data(), writer.data.size());
   CHECK(decoded != nullptr);
   if (decoded) {
     const auto& result = *static_cast<const krosc::msgs::Image*>(decoded.get());

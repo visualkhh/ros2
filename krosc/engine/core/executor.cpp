@@ -107,4 +107,45 @@ void Executor::worker_loop() {
   }
 }
 
+void Strand::post(std::function<void()> task) {
+  if (!task) {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    queue_.push_back(std::move(task));
+    if (running_) {
+      return;  // 지금 실행 중인 drain이 이어서 처리한다
+    }
+    running_ = true;
+  }
+  if (executor_.inline_mode()) {
+    drain();
+  } else {
+    executor_.post([self = shared_from_this()] { self->drain(); });
+  }
+}
+
+void Strand::drain() {
+  for (;;) {
+    std::function<void()> task;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (queue_.empty()) {
+        running_ = false;
+        return;
+      }
+      task = std::move(queue_.front());
+      queue_.pop_front();
+    }
+    try {
+      task();
+    } catch (const std::exception& error) {
+      std::fprintf(stderr, "[krosc] strand task failed: %s\n", error.what());
+    } catch (...) {
+      std::fprintf(stderr, "[krosc] strand task failed: unknown exception\n");
+    }
+  }
+}
+
 }  // namespace krosc

@@ -4,11 +4,15 @@
 
 namespace krosc {
 
+// Buffer는 자체 락이 있다. 노드 줄에 넣으면 그 노드 콜백이 lookup(timeout)으로 기다리는 동안 TF 갱신도
+// 같은 줄 뒤에서 기다려 항상 timeout이 난다. tf2_ros가 리스너 전용 스레드를 두는 것과 같은 이유로 Reentrant.
 TransformListener::TransformListener(Buffer& buffer, Node& node) : buffer_(buffer), node_(node) {
   tf_subscription_ = node_.subscribe<msgs::TFMessage>(
-      TF_TOPIC_NAME, [this](const msgs::TFMessage& message) { on_message(message, false); }, QOS_TF);
+      TF_TOPIC_NAME, [this](const msgs::TFMessage& message) { on_message(message, false); }, QOS_TF,
+      CallbackGroup::Reentrant);
   static_subscription_ = node_.subscribe<msgs::TFMessage>(
-      TF_STATIC_TOPIC_NAME, [this](const msgs::TFMessage& message) { on_message(message, true); }, QOS_TF_STATIC);
+      TF_STATIC_TOPIC_NAME, [this](const msgs::TFMessage& message) { on_message(message, true); }, QOS_TF_STATIC,
+      CallbackGroup::Reentrant);
 }
 
 TransformListener::~TransformListener() {

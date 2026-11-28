@@ -43,7 +43,7 @@ class Timer {
 //
 // - 실제 시간: 스케줄 스레드 하나가 가장 가까운 주기까지 기다렸다 깨운다 (타이머마다 스레드를 만들지 않는다).
 // - 시뮬레이션 시간: 시간을 set하는 스레드가 그 자리에서 바로 판정한다 (결정적, 스케줄 스레드 없음).
-// - 콜백은 Executor에서 돈다. inline Executor면 set()/스케줄 스레드에서 바로 실행된다.
+// - 콜백은 Executor에서 돈다 (strand를 주면 그 줄에서). inline Executor면 set()/스케줄 스레드에서 바로 실행된다.
 // - 시간이 한꺼번에 건너뛰면 한 번만 부르고 나머지는 missed로 센다 (박자는 유지).
 class TimerManager {
  public:
@@ -53,7 +53,9 @@ class TimerManager {
   TimerManager(const TimerManager&) = delete;
   TimerManager& operator=(const TimerManager&) = delete;
 
-  Timer create(double period, std::function<void()> callback, std::string name = {});
+  // strand: 콜백을 올릴 직렬 줄 (Node가 자기 줄을 넘긴다). 없으면 Executor로 바로 올린다.
+  Timer create(double period, std::function<void()> callback, std::string name = {},
+               std::shared_ptr<Strand> strand = nullptr);
   [[nodiscard]] bool join(std::optional<double> timeout_seconds = std::nullopt);
   void shutdown();
   [[nodiscard]] std::size_t timer_count() const;

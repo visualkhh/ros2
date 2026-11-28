@@ -14,8 +14,8 @@ class Context;
 namespace krosc::net {
 
 // Krosc/Context가 다른 Krosc 인스턴스와 토픽을 주고받기 위한 peer 설정.
-//   - listen=true, port=0: 임시 포트로 서버를 열고 port()로 실제 포트를 확인
-//   - peers: 연결할 "host:port" 목록 (끊기면 1초마다 재연결)
+//   - host 지정 + port=0: 임시 포트로 서버를 열고 port()로 실제 포트를 확인
+//   - servers: 연결할 "host:port" 목록 (끊기면 1초마다 재연결)
 struct PeerNetworkOptions {
   std::string name = "krosc";
   // 로컬 listen 주소. 비우면 이쪽으로 들어오는 연결은 받지 않는다.
@@ -32,30 +32,12 @@ struct PeerNetworkOptions {
   // 원격 서비스 호출 타임아웃 (초).
   double rpc_timeout_sec = 5.0;
 
-  // 기존 옵션 호환용. 새 코드는 host/servers를 쓴다.
-  std::string bind_address = "0.0.0.0";
-  bool listen = false;
-  std::vector<std::string> peers;
-
   void add_server(std::string server_host, std::uint16_t server_port) {
     servers.push_back(std::move(server_host) + ":" + std::to_string(server_port));
   }
 
-  [[nodiscard]] bool listen_enabled() const { return !host.empty() || listen; }
-
-  [[nodiscard]] bool enabled() const {
-    return listen_enabled() || !servers.empty() || !peers.empty();
-  }
-
-  [[nodiscard]] std::vector<std::string> all_servers() const {
-    std::vector<std::string> result = servers;
-    result.insert(result.end(), peers.begin(), peers.end());
-    return result;
-  }
-
-  [[nodiscard]] std::string effective_bind_address() const {
-    return host.empty() ? bind_address : host;
-  }
+  [[nodiscard]] bool listen_enabled() const { return !host.empty(); }
+  [[nodiscard]] bool enabled() const { return listen_enabled() || !servers.empty(); }
 };
 
 // 여러 Krosc 프로세스 사이의 토픽 mesh.

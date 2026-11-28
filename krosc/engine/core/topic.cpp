@@ -7,8 +7,14 @@ namespace krosc {
 
 namespace detail {
 
-SubscriptionBase::SubscriptionBase(std::string topic, QoS qos, Executor& executor, std::weak_ptr<TopicState> state)
-    : topic_(std::move(topic)), qos_(qos), executor_(executor), state_(std::move(state)) {}
+SubscriptionBase::SubscriptionBase(std::string topic, QoS qos, Executor& executor, std::shared_ptr<Strand> strand,
+                                   std::weak_ptr<TopicState> state, std::weak_ptr<ChannelBase> channel)
+    : topic_(std::move(topic)),
+      qos_(qos),
+      executor_(executor),
+      strand_(std::move(strand)),
+      state_(std::move(state)),
+      channel_(std::move(channel)) {}
 
 void SubscriptionBase::schedule() {
   bool post = false;
@@ -20,8 +26,16 @@ void SubscriptionBase::schedule() {
     }
   }
   if (post) {
-    auto self = shared_from_this();
-    executor_.post([self = std::move(self)] { self->drain(); });
+    post_drain();
+  }
+}
+
+void SubscriptionBase::post_drain() {
+  auto task = [self = shared_from_this()] { self->drain(); };
+  if (strand_) {
+    strand_->post(std::move(task));
+  } else {
+    executor_.post(std::move(task));
   }
 }
 
@@ -47,8 +61,7 @@ void SubscriptionBase::cancel() {
   SubscriptionHook subscription_hook;
   if (state) {
     std::lock_guard<std::mutex> lock(state->mutex);
-    for (auto& [name, channel] : state->channels) {
-      (void)name;
+    if (auto channel = channel_.lock()) {
       auto subscribers = std::make_shared<SubscriberList>(*channel->subscribers);
       subscribers->erase(std::remove_if(subscribers->begin(), subscribers->end(),
                                         [this](const std::shared_ptr<SubscriptionBase>& subscriber) {

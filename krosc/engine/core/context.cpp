@@ -20,7 +20,7 @@ Context::Context(Options options)
   }
   if (options.publish_parameter_events) {
     parameters_->set_event_callback([this](const ParameterEvent& event) {
-      topics_->publish("parameter_events", event);
+      topics_->publish("parameter_events", event, QOS_PARAMETER_EVENTS);
     });
   }
 }

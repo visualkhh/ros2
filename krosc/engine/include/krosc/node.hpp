@@ -18,6 +18,11 @@
 
 namespace krosc {
 
+// ROS 2 callback group. 기본은 MutuallyExclusive: 한 노드의 구독/타이머 콜백은 서로 동시에 돌지 않아
+// 노드 멤버에 락이 필요 없다 (노드끼리는 병렬). Reentrant는 노드 줄을 거치지 않고 바로 Executor로 간다.
+// 서비스 핸들러는 지금도 호출한 쪽 스레드에서 돈다 (동기 호출 데드락을 피하려고 줄에 넣지 않는다).
+enum class CallbackGroup { MutuallyExclusive, Reentrant };
+
 // krosc 노드의 기본형: Context를 반드시 가진다. 이름은 Context 안에서 유일해야 한다.
 // 파라미터를 선언해서 가지며, 실행 중에 publish/subscribe/service/timer를 만든다.
 class Node {
@@ -39,11 +44,17 @@ class Node {
 
   template <class T>
   Subscription<T> subscribe(const std::string& topic, std::function<void(const T&)> callback,
-                            QoS qos = QOS_DEFAULT) {
-    auto subscription = context_.topics().subscribe<T>(topic, std::move(callback), qos);
+                            QoS qos = QOS_DEFAULT, CallbackGroup group = CallbackGroup::MutuallyExclusive) {
+    auto subscription = context_.topics().subscribe<T>(topic, std::move(callback), qos, strand_for(group));
     // 타입 소거해 두었다가 Node가 소멸할 때 정리한다. (TopicRegistry도 자체적으로 구독을 보관한다)
     subscriptions_.push_back(subscription.base());
     return subscription;
+  }
+
+  // 같은 토픽을 자주 발행하면 손잡이를 만들어 두고 쓴다 (publish마다 이름 조회가 없다).
+  template <class T>
+  Publisher<T> create_publisher(const std::string& topic, QoS qos = QOS_DEFAULT) {
+    return context_.topics().create_publisher<T>(topic, qos);
   }
 
   template <class T>
@@ -56,8 +67,9 @@ class Node {
     context_.topics().publish<T>(topic, std::move(message), qos);
   }
 
-  Timer create_timer(double period, std::function<void()> callback) {
-    Timer timer = context_.timers().create(period, std::move(callback), name_);
+  Timer create_timer(double period, std::function<void()> callback,
+                     CallbackGroup group = CallbackGroup::MutuallyExclusive) {
+    Timer timer = context_.timers().create(period, std::move(callback), name_, strand_for(group));
     timers_.push_back(timer);
     return timer;
   }
@@ -121,8 +133,12 @@ class Node {
 
  private:
   void create_parameter_services();
+  [[nodiscard]] std::shared_ptr<Strand> strand_for(CallbackGroup group) const {
+    return group == CallbackGroup::MutuallyExclusive ? strand_ : nullptr;
+  }
 
   Context& context_;
+  std::shared_ptr<Strand> strand_ = std::make_shared<Strand>(context_.executor());
   std::string name_;
   Parameter<std::string> log_level_;
   std::unique_ptr<NodeLogger> logger_;

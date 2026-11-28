@@ -17,6 +17,7 @@ namespace detail {
 struct TimerState {
   double period = 0.0;
   std::function<void()> callback;
+  std::shared_ptr<Strand> strand;
   std::string name;
   std::uint64_t id = 0;
   double next_due = 0.0;
@@ -120,7 +121,9 @@ void fire_due(const std::shared_ptr<TimerManagerState>& state) {
     }
   }
   for (const auto& timer : due) {
-    if (state->executor->inline_mode()) {
+    if (timer->strand) {
+      timer->strand->post([state, timer] { run_timer(state, timer); });
+    } else if (state->executor->inline_mode()) {
       run_timer(state, timer);
     } else {
       state->executor->post([state, timer] { run_timer(state, timer); });
@@ -187,13 +190,15 @@ TimerManager::TimerManager(TimeSource& time_source, Executor& executor)
 
 TimerManager::~TimerManager() { shutdown(); }
 
-Timer TimerManager::create(double period, std::function<void()> callback, std::string name) {
+Timer TimerManager::create(double period, std::function<void()> callback, std::string name,
+                           std::shared_ptr<Strand> strand) {
   if (!(period > 0.0)) {
     throw std::invalid_argument("타이머 주기는 0보다 커야 한다");
   }
   auto timer = std::make_shared<detail::TimerState>();
   timer->period = period;
   timer->callback = std::move(callback);
+  timer->strand = std::move(strand);
   timer->name = std::move(name);
   {
     std::lock_guard<std::mutex> lock(state_->mutex);

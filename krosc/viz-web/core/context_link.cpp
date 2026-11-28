@@ -2,8 +2,6 @@
 
 #include <chrono>
 #include <map>
-#include <typeindex>
-#include <typeinfo>
 #include <utility>
 
 namespace krosc::viz_web {
@@ -11,41 +9,6 @@ namespace krosc::viz_web {
 struct ContextLink::Impl {
   explicit Impl(Context& context_value) : context(context_value) {}
   ~Impl() { shutdown(); }
-
-  template <class T>
-  bool subscribe_topic(const std::string& name, net::Kind kind, QoS qos) {
-    if (name.empty() || subscriptions.count(name) != 0) {
-      return false;
-    }
-    try {
-      auto subscription = context.topics().subscribe<T>(
-          name,
-          [this, name, kind](const T& message) {
-            if (stopping.load()) {
-              return;
-            }
-            FrameHandler handler;
-            {
-              std::lock_guard<std::mutex> lock(handler_mutex);
-              handler = frame_handler;
-            }
-            if (!handler) {
-              return;
-            }
-            net::Frame frame;
-            frame.type = net::kFrameTopic;
-            frame.topic = name;
-            frame.kind = kind;
-            frame.payload = net::encode_message(std::type_index(typeid(T)), &message);
-            handler(frame);
-          },
-          qos);
-      subscriptions.emplace(name, subscription.base());
-      return true;
-    } catch (...) {
-      return false;
-    }
-  }
 
   void start() {
     if (started.exchange(true)) {
@@ -57,41 +20,36 @@ struct ContextLink::Impl {
   }
 
   bool subscribe(const TopicSpec& topic) {
-    switch (topic.kind) {
-      case net::Kind::Twist:
-        return subscribe_topic<msgs::Twist>(topic.name, topic.kind, topic.qos);
-      case net::Kind::String:
-        return subscribe_topic<msgs::String>(topic.name, topic.kind, topic.qos);
-      case net::Kind::TF:
-        return subscribe_topic<msgs::TFMessage>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Scan:
-        return subscribe_topic<msgs::LaserScan>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Image:
-        return subscribe_topic<msgs::Image>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Imu:
-        return subscribe_topic<msgs::Imu>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Odometry:
-        return subscribe_topic<msgs::Odometry>(topic.name, topic.kind, topic.qos);
-      case net::Kind::JointState:
-        return subscribe_topic<msgs::JointState>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Grid:
-        return subscribe_topic<msgs::OccupancyGrid>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Path:
-        return subscribe_topic<msgs::Path>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Diagnostics:
-        return subscribe_topic<msgs::DiagnosticArray>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Log:
-        return subscribe_topic<msgs::Log>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Pose:
-        return subscribe_topic<msgs::PoseStamped>(topic.name, topic.kind, topic.qos);
-      case net::Kind::PoseCov:
-        return subscribe_topic<msgs::PoseWithCovarianceStamped>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Bool:
-        return subscribe_topic<msgs::Bool>(topic.name, topic.kind, topic.qos);
-      case net::Kind::Empty:
-        return subscribe_topic<msgs::Empty>(topic.name, topic.kind, topic.qos);
-      default:
-        return false;
+    const auto* codec = net::find_topic_type(topic.kind);
+    if (codec == nullptr || topic.name.empty() || subscriptions.count(topic.name) != 0) {
+      return false;
+    }
+    try {
+      const std::string name = topic.name;
+      const net::Kind kind = topic.kind;
+      auto subscription = codec->subscribe(
+          context.topics(), name,
+          [this, name, kind, codec](const void* message) {
+            if (stopping.load()) {
+              return;
+            }
+            FrameHandler handler;
+            {
+              std::lock_guard<std::mutex> lock(handler_mutex);
+              handler = frame_handler;
+            }
+            if (!handler) {
+              return;
+            }
+            net::RpcWriter writer;
+            codec->encode(writer, message);
+            handler(net::Frame{net::kFrameTopic, name, kind, std::move(writer.data)});
+          },
+          topic.qos);
+      subscriptions.emplace(name, std::move(subscription));
+      return true;
+    } catch (...) {
+      return false;
     }
   }
 
@@ -180,80 +138,16 @@ struct ContextLink::Impl {
     if (frame.type != net::kFramePublish) {
       return false;
     }
-    const auto message =
-        net::decode_message(frame.kind, frame.payload.data(), frame.payload.size());
+    const auto* codec = net::find_topic_type(frame.kind);
+    if (codec == nullptr) {
+      return false;
+    }
+    const auto message = codec->decode(frame.payload.data(), frame.payload.size());
     if (!message) {
       return false;
     }
     const QoS qos = frame.kind == net::Kind::Twist ? QOS_COMMAND : QOS_DEFAULT;
-    switch (frame.kind) {
-      case net::Kind::Twist:
-        context.topics().publish<msgs::Twist>(
-            frame.topic, std::static_pointer_cast<const msgs::Twist>(message), qos);
-        break;
-      case net::Kind::String:
-        context.topics().publish<msgs::String>(
-            frame.topic, std::static_pointer_cast<const msgs::String>(message), qos);
-        break;
-      case net::Kind::TF:
-        context.topics().publish<msgs::TFMessage>(
-            frame.topic, std::static_pointer_cast<const msgs::TFMessage>(message), qos);
-        break;
-      case net::Kind::Scan:
-        context.topics().publish<msgs::LaserScan>(
-            frame.topic, std::static_pointer_cast<const msgs::LaserScan>(message), qos);
-        break;
-      case net::Kind::Image:
-        context.topics().publish<msgs::Image>(
-            frame.topic, std::static_pointer_cast<const msgs::Image>(message), qos);
-        break;
-      case net::Kind::Imu:
-        context.topics().publish<msgs::Imu>(
-            frame.topic, std::static_pointer_cast<const msgs::Imu>(message), qos);
-        break;
-      case net::Kind::Odometry:
-        context.topics().publish<msgs::Odometry>(
-            frame.topic, std::static_pointer_cast<const msgs::Odometry>(message), qos);
-        break;
-      case net::Kind::JointState:
-        context.topics().publish<msgs::JointState>(
-            frame.topic, std::static_pointer_cast<const msgs::JointState>(message), qos);
-        break;
-      case net::Kind::Grid:
-        context.topics().publish<msgs::OccupancyGrid>(
-            frame.topic, std::static_pointer_cast<const msgs::OccupancyGrid>(message), qos);
-        break;
-      case net::Kind::Path:
-        context.topics().publish<msgs::Path>(
-            frame.topic, std::static_pointer_cast<const msgs::Path>(message), qos);
-        break;
-      case net::Kind::Diagnostics:
-        context.topics().publish<msgs::DiagnosticArray>(
-            frame.topic, std::static_pointer_cast<const msgs::DiagnosticArray>(message), qos);
-        break;
-      case net::Kind::Log:
-        context.topics().publish<msgs::Log>(
-            frame.topic, std::static_pointer_cast<const msgs::Log>(message), qos);
-        break;
-      case net::Kind::Pose:
-        context.topics().publish<msgs::PoseStamped>(
-            frame.topic, std::static_pointer_cast<const msgs::PoseStamped>(message), qos);
-        break;
-      case net::Kind::PoseCov:
-        context.topics().publish<msgs::PoseWithCovarianceStamped>(
-            frame.topic, std::static_pointer_cast<const msgs::PoseWithCovarianceStamped>(message), qos);
-        break;
-      case net::Kind::Bool:
-        context.topics().publish<msgs::Bool>(
-            frame.topic, std::static_pointer_cast<const msgs::Bool>(message), qos);
-        break;
-      case net::Kind::Empty:
-        context.topics().publish<msgs::Empty>(
-            frame.topic, std::static_pointer_cast<const msgs::Empty>(message), qos);
-        break;
-      default:
-        return false;
-    }
+    codec->publish(context.topics(), frame.topic, message, qos);
     return true;
   }
 

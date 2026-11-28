@@ -25,7 +25,6 @@
 #include "krosc/context.hpp"
 #include "krosc/msgs.hpp"
 #include "krosc/nodes/moveit/move_group.hpp"
-#include "krosc/net/net.hpp"
 #include "krosc/qos.hpp"
 #include "krosc/nodes/cartographer.hpp"
 #include "krosc/nodes/collision_monitor.hpp"
