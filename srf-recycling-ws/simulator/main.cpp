@@ -260,6 +260,11 @@ int main(int argc, char** argv) {
   options.enable_rl = true;
   options.enable_arm = true;
   options.enable_status = true;
+  // 시뮬 카메라는 color·depth 를 같은 렌더(수평 69°)로 만든다 → vlm/select 의 픽셀→3D 화각
+  options.camera_color_hfov_deg = 69.0;
+  options.camera_depth_hfov_deg = 69.0;
+  options.camera_depth_vfov_deg = 2.0 * std::atan(std::tan(34.5 * 3.141592653589793 / 180.0) * camera_height / camera_width) *
+                                  180.0 / 3.141592653589793;
   options.enable_robot_state_publisher = true;
   options.enable_camera = true;
   options.wheel_radius = srf_recycling_ws::sim::WafflePiArm::kWheelRadius;

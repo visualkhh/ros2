@@ -28,6 +28,7 @@ std::string strip_code_fence(std::string text);
 
 std::optional<std::string> string_field(std::string_view json, std::string_view key);
 std::optional<double> number_field(std::string_view json, std::string_view key);
+std::optional<bool> bool_field(std::string_view json, std::string_view key);
 
 // Ollama /api/chat 응답 본문에서 message.content를 꺼낸다.
 std::optional<std::string> ollama_content(std::string_view response);

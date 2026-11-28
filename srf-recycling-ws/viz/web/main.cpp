@@ -164,14 +164,14 @@ void register_arm_rpc(srf::viz_web::WebRpc& rpc, srf::Context& context) {
           });
 }
 
-void register_llm_rpc(srf::viz_web::WebRpc& rpc, srf::Context& context) {
-  rpc.add("llm/command",
+void register_prompt_rpc(srf::viz_web::WebRpc& rpc, srf::Context& context) {
+  rpc.add("prompt/submit",
           [&context](const srf::viz_web::Json& params, const srf::viz_web::WebRpc::Notify&) {
             srf::viz_web::Json result = srf::viz_web::Json::object();
             try {
               const auto response = context.services().call<srf::msgs::String,
                                                             srf::msgs::String>(
-                  "llm/command", srf::msgs::String{params["text"].as_string()});
+                  "prompt/submit", srf::msgs::String{params["text"].as_string()});
               result["raw"] = response.data;
             } catch (const std::exception& error) {
               result["accepted"] = false;
@@ -219,7 +219,7 @@ int main(int argc, char** argv) {
       {"moveit_path", srf::net::Kind::Path, srf::QOS_DEFAULT},
       {"rl_nav_status", srf::net::Kind::String, srf::QOS_LATCHED},
       {"rl_nav_model_list", srf::net::Kind::String, srf::QOS_LATCHED},
-      {"llm/status", srf::net::Kind::String, srf::QOS_DEFAULT},
+      {"prompt/status", srf::net::Kind::String, srf::QOS_DEFAULT},  // prompt_input: coordinator 진행·결과
       {"recycling/truth", srf::net::Kind::String, srf::QOS_DEFAULT},  // 시뮬레이터 진실 판정
       {"vlm/status", srf::net::Kind::String, srf::QOS_DEFAULT},
       {"vla/status", srf::net::Kind::String, srf::QOS_DEFAULT},
@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
   srf::viz_web::VizWeb web(std::move(options), std::move(registry), app.context());
   register_move_rpc(web.rpc(), app.context());
   register_arm_rpc(web.rpc(), app.context());
-  register_llm_rpc(web.rpc(), app.context());
+  register_prompt_rpc(web.rpc(), app.context());
   if (!web.initialize(error)) {
     std::fprintf(stderr, "[viz-web] %s\n", error.c_str());
     return 1;

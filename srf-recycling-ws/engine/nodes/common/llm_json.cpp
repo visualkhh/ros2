@@ -211,6 +211,21 @@ std::optional<double> number_field(std::string_view json, std::string_view key) 
   return value;
 }
 
+std::optional<bool> bool_field(std::string_view json, std::string_view key) {
+  const auto start = value_start(json, key);
+  if (!start) {
+    return std::nullopt;
+  }
+  const auto rest = json.substr(*start);
+  if (rest.substr(0, 4) == "true") {
+    return true;
+  }
+  if (rest.substr(0, 5) == "false") {
+    return false;
+  }
+  return std::nullopt;
+}
+
 std::optional<std::string> ollama_content(std::string_view response) {
   auto content = string_field(response, "content");
   if (!content) {

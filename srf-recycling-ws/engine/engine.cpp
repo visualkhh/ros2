@@ -43,9 +43,11 @@
 #include "hardwares/opencr/opencr_device.hpp"
 #include "nodes/ai_context/ai_context_node.hpp"
 #include "nodes/grasp_detector/grasp_detector_node.hpp"
-#include "nodes/llm_input/llm_input.hpp"
+#include "nodes/coordinator/coordinator.hpp"
+#include "nodes/llm/llm.hpp"
 #include "nodes/nav_behavior/nav_behavior_node.hpp"
 #include "nodes/pick_place/pick_place_node.hpp"
+#include "nodes/prompt_input/prompt_input.hpp"
 #include "nodes/robot_status/robot_status.hpp"
 #include "nodes/vla/vla_node.hpp"
 #include "nodes/vlm/vlm_node.hpp"
@@ -218,22 +220,35 @@ Engine::Engine(srf::Context& context, OpenCrDevice& opencr, LdsDevice* lidar,
   if (options_.enable_status) {
     status_ = std::make_unique<RobotStatus>(context_, opencr_, lidar_);
   }
+  // 사람 지시 → prompt_input → coordinator(계획·실행) → llm(해석) / vlm(고르기) / vla(움직임) / Nav / map_marker
   if (options_.enable_llm) {
-    llm_ = std::make_unique<LlmInput>(context_, options_.llm_ollama_url,
-                                      options_.llm_model, options_.llm_timeout,
-                                      options_.llm_mode, options_.camera_color_topic,
-                                      options_.llm_include_image);
+    llm_ = std::make_unique<Llm>(context_, options_.llm_ollama_url, options_.llm_model, options_.llm_timeout,
+                                 options_.llm_mode, options_.camera_color_topic, options_.llm_include_image);
   }
   if (options_.enable_vla) {
-    vla_ = std::make_unique<VlaNode>(context_, options_.vla_url,
-                                     options_.camera_color_topic,
-                                     options_.vla_period, options_.vla_timeout,
-                                     options_.vla_replan_steps);
+    VlaNode::Options vla;
+    vla.url = options_.vla_url;
+    vla.color_topic = options_.camera_color_topic;
+    vla.depth_topic = options_.camera_depth_topic;
+    vla.period_s = options_.vla_period;
+    vla.timeout_s = options_.vla_timeout;
+    vla.replan_steps = options_.vla_replan_steps;
+    vla.urdf = urdf_;
+    vla_ = std::make_unique<VlaNode>(context_, std::move(vla));
   }
   if (options_.enable_vlm) {
-    vlm_ = std::make_unique<VlmNode>(context_, options_.vlm_url,
-                                     options_.camera_color_topic,
-                                     options_.vlm_timeout);
+    VlmCamera camera;
+    camera.color_frame = options_.camera_color_frame;
+    camera.depth_topic = options_.camera_depth_topic;
+    camera.color_hfov_deg = options_.camera_color_hfov_deg;
+    camera.depth_hfov_deg = options_.camera_depth_hfov_deg;
+    camera.depth_vfov_deg = options_.camera_depth_vfov_deg;
+    vlm_ = std::make_unique<VlmNode>(context_, options_.vlm_url, options_.camera_color_topic, options_.vlm_timeout,
+                                     std::move(camera));
+  }
+  if (options_.enable_coordinator) {
+    coordinator_ = std::make_unique<Coordinator>(context_);
+    prompt_input_ = std::make_unique<PromptInput>(context_);
   }
   if (options_.enable_grasp_detector) {
     grasp_detector_ = std::make_unique<GraspDetectorNode>(
@@ -543,8 +558,9 @@ void Engine::publish_ai_info() {
       << options_.vla_model << "\"},"
       << "\"grasp\":{\"enabled\":" << (options_.enable_grasp_detector ? "true" : "false")
       << ",\"source\":\"camera/color+depth\"},"
-      << "\"services\":{\"command\":\"llm/command\",\"pick\":\"pick/command\","
-      << "\"nav\":\"nav/hide|nav/approach\",\"vlm\":\"vlm/query\",\"vla\":\"vla/command\"}}";
+      << "\"services\":{\"prompt\":\"prompt/submit\",\"coordinator\":\"coordinator/task (action)\","
+      << "\"llm\":\"llm/parse\",\"pick\":\"pick/command\",\"nav\":\"nav/hide|nav/approach\","
+      << "\"vlm\":\"vlm/query|vlm/select\",\"vla\":\"vla/execute (action)\"}}";
   context_.topics().publish<srf::msgs::String>(
       "ai_info", srf::msgs::String{out.str()}, srf::QOS_LATCHED);
 }
@@ -590,8 +606,8 @@ void Engine::stop() {
   if (!started_) {
     return;
   }
-  if (llm_) {
-    llm_->emergency_stop();
+  if (coordinator_) {
+    coordinator_->emergency_stop();
   }
   if (vla_) {
     vla_->emergency_stop();

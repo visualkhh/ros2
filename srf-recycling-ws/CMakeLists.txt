@@ -20,10 +20,12 @@ set(SRF_RECYCLING_WS_REAL_SOURCES
   engine/main.cpp
   engine/engine.cpp
   engine/nodes/robot_status/robot_status.cpp
-  engine/nodes/llm_input/llm_input.cpp
-  engine/nodes/llm_input/llm_client.cpp
+  engine/nodes/llm/llm.cpp
+  engine/nodes/coordinator/coordinator.cpp
+  engine/nodes/prompt_input/prompt_input.cpp
+  engine/nodes/llm/llm_client.cpp
   engine/nodes/common/llm_json.cpp
-  engine/nodes/llm_input/command_rules.cpp
+  engine/nodes/llm/command_rules.cpp
   engine/nodes/common/http_client.cpp
   engine/nodes/vla/vla_node.cpp
   engine/nodes/vlm/vlm_node.cpp
@@ -264,10 +266,12 @@ if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^
     simulator/panels/cell_panel.cpp
     engine/engine.cpp
     engine/nodes/robot_status/robot_status.cpp
-    engine/nodes/llm_input/llm_input.cpp
-    engine/nodes/llm_input/llm_client.cpp
+    engine/nodes/llm/llm.cpp
+  engine/nodes/coordinator/coordinator.cpp
+  engine/nodes/prompt_input/prompt_input.cpp
+    engine/nodes/llm/llm_client.cpp
     engine/nodes/common/llm_json.cpp
-    engine/nodes/llm_input/command_rules.cpp
+    engine/nodes/llm/command_rules.cpp
     engine/nodes/common/http_client.cpp
     engine/nodes/vla/vla_node.cpp
     engine/nodes/vlm/vlm_node.cpp
@@ -339,8 +343,11 @@ if(SRF_RECYCLING_WS_BUILD_TESTS)
     tests/test_rl_nav_plugin.cpp
     tests/test_llm.cpp
     tests/test_commands.cpp
+    tests/test_coordinator.cpp
+    engine/nodes/coordinator/coordinator.cpp
+    engine/nodes/prompt_input/prompt_input.cpp
     engine/nodes/common/llm_json.cpp
-    engine/nodes/llm_input/command_rules.cpp
+    engine/nodes/llm/command_rules.cpp
     engine/ml/onnx_policy.cpp
     engine/nodes/rl_nav/rl_nav_controller.cpp
     engine/hardwares/lds03/lds03_device.cpp

@@ -48,7 +48,9 @@ class OpenCrImu;
 class Lds03Sensor;
 class RealSenseSensor;
 class RobotStatus;
-class LlmInput;
+class Llm;
+class Coordinator;
+class PromptInput;
 class VlaNode;
 class VlmNode;
 class PickPlaceNode;
@@ -68,7 +70,9 @@ struct EngineOptions {
   bool enable_robot_state_publisher = true;
   bool enable_camera = true;
   bool enable_llm = true;
-  // llm_input 노드가 직접 호출하는 Ollama 서버. 원격 서버는 SRF_RECYCLING_WS_OLLAMA_URL로 덮어쓴다.
+  // prompt_input + coordinator (사람 지시 → 여러 노드를 불러 계획·실행)
+  bool enable_coordinator = true;
+  // llm 노드가 직접 호출하는 Ollama 서버. 원격 서버는 SRF_RECYCLING_WS_OLLAMA_URL로 덮어쓴다.
   std::string llm_ollama_url = "http://127.0.0.1:11434";
   std::string llm_model = "gemma3:12b";
   // llm: Ollama가 intent를 결정(규칙은 실패/unsupported fallback)
@@ -87,18 +91,18 @@ struct EngineOptions {
   bool enable_grasp_detector = false;
   // LLM/VLA/VLM이 행동 전에 참고할 현재 상태 스냅샷 (RobotStatus의 canonical 토픽 조합).
   bool enable_ai_context = true;
-  std::string vla_url = "http://127.0.0.1:8765/plan";
-  std::string vlm_url = "http://127.0.0.1:8766/query";
-  std::string vla_model = "waffle-color-73";
-  std::string vlm_model = "SmolVLM2-500M";
+  std::string vla_url = "http://127.0.0.1:8765/act";  // ml/vla/serve.py
+  std::string vlm_url = "http://127.0.0.1:8766/query";  // ml/vlm/serve.py
+  std::string vla_model = "srf-recycling-vla";
+  std::string vlm_model = "SmolVLM2-256M (ml/vlm 미세조정)";
   std::string pick_objects_topic = "sim_graspable";
   std::string pick_grasp_info_topic = "grasp_info";
   std::string nav_costmap_topic = "global_costmap/costmap";
   std::string nav_scan_topic = "scan";
   double vla_period = 0.25;
-  double vla_timeout = 180.0;
-  // 0이면 한 청크를 끝까지 open-loop 실행. >0이면 N스텝마다 최신 관측으로 재계획.
-  std::size_t vla_replan_steps = 8;
+  double vla_timeout = 120.0;
+  // 0이면 한 청크(8 스텝)를 끝까지 실행. >0이면 N스텝마다 최신 관측으로 재계획.
+  std::size_t vla_replan_steps = 4;
   double vlm_timeout = 60.0;
   double wheel_radius = 0.033;
   double wheel_separation = 0.287;
@@ -113,6 +117,10 @@ struct EngineOptions {
   std::string camera_depth_topic = "camera/depth/image_rect_raw";
   std::string camera_color_frame = "camera_color_optical_frame";
   std::string camera_depth_frame = "camera_depth_optical_frame";
+  // 픽셀 → 3D (vlm/select). 실기 D435 기본, 시뮬레이터는 렌더 화각을 넣는다.
+  double camera_color_hfov_deg = 69.0;
+  double camera_depth_hfov_deg = 87.0;
+  double camera_depth_vfov_deg = 58.0;
   double camera_period = 0.2;        // color 5Hz
   double camera_depth_period = 0.5;  // depth 2Hz (160x120)
   double control_read_period = 0.02;
@@ -160,7 +168,9 @@ class Engine {
   std::unique_ptr<Lds03Sensor> lds_sensor_;
   std::unique_ptr<RealSenseSensor> camera_sensor_;
   std::unique_ptr<RobotStatus> status_;
-  std::unique_ptr<LlmInput> llm_;
+  std::unique_ptr<Llm> llm_;
+  std::unique_ptr<Coordinator> coordinator_;
+  std::unique_ptr<PromptInput> prompt_input_;
   std::unique_ptr<VlaNode> vla_;
   std::unique_ptr<VlmNode> vlm_;
   std::unique_ptr<PickPlaceNode> pick_;

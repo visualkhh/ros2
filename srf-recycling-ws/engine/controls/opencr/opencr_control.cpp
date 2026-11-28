@@ -26,6 +26,11 @@ OpenCrControl::OpenCrControl(OpenCrDevice& opencr, double wheel_radius, double w
       std::make_shared<srf::control::StateInterface>("wheel_left_joint/velocity");
   states_["wheel_right_joint/velocity"] =
       std::make_shared<srf::control::StateInterface>("wheel_right_joint/velocity");
+  // 팔 관절 속도·전류 (ROS 2 Dynamixel 하드웨어처럼 전류는 effort, A) → joint_states velocity/effort
+  for (const auto& name : arm_joints()) {
+    states_[name + "/velocity"] = std::make_shared<srf::control::StateInterface>(name + "/velocity");
+    states_[name + "/effort"] = std::make_shared<srf::control::StateInterface>(name + "/effort");
+  }
   for (const auto& name : arm_joints()) {
     // 컨트롤러가 실제 목표를 쓰기 전에는 팔에 0을 보내지 않는다.
     // 실기 부팅 직후 팔이 임의로 0 자세로 튀는 것을 막고, 시뮬은 초기 자세를 유지한다.
@@ -87,6 +92,10 @@ bool OpenCrControl::read(double time, double period) {
         found->second->set(arm.position[i]);
       }
       arm_ready_ = true;
+    }
+    for (std::size_t i = 0; i < 5; ++i) {
+      states_[arm_joints()[i] + "/velocity"]->set(arm.velocity[i]);
+      states_[arm_joints()[i] + "/effort"]->set(arm.current[i]);
     }
     if (std::isfinite(arm.position[4])) {
       states_["gripper_left_joint"]->set(arm.position[4]);

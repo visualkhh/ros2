@@ -1,19 +1,16 @@
 #include "vla_node.hpp"
 
 #include <algorithm>
-#include <array>
-#include <cctype>
+#include <chrono>
 #include <cmath>
-#include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <exception>
-#include <string>
+#include <thread>
 #include <utility>
-#include <vector>
 
 #include "srf/control/controller_manager.hpp"
-#include "srf/msgs.hpp"
+#include "srf/nodes/map/map_marker.hpp"
+#include "srf/tf/math.hpp"
+#include "srf/urdf.hpp"
 
 #include "nodes/common/http_client.hpp"
 #include "nodes/common/llm_json.hpp"
@@ -22,498 +19,354 @@ namespace srf_recycling_ws {
 
 namespace {
 
-constexpr std::array<const char*, 5> kJointNames{
-    "joint1", "joint2", "joint3", "joint4", "gripper_left_joint"};
+constexpr std::array<const char*, 5> kJointNames{"joint1", "joint2", "joint3", "joint4", "gripper_left_joint"};
+// 공식 OpenMANIPULATOR-X 범위
+constexpr std::array<std::array<double, 2>, 5> kJointLimits{{{-2.827433388230814, 2.827433388230814},
+                                                            {-1.790707812546182, 1.5707963267948966},
+                                                            {-0.9424777960769379, 1.382300767579509},
+                                                            {-1.790707812546182, 2.0420352248333655},
+                                                            {-0.010, 0.019}}};
+constexpr double kMaxV = 0.10;  // VLA 접근 속도 상한 (m/s) — Nav 보다 훨씬 느리게
+constexpr double kMaxW = 0.50;  // rad/s
+constexpr double kBaseLinkZ = 0.010;
 
-// actions.py LOW/HIGH와 같은 공식 OpenMANIPULATOR-X 범위.
-struct JointLimit {
-  double lower;
-  double upper;
-};
-constexpr std::array<JointLimit, 5> kJointLimits{{
-    {-2.827433388230814, 2.827433388230814},
-    {-1.790707812546182, 1.5707963267948966},
-    {-0.9424777960769379, 1.382300767579509},
-    {-1.790707812546182, 2.0420352248333655},
-    {-0.010, 0.019},
-}};
-
-std::string number(double value) {
-  char buffer[32];
-  std::snprintf(buffer, sizeof(buffer), "%.4f", value);
-  return buffer;
-}
-
-std::string json_quoted(const std::string& value) {
-  return "\"" + llm::escape_json(value) + "\"";
-}
-
-double clamp(double value, double lower, double upper) {
-  return std::clamp(value, lower, upper);
-}
-
-std::string lower_copy(std::string text) {
-  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char character) {
-    return static_cast<char>(std::tolower(character));
-  });
-  return text;
-}
+std::string json_quoted(const std::string& value) { return "\"" + llm::escape_json(value) + "\""; }
 
 std::string base64_encode(const std::vector<std::uint8_t>& data) {
-  static constexpr char kTable[] =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  static constexpr char kTable[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   std::string out;
   out.reserve((data.size() + 2U) / 3U * 4U);
-  for (std::size_t index = 0; index < data.size(); index += 3U) {
-    const unsigned first = data[index];
-    const unsigned second = index + 1U < data.size() ? data[index + 1U] : 0U;
-    const unsigned third = index + 2U < data.size() ? data[index + 2U] : 0U;
-    out.push_back(kTable[first >> 2U]);
-    out.push_back(kTable[((first & 0x03U) << 4U) | (second >> 4U)]);
-    out.push_back(index + 1U < data.size()
-                      ? kTable[((second & 0x0FU) << 2U) | (third >> 6U)]
-                      : '=');
-    out.push_back(index + 2U < data.size() ? kTable[third & 0x3FU] : '=');
+  for (std::size_t i = 0; i < data.size(); i += 3U) {
+    const unsigned a = data[i], b = i + 1U < data.size() ? data[i + 1U] : 0U, c = i + 2U < data.size() ? data[i + 2U] : 0U;
+    out.push_back(kTable[a >> 2U]);
+    out.push_back(kTable[((a & 0x03U) << 4U) | (b >> 4U)]);
+    out.push_back(i + 1U < data.size() ? kTable[((b & 0x0FU) << 2U) | (c >> 6U)] : '=');
+    out.push_back(i + 2U < data.size() ? kTable[c & 0x3FU] : '=');
   }
   return out;
 }
 
-std::vector<double> number_array_field(const std::string& json,
-                                       const std::string& key) {
-  const std::string needle = "\"" + key + "\"";
-  const std::size_t key_position = json.find(needle);
-  if (key_position == std::string::npos) {
-    return {};
+std::string array_json(const double* v, std::size_t n) {
+  std::string out = "[";
+  char buffer[32];
+  for (std::size_t i = 0; i < n; ++i) {
+    std::snprintf(buffer, sizeof(buffer), "%s%.5f", i ? "," : "", std::isfinite(v[i]) ? v[i] : 0.0);
+    out += buffer;
   }
-  const std::size_t begin = json.find('[', key_position + needle.size());
-  if (begin == std::string::npos) {
-    return {};
-  }
-  std::vector<double> values;
-  std::size_t index = begin + 1U;
-  while (index < json.size()) {
-    while (index < json.size() &&
-           (std::isspace(static_cast<unsigned char>(json[index])) != 0 ||
-            json[index] == ',')) {
-      ++index;
-    }
-    if (index >= json.size() || json[index] == ']') {
-      break;
-    }
-    const char* start = json.c_str() + index;
+  return out + "]";
+}
+
+// "key":[x,y,z] 숫자 배열
+std::optional<std::array<double, 3>> vec3_field(const std::string& json, const std::string& key) {
+  const auto at = json.find("\"" + key + "\"");
+  if (at == std::string::npos) return std::nullopt;
+  const auto open = json.find('[', at);
+  if (open == std::string::npos) return std::nullopt;
+  std::array<double, 3> out{};
+  const char* p = json.c_str() + open + 1;
+  for (auto& value : out) {
     char* end = nullptr;
-    const double value = std::strtod(start, &end);
-    if (end == start) {
-      break;
-    }
-    values.push_back(value);
-    index = static_cast<std::size_t>(end - json.c_str());
+    value = std::strtod(p, &end);
+    if (end == p) return std::nullopt;
+    p = end;
+    while (*p == ',' || *p == ' ') ++p;
   }
-  return values;
+  return out;
 }
 
 }  // namespace
 
-VlaNode::VlaNode(srf::Context& context, std::string url, std::string camera_topic,
-                 double period_s, double timeout_s, std::size_t replan_steps)
-    : Node(context, "vla"),
-      url_(std::move(url)),
-      camera_topic_(std::move(camera_topic)),
-      period_s_(period_s > 0.0 ? period_s : 0.25),
-      timeout_s_(timeout_s > 0.0 ? timeout_s : 180.0),
-      replan_steps_(replan_steps) {
-  camera_subscription_ = subscribe<srf::msgs::Image>(
-      camera_topic_, [this](const srf::msgs::Image& message) {
-        std::lock_guard<std::mutex> lock(image_mutex_);
-        image_ = message;
-        image_seen_ = true;
-      });
-  joint_subscription_ = subscribe<srf::msgs::JointState>(
-      "joint_states", [this](const srf::msgs::JointState& message) {
-        std::array<double, 5> values{};
-        std::array<bool, 5> seen{};
-        for (std::size_t index = 0; index < message.name.size() &&
-                                    index < message.position.size();
-             ++index) {
-          for (std::size_t joint = 0; joint < kJointNames.size(); ++joint) {
-            if (message.name[index] == kJointNames[joint]) {
-              values[joint] = message.position[index];
-              seen[joint] = true;
-            }
-          }
-        }
-        const bool complete = std::all_of(seen.begin(), seen.end(),
-                                          [](bool value) { return value; });
-        if (!complete) {
-          return;
-        }
-        std::lock_guard<std::mutex> lock(joints_mutex_);
-        joints_ = values;
-        joints_seen_ = true;
-      });
-  context_subscription_ = subscribe<srf::msgs::String>(
-      "robot_context", [this](const srf::msgs::String& message) {
-        std::lock_guard<std::mutex> lock(context_mutex_);
-        robot_context_ = message.data;
-      });
-  odom_subscription_ = subscribe<srf::msgs::Odometry>(
-      "odom", [this](const srf::msgs::Odometry& message) {
-        std::lock_guard<std::mutex> lock(odom_mutex_);
-        linear_ = message.twist.twist.linear.x;
-        yaw_rate_ = message.twist.twist.angular.z;
-        odom_seen_ = true;
-      });
-  timer_ = create_timer(period_s_, [this] { tick(); });
-  create_service<srf::msgs::String, srf::msgs::String>(
-      "vla/command", [this](const srf::msgs::String& request) {
-        return handle_command(request);
-      });
+VlaNode::VlaNode(srf::Context& context, Options options) : Node(context, "vla"), options_(std::move(options)) {
+  if (!options_.urdf.empty()) {
+    std::string error;
+    chain_ = srf::manipulation::ArmChain::from_urdf(srf::parse_urdf(options_.urdf), "base_link", "end_effector_link",
+                                                    {"joint1", "joint2", "joint3", "joint4"}, error);
+    if (!chain_) logger().warn("VlaNode: 팔 체인 실패 (엔드이펙터 자세 0): %s", error.c_str());
+  }
+  tf_listener_ = std::make_unique<srf::TransformListener>(tf_buffer_, *this);
+  color_subscription_ = subscribe<srf::msgs::Image>(options_.color_topic, [this](const srf::msgs::Image& m) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    color_ = m;
+    color_seen_ = true;
+  }, srf::QOS_SENSOR_DATA);
+  depth_subscription_ = subscribe<srf::msgs::Image>(options_.depth_topic, [this](const srf::msgs::Image& m) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    depth_ = m;
+    depth_seen_ = true;
+  }, srf::QOS_SENSOR_DATA);
+  joints_subscription_ = subscribe<srf::msgs::JointState>("joint_states", [this](const srf::msgs::JointState& m) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    joints_ = m;
+    joints_seen_ = true;
+  });
+  odom_subscription_ = subscribe<srf::msgs::Odometry>("odom", [this](const srf::msgs::Odometry& m) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    odom_v_ = m.twist.twist.linear.x;
+    odom_w_ = m.twist.twist.angular.z;
+    odom_seen_ = true;
+  });
+  scan_subscription_ = subscribe<srf::msgs::LaserScan>("scan", [this](const srf::msgs::LaserScan& m) {
+    // 앞 ±20° 최소 거리 (ml/vla 와 같다)
+    double best = 3.5;
+    for (std::size_t i = 0; i < m.ranges.size(); ++i) {
+      double angle = m.angle_min + m.angle_increment * static_cast<double>(i);
+      angle = std::atan2(std::sin(angle), std::cos(angle));
+      const double r = m.ranges[i];
+      if (std::abs(angle) <= 20.0 * 3.14159265358979323846 / 180.0 && std::isfinite(r) && r > 0.0) best = std::min(best, r);
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    front_ = best;
+  }, srf::QOS_SENSOR_DATA);
+  markers_subscription_ = subscribe<srf::msgs::MapMarkers>("map_markers", [this](const srf::msgs::MapMarkers& m) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    markers_ = m;
+  }, srf::QOS_LATCHED);
+  server_ = std::make_unique<Server>(context, "vla/execute", [this](Handle& handle) { return execute(handle); });
   create_service<srf::msgs::TriggerRequest, srf::msgs::TriggerResponse>(
-      "vla/stop", [this](const srf::msgs::TriggerRequest& request) {
-        return handle_stop(request);
+      "vla/stop", [this](const srf::msgs::TriggerRequest&) {
+        emergency_stop();
+        return srf::msgs::TriggerResponse{true, "vla stop"};
       });
-  worker_ = std::thread([this] { worker_loop(); });
-  logger().info("VlaNode: ready service=vla/command period=%.2fs sidecar=%s",
-                period_s_, url_.c_str());
+  logger().info("VlaNode: ready action=vla/execute sidecar=%s period=%.2fs replan=%zu", options_.url.c_str(),
+                options_.period_s, options_.replan_steps);
 }
 
 VlaNode::~VlaNode() {
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    stopping_ = true;
-    cancel_ = true;
-    pending_ = false;
-  }
-  condition_.notify_all();
-  if (worker_.joinable()) {
-    worker_.join();
-  }
-  stop_motion();
+  stop_.store(true);
+  server_.reset();
   shutdown();
 }
 
-srf::msgs::String VlaNode::handle_command(const srf::msgs::String& request) {
-  std::string target = llm::string_field(request.data, "target").value_or("");
-  if (target.empty()) {
-    target = request.data.empty() ? "red block" : request.data;
-  }
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (pending_ || plan_active_) {
-    return srf::msgs::String{
-        R"({"accepted":false,"error":"VLA busy","stage":"busy"})"};
-  }
-  pending_ = true;
-  pending_id_ = next_id_++;
-  pending_target_ = target;
-  cancel_ = false;
-  const std::uint64_t id = pending_id_;
-  condition_.notify_one();
-  return srf::msgs::String{"{\"accepted\":true,\"request_id\":" +
-                             std::to_string(id) + "}"};
-}
-
-srf::msgs::TriggerResponse VlaNode::handle_stop(
-    const srf::msgs::TriggerRequest&) {
-  emergency_stop();
-  return srf::msgs::TriggerResponse{true, "VLA stop"};
-}
-
 void VlaNode::emergency_stop() {
-  std::uint64_t id = 0;
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    cancel_ = true;
-    pending_ = false;
-    actions_.clear();
-    plan_active_ = false;
-    id = plan_id_;
-  }
+  stop_.store(true);
   stop_motion();
-  if (id != 0) {
-    publish_status(id, "cancelled");
-  }
-  std::string error;
-  (void)switch_arm(false, error);
 }
 
-void VlaNode::worker_loop() {
-  while (true) {
-    std::uint64_t id = 0;
-    std::string target;
-    {
-      std::unique_lock<std::mutex> lock(mutex_);
-      condition_.wait(lock, [this] { return stopping_ || pending_; });
-      if (stopping_) {
-        return;
-      }
-      if (!pending_) {
-        continue;
-      }
-      id = pending_id_;
-      target = pending_target_;
-      pending_ = false;
-    }
-    publish_status(id, "planning");
-    std::vector<Action> actions;
-    std::string instruction;
-    std::string error;
-    if (!request_plan(id, target, actions, instruction, error)) {
-      {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (plan_id_ == id) {
-          plan_active_ = false;
-          actions_.clear();
-        }
-      }
-      stop_motion();
-      std::string ignored;
-      (void)switch_arm(false, ignored);
-      publish_status(id, "error", ",\"error\":" + json_quoted(error));
-      continue;
-    }
-    bool cancelled = false;
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      cancelled = cancel_;
-    }
-    if (cancelled) {
-      publish_status(id, "cancelled");
-      continue;
-    }
-    std::string switch_error;
-    if (!switch_arm(true, switch_error)) {
-      {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (plan_id_ == id) {
-          plan_active_ = false;
-          actions_.clear();
-        }
-      }
-      publish_status(id, "error",
-                     ",\"error\":" + json_quoted("controller switch: " + switch_error));
-      continue;
-    }
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      if (cancel_) {
-        cancelled = true;
-      } else {
-        actions_.clear();
-        for (const Action& action : actions) {
-          actions_.push_back(action);
-        }
-        plan_active_ = true;
-        plan_id_ = id;
-        plan_index_ = 0;
-        plan_total_ = actions.size();
-        plan_instruction_ = instruction;
-        plan_target_ = target;
-      }
-    }
-    if (cancelled) {
-      publish_status(id, "cancelled");
-      std::string ignored;
-      (void)switch_arm(false, ignored);
-      continue;
-    }
-    publish_status(id, "executing",
-                   ",\"steps\":" + std::to_string(actions.size()) +
-                       ",\"instruction\":" + json_quoted(instruction));
-  }
-}
+void VlaNode::stop_motion() { publish<srf::msgs::Twist>("cmd_vel_nav", srf::msgs::Twist{}); }
 
-void VlaNode::tick() {
-  Action action;
-  std::uint64_t id = 0;
-  std::size_t index = 0;
-  std::size_t total = 0;
-  bool replan = false;
+std::optional<std::string> VlaNode::state_json(const std::optional<srf::msgs::Point>& target_odom,
+                                               const std::string& bin, std::string& error) {
+  srf::msgs::JointState joints;
+  double v = 0.0, w = 0.0, front = 3.5;
+  srf::msgs::MapMarkers markers;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!plan_active_ || actions_.empty()) {
-      return;
+    if (!joints_seen_ || !odom_seen_) {
+      error = !joints_seen_ ? "joint_states 가 없다" : "odom 이 없다";
+      return std::nullopt;
     }
-    id = plan_id_;
-    index = plan_index_;
-    total = plan_total_;
-    // 92스텝 청크를 끝까지 open-loop로 실행하면 23초 동안 새 관측을 못 본다.
-    // N스텝마다 큐를 비우고 최신 카메라/관절/odom으로 다시 계획한다.
-    if (replan_steps_ > 0 && plan_index_ >= replan_steps_ &&
-        plan_index_ < plan_total_ && !pending_) {
-      actions_.clear();
-      pending_ = true;
-      pending_id_ = plan_id_;
-      pending_target_ = plan_target_;
-      replan = true;
-    } else {
-      action = actions_.front();
-      actions_.pop_front();
-      ++plan_index_;
-      index = plan_index_;
+    joints = joints_;
+    v = odom_v_;
+    w = odom_w_;
+    front = front_;
+    markers = markers_;
+  }
+  std::array<double, 5> q{}, dq{}, cur{};
+  for (std::size_t j = 0; j < 5; ++j) {
+    for (std::size_t i = 0; i < joints.name.size(); ++i) {
+      if (joints.name[i] != kJointNames[j]) continue;
+      q[j] = i < joints.position.size() ? joints.position[i] : 0.0;
+      dq[j] = i < joints.velocity.size() ? joints.velocity[i] : 0.0;
+      cur[j] = i < joints.effort.size() ? joints.effort[i] : 0.0;
     }
   }
-  if (replan) {
-    stop_motion();
-    publish_status(id, "replanning",
-                   ",\"index\":" + std::to_string(index) +
-                       ",\"steps\":" + std::to_string(total));
-    condition_.notify_one();
-    return;
+  std::array<double, 5> ee{};
+  if (chain_) {
+    const std::array<double, 4> q4{q[0], q[1], q[2], q[3]};
+    const auto tcp = chain_->tcp(q4);
+    ee = {tcp.x, tcp.y, tcp.z, chain_->pitch_down(q4), chain_->tool_yaw(q4)};
   }
-  apply_action(action);
-  publish_status(id, "executing",
-                 ",\"index\":" + std::to_string(index) +
-                     ",\"steps\":" + std::to_string(total));
-  if (index >= total) {
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      plan_active_ = false;
+  std::array<double, 3> target{}, bin_xyz{};
+  try {
+    if (target_odom) {
+      const auto t = tf_buffer_.lookup_transform("base_link", "odom", now() - 0.05);
+      const auto p = srf::tfmath::apply(t.transform, *target_odom);
+      target = {p.x, p.y, p.z};
     }
-    stop_motion();
-    publish_status(id, "done", ",\"steps\":" + std::to_string(total));
-    std::string error;
-    (void)switch_arm(false, error);
+    if (const auto* marker = srf::nodes::find_marker(markers, bin)) {
+      const auto t = tf_buffer_.lookup_transform("base_link", marker->frame_id.empty() ? "map" : marker->frame_id, now() - 0.05);
+      const auto p = srf::tfmath::apply(t.transform, marker->pose.position);
+      const double height = srf::nodes::marker_property_number(marker->properties, "height").value_or(0.10);
+      bin_xyz = {p.x, p.y, height - kBaseLinkZ};
+    }
+  } catch (const std::exception& exception) {
+    error = std::string("TF: ") + exception.what();
+    return std::nullopt;
   }
+  if (target_odom == std::nullopt) target = bin_xyz;  // place: 목표 = 바구니 (시범 데이터와 같다)
+  char head[160];
+  std::snprintf(head, sizeof(head), "{\"odom\":{\"v\":%.5f,\"w\":%.5f},\"scan_front_min\":%.4f,", v, w, front);
+  return std::string(head) + "\"arm\":{\"position\":" + array_json(q.data(), 5) + ",\"velocity\":" +
+         array_json(dq.data(), 5) + ",\"current\":" + array_json(cur.data(), 5) + "},\"ee\":" + array_json(ee.data(), 5) +
+         ",\"target_xyz\":" + array_json(target.data(), 3) + ",\"bin_xyz\":" + array_json(bin_xyz.data(), 3) + "}";
 }
 
-void VlaNode::apply_action(const Action& action) {
-  const double linear = clamp(action.value[0], -0.26, 0.26);
-  const double angular = clamp(action.value[1], -1.82, 1.82);
-  publish<srf::msgs::Twist>(
-      "cmd_vel_nav",
-      srf::msgs::Twist{{linear, 0.0, 0.0}, {0.0, 0.0, angular}});
+std::optional<std::vector<VlaNode::Action>> VlaNode::request(const std::string& instruction,
+                                                             const std::string& state, std::string& error) {
+  srf::msgs::Image color, depth;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!color_seen_ || !depth_seen_) {
+      error = !color_seen_ ? "카메라 color 가 없다" : "카메라 depth 가 없다";
+      return std::nullopt;
+    }
+    color = color_;
+    depth = depth_;
+  }
+  const std::string body = "{\"instruction\":" + json_quoted(instruction) + ",\"state\":" + state +
+                           ",\"rgb\":{\"b64\":\"" + base64_encode(color.data) + "\",\"encoding\":" +
+                           json_quoted(color.encoding) + ",\"width\":" + std::to_string(color.width) +
+                           ",\"height\":" + std::to_string(color.height) + "},\"depth\":{\"b64\":\"" +
+                           base64_encode(depth.data) + "\",\"encoding\":" + json_quoted(depth.encoding) +
+                           ",\"width\":" + std::to_string(depth.width) + ",\"height\":" + std::to_string(depth.height) +
+                           ",\"step\":" + std::to_string(depth.step) + "}}";
+  const HttpResponse response = http_post_json(options_.url, body, options_.request_timeout_s);
+  if (!response.ok) {
+    error = "sidecar: " + response.error;
+    return std::nullopt;
+  }
+  // "actions":[[8],[8],...]
+  const auto at = response.body.find("\"actions\"");
+  if (at == std::string::npos) {
+    error = "sidecar 응답에 actions 가 없다";
+    return std::nullopt;
+  }
+  std::vector<Action> actions;
+  const char* p = response.body.c_str() + response.body.find('[', at) + 1;
+  while (*p != '\0' && *p != ']') {
+    while (*p == ' ' || *p == ',' || *p == '\n') ++p;
+    if (*p != '[') break;
+    ++p;
+    Action a{};
+    for (auto& value : a) {
+      char* end = nullptr;
+      value = std::strtod(p, &end);
+      if (end == p) {
+        error = "actions 파싱 실패";
+        return std::nullopt;
+      }
+      p = end;
+      while (*p == ',' || *p == ' ') ++p;
+    }
+    while (*p != '\0' && *p != ']') ++p;
+    if (*p == ']') ++p;
+    actions.push_back(a);
+  }
+  if (actions.empty()) {
+    error = "actions 가 비었다";
+    return std::nullopt;
+  }
+  return actions;
+}
+
+void VlaNode::apply(const Action& a, bool& buzzer_on, std::string& clipped) {
+  const double v = std::clamp(a[0], -kMaxV, kMaxV), w = std::clamp(a[1], -kMaxW, kMaxW);
+  if (v != a[0] || w != a[1]) clipped = "base";
+  publish<srf::msgs::Twist>("cmd_vel_nav", srf::msgs::Twist{{v, 0.0, 0.0}, {0.0, 0.0, w}});
   srf::msgs::JointState command;
   command.header.stamp = now();
   command.name.assign(kJointNames.begin(), kJointNames.end());
-  command.position.reserve(5);
-  for (std::size_t index = 0; index < kJointNames.size(); ++index) {
-    command.position.push_back(
-        clamp(action.value[2 + index], kJointLimits[index].lower,
-              kJointLimits[index].upper));
+  for (std::size_t j = 0; j < 5; ++j) {
+    const double value = std::clamp(a[2 + j], kJointLimits[j][0], kJointLimits[j][1]);
+    if (value != a[2 + j]) clipped = kJointNames[j];
+    command.position.push_back(value);
   }
   publish<srf::msgs::JointState>("arm_joint_command", std::move(command));
+  const bool on = a[7] > 0.5;
+  if (on && !buzzer_on) {
+    try {
+      (void)context().services().call<srf::msgs::String, srf::msgs::TriggerResponse>("buzzer/melody",
+                                                                                   srf::msgs::String{"beep"});
+    } catch (const std::exception&) {
+    }
+  }
+  buzzer_on = on;
 }
 
-void VlaNode::stop_motion() {
-  publish<srf::msgs::Twist>(
-      "cmd_vel_nav",
-      srf::msgs::Twist{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}});
-}
-
-void VlaNode::publish_status(std::uint64_t id, const std::string& stage,
-                             const std::string& extra_json) {
-  std::string json = "{\"request_id\":" + std::to_string(id) + ",\"stage\":" +
-                     json_quoted(stage);
-  if (!extra_json.empty()) {
-    json += extra_json;
-  }
-  json += "}";
-  publish<srf::msgs::String>("vla/status",
-                               srf::msgs::String{std::move(json)});
-}
-
-bool VlaNode::request_plan(std::uint64_t, const std::string& target,
-                           std::vector<Action>& actions, std::string& instruction,
-                           std::string& error) {
-  srf::msgs::Image image;
-  {
-    std::lock_guard<std::mutex> lock(image_mutex_);
-    if (!image_seen_) {
-      error = "camera 프레임이 없다";
-      return false;
-    }
-    image = image_;
-  }
-  std::array<double, 5> joints{};
-  {
-    std::lock_guard<std::mutex> lock(joints_mutex_);
-    if (!joints_seen_) {
-      error = "joint_states가 없다";
-      return false;
-    }
-    joints = joints_;
-  }
-  double linear = 0.0;
-  double yaw_rate = 0.0;
-  {
-    std::lock_guard<std::mutex> lock(odom_mutex_);
-    if (!odom_seen_) {
-      error = "odom이 없다";
-      return false;
-    }
-    linear = linear_;
-    yaw_rate = yaw_rate_;
-  }
-
-  const std::string lowered = lower_copy(target);
-  if (lowered.find("red") != std::string::npos || target.find("빨") != std::string::npos) {
-    instruction = "Pick up the red cube and place it on the green square.";
-  } else if (lowered.find("blue") != std::string::npos ||
-             target.find("파") != std::string::npos) {
-    instruction = "Pick up the blue cube and place it on the green square.";
-  } else {
-    instruction = target.empty() ? "Pick up the red cube and place it on the green square."
-                                 : target;
-  }
-
-  std::string state = "[" + number(linear) + "," + number(yaw_rate);
-  for (double value : joints) {
-    state += "," + number(value);
-  }
-  state += "]";
-  std::string robot_context;
-  {
-    std::lock_guard<std::mutex> lock(context_mutex_);
-    robot_context = robot_context_;
-  }
-  const std::string body =
-      "{\"image_b64\":\"" + base64_encode(image.data) + "\",\"encoding\":" +
-      json_quoted(image.encoding) + ",\"width\":" + std::to_string(image.width) +
-      ",\"height\":" + std::to_string(image.height) + ",\"instruction\":" +
-      json_quoted(instruction) + ",\"state\":" + state +
-      ",\"context\":" + json_quoted(robot_context) + "}";
-
-  const HttpResponse response = http_post_json(url_, body, timeout_s_);
-  if (!response.ok) {
-    error = response.error;
-    return false;
-  }
-  const std::vector<double> flat = number_array_field(response.body, "actions_flat");
-  if (flat.empty() || flat.size() % 7U != 0U) {
-    error = "sidecar 응답에 actions_flat이 없다: " + response.body.substr(0, 160);
-    return false;
-  }
-  actions.clear();
-  actions.reserve(flat.size() / 7U);
-  for (std::size_t index = 0; index + 7U <= flat.size(); index += 7U) {
-    Action action;
-    for (std::size_t value = 0; value < 7U; ++value) {
-      action.value[value] = flat[index + value];
-    }
-    actions.push_back(action);
-  }
-  if (const auto from_reply = llm::string_field(response.body, "instruction")) {
-    if (!from_reply->empty()) {
-      instruction = *from_reply;
+srf::msgs::String VlaNode::execute(Handle& handle) {
+  stop_.store(false);
+  const std::string goal = handle.goal().data;
+  const std::string kind = llm::string_field(goal, "kind").value_or("pick");
+  const std::string instruction = llm::string_field(goal, "instruction").value_or("pick up the can");
+  const std::string bin = llm::string_field(goal, "bin").value_or("");
+  const auto feedback = [&](const std::string& json) { handle.publish_feedback(srf::msgs::String{json}); };
+  const auto result = [&](bool ok, const std::string& extra) {
+    stop_motion();
+    std::string error;
+    (void)switch_arm(false, error);
+    return srf::msgs::String{"{\"ok\":" + std::string(ok ? "true" : "false") + ",\"kind\":" + json_quoted(kind) + extra + "}"};
+  };
+  // 대상(base_link) → odom 에 고정: 로봇이 다가가도 같은 물체를 가리킨다
+  std::optional<srf::msgs::Point> target_odom;
+  if (kind == "pick") {
+    const auto xyz = vec3_field(goal, "target_xyz");
+    if (!xyz) return result(false, ",\"error\":\"pick 에 target_xyz 가 없다\"");
+    try {
+      const auto t = tf_buffer_.lookup_transform("odom", "base_link", now() - 0.05);
+      target_odom = srf::tfmath::apply(t.transform, srf::msgs::Point{(*xyz)[0], (*xyz)[1], (*xyz)[2]});
+    } catch (const std::exception& exception) {
+      return result(false, ",\"error\":" + json_quoted(std::string("TF odom<-base_link: ") + exception.what()));
     }
   }
-  return true;
+  std::string error;
+  if (!switch_arm(true, error)) return result(false, ",\"error\":" + json_quoted("컨트롤러 전환: " + error));
+
+  const auto started = std::chrono::steady_clock::now();
+  const auto period = std::chrono::duration<double>(options_.period_s);
+  int step = 0, still = 0, requests = 0;
+  bool buzzer_on = false;
+  std::string clipped_log;
+  while (true) {
+    if (handle.is_cancel_requested() || stop_.load()) return result(false, ",\"error\":\"취소\"");
+    if (std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count() > options_.timeout_s)
+      return result(false, ",\"error\":\"시간 초과\",\"steps\":" + std::to_string(step));
+    const auto state = state_json(target_odom, bin, error);
+    if (!state) return result(false, ",\"error\":" + json_quoted(error));
+    const auto chunk = request(instruction, *state, error);
+    if (!chunk) return result(false, ",\"error\":" + json_quoted(error));
+    ++requests;
+    // 청크가 "멈춤"(바퀴 0, 관절·그리퍼 변화 없음)이면 할 일이 끝난 것
+    bool static_chunk = true;
+    for (const auto& a : *chunk) {
+      if (std::abs(a[0]) > 0.01 || std::abs(a[1]) > 0.03) static_chunk = false;
+      for (std::size_t j = 2; j < 6; ++j)
+        if (std::abs(a[j] - chunk->front()[j]) > 0.02) static_chunk = false;
+      if (std::abs(a[6] - chunk->front()[6]) > 0.002) static_chunk = false;
+    }
+    still = static_chunk ? still + 1 : 0;
+    if (still >= 2) {
+      return result(true, ",\"steps\":" + std::to_string(step) + ",\"requests\":" + std::to_string(requests) +
+                              (clipped_log.empty() ? "" : ",\"clipped\":" + json_quoted(clipped_log)));
+    }
+    const std::size_t run = std::min(options_.replan_steps == 0 ? chunk->size() : options_.replan_steps, chunk->size());
+    for (std::size_t k = 0; k < run; ++k) {
+      if (handle.is_cancel_requested() || stop_.load()) return result(false, ",\"error\":\"취소\"");
+      const auto tick = std::chrono::steady_clock::now();
+      std::string clipped;
+      apply((*chunk)[k], buzzer_on, clipped);
+      if (!clipped.empty()) clipped_log = clipped;  // 마지막으로 범위 밖이었던 것
+      char json[256];
+      std::snprintf(json, sizeof(json),
+                    "{\"kind\":\"%s\",\"step\":%d,\"v\":%.3f,\"w\":%.3f,\"gripper\":%.4f,\"buzzer\":%d%s%s%s}",
+                    kind.c_str(), step, (*chunk)[k][0], (*chunk)[k][1], (*chunk)[k][6], (*chunk)[k][7] > 0.5 ? 1 : 0,
+                    clipped.empty() ? "" : ",\"clipped\":\"", clipped.c_str(), clipped.empty() ? "" : "\"");
+      feedback(json);
+      ++step;
+      std::this_thread::sleep_until(tick + std::chrono::duration_cast<std::chrono::steady_clock::duration>(period));
+    }
+  }
 }
 
 bool VlaNode::switch_arm(bool manual, std::string& error) {
   srf::control::SwitchControllerRequest request;
-  if (manual) {
-    request.start_controllers = {"arm_command_controller"};
-    request.stop_controllers = {"joint_trajectory_controller"};
-  } else {
-    request.start_controllers = {"joint_trajectory_controller"};
-    request.stop_controllers = {"arm_command_controller"};
-  }
+  request.start_controllers = manual ? std::vector<std::string>{"arm_command_controller"}
+                                     : std::vector<std::string>{"joint_trajectory_controller"};
+  request.stop_controllers = manual ? std::vector<std::string>{"joint_trajectory_controller"}
+                                    : std::vector<std::string>{"arm_command_controller"};
   request.strictness = 0;
   try {
-    const auto response = context().services().call<
-        srf::control::SwitchControllerRequest,
-        srf::control::SwitchControllerResponse>(
+    const auto response = context().services().call<srf::control::SwitchControllerRequest,
+                                                    srf::control::SwitchControllerResponse>(
         "controller_manager/switch_controller", request);
     if (!response.ok) {
       error = response.message;

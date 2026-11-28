@@ -142,6 +142,20 @@ std::optional<Plan> parse_command(std::string_view input) {
     }
   }
 
+  // 2.5) 분리수거 미션 (coordinator 의 sort 스킬). "캔 넣어", "페트병 치워", "전부 분리수거해"
+  {
+    const bool can = has_any(text, {"캔", "can"});
+    const bool pet = has_any(text, {"페트", "pet", "플라스틱", "plastic"});
+    const bool paper = has_any(text, {"종이", "paper", "박스", "carton", "상자"});
+    const bool sort_word = has_any(text, {"분리수거", "분리", "치워", "정리", "recycl", "sort", "clean up"});
+    const bool put_word = has_any(text, {"넣", "버려", "담아", "bin"});
+    if (sort_word || ((can || pet || paper) && put_word)) {
+      plan.intent = "sort";
+      plan.target = can && !pet && !paper ? "can" : pet && !can && !paper ? "pet" : paper && !can && !pet ? "paper" : "all";
+      return plan;
+    }
+  }
+
   // 3) 상판(body) place. "내 몸에 올려놔"가 pick으로 새지 않게 먼저.
   if (has_any(text, {"몸", "상판", "덱", "deck", "body", "on me", "로봇 위"}) &&
       has_place_word(text)) {

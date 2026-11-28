@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-#include "nodes/llm_input/command_rules.hpp"
+#include "nodes/llm/command_rules.hpp"
 
 #include "test_framework.hpp"
 

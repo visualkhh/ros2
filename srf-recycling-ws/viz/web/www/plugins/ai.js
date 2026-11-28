@@ -1,7 +1,7 @@
 import { button, buttonRow, row, setLevel } from './util.js';
 
-// 평문 명령 -> llm_input 노드(Ollama) -> llm/status.
-// 브라우저는 srf service를 직접 못 부르므로 viz-web RPC('llm/command')를 거친다.
+// 평문 명령 -> prompt_input -> coordinator(계획·실행: llm·vlm·vla·Nav) -> prompt/status (action 진행·결과).
+// 브라우저는 srf service를 직접 못 부르므로 viz-web RPC('prompt/submit')를 거친다.
 export function init(host) {
   const body = host.addPanel('AI');
   const status = row(body, 'llm');
@@ -77,19 +77,19 @@ export function init(host) {
     if (!text) return;
     setLevel(status, '요청 전송…', 'warn');
     try {
-      const response = await host.rpc('llm/command', { text });
+      const response = await host.rpc('prompt/submit', { text });
       const result = response && response.raw ? JSON.parse(response.raw) : response;
       if (!result || result.accepted !== true) {
         setLevel(status, `거부: ${(result && result.error) || '알 수 없음'}`, 'bad');
         return;
       }
-      setLevel(status, result.request_id ? `요청 #${result.request_id} 접수` : '접수', 'ok');
+      setLevel(status, result.goal_id ? `작업 ${result.goal_id.slice(0, 8)} 접수` : '접수', 'ok');
     } catch (error) {
       setLevel(status, `RPC 실패: ${error.message}`, 'bad');
     }
   };
   button(actions, '보내기', send, 'primary');
-  button(actions, '정지', () => host.rpc('llm/command', { text: 'stop' }).catch(() => {}), 'danger');
+  button(actions, '정지', () => host.rpc('prompt/submit', { text: 'stop' }).catch(() => {}), 'danger');
   const fun = buttonRow(body);
   button(fun, 'Mario', () => {
     input.value = '마리오 죽을 때 효과음 내줘';
@@ -163,7 +163,7 @@ export function init(host) {
     hide: 'nav/hide',
     approach: 'nav/approach',
     vlm_query: 'vlm/query',
-    vla_pick: 'vla/command',
+    sort: 'Nav → vlm/select → vla/execute pick → Nav → vla/execute place (반복)',
     stop: 'emergency_stop',
     unsupported: '-',
   };
@@ -260,8 +260,16 @@ export function init(host) {
     moveit: 'MoveIt 실행 중',
     done: '완료',
     error: '오류',
+    queued: '대기',
+    navigating: '이동 중',
+    selecting: 'VLM 고르는 중',
+    picking: 'VLA 집는 중',
+    placing: 'VLA 넣는 중',
+    placed: '넣음',
+    vla: 'VLA 실행 중',
+    hold: '보류',
   };
-  host.onTopic('llm/status', (message) => {
+  host.onTopic('prompt/status', (message) => {
     let event;
     try {
       event = JSON.parse(message.data);
@@ -269,9 +277,9 @@ export function init(host) {
       return;
     }
     const stage = stages[event.stage] || event.stage || '-';
-    const request = event.request_id ? `#${event.request_id} ` : '';
+    const request = event.task_id ? `#${event.task_id} ` : '';
     setLevel(status, `${request}${stage}`,
-             event.stage === 'error' ? 'bad'
+             event.stage === 'error' || event.stage === 'hold' ? 'bad'
                : event.stage === 'done' ? 'ok'
                  : event.stage === 'thinking' || event.stage === 'executing' ? 'warn' : '');
     if (event.plan) {
@@ -296,7 +304,7 @@ export function init(host) {
     if (event.error) {
       setLevel(plan, event.error, 'bad');
     }
-    if (event.stage === 'done' || event.stage === 'error') {
+    if (event.stage === 'done' || event.stage === 'error' || event.stage === 'hold') {
       log.textContent = `${new Date().toLocaleTimeString()} ${request}${stage}` +
         (event.distance !== undefined ? ` · ${Number(event.distance).toFixed(2)} m` : '') +
         (event.answer ? ` · ${event.answer}` : '') +
@@ -335,12 +343,12 @@ export function init(host) {
       return;
     }
     const stage = armStages[event.stage] || event.stage || '-';
-    const request = event.request_id ? `#${event.request_id} ` : '';
+    const request = event.task_id ? `#${event.task_id} ` : '';
     const progress = event.steps
       ? ` · ${event.index || 0}/${event.steps}`
       : '';
     setLevel(action, `${request}${stage}${progress}`,
-             event.stage === 'error' ? 'bad'
+             event.stage === 'error' || event.stage === 'hold' ? 'bad'
                : event.stage === 'done' ? 'ok' : 'warn');
     if (event.error) {
       setLevel(plan, event.error, 'bad');
