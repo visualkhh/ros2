@@ -15,5 +15,5 @@ bind="${SRF_DEFAULT_WS_VIZ_WEB_BIND:-0.0.0.0}"
 "$here/build.sh" viz-web
 
 echo "[run-viz-web] http://localhost:$port/  (robot $host:$robot_port)"
-exec "$SRF_BUILD_DIR/viz-web/srf_default_ws_viz_web" --robot "$host:$robot_port" \
+exec "$SRF_BUILD_DIR/viz/web/srf_default_ws_viz_web" --robot "$host:$robot_port" \
      --port "$port" --bind "$bind" "$@"

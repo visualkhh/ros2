@@ -22,7 +22,7 @@ void ProjectPanelPlugin::initialize(srf::viz::VizHost& host) {
   layout->addWidget(title);
 
   auto* subtitle = new QLabel(
-      "이 탭은 프로젝트 플러그인 예제다. srf-default-ws/viz/plugins/ 에서 직접 수정한다.", page);
+      "이 탭은 프로젝트 플러그인 예제다. srf-default-ws/viz/qt/plugins/ 에서 직접 수정한다.", page);
   subtitle->setWordWrap(true);
   subtitle->setObjectName("Subtitle");
   layout->addWidget(subtitle);

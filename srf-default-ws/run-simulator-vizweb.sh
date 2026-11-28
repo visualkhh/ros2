@@ -35,7 +35,7 @@ sim_pid=$!
 wait_tcp "$robot_port" 30 || true
 
 echo "[run-simulator-vizweb] http://localhost:$web_port/  (simulator 127.0.0.1:$robot_port)"
-"$SRF_BUILD_DIR/viz-web/srf_default_ws_viz_web" --robot "127.0.0.1:$robot_port" \
+"$SRF_BUILD_DIR/viz/web/srf_default_ws_viz_web" --robot "127.0.0.1:$robot_port" \
   --port "$web_port" --bind "${SRF_DEFAULT_WS_VIZ_WEB_BIND:-0.0.0.0}" > /tmp/srf_default_ws_simulator_vizweb.log 2>&1 &
 gateway_pid=$!
 

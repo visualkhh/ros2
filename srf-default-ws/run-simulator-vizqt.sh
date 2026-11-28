@@ -35,7 +35,7 @@ sim_pid=$!
 wait_tcp "$robot_port" 30 || true
 
 echo "[run-simulator-vizqt] simulator=127.0.0.1:$robot_port  (Qt Viz)"
-"$SRF_BUILD_DIR/viz/srf_default_ws_viz_app" --server "127.0.0.1:$robot_port" \
+"$SRF_BUILD_DIR/viz/qt/srf_default_ws_viz_app" --server "127.0.0.1:$robot_port" \
   --fixed-frame map > /tmp/srf_default_ws_simulator_vizqt.log 2>&1 &
 viz_pid=$!
 

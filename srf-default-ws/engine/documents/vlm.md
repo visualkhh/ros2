@@ -10,7 +10,7 @@
 | `srf-default-ws/engine/nodes/vlm/vlm_node.cpp` | 최신 D435 프레임 보관, `vlm/query` 서비스 |
 | `srf-default-ws/tools/vlm_server.py` | SmolVLM2-500M HTTP sidecar `/query` |
 | `srf-default-ws/engine/nodes/llm_input/llm_input.cpp` | `vlm_query` → `vlm/query` |
-| `srf-default-ws/viz-web/www/plugins/ai.js` | AI 패널 결과 표시 |
+| `srf-default-ws/viz/web/www/plugins/ai.js` | AI 패널 결과 표시 |
 
 ## 2. 경로
 

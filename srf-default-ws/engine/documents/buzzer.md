@@ -12,7 +12,7 @@
 | `srf-default-ws/engine/hardwares/opencr/opencr_serial.cpp` | `B,<Hz>,<ms>` 전송 |
 | `firmware/opencr/tb3_wheels/tb3_wheels.ino` | `tone(BDPIN_BUZZER, hz, ms)` |
 | `srf-default-ws/simulator/hardwares/opencr/simulator_buzzer.cpp` | Qt `QAudioSink`로 시뮬 소리 |
-| `srf-default-ws/viz-web/www/plugins/ai.js` | AI 패널 Mario/성공음 버튼 |
+| `srf-default-ws/viz/web/www/plugins/ai.js` | AI 패널 Mario/성공음 버튼 |
 
 ## 2. 서비스
 

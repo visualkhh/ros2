@@ -8,5 +8,5 @@ target_compile_definitions(srf_default_ws_viz_web PRIVATE
   SRF_DEFAULT_WS_VIZ_WEB_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/www")
 target_compile_options(srf_default_ws_viz_web PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(srf_default_ws_viz_web PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/viz-web"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/viz/web"
 )

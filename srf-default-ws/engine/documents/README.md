@@ -84,7 +84,7 @@ flowchart LR
 | 프레임워크 | `srf/engine` | Node/Service/Topic/Action, TF, URDF, Nav2/MoveIt |
 | 프로젝트 엔진 | `srf-default-ws/engine` | 하드웨어 + AI/명령 노드 조립 |
 | 시뮬레이터 | `srf-default-ws/simulator`, `srf/simulator` | 로봇/월드/센서/Qt 뷰/오디오 |
-| 웹 | `srf-default-ws/viz-web`, `srf/viz-web` | WebSocket RPC, AI 패널, 토픽 표시 |
+| 웹 | `srf-default-ws/viz/web`, `srf/viz/web` | WebSocket RPC, AI 패널, 토픽 표시 |
 | 모델 sidecar | `srf-default-ws/tools` | PyTorch/Transformers를 HTTP로 감싼 프로세스 |
 
 ## 3. 명령 카탈로그 (20 + 20 + 30 + 20)

@@ -23,4 +23,4 @@ if [ -n "$plugins" ] && [ "$plugins" != "none" ]; then
 else
   plugin_args=(--no-plugins)
 fi
-exec "$SRF_BUILD_DIR/viz/srf_default_ws_viz_app" --server "$host:$port" --fixed-frame "$frame" --tab "$tab" --manual "${plugin_args[@]}" "$@"
+exec "$SRF_BUILD_DIR/viz/qt/srf_default_ws_viz_app" --server "$host:$port" --fixed-frame "$frame" --tab "$tab" --manual "${plugin_args[@]}" "$@"

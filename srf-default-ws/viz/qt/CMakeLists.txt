@@ -18,5 +18,5 @@ add_executable(srf_default_ws_viz_app main.cpp)
 target_link_libraries(srf_default_ws_viz_app PRIVATE srf::viz srf_default_ws_viz_plugins)
 target_compile_options(srf_default_ws_viz_app PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(srf_default_ws_viz_app PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/viz"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/viz/qt"
 )

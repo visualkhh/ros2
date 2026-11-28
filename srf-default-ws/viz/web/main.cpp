@@ -16,7 +16,7 @@
 #include "srf/viz_web/viz_web_plugins.hpp"
 
 #ifndef SRF_DEFAULT_WS_VIZ_WEB_ROOT
-#define SRF_DEFAULT_WS_VIZ_WEB_ROOT "viz-web/www"
+#define SRF_DEFAULT_WS_VIZ_WEB_ROOT "viz/web/www"
 #endif
 
 namespace {
@@ -237,6 +237,7 @@ int main(int argc, char** argv) {
   if (!options.robot_host.empty()) {
     network.add_server(options.robot_host, options.robot_port);
   }
+  network.token = options.token;
   srf::App app(nullptr, network);
   srf::viz_web::VizWeb web(std::move(options), std::move(registry), app.context());
   register_move_rpc(web.rpc(), app.context());

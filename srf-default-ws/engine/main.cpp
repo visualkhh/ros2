@@ -138,6 +138,8 @@ void usage() {
                "          ROS /cmd_vel은 cmd_vel_teleop으로 들어가 twist_mux·collision_monitor를 거친다\n"
                "  --ros2-namespace: ROS 2 쪽 토픽 접두어 (예: /pak → /pak/scan)\n"
                "  --record PATH: 로봇 프로세스 안에서 모든 토픽을 MCAP 파일에 녹화 (srf bag info/play로 본다)\n"
+               "  --token TOKEN: 같은 토큰을 가진 피어만 붙게 한다 (env SRF_DEFAULT_WS_TOKEN, 비우면 인증 없음)\n"
+               "  --no-announce: UDP 9099로 위치를 알리지 않는다 (srf discover / --robot auto에 안 보임)\n"
                "  --camera-rate: color Image 발행 주기 (기본 5Hz)\n"
                "  --camera-depth-rate: depth Image 발행 주기 (기본 2Hz)\n"
                "  --camera-width/height: D435 stream 크기 (기본 640x480@15)\n"
@@ -171,6 +173,8 @@ int main(int argc, char** argv) {
   bool slam = false;
   bool enable_ros2 = env_or("SRF_DEFAULT_WS_ROS2", "0") != "0";
   std::string record_path;
+  std::string token = env_or("SRF_DEFAULT_WS_TOKEN", "");
+  bool announce = env_or("SRF_DEFAULT_WS_ANNOUNCE", "1") != "0";
   std::string ros2_namespace = env_or("SRF_DEFAULT_WS_ROS2_NAMESPACE", "");
   std::string scan_topic = env_or("SRF_DEFAULT_WS_SCAN_TOPIC", "scan");
   std::string imu_topic = env_or("SRF_DEFAULT_WS_IMU_TOPIC", "imu");
@@ -240,6 +244,10 @@ int main(int argc, char** argv) {
       enable_lidar = false;
     } else if (argument == "--no-camera") {
       enable_camera = false;
+    } else if (argument == "--no-announce") {
+      announce = false;
+    } else if (argument == "--token" && i + 1 < argc) {
+      token = argv[++i];
     } else if (argument == "--record" && i + 1 < argc) {
       record_path = argv[++i];
     } else if (argument == "--ros2") {
@@ -279,6 +287,8 @@ int main(int argc, char** argv) {
     options.network.port = static_cast<std::uint16_t>(server_port);
     // Viz의 텔레옵은 cmd_vel로 오지만 로봇에서는 cmd_vel_teleop으로 받아야 한다.
     options.network.receive_remap["cmd_vel"] = "cmd_vel_teleop";
+    options.network.token = token;  // 비우면 인증 없음
+    options.network.announce = announce;
   }
   srf::Context context(options);
 

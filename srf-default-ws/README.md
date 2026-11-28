@@ -45,6 +45,7 @@ ls -l /dev/opencr /dev/tb3_lidar
 cd ~/ros2/srf-default-ws
 
 ./build.sh          # Pi: srf_default_ws_real만 / PC: srf_default_ws_real + sim + viz + viz-web
+./build.sh viz-tui  # 터미널 Viz (어디서나)
 ./run.sh            # 실기: 빌드 후 idle/텔레옵 실행 (TCP 9000)
 ./run-slam.sh       # 실기: 빌드 후 SLAM(mapping) 실행
 ./run-tests.sh      # SRF + srf-default-ws 테스트 빌드/실행
@@ -56,11 +57,12 @@ SRF_DEFAULT_WS_VIZ_HOST=10.2.150.135 ./run-viz.sh
 ./run-simulator-vizqt.sh   # 시뮬레이터 + Qt Viz 한 번에
 ./run-simulator-vizweb.sh # 시뮬레이터 + 웹 Viz 한 번에
 ./run-viz-web.sh    # 웹 Viz 게이트웨이 (로봇 9000에 접속)
+./run-viz-tui.sh    # 터미널 Viz (Pi·SSH에서도, 로봇 9000에 접속)
 ```
 
 **Pi는 `srf_default_ws_real`만 빌드한다.** 웹 Viz 게이트웨이(`srf_default_ws_viz_web`)는 PC에서 실행해
 로봇의 PeerNetwork(9000)에 붙는다. `viz`, `sim`, `viz-web`은 PC 전용이며 ARM에서 호출하면
-`build.sh`가 에러를 낸다.
+`build.sh`가 에러를 낸다. 터미널 Viz(`viz-tui`)는 Qt가 없어 Pi에서도 빌드된다.
 
 `run-viz.sh`는 프로젝트 전용 `srf_default_ws_viz_app`을 빌드/실행한다.
 `SRF_DEFAULT_WS_VIZ_HOST`, `SRF_DEFAULT_WS_VIZ_PORT`, `SRF_DEFAULT_WS_VIZ_FIXED_FRAME`, `SRF_DEFAULT_WS_VIZ_TAB`,
@@ -120,7 +122,7 @@ cd /Users/hyunhakim/workspace/visualkhh/source/ros2/srf
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build -j
 
-./build/viz/srf_viz_app --server pak.local:9000 --fixed-frame odom
+./build/viz/qt/srf_viz_app --server pak.local:9000 --fixed-frame odom
 ```
 
 - Pi 로그의 IP를 그대로 써도 된다: `--server 192.168.x.x:9000`.
@@ -186,20 +188,20 @@ cmake --build build -j
 
 ## Viz 플러그인 / 프로젝트 Viz main
 
-로봇 쪽 진입점이 `engine/main.cpp`라면, Viz 쪽 진입점은 `viz/main.cpp`다.
-`viz/main.cpp`는 **인자 파싱과 `Viz` 실행만** 하고, 앱 조립은 코어 `srf::viz::Viz`가 맡는다.
+로봇 쪽 진입점이 `engine/main.cpp`라면, Viz 쪽 진입점은 `viz/qt/main.cpp`다.
+`viz/qt/main.cpp`는 **인자 파싱과 `Viz` 실행만** 하고, 앱 조립은 코어 `srf::viz::Viz`가 맡는다.
 
 ```text
 srf-default-ws/
 ├── engine/main.cpp           # 로봇(Pi) 엔드포인트
-├── viz/
+├── viz/qt/
 │   ├── main.cpp              # 프로젝트 Viz 엔드포인트 (파라미터 → Viz)
 │   ├── CMakeLists.txt
 │   └── plugins/
 │       ├── project_panel.cpp # 프로젝트 플러그인 예제 ("Project" 탭)
 │       └── moveit_plugin.cpp # MoveIt 도크 + MoveIt 탭
 
-srf/viz/
+srf/viz/qt/
 ├── main.cpp                  # 공통/최소 Viz 앱 (파라미터 → Viz)
 ├── core/
 │   ├── viz.cpp               # 조립/수명주기: Context, Net Client, VizWindow, 플러그인, 타이머
@@ -218,7 +220,7 @@ srf/viz/
 `Context`/`App`는 app main이 소유하고 `Viz`는 빌려 쓴다. 원격 연결은 `App`의 `PeerNetwork`가
 담당하며, 플러그인은 로컬 노드처럼 `context.topics()`/`Node`를 쓴다.
 
-코어 API는 `srf/viz/include/srf/viz/viz_plugin.hpp`에 있다.
+코어 API는 `srf/viz/qt/include/srf/viz/viz_plugin.hpp`에 있다.
 
 ```cpp
 class MyPlugin final : public srf::viz::VizPlugin {
@@ -256,9 +258,9 @@ SRF_DEFAULT_WS_VIZ_PLUGINS=project_panel,my_plugin ./run-viz.sh
 - 코어 `srf_viz_app`은 공통/최소 앱(디스플레이 토글/토픽/TF)으로 남아 있고,
   `run-viz.sh`는 프로젝트 앱을 사용한다.
 
-### 웹 Viz (srf-default-ws/viz-web)
+### 웹 Viz (srf-default-ws/viz/web)
 
-`srf/viz-web` 코어를 링크하고 프로젝트 플러그인(`opencr`, `moveit`, `rl_nav`, `manipulator`)을 추가한다.
+`srf/viz/web` 코어를 링크하고 프로젝트 플러그인(`opencr`, `moveit`, `rl_nav`, `manipulator`)을 추가한다.
 
 ```bash
 ./run-viz-web.sh                 # http://localhost:8080/, robot pak.local:9000
@@ -271,14 +273,14 @@ SRF_DEFAULT_WS_VIZ_HOST=10.2.150.138 ./run-viz-web.sh
 - `srf_default_ws_viz_web` = `srf::viz_web` 코어 + 프로젝트 레지스트리
 - 내보낼 토픽은 `VizWebOptions::forward_topics`로 정한다. 코어 기본 목록 +
   프로젝트 main이 추가한 `moveit_*`/`rl_nav_*` 토픽이 브라우저로 간다.
-- 프로젝트 JS: `srf-default-ws/viz-web/www/plugins/{opencr,moveit,rl_nav,manipulator}.js`
+- 프로젝트 JS: `srf-default-ws/viz/web/www/plugins/{opencr,moveit,rl_nav,manipulator}.js`
   (OpenCR 패널은 이 로봇 전용이라 코어 www가 아니라 프로젝트 www에 둔다)
 - 정적 파일은 프로젝트 www → 코어 www 순으로 찾는다 (`VizWebOptions::overlay_root`)
 - `/plugins.json`은 main이 등록한 레지스트리에서 동적으로 생성된다
-- 코어 Viz 플러그인: `srf/viz/plugins/teleop_plugin.cpp`(주행 텔레옵),
+- 코어 Viz 플러그인: `srf/viz/qt/plugins/teleop_plugin.cpp`(주행 텔레옵),
   `slam_plugin.cpp`(SLAM/지도), `navigation_plugin.cpp`(2D Pose/Goal/Multi Goal),
   `manipulator_plugin.cpp`(수동 관절).
-- 프로젝트 플러그인: `srf-default-ws/viz/plugins/project_panel.cpp`, `moveit_plugin.cpp`, `rl_nav_plugin.cpp`.
+- 프로젝트 플러그인: `srf-default-ws/viz/qt/plugins/project_panel.cpp`, `moveit_plugin.cpp`, `rl_nav_plugin.cpp`.
 - 남은 코어 후보: Displays/Topics 패널의 플러그인화, YAML 프로필 로딩.
 
 ## RL navigation (rl_nav_controller)
@@ -293,7 +295,7 @@ Isaac `rl_maze` 정책(52관측 → 2행동, nav 50Hz)을 Pi에서 ONNX Runtime�
   CUDA 세션 생성이 실패하면 CPUExecutionProvider로 내려간다.
   ONNX Runtime 없이 빌드해도 플러그인은 있고, 정책 로드가 실패하면 fallback 컨트롤러가 주행한다.
 - 폴더 스캔: `engine/ml/model_catalog.hpp`
-- Viz: `viz/plugins/rl_nav_plugin.cpp` — 모델 선택, RL ON/OFF, fallback, 실행 장치/상태
+- Viz: `viz/qt/plugins/rl_nav_plugin.cpp` — 모델 선택, RL ON/OFF, fallback, 실행 장치/상태
 - 지도와 같은 방식으로 **모델 목록**을 고른다:
   - `rl_nav_model_list`(String, latch): 모델 이름들 (한 줄에 하나)
   - `rl_nav_model`(String): 선택한 모델 이름 → 그 자리에서 다시 로드
@@ -321,7 +323,7 @@ RL이 켜져도 scan/odom/plan/TF가 없거나 추론이 실패하면 자동으�
 진단은 ROS 2처럼 `diagnostics`(`diagnostic_msgs/DiagnosticArray`)에 `controller_server: RL Navigation`
 상태를 낸다. 값: `onnxruntime`, `onnxruntime_version`, `provider`, `providers`,
 `model`, `policy`, `fallback`, `reason`, `infer_ms`, `scan_age`.
-Viz는 여러 노드의 diagnostics를 이름 기준으로 합쳐서 본다 (`viz/core/viz_model.cpp`).
+Viz는 여러 노드의 diagnostics를 이름 기준으로 합쳐서 본다 (`srf/viz/qt/core/viz_model.cpp`).
 
 ONNX Runtime은 `ONNXRUNTIME_ROOT` 환경변수, `~/opt/onnxruntime-gpu/<version>`,
 시스템 include/lib 순으로 찾는다. ROS 경로는 쓰지 않는다.
@@ -432,8 +434,8 @@ MoveIt 뷰:
 
 ## MoveIt / control
 
-Viz의 **MoveIt** 도킹 패널/탭은 `srf-default-ws/viz/plugins/moveit_plugin.cpp` 플러그인이다.
-코어 `srf/viz`에는 MoveIt이 없고, 프로젝트 Viz 앱에서만 로드한다.
+Viz의 **MoveIt** 도킹 패널/탭은 `srf-default-ws/viz/qt/plugins/moveit_plugin.cpp` 플러그인이다.
+코어 `srf/viz/qt`에는 MoveIt이 없고, 프로젝트 Viz 앱에서만 로드한다.
 계산은 Pi의 `srf::moveit::MoveGroup` 노드가 하고, Viz는 `move_action` 액션/서비스
 클라이언트로 명령하고 `moveit_*` 상태 토픽을 구독한다.
 내부는 ROS 2처럼 플러그인으로 나뉜다:
@@ -472,6 +474,11 @@ Viz의 **MoveIt** 도킹 패널/탭은 `srf-default-ws/viz/plugins/moveit_plugin
 - 실행 시 변경: `--scan-topic`, `--scan-rate`, `--imu-topic`, `--imu-rate`,
   `--executor-threads` (환경 변수 `SRF_DEFAULT_WS_SCAN_TOPIC`, `SRF_DEFAULT_WS_IMU_TOPIC`, `SRF_DEFAULT_WS_EXECUTOR_THREADS`)
 - 로봇 main은 `Context::executor_threads`를 기본 10으로 켠다 (라이브러리 기본은 0=inline)
+
+### 보안 · 발견
+
+- `--token TOKEN` (또는 `SRF_DEFAULT_WS_TOKEN`): 같은 토큰을 가진 피어만 붙는다. PC 쪽도 같은 토큰을 준다: `srf ... --token TOKEN`, `run-viz-web.sh`/`viz`의 `--token`. 비우면(기본) 인증 없음.
+- 로봇은 UDP 9099로 위치를 알린다 (`--no-announce`로 끔). PC에서 `srf discover`로 찾고 `--robot auto`로 붙는다.
 
 ### 녹화 · 실시간 보기 (srf 명령)
 
@@ -520,7 +527,7 @@ LDS-03은 물리 장치 `hardwares/lds03/lds03_device.cpp`와
 scan을 발행하는 sensor 논리 레이어 `sensors/lds03/lds03_sensor.cpp`로 나뉜다.
 OpenCR은 물리 `hardwares/opencr/opencr_serial.cpp`, 제어 `controls/opencr/opencr_control.cpp`,
 IMU `sensors/opencr/opencr_imu.cpp`로 나뉘고 SensorManager/ControlManager가 주기 실행한다.
-Viz 쪽은 `srf-default-ws/viz/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
+Viz 쪽은 `srf-default-ws/viz/qt/plugins/moveit_plugin.cpp`가 도크 + MoveIt 탭을 만든다.
 
 ## 구성
 
@@ -558,14 +565,9 @@ srf-default-ws/
 │   ├── hardwares/lds03/         # SimulatorLds 스텁
 │   ├── robot/                   # WafflePiArm + URDF 파서/시뮬레이터용 URDF 복제본
 │   └── panels/arm_panel.*       # Qt 수동 조작 패널
-├── viz/                         # PC Qt Viz 앱 + 프로젝트 플러그인
-│   ├── main.cpp
-│   ├── CMakeLists.txt
-│   └── plugins/
-├── viz-web/                     # PC 웹 Viz 앱 + 프로젝트 JS 플러그인
-│   ├── main.cpp
-│   ├── CMakeLists.txt
-│   └── www/plugins/             # moveit.js, rl_nav.js, camera.js
+├── viz/
+│   ├── qt/                      # PC Qt Viz 앱 + 프로젝트 플러그인 (main.cpp, plugins/)
+│   └── web/                     # PC 웹 Viz 앱 + 프로젝트 JS 플러그인 (main.cpp, www/plugins/)
 ├── artifacts/models/rl_nav_controller/<name>/  # policy.onnx + policy.onnx.data
 ├── firmware/opencr/             # 이 프로젝트 전용 OpenCR 펌웨어 사본
 │   ├── turtlebot_opencr/turtlebot_opencr.ino

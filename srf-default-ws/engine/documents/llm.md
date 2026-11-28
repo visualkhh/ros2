@@ -15,8 +15,8 @@
 | `srf-default-ws/engine/nodes/common/llm_json.cpp` | Ollama 응답/plan 파서, JSON escape |
 | `srf-default-ws/engine/nodes/llm_input/llm_client.cpp` | `/api/chat` 요청 본문 + 응답 content |
 | `srf-default-ws/engine/nodes/common/http_client.cpp` | 의존성 없는 HTTP/1.1 POST (POSIX 소켓) |
-| `srf-default-ws/viz-web/main.cpp` | `llm/command` RPC 브리지 |
-| `srf-default-ws/viz-web/www/plugins/ai.js` | AI 패널, 버튼, `llm/status` 표시 |
+| `srf-default-ws/viz/web/main.cpp` | `llm/command` RPC 브리지 |
+| `srf-default-ws/viz/web/www/plugins/ai.js` | AI 패널, 버튼, `llm/status` 표시 |
 | `srf-default-ws/engine/documents/commands.md` | 90개 명령 표 |
 
 ## 2. 처리 흐름
