@@ -473,6 +473,18 @@ Viz의 **MoveIt** 도킹 패널/탭은 `srf-default-ws/viz/plugins/moveit_plugin
   `--executor-threads` (환경 변수 `SRF_DEFAULT_WS_SCAN_TOPIC`, `SRF_DEFAULT_WS_IMU_TOPIC`, `SRF_DEFAULT_WS_EXECUTOR_THREADS`)
 - 로봇 main은 `Context::executor_threads`를 기본 10으로 켠다 (라이브러리 기본은 0=inline)
 
+### 녹화 · 실시간 보기 (srf 명령)
+
+```bash
+./build.sh tools                                              # srf 명령 빌드 → ../srf/build-mac/tools/srf/srf (Pi: ../srf/build)
+srf topic echo rosout --robot <pi-ip>:9000                    # 실시간 로그
+srf bag record -a -o run1.mcap --robot <pi-ip>:9000 --compress  # PC에서 녹화
+./build/srf_default_ws_real --record /data/run1.mcap          # 로봇 안에서 빠짐없이 녹화
+srf bag report run1.mcap -o report.html                       # 요약 보고서
+```
+
+자세한 것은 `../srf/tools/srf/bag/README.md`.
+
 ### ROS 2와 잇기 (선택)
 
 ROS 2가 있는 환경에서 브리지를 넣어 빌드하면, 로봇 프로세스 안에서 SRF 토픽을 ROS 2로 내보낸다

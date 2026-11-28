@@ -25,7 +25,7 @@ run_test() {
 
 run_test "$SRF_BUILD_DIR/engine/srf_core_tests"
 run_test "$SRF_BUILD_DIR/simulator/srf_simulator_tests"
-run_test "$SRF_BUILD_DIR/bag/srf_bag_tests"
+run_test "$SRF_BUILD_DIR/tools/srf/bag/srf_bag_tests"
 run_test "$SRF_DEFAULT_WS_BUILD_DIR/srf_default_ws_tests"
 
 exit "$status"

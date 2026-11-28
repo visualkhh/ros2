@@ -9,6 +9,7 @@
 #   ./build.sh tests           # srf_core_tests + srf_simulator_tests + srf_bag_tests + srf_default_ws_tests (+ srf CLI)
 #   ./build.sh viz             # srf_default_ws_viz_app (PC 전용, Qt6)
 #   ./build.sh viz-web         # srf_default_ws_viz_web (PC 전용, 로봇 9000에 접속)
+#   ./build.sh tools           # srf 명령 (srf bag / srf topic) → $SRF_BUILD_DIR/tools/srf/srf
 #
 # 환경변수:
 #   SRF_DEFAULT_WS_JOBS=2   빌드 병렬 수 (기본: Pi/ARM=2, 그 외 nproc)
@@ -104,6 +105,17 @@ build_tests() {
   cmake --build "$SRF_DEFAULT_WS_BUILD_DIR" -j"$jobs" --target srf_default_ws_tests
 }
 
+build_tools() {
+  echo "[build] srf: srf 명령 (bag, topic)"
+  if is_arm; then
+    configure_srf -DSRF_BUILD_VIZ=OFF -DSRF_BUILD_EXAMPLES=OFF
+  else
+    configure_srf
+  fi
+  cmake --build "$SRF_BUILD_DIR" -j"$jobs" --target srf_cli
+  echo "[build] srf 명령: $SRF_BUILD_DIR/tools/srf/srf  (PATH에 넣으려면: cmake --install $SRF_BUILD_DIR --prefix ~/.local)"
+}
+
 build_viz() {
   require_pc viz
   require_qt
@@ -126,8 +138,10 @@ case "$target" in
     if is_arm; then
       # Pi는 하드웨어만 돌린다. 웹/Qt Viz는 PC에서 빌드해 9000으로 붙는다.
       build_robot
+      build_tools
     else
       build_robot
+      build_tools
       build_simulator
       build_viz
       build_viz_web
@@ -138,8 +152,9 @@ case "$target" in
   tests) build_tests ;;
   viz) build_viz ;;
   viz-web|viz_web) build_viz_web ;;
+  tools) build_tools ;;
   *)
-    echo "usage: $0 [all|robot|simulator|tests|viz|viz-web]" >&2
+    echo "usage: $0 [all|robot|simulator|tests|viz|viz-web|tools]" >&2
     exit 2
     ;;
 esac

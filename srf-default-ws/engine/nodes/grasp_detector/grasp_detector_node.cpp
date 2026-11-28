@@ -27,7 +27,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kColorFxScale = 0.961;  // D435 color 640x480 fx≈615 -> 320x240 fx≈307.5
 
-std::string json_quoted(const std::string& value) {
+[[maybe_unused]] std::string json_quoted(const std::string& value) {  // OpenCV 없이 빌드하면 안 쓰인다
   std::string out = "\"";
   for (const char character : value) {
     if (character == '"' || character == '\\') {
